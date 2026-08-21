@@ -1,0 +1,30 @@
+{
+  "name": "ran/wp-release-updater",
+  "description": "Provider-neutral release update integration for WordPress plugins and themes.",
+  "type": "library",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": "^8.2",
+    "ext-hash": "*",
+    "ext-json": "*",
+    "ext-zip": "*"
+  },
+  "conflict": {
+    "ran/wp-github-release-updater": "*"
+  },
+  "support": {
+    "issues": "https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues",
+    "security": "https://github.com/RocketsAreNostalgic/ran-wp-release-updater/security/advisories/new",
+    "source": "https://github.com/RocketsAreNostalgic/ran-wp-release-updater"
+  },
+  "scripts": {
+    "check": "@validate:strict",
+    "validate:strict": "composer validate --strict --no-check-publish"
+  },
+  "config": {
+    "platform": {
+      "php": "8.2.0"
+    },
+    "sort-packages": true
+  }
+}
