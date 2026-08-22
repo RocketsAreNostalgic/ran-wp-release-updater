@@ -186,13 +186,22 @@ final class GitHubReleaseAdapter implements ReleaseAdapter
 		string $releaseIdentity,
 		?string $expectedTag = null
 	): IdentityDescriptor {
-		$releaseIdentity = self::canonicalDecimal($releaseIdentity)
-			?? throw new InvalidArgumentException('The GitHub release identity is invalid.');
-		if (null !== $expectedTag && null === self::versionFromTag($expectedTag)) {
-			throw new InvalidArgumentException('The expected GitHub release tag is invalid.');
-		}
+		list( $releaseIdentity, $expectedTag ) = $this->inspectInput(
+			$releaseIdentity,
+			$expectedTag
+		);
+		return $this->inspectWithToken(
+			$releaseIdentity,
+			$expectedTag,
+			$this->credentials->resolve()
+		);
+	}
 
-		$token = $this->credentials->resolve();
+	private function inspectWithToken(
+		string $releaseIdentity,
+		?string $expectedTag,
+		?string $token
+	): IdentityDescriptor {
 		$repositoryIdentity = $this->repositoryIdentity($token);
 		$release = $this->jsonSuccess(
 			$this->request(
@@ -215,14 +224,19 @@ final class GitHubReleaseAdapter implements ReleaseAdapter
 
 	public function acquire(IdentityDescriptor $descriptor): TemporaryArtifact
 	{
-		BindingRecord::assertDescriptorBinding($descriptor, $this->bindingRecord);
-		$facts = $descriptor->toArray();
-		$artifactIdentity = self::canonicalDecimal($facts['artifact_identity'] ?? null);
-		if ('github' !== $facts['provider_code'] || null === $artifactIdentity) {
-			throw new InvalidArgumentException('The GitHub artifact identity is invalid.');
-		}
+		list( $facts, $artifactIdentity ) = $this->acquisitionInput( $descriptor );
+		return $this->acquireWithToken(
+			$facts,
+			$artifactIdentity,
+			$this->credentials->resolve()
+		);
+	}
 
-		$token = $this->credentials->resolve();
+	private function acquireWithToken(
+		array $facts,
+		string $artifactIdentity,
+		?string $token
+	): TemporaryArtifact {
 		$this->repositoryIdentity($token);
 		list($path, $initialIdentity) = $this->temporaryFile($facts['artifact_filename']);
 
@@ -259,6 +273,68 @@ final class GitHubReleaseAdapter implements ReleaseAdapter
 			self::removeOwnedFile($path, $initialIdentity);
 			throw $exception;
 		}
+	}
+
+	/** @return array<string,mixed> */
+	public function inspectProspective( string $releaseIdentity, ?string $expectedTag = null ): array {
+		list( $releaseIdentity, $expectedTag ) = $this->inspectInput(
+			$releaseIdentity,
+			$expectedTag
+		);
+		$token = $this->credentials->resolve();
+		$descriptor = $this->inspectWithToken( $releaseIdentity, $expectedTag, $token );
+		list( $facts, $artifactIdentity ) = $this->acquisitionInput( $descriptor );
+		$artifact = $this->acquireWithToken(
+			$facts,
+			$artifactIdentity,
+			$token
+		);
+		try {
+			$validator = new PackageIdentityValidator();
+			$package = $artifact->inspect(
+				fn ( string $path ): ?array => $validator->inspectProspective(
+					$descriptor,
+					$this->bindingRecord,
+					$path
+				)
+			);
+			if ( ! is_array( $package ) ) {
+				throw new RuntimeException( 'The GitHub release package is invalid.' );
+			}
+			$result = array_merge( $descriptor->toArray(), $package );
+		} catch ( \Throwable $exception ) {
+			try {
+				$artifact->discard();
+			} catch ( \Throwable ) {
+				// Preserve the validation failure over cleanup failure.
+			}
+			throw $exception;
+		}
+		if ( ! $artifact->discard() ) {
+			throw new RuntimeException( 'The GitHub release package could not be discarded.' );
+		}
+		return $result;
+	}
+
+	/** @return array{string,?string} */
+	private function inspectInput( string $releaseIdentity, ?string $expectedTag ): array {
+		$releaseIdentity = self::canonicalDecimal( $releaseIdentity )
+			?? throw new InvalidArgumentException( 'The GitHub release identity is invalid.' );
+		if ( null !== $expectedTag && null === self::versionFromTag( $expectedTag ) ) {
+			throw new InvalidArgumentException( 'The expected GitHub release tag is invalid.' );
+		}
+		return array( $releaseIdentity, $expectedTag );
+	}
+
+	/** @return array{array<string,mixed>,string} */
+	private function acquisitionInput( IdentityDescriptor $descriptor ): array {
+		BindingRecord::assertDescriptorBinding( $descriptor, $this->bindingRecord );
+		$facts = $descriptor->toArray();
+		$artifactIdentity = self::canonicalDecimal( $facts['artifact_identity'] ?? null );
+		if ( 'github' !== $facts['provider_code'] || null === $artifactIdentity ) {
+			throw new InvalidArgumentException( 'The GitHub artifact identity is invalid.' );
+		}
+		return array( $facts, $artifactIdentity );
 	}
 
 	/** @param array<string, mixed> $release */

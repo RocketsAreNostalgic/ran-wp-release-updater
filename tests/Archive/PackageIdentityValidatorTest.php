@@ -6,6 +6,7 @@ namespace Tests\Archive;
 
 use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
+use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 
 final class PackageIdentityValidatorTest extends TestCase {
@@ -27,6 +28,119 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertTrue( $result->isValid() );
 		self::assertSame( 'example-plugin/example-plugin.php', $result->toArray()['archive_root'] . '/' . $result->toArray()['header_file'] );
 		self::assertTrue( $validator->validate( $this->descriptor( $theme, 'theme', 'example-theme' ), $this->policy( 'theme', 'example-theme', 'style.css', 'Example Theme' ), $theme )->isValid() );
+	}
+
+	public function testProspectiveInspectionDiscoversOneSafePluginOrThemeHeader(): void {
+		$plugin = $this->archive( array( 'example-plugin/loader.php' => '<?php return true;', 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
+		$theme = $this->archive( array( 'example-theme/style.css' => $this->header( 'Theme Name', 'Example Theme' ) ) );
+		$validator = new PackageIdentityValidator();
+		self::assertSame( array( 'package_root' => 'example-plugin', 'main_file' => 'example-plugin.php' ), $validator->inspectProspective( $this->descriptor( $plugin, 'plugin', 'example-plugin/example-plugin.php' ), $this->binding( 'plugin', 'example-plugin/example-plugin.php' ), $plugin ) );
+		self::assertSame( array( 'package_root' => 'example-theme', 'main_file' => 'style.css' ), $validator->inspectProspective( $this->descriptor( $theme, 'theme', 'example-theme' ), $this->binding( 'theme', 'example-theme' ), $theme ) );
+	}
+
+	public function testProspectiveInspectionRejectsAmbiguousPluginHeaders(): void {
+		$archive = $this->archive( array( 'example-plugin/a.php' => $this->header( 'Plugin Name', 'Example Plugin' ), 'example-plugin/b.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
+		self::assertNull( ( new PackageIdentityValidator() )->inspectProspective( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $this->binding( 'plugin', 'example-plugin/example-plugin.php' ), $archive ) );
+	}
+
+	/** @dataProvider prospectiveUnsafeArchives */
+	public function testProspectiveInspectionRejectsUnsafeAndAmbiguousShapes(
+		array $entries,
+		array $links = array()
+	): void {
+		$archive = $this->archive( $entries, $links );
+		self::assertNull( $this->prospectivePlugin( $archive ) );
+	}
+
+	/** @return array<string,array{0:array<string,string>,1?:list<string>}> */
+	public static function prospectiveUnsafeArchives(): array {
+		$header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/";
+		return array(
+			'multiple roots' => array(
+				array(
+					'example-plugin/example-plugin.php' => $header,
+					'other/payload.php' => '<?php return true;',
+				),
+			),
+			'unsafe path' => array(
+				array(
+					'example-plugin/example-plugin.php' => $header,
+					'example-plugin/../escape.php' => '<?php return true;',
+				),
+			),
+			'duplicate case path' => array(
+				array(
+					'example-plugin/example-plugin.php' => $header,
+					'example-plugin/EXAMPLE-PLUGIN.PHP' => '<?php return true;',
+				),
+			),
+			'special entry' => array(
+				array(
+					'example-plugin/example-plugin.php' => $header,
+					'example-plugin/link.php' => '../outside',
+				),
+				array( 'example-plugin/link.php' ),
+			),
+		);
+	}
+
+	public function testProspectiveInspectionRejectsEntryLimitAndHeaderMismatches(): void {
+		$many = array(
+			'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+		);
+		for ( $index = 1; $index <= 10000; ++$index ) {
+			$many[ 'example-plugin/entry-' . $index ] = '';
+		}
+		self::assertNull( $this->prospectivePlugin( $this->archive( $many ) ) );
+
+		foreach (
+			array(
+				'missing PHP requirement' => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires at least: 6.8\n*/",
+				'missing WordPress requirement' => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires PHP: 8.2\n*/",
+				'URI mismatch' => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/other\n*/",
+				'version mismatch' => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.1\nUpdate URI: https://updates.example.test/owner/package\n*/",
+				'PHP mismatch' => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires PHP: 8.3\n*/",
+				'WordPress mismatch' => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires at least: 6.9\n*/",
+			) as $header
+		) {
+			$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
+			self::assertNull( $this->prospectivePlugin( $archive ) );
+		}
+	}
+
+	public function testProspectiveInspectionKeepsCrossTypeHeadersAndRejectsReplacement(): void {
+		$archive = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+				'example-plugin/style.css' => $this->header( 'Theme Name', 'Example Theme' ),
+			)
+		);
+		self::assertSame(
+			array( 'package_root' => 'example-plugin', 'main_file' => 'example-plugin.php' ),
+			$this->prospectivePlugin( $archive )
+		);
+
+		$archive = $this->archive(
+			array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) )
+		);
+		$replacement = $this->archive(
+			array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Other Plugin' ) )
+		);
+		$validator = new PackageIdentityValidator();
+		$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+		$afterOpen->setValue(
+			$validator,
+			static function ( string $path ) use ( $replacement ): void {
+				copy( $replacement, $path );
+			}
+		);
+		self::assertNull(
+			$validator->inspectProspective(
+				$this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ),
+				$this->binding( 'plugin', 'example-plugin/example-plugin.php' ),
+				$archive
+			)
+		);
 	}
 
 	public function testFailsClosedForDigestSizeUriTargetAndMetadataMismatches(): void {
@@ -138,10 +252,36 @@ final class PackageIdentityValidatorTest extends TestCase {
 		$zip->close(); return $path;
 	}
 
-	private function header( string $kind, string $name ): string { return "<?php\n/*\n{$kind}: {$name}\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/"; }
+	private function header( string $kind, string $name ): string { return "<?php\n/*\n{$kind}: {$name}\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires PHP: 8.2\nRequires at least: 6.8\n*/"; }
 
 	private function descriptor( string $path, string $type, string $identity ): IdentityDescriptor {
 		return IdentityDescriptor::create( array( 'artifact_filename' => 'package.zip', 'artifact_identity' => 'asset:1', 'artifact_sha256' => hash_file( 'sha256', $path ), 'artifact_size' => filesize( $path ), 'assurance_facts' => array( 'exact_artifact_identity' => true, 'exact_commit_identity' => true, 'exact_reacquisition_supported' => true, 'exact_release_identity' => true, 'provenance_verified' => true, 'publication_immutable' => true, 'repository_identity_stable' => true, 'trusted_digest_source' => true ), 'canonical_update_uri' => 'https://updates.example.test/owner/package', 'channel' => 'stable', 'commit_identity' => 'commit:1', 'installed_package_identity' => $identity, 'prerelease' => false, 'provider_code' => 'neutral', 'release_identity' => 'release:1', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package', 'tag' => 'v1.0.0', 'target_type' => $type, 'version' => '1.0.0' ) );
+	}
+
+	/** @return array{package_root:string,main_file:string}|null */
+	private function prospectivePlugin( string $archive ): ?array {
+		return ( new PackageIdentityValidator() )->inspectProspective(
+			$this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ),
+			$this->binding( 'plugin', 'example-plugin/example-plugin.php' ),
+			$archive
+		);
+	}
+
+	private function binding( string $type, string $identity ): BindingRecord {
+		return BindingRecord::create(
+			array(
+				'canonical_repository_locator' => 'owner/package',
+				'canonical_update_uri' => 'https://updates.example.test/owner/package',
+				'installed_package_identity' => $identity,
+				'php_runtime_version' => '8.2',
+				'provider_code' => 'neutral',
+				'release_channel' => 'stable',
+				'stable_repository_identity' => 'repo:1',
+				'target_type' => $type,
+				'update_policy' => 'manual',
+				'wordpress_runtime_version' => '6.8',
+			)
+		);
 	}
 
 	/** @return array<string,string> */

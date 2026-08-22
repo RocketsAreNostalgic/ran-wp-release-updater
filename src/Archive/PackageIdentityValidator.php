@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\Archive;
 
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
+use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 use WeakMap;
@@ -23,6 +24,121 @@ final class PackageIdentityValidator {
 
 	public function __construct() { $this->receiptProofs = new WeakMap(); }
 	private function __clone(): void {}
+
+	/** @return array{package_root:string,main_file:string}|null */
+	public function inspectProspective( IdentityDescriptor $descriptor, BindingRecord $binding, string $archivePath ): ?array {
+		try {
+			BindingRecord::assertDescriptorBinding( $descriptor, $binding );
+		} catch ( \InvalidArgumentException ) {
+			return null;
+		}
+		$facts    = $descriptor->toArray();
+		$runtime  = $binding->toArray();
+		$identity = $this->archiveIdentity( $archivePath, $facts );
+		if ( null === $identity || ! class_exists( '\\ZipArchive' ) ) {
+			return null;
+		}
+		$zip = new \ZipArchive();
+		if ( true !== $zip->open( $archivePath ) ) {
+			return null;
+		}
+		try {
+			if ( null !== $this->afterOpen ) {
+				( $this->afterOpen )( $archivePath );
+			}
+			if (
+				! $this->matchesArchiveIdentity( $archivePath, $facts, $identity )
+				|| $zip->numFiles < 1
+				|| $zip->numFiles > self::MAX_ARCHIVE_ENTRIES
+			) {
+				return null;
+			}
+			$root = null;
+			$seen = array();
+			$expanded = 0;
+			$candidate = null;
+			for ( $index = 0; $index < $zip->numFiles; ++$index ) {
+				$name = $zip->getNameIndex( $index, \ZipArchive::FL_UNCHANGED );
+				$stat = $zip->statIndex( $index, \ZipArchive::FL_UNCHANGED );
+				$path = is_string( $name ) ? self::normalizePath( $name ) : null;
+				if (
+					null === $path
+					|| ! is_array( $stat )
+					|| ! is_int( $stat['size'] ?? null )
+					|| ! is_int( $stat['comp_size'] ?? null )
+					|| $stat['size'] < 0
+					|| $stat['comp_size'] < 0
+					|| self::isSpecialEntry( $zip, $index )
+					|| $stat['size'] > self::MAX_EXPANDED_ARCHIVE_BYTES - $expanded
+					|| (
+						$stat['size'] > 0
+						&& (
+							0 === $stat['comp_size']
+							|| $stat['size'] > self::MAX_COMPRESSION_RATIO * $stat['comp_size']
+						)
+					)
+				) {
+					return null;
+				}
+				$expanded += $stat['size'];
+				$key = strtolower( $path['path'] );
+				if ( isset( $seen[ $key ] ) ) {
+					return null;
+				}
+				$seen[ $key ] = true;
+				$parts = explode( '/', $path['path'] );
+				$root ??= $parts[0];
+				if ( ! hash_equals( $root, $parts[0] ) || ( 1 === count( $parts ) && ! $path['directory'] ) ) {
+					return null;
+				}
+				$isThemeHeader = $root . '/style.css' === $path['path'];
+				$isPluginHeader = 2 === count( $parts )
+					&& ! $path['directory']
+					&& str_ends_with( $parts[1], '.php' );
+				$header = 'theme' === $facts['target_type']
+					? ( $isThemeHeader ? 'style.css' : null )
+					: (
+						$isPluginHeader
+						? $parts[1]
+						: null
+					);
+				if ( null === $header ) {
+					continue;
+				}
+				$contents = self::readHeader( $zip, $name );
+				$metadata = null === $contents
+					? null
+					: self::headerValue( $contents, 'theme' === $facts['target_type'] ? 'Theme Name' : 'Plugin Name' );
+				if ( 'plugin' === $facts['target_type'] && null === $metadata ) {
+					continue;
+				}
+				if ( null === $contents || null === $metadata ) {
+					return null;
+				}
+				$uri = self::headerValue( $contents, 'Update URI' );
+				$version = self::headerValue( $contents, 'Version' );
+				$php = self::optionalHeaderValue( $contents, 'Requires PHP' );
+				$wordpress = self::optionalHeaderValue( $contents, 'Requires at least' );
+				if (
+					null === $uri
+					|| null === $version
+					|| $facts['canonical_update_uri'] !== CanonicalUpdateUri::canonicalize( $uri )
+					|| 0 !== ReleaseVersion::compare( $version, $facts['version'] )
+					|| ! is_string( $php )
+					|| ! self::meetsRequirement( $runtime['php_runtime_version'], $php )
+					|| ! is_string( $wordpress )
+					|| ! self::meetsRequirement( $runtime['wordpress_runtime_version'], $wordpress )
+					|| null !== $candidate
+				) {
+					return null;
+				}
+				$candidate = array( 'package_root' => $root, 'main_file' => $header );
+			}
+			return $this->matchesArchiveIdentity( $archivePath, $facts, $identity ) ? $candidate : null;
+		} finally {
+			$zip->close();
+		}
+	}
 
 
 	/**

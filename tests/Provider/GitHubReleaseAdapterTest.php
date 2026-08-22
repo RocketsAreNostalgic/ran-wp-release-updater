@@ -229,6 +229,47 @@ final class GitHubReleaseAdapterTest extends TestCase
 		}
 	}
 
+	public function testInvalidCallerInputDoesNotResolveCredentialsOrCallGitHub(): void
+	{
+		$valid = new GitHubReleaseAdapter($this->binding());
+		$GLOBALS['ran_github_responses'] = $this->inspectionResponses(7, 'v1.2.3');
+		$descriptor = $valid->inspect('7');
+		$facts = $descriptor->toArray();
+		unset($facts['fingerprint']);
+		$facts['artifact_identity'] = 'invalid-asset';
+		$invalidDescriptor = IdentityDescriptor::create($facts);
+
+		$calls = 0;
+		$adapter = new GitHubReleaseAdapter(
+			$this->binding(),
+			new GitHubCredentialResolver(
+				static function () use (&$calls): string {
+					++$calls;
+					return 'private-token';
+				}
+			)
+		);
+		$GLOBALS['ran_github_requests'] = array();
+
+		foreach (
+			array(
+				static fn (): IdentityDescriptor => $adapter->inspect('not-a-release'),
+				static fn (): TemporaryArtifact => $adapter->acquire($invalidDescriptor),
+				static fn (): array => $adapter->inspectProspective('not-a-release'),
+			) as $operation
+		) {
+			try {
+				$operation();
+				self::fail('Invalid caller input unexpectedly reached the request chain.');
+			} catch (\InvalidArgumentException) {
+				self::addToAssertionCount(1);
+			}
+		}
+
+		self::assertSame(0, $calls);
+		self::assertSame(array(), $GLOBALS['ran_github_requests']);
+	}
+
 	public function testListingSortsStableNumericIdentitiesAndReturnsReleaseDetails(): void
 	{
 		$GLOBALS['ran_github_responses'] = array(
@@ -731,6 +772,113 @@ final class GitHubReleaseAdapterTest extends TestCase
 		self::assertFileDoesNotExist($path);
 	}
 
+	public function testProspectiveInspectionKeepsReleaseAndDescriptorFactsThenDiscards(): void
+	{
+		$calls = 0;
+		$archive = $this->prospectiveArchive(
+			"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n"
+			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
+		);
+		$adapter = new GitHubReleaseAdapter(
+			$this->binding(),
+			new GitHubCredentialResolver(
+				static function () use (&$calls): string {
+					++$calls;
+					return 'private-token';
+				}
+			)
+		);
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(
+			7,
+			'v1.2.3',
+			$archive
+		);
+
+		$facts = $adapter->inspectProspective('7', 'v1.2.3');
+
+		self::assertSame('7', $facts['release_identity']);
+		self::assertSame('v1.2.3', $facts['tag']);
+		self::assertSame('1.2.3', $facts['version']);
+		self::assertSame('repository', $facts['package_root']);
+		self::assertSame('repository.php', $facts['main_file']);
+		self::assertArrayHasKey('fingerprint', $facts);
+		self::assertSame(1, $calls);
+		self::assertCount(6, $GLOBALS['ran_github_requests']);
+		$this->assertAllTemporaryPathsAbsent();
+	}
+
+	public function testPrivateThemeProspectiveFlowResolvesOncePerChainAndDiscards(): void
+	{
+		$calls = 0;
+		$adapter = new GitHubReleaseAdapter(
+			$this->binding('stable', 'theme'),
+			new GitHubCredentialResolver(
+				static function () use (&$calls): string {
+					++$calls;
+					return 'private-token';
+				}
+			)
+		);
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array($this->release(7, 'v1.2.3'))),
+		);
+		$candidate = $adapter->listReleases()['candidates'][0];
+		self::assertSame(1, $calls);
+		self::assertSame('7', $candidate['release_identity']);
+
+		$archive = $this->prospectiveThemeArchive(
+			"/*\nTheme Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n"
+			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
+		);
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(
+			7,
+			'v1.2.3',
+			$archive
+		);
+
+		$facts = $adapter->inspectProspective(
+			$candidate['release_identity'],
+			$candidate['tag']
+		);
+
+		self::assertSame(2, $calls);
+		self::assertSame('theme', $facts['target_type']);
+		self::assertSame('repository', $facts['package_root']);
+		self::assertSame('style.css', $facts['main_file']);
+		foreach ($GLOBALS['ran_github_requests'] as $request) {
+			self::assertSame('Bearer private-token', $request[1]['headers']['Authorization']);
+		}
+		$this->assertAllTemporaryPathsAbsent();
+	}
+
+	public function testProspectiveInspectionRejectsArchiveAndStillDiscards(): void
+	{
+		$archive = $this->prospectiveArchive(
+			"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n*/",
+			array(
+				'repository/other.php' => "<?php\n/*\nPlugin Name: Other\nVersion: 1.2.3\n"
+					. "Update URI: https://github.com/owner/repository\n*/",
+			)
+		);
+		$adapter = new GitHubReleaseAdapter($this->binding());
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(
+			7,
+			'v1.2.3',
+			$archive
+		);
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('release package is invalid');
+		try {
+			$adapter->inspectProspective('7', 'v1.2.3');
+		} finally {
+			$this->assertAllTemporaryPathsAbsent();
+		}
+	}
+
 	/** @dataProvider unsafeRedirectProvider */
 	public function testUnsafeExpiredAndExcessRedirectsFailClosed(string $location): void
 	{
@@ -918,6 +1066,57 @@ final class GitHubReleaseAdapterTest extends TestCase
 			),
 			$this->response(200, array('sha' => str_repeat('a', 40))),
 		);
+	}
+
+	/** @return list<array<string,mixed>> */
+	private function prospectiveInspectionResponses(
+		int $releaseIdentity,
+		string $tag,
+		string $archive
+	): array {
+		$release = $this->release($releaseIdentity, $tag);
+		$release['assets'][0]['digest'] = 'sha256:' . hash('sha256', $archive);
+		$release['assets'][0]['size'] = strlen($archive);
+		return array(
+			$this->response(200, array('id' => 99)),
+			$this->response(200, $release),
+			$this->response(200, array('sha' => str_repeat('a', 40))),
+			$this->response(200, array('id' => 99)),
+			$this->response(200, null, array(), $archive),
+			$this->response(200, array('id' => 99)),
+		);
+	}
+
+	/** @param array<string,string> $additionalEntries */
+	private function prospectiveArchive(string $header, array $additionalEntries = array()): string
+	{
+		$path = tempnam(sys_get_temp_dir(), 'ran-github-prospective-');
+		self::assertIsString($path);
+		$zip = new \ZipArchive();
+		self::assertTrue($zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE));
+		self::assertTrue($zip->addFromString('repository/repository.php', $header));
+		foreach ($additionalEntries as $name => $contents) {
+			self::assertTrue($zip->addFromString($name, $contents));
+		}
+		$zip->close();
+		$archive = file_get_contents($path);
+		self::assertIsString($archive);
+		self::assertTrue(unlink($path));
+		return $archive;
+	}
+
+	private function prospectiveThemeArchive(string $header): string
+	{
+		$path = tempnam(sys_get_temp_dir(), 'ran-github-prospective-');
+		self::assertIsString($path);
+		$zip = new \ZipArchive();
+		self::assertTrue($zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE));
+		self::assertTrue($zip->addFromString('repository/style.css', $header));
+		$zip->close();
+		$archive = file_get_contents($path);
+		self::assertIsString($archive);
+		self::assertTrue(unlink($path));
+		return $archive;
 	}
 
 	/** @return array<string,mixed> */
