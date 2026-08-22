@@ -96,7 +96,7 @@ final class CanonicalUpdateUriTest extends TestCase {
 	public function testCanonicalizesOnlyTheClosedFourBoundaryTuple(): void {
 		$boundaries = array(
 			'configuration' => 'HTTPS://Updates.Example.test/Release/Plugin/',
-			'offer_or_cache' => 'https://updates.example.test/Release/Plugin',
+			'offer' => 'https://updates.example.test/Release/Plugin',
 			'archive_preflight' => 'https://updates.example.test/Release/Plugin',
 			'staged_package' => 'https://updates.example.test/Release/Plugin',
 		);
@@ -119,7 +119,7 @@ final class CanonicalUpdateUriTest extends TestCase {
 	public function testFourBoundaryTupleRejectsAChangedPathOrInvalidValueType(): void {
 		$boundaries = array(
 			'configuration' => 'https://updates.example.test/Release/Plugin',
-			'offer_or_cache' => 'https://updates.example.test/Release/Plugin',
+			'offer' => 'https://updates.example.test/Release/Plugin',
 			'archive_preflight' => 'https://updates.example.test/Release/Plugin',
 			'staged_package' => 'https://updates.example.test/release/Plugin',
 		);

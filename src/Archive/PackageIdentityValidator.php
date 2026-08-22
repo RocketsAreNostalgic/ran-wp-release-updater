@@ -17,7 +17,7 @@ final class PackageIdentityValidator {
 	private const MAX_ARCHIVE_ENTRIES = 10000;
 	private const MAX_HEADER_BYTES = 8192;
 	private const MAX_COMPRESSION_RATIO = 100;
-	private const POLICY_KEYS = array( 'archive_root', 'configuration_update_uri', 'header_file', 'installed_package_identity', 'metadata_name', 'offer_or_cache_update_uri', 'php_runtime_version', 'provider_code', 'repository_identity', 'repository_locator', 'staged_package_update_uri', 'target_type', 'wordpress_runtime_version' );
+	private const POLICY_KEYS = array( 'archive_root', 'configuration_update_uri', 'header_file', 'installed_package_identity', 'metadata_name', 'offer_update_uri', 'php_runtime_version', 'provider_code', 'repository_identity', 'repository_locator', 'staged_package_update_uri', 'target_type', 'wordpress_runtime_version' );
 	private ?\Closure $afterOpen = null;
 	private WeakMap $receiptProofs;
 
@@ -67,7 +67,7 @@ final class PackageIdentityValidator {
 			$requiresPhp = self::optionalHeaderValue( $header, 'Requires PHP' );
 			$requiresWordPress = self::optionalHeaderValue( $header, 'Requires at least' );
 			if ( null === $name || ! hash_equals( $policy['metadata_name'], $name ) ) return ValidatedPackage::blocked( 'archive_metadata_identity_mismatch' );
-			if ( null === $uri || null === CanonicalUpdateUri::canonicalizeBoundaries( array( 'archive_preflight' => $uri, 'configuration' => $policy['configuration_update_uri'], 'offer_or_cache' => $policy['offer_or_cache_update_uri'], 'staged_package' => $policy['staged_package_update_uri'] ) ) ) return ValidatedPackage::blocked( 'archive_update_uri_mismatch' );
+			if ( null === $uri || null === CanonicalUpdateUri::canonicalizeBoundaries( array( 'archive_preflight' => $uri, 'configuration' => $policy['configuration_update_uri'], 'offer' => $policy['offer_update_uri'], 'staged_package' => $policy['staged_package_update_uri'] ) ) ) return ValidatedPackage::blocked( 'archive_update_uri_mismatch' );
 			if ( null === $version || 0 !== ReleaseVersion::compare( $version, $descriptorFacts['version'] ) ) return ValidatedPackage::blocked( 'archive_version_mismatch' );
 			if ( null === $requiresPhp || ( is_string( $requiresPhp ) && ! self::meetsRequirement( $policy['php_runtime_version'], $requiresPhp ) ) ) return ValidatedPackage::blocked( 'archive_php_requirement_incompatible' );
 			if ( null === $requiresWordPress || ( is_string( $requiresWordPress ) && ! self::meetsRequirement( $policy['wordpress_runtime_version'], $requiresWordPress ) ) ) return ValidatedPackage::blocked( 'archive_wordpress_requirement_incompatible' );
@@ -99,7 +99,7 @@ final class PackageIdentityValidator {
 		foreach ( array( 'installed_package_identity', 'provider_code', 'repository_identity', 'repository_locator', 'target_type' ) as $key ) if ( ! hash_equals( $facts[ $key ], $policy[ $key ] ) ) return false;
 		if ( ( 'plugin' === $policy['target_type'] && $policy['installed_package_identity'] !== $policy['archive_root'] . '/' . $policy['header_file'] ) || ( 'theme' === $policy['target_type'] && ( $policy['installed_package_identity'] !== $policy['archive_root'] || 'style.css' !== $policy['header_file'] ) ) ) return false;
 		if ( ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $policy['archive_root'] ) || ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(?:php|css)\z/D', $policy['header_file'] ) || ( 'plugin' === $policy['target_type'] && ! str_ends_with( $policy['header_file'], '.php' ) ) || ( 'theme' === $policy['target_type'] && 'style.css' !== $policy['header_file'] ) || '' === $policy['metadata_name'] || strlen( $policy['metadata_name'] ) > 500 || 1 === preg_match( '/[\x00-\x1f\x7f]/', $policy['metadata_name'] ) || null === ReleaseVersion::normalizeHeader( $policy['php_runtime_version'] ) || null === ReleaseVersion::normalizeHeader( $policy['wordpress_runtime_version'] ) ) return false;
-		return $facts['canonical_update_uri'] === CanonicalUpdateUri::canonicalizeBoundaries( array( 'archive_preflight' => $facts['canonical_update_uri'], 'configuration' => $policy['configuration_update_uri'], 'offer_or_cache' => $policy['offer_or_cache_update_uri'], 'staged_package' => $policy['staged_package_update_uri'] ) );
+		return $facts['canonical_update_uri'] === CanonicalUpdateUri::canonicalizeBoundaries( array( 'archive_preflight' => $facts['canonical_update_uri'], 'configuration' => $policy['configuration_update_uri'], 'offer' => $policy['offer_update_uri'], 'staged_package' => $policy['staged_package_update_uri'] ) );
 	}
 
 	/** @param array<string, mixed> $facts */

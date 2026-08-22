@@ -143,7 +143,7 @@ function build_target( string $type, string $identity, string $uri, string $arch
 		'header_file'               => ( 'theme' === $type ? 'style.css' : 'phase24-plugin.php' ),
 		'installed_package_identity' => $identity,
 		'metadata_name'             => 'Phase24 ' . ucfirst( $type ),
-		'offer_or_cache_update_uri'  => $cleanUri,
+		'offer_update_uri'           => $cleanUri,
 		'php_runtime_version'       => '8.2',
 		'provider_code'             => 'neutral',
 		'repository_identity'       => 'repo:phase24',

@@ -73,7 +73,7 @@ final class FakeAdapterLifecycleTest extends TestCase {
 		$policy = $this->policy( $targetType, $uri );
 
 		$redirectCandidate = $policy;
-		$redirectCandidate['offer_or_cache_update_uri'] = 'https://updates.example.test/owner/fake-release-redirect';
+		$redirectCandidate['offer_update_uri'] = 'https://updates.example.test/owner/fake-release-redirect';
 		self::assertSame( 'archive_target_policy_invalid', $validator->validate( $descriptor, $redirectCandidate, $archive )->code() );
 
 		$package = $validator->validate( $descriptor, $policy, $archive );
@@ -186,7 +186,7 @@ final class FakeAdapterLifecycleTest extends TestCase {
 	/** @return array<string,string> */
 	private function policy( string $targetType, string $uri ): array {
 		$header = 'plugin' === $targetType ? 'fake-release.php' : 'style.css';
-		return array( 'archive_root' => 'fake-release', 'configuration_update_uri' => $uri, 'header_file' => $header, 'installed_package_identity' => 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release', 'metadata_name' => 'Fake Release', 'offer_or_cache_update_uri' => $uri, 'php_runtime_version' => '8.2', 'provider_code' => 'fake', 'repository_identity' => 'fake:repository', 'repository_locator' => 'owner/fake-release', 'staged_package_update_uri' => $uri, 'target_type' => $targetType, 'wordpress_runtime_version' => '6.8' );
+		return array( 'archive_root' => 'fake-release', 'configuration_update_uri' => $uri, 'header_file' => $header, 'installed_package_identity' => 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release', 'metadata_name' => 'Fake Release', 'offer_update_uri' => $uri, 'php_runtime_version' => '8.2', 'provider_code' => 'fake', 'repository_identity' => 'fake:repository', 'repository_locator' => 'owner/fake-release', 'staged_package_update_uri' => $uri, 'target_type' => $targetType, 'wordpress_runtime_version' => '6.8' );
 	}
 
 	/** @return array<string,mixed> */

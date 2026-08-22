@@ -9,7 +9,7 @@ final class CanonicalUpdateUri {
 	private const BOUNDARY_KEYS = array(
 		'archive_preflight',
 		'configuration',
-		'offer_or_cache',
+		'offer',
 		'staged_package',
 	);
 

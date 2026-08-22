@@ -49,7 +49,7 @@ final class KernelPerformanceTest extends TestCase {
 	}
 
 	/** @return array<string,string> */
-	private function boundaries(): array { return array( 'archive_preflight' => 'https://UPDATES.example.test/owner/package/', 'configuration' => 'https://updates.example.test/owner/package', 'offer_or_cache' => 'https://updates.example.test/owner/package', 'staged_package' => 'https://updates.example.test/owner/package' ); }
+	private function boundaries(): array { return array( 'archive_preflight' => 'https://UPDATES.example.test/owner/package/', 'configuration' => 'https://updates.example.test/owner/package', 'offer' => 'https://updates.example.test/owner/package', 'staged_package' => 'https://updates.example.test/owner/package' ); }
 	private function cpuNanoseconds(): int { $usage = getrusage(); return ( (int) $usage['ru_utime.tv_sec'] + (int) $usage['ru_stime.tv_sec'] ) * 1_000_000_000 + ( (int) $usage['ru_utime.tv_usec'] + (int) $usage['ru_stime.tv_usec'] ) * 1000; }
 
 	private function descriptor( string $version, string $release ): IdentityDescriptor {
