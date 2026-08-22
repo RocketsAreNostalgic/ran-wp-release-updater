@@ -2,8 +2,17 @@
 
 declare(strict_types=1);
 
+$testAutoloadMap = array(
+	'RAN\\WPReleaseUpdater\\V1\\WordPress\\BindingState' => dirname( __DIR__ ) . '/src/WordPress/ReleaseOperationCoordinator.php',
+);
+
 spl_autoload_register(
-	static function ( string $class ): void {
+	static function ( string $class ) use ( $testAutoloadMap ): void {
+		if ( isset( $testAutoloadMap[ $class ] ) ) {
+			require_once $testAutoloadMap[ $class ];
+			return;
+		}
+
 		$prefix = 'RAN\\WPReleaseUpdater\\V1\\';
 		if ( ! str_starts_with( $class, $prefix ) ) {
 			return;

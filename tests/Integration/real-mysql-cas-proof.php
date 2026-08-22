@@ -44,7 +44,7 @@ try {
 	$target = targetName( $binding );
 	$rows = $mysqli->query( "SELECT option_name, autoload FROM options ORDER BY option_name" )->fetch_all( MYSQLI_ASSOC );
 	if ( 1 !== count( $rows ) || 'no' !== $rows[0]['autoload'] ) throw new RuntimeException( 'Option was not one non-autoload row.' );
-	$mysqli->query( "UPDATE options SET option_value = JSON_SET(option_value, '$.lease_deadline', 0) WHERE option_name = '" . $mysqli->real_escape_string( $target ) . "'" );
+	$mysqli->query( "UPDATE options SET option_value = JSON_SET(option_value, '$.lease_deadline', 1) WHERE option_name = '" . $mysqli->real_escape_string( $target ) . "'" );
 	$takeover = workers( $socket, 'takeover' );
 	assertOneClaim( $takeover, 'expired takeover' );
 	$new = claimed( $takeover );
@@ -77,7 +77,10 @@ function worker( array $argv ): void {
 function workers( string $socket, string $scenario ): array {
 	$processes = array();
 	$startAt = hrtime( true ) + 500000000;
-	foreach ( array( str_repeat( 'a', 64 ), str_repeat( 'b', 64 ) ) as $owner ) {
+	$owners = 'takeover' === $scenario
+		? array( str_repeat( 'c', 64 ), str_repeat( 'd', 64 ) )
+		: array( str_repeat( 'a', 64 ), str_repeat( 'b', 64 ) );
+	foreach ( $owners as $owner ) {
 		$processes[] = proc_open( array( PHP_BINARY, __FILE__, '--worker', $socket, $owner, $scenario, (string) $startAt ), array( 0 => array( 'pipe', 'r' ), 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ), $pipes );
 		$processes[array_key_last( $processes )] = array( 'process' => $processes[array_key_last( $processes )], 'pipes' => $pipes );
 	}
