@@ -38,6 +38,7 @@ namespace Tests\WordPress {
 		private array $paths = array();
 		protected function setUp(): void {
 			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
+			$GLOBALS['ran_wp_release_updater_test_filter_callbacks'] = array();
 		}
 		protected function tearDown(): void {
 			foreach ( $this->paths as $path ) {
@@ -233,6 +234,108 @@ namespace Tests\WordPress {
 			$configuration['target_type'] = 'theme';
 			self::assertNull( NativePluginUpdater::fromConfiguration( $configuration, $binding, $adapter, $database, $this->policy() ) );
 		}
+		public function testCoreArtifactHandoffUsesExactCoreHookOrderAndToleratesCoreUnlink(): void {
+			list( $updater, $adapter, $database ) = $this->subject();
+			$path = tempnam( sys_get_temp_dir(), 'ran-core-handoff-' ); self::assertIsString( $path ); $this->paths[] = $path; chmod( $path, 0600 ); file_put_contents( $path, 'core archive' );
+			$GLOBALS['ran_wp_release_updater_test_filter_callbacks']['ran_wp_release_updater_v1_core_artifact_handoff'] = static fn() => \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact::forCoreUpdate( $path, hash_file( 'sha256', $path ), 'plugin', 'package/package.php', '2.0.0' );
+			$extra = array( 'action' => 'update', 'type' => 'plugin', 'plugin' => 'package/package.php' );
+			self::assertSame( $path, $updater->filterPreDownload( $path, $path, null, $extra ) ); self::assertSame( array( 0, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) ); self::assertSame( array(), $database->preparedSql() );
+			self::assertNull( $updater->filterPreUnzipFile( null, $path, '/tmp', array(), 0.0 ) ); @unlink( $path ); self::assertTrue( $updater->filterPreInstall( true, $extra ) ); $staged = $this->staged(); self::assertSame( $staged, $updater->filterSourceSelection( $staged, '/tmp', null, $extra ) );
+			$updater->captureInstallPackageResult( array( 'destination' => $staged ), $extra ); $updater->observeCompletion( null, array( 'action' => 'update', 'type' => 'plugin', 'plugins' => array( 'package/package.php' ) ) ); $updater->finalizePendingInstall(); $this->assertCorePassive( $adapter, $database );
+		}
+		public function testCoreArtifactHandoffRejectsNormalPendingWithoutConsumingCapability(): void {
+			list( $updater, , $database ) = $this->subject();
+			$offer = $this->offer( $updater );
+			$normal = $updater->filterPreDownload( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $normal );
+			$path = tempnam( sys_get_temp_dir(), 'ran-core-pending-' ); self::assertIsString( $path ); $this->paths[] = $path; chmod( $path, 0600 ); file_put_contents( $path, 'core archive' );
+			$calls = 0;
+			$GLOBALS['ran_wp_release_updater_test_filter_callbacks']['ran_wp_release_updater_v1_core_artifact_handoff'] = static function () use ( &$calls ): mixed { ++$calls; return null; };
+			$result = $updater->filterPreDownload( $path, $path, null, array( 'action' => 'update', 'type' => 'plugin', 'plugin' => 'package/package.php' ) );
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertSame( 0, $calls );
+			self::assertFileExists( $path );
+			self::assertNotEmpty( $database->rows() );
+			$updater->refresh();
+		}
+
+		public function testCoreArtifactHandoffReleasesOnlyExistingDiscoveryLease(): void {
+			list( $updater, $adapter, $database, , $binding ) = $this->subject();
+			$this->offer( $updater );
+			$prepared = count( $database->preparedSql() );
+			$reads = count( $database->readOptionNames() );
+			$path = tempnam( sys_get_temp_dir(), 'ran-core-discovery-' ); self::assertIsString( $path ); $this->paths[] = $path; chmod( $path, 0600 ); file_put_contents( $path, 'core archive' );
+			$GLOBALS['ran_wp_release_updater_test_filter_callbacks']['ran_wp_release_updater_v1_core_artifact_handoff'] = static fn() => \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact::forCoreUpdate( $path, hash_file( 'sha256', $path ), 'plugin', 'package/package.php', '2.0.0' );
+			$extra = array( 'action' => 'update', 'type' => 'plugin', 'plugin' => 'package/package.php' );
+			self::assertSame( $path, $updater->filterPreDownload( $path, $path, null, $extra ) );
+			self::assertCount( $prepared + 3, $database->preparedSql() );
+			self::assertCount( $reads + 2, $database->readOptionNames() );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			$rows = $database->rows(); self::assertCount( 1, $rows ); $state = json_decode( array_values( $rows )[0]['option_value'], true, 32, JSON_THROW_ON_ERROR ); self::assertSame( 1, $state['lease_deadline'] );
+			$updater->finalizePendingInstall();
+			self::assertCount( $prepared + 3, $database->preparedSql() );
+			self::assertSame( 'claimed', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'f', 64 ), 1 )['result'] );
+		}
+
+		public function testCoreArtifactHandoffDiscardsPreConsumedCapability(): void {
+			list( $updater, $adapter, $database ) = $this->subject();
+			$path = tempnam( sys_get_temp_dir(), 'ran-core-consumed-' ); self::assertIsString( $path ); $this->paths[] = $path; chmod( $path, 0600 ); file_put_contents( $path, 'core archive' );
+			$artifact = \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact::forCoreUpdate( $path, hash_file( 'sha256', $path ), 'plugin', 'package/package.php', '2.0.0' );
+			$artifact->acceptCoreUpdate( 'plugin', 'package/package.php', 'update', $path );
+			$GLOBALS['ran_wp_release_updater_test_filter_callbacks']['ran_wp_release_updater_v1_core_artifact_handoff'] = static fn() => $artifact;
+			$extra = array( 'action' => 'update', 'type' => 'plugin', 'plugin' => 'package/package.php' );
+			self::assertInstanceOf( \WP_Error::class, $updater->filterPreDownload( $path, $path, null, $extra ) );
+			self::assertFileDoesNotExist( $path );
+			$this->assertCorePassive( $adapter, $database );
+		}
+		public function testCoreArtifactHandoffCompletesThemeWithoutCoordinatorState(): void {
+			list( $updater, $adapter, $database, $path, $extra ) = $this->coreHandoffSubject( 'theme' );
+			self::assertSame( $path, $updater->filterPreDownload( $path, $path, null, $extra ) );
+			self::assertNull( $updater->filterPreUnzipFile( null, $path, '/tmp', array(), 0.0 ) );
+			@unlink( $path ); self::assertTrue( $updater->filterPreInstall( true, $extra ) ); $staged = $this->coreStaged( 'theme' ); self::assertSame( $staged, $updater->filterSourceSelection( $staged, '/tmp', null, $extra ) );
+			$updater->captureInstallPackageResult( array( 'destination' => $staged ), $extra ); $updater->observeCompletion( null, array( 'action' => 'update', 'type' => 'theme', 'themes' => array( 'package' ) ) ); $updater->finalizePendingInstall();
+			self::assertFileDoesNotExist( $path ); $this->assertCorePassive( $adapter, $database );
+		}
+		/** @dataProvider coreStagedMismatchProvider */
+		public function testCoreArtifactHandoffRejectsStagedMetadataBeforeDestinationMutation( string $mismatch ): void {
+			list( $updater, $adapter, $database, $path, $extra ) = $this->coreHandoffSubject(); self::assertSame( $path, $updater->filterPreDownload( $path, $path, null, $extra ) ); self::assertNull( $updater->filterPreUnzipFile( null, $path, '/tmp', array(), 0.0 ) ); @unlink( $path ); self::assertTrue( $updater->filterPreInstall( true, $extra ) );
+			$staged = $this->coreStaged( 'plugin', $mismatch ); $header = $staged . '/package.php'; $before = is_file( $header ) ? hash_file( 'sha256', $header ) : null;
+			self::assertInstanceOf( \WP_Error::class, $updater->filterSourceSelection( $staged, '/tmp', null, $extra ) ); self::assertSame( $before, is_file( $header ) ? hash_file( 'sha256', $header ) : null ); self::assertFileDoesNotExist( $path ); $this->assertCorePassive( $adapter, $database );
+		}
+		public static function coreStagedMismatchProvider(): array { return array( 'root' => array( 'root' ), 'header' => array( 'header' ), 'version' => array( 'version' ), 'uri' => array( 'uri' ) ); }
+		public function testCoreArtifactHandoffRejectsArchiveMutationBeforeUnzipWithoutCoordinatorState(): void {
+			list( $updater, $adapter, $database, $path, $extra ) = $this->coreHandoffSubject(); self::assertSame( $path, $updater->filterPreDownload( $path, $path, null, $extra ) ); file_put_contents( $path, 'changed' );
+			self::assertInstanceOf( \WP_Error::class, $updater->filterPreUnzipFile( null, $path, '/tmp', array(), 0.0 ) ); self::assertFileExists( $path ); $this->assertCorePassive( $adapter, $database );
+		}
+		public function testCoreArtifactHandoffFailedInstallAndRollbackReadbackCleanUpWithoutCoordinatorState(): void {
+			list( $failed, $adapter, $database, $path, $extra ) = $this->coreHandoffSubject(); self::assertSame( $path, $failed->filterPreDownload( $path, $path, null, $extra ) ); self::assertNull( $failed->filterPreUnzipFile( null, $path, '/tmp', array(), 0.0 ) ); @unlink( $path ); self::assertTrue( $failed->filterPreInstall( true, $extra ) ); $staged = $this->coreStaged(); self::assertSame( $staged, $failed->filterSourceSelection( $staged, '/tmp', null, $extra ) ); self::assertInstanceOf( \WP_Error::class, $failed->captureInstallPackageResult( new \WP_Error( 'failed', 'failed' ), $extra ) ); self::assertFileDoesNotExist( $path ); $this->assertCorePassive( $adapter, $database );
+			list( $rollback, $adapter, $database, $path, $extra ) = $this->coreHandoffSubject(); self::assertSame( $path, $rollback->filterPreDownload( $path, $path, null, $extra ) ); self::assertNull( $rollback->filterPreUnzipFile( null, $path, '/tmp', array(), 0.0 ) ); @unlink( $path ); self::assertTrue( $rollback->filterPreInstall( true, $extra ) ); $staged = $this->coreStaged(); self::assertSame( $staged, $rollback->filterSourceSelection( $staged, '/tmp', null, $extra ) ); $rollback->captureInstallPackageResult( array( 'destination' => $staged ), $extra ); $rollback->observeCompletion( null, array( 'action' => 'update', 'type' => 'plugin', 'plugins' => array( 'package/package.php' ) ) ); file_put_contents( $staged . '/package.php', "<?php\n/*\nPlugin Name: Package\nVersion: 1.0.0\nUpdate URI: {$this->uri()}\n*/" ); $rollback->finalizePendingInstall();
+			self::assertContains( 'outcome_uncertain', $rollback->diagnostics() ); self::assertFileDoesNotExist( $path ); $this->assertCorePassive( $adapter, $database );
+		}
+		/** @dataProvider coreHandoffMismatchProvider */
+		public function testCoreArtifactHandoffRejectsMismatches( mixed $reply, string $package, array $extra, mixed $expected, bool $diagnosed ): void {
+			list( $updater, $adapter, $database ) = $this->subject();
+			$path = tempnam( sys_get_temp_dir(), 'ran-core-mismatch-' ); self::assertIsString( $path ); $this->paths[] = $path; chmod( $path, 0600 ); file_put_contents( $path, 'core archive' );
+			$GLOBALS['ran_wp_release_updater_test_filter_callbacks']['ran_wp_release_updater_v1_core_artifact_handoff'] = static fn() => \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact::forCoreUpdate( $path, hash_file( 'sha256', $path ), 'plugin', 'package/package.php', '2.0.0' );
+			$result = $updater->filterPreDownload( $reply === '__path__' ? $path : $reply, $package === '__path__' ? $path : $package, null, $extra ); if ( 'error' === $expected ) self::assertInstanceOf( \WP_Error::class, $result ); else self::assertSame( $expected === '__path__' ? $path : $expected, $result ); if ( $diagnosed ) self::assertContains( 'unverified_pre_download_result', $updater->diagnostics() ); else self::assertSame( array(), $updater->diagnostics() ); $this->assertCorePassive( $adapter, $database );
+		}
+		public static function coreHandoffMismatchProvider(): array { return array( 'reply' => array( 'other', '__path__', array( 'action' => 'update', 'type' => 'plugin', 'plugin' => 'package/package.php' ), 'error', true ), 'package' => array( '__path__', 'other', array( 'action' => 'update', 'type' => 'plugin', 'plugin' => 'package/package.php' ), 'error', true ), 'unrelated' => array( '__path__', '__path__', array( 'action' => 'update', 'type' => 'plugin', 'plugin' => 'other/other.php' ), '__path__', false ), 'action rejects nonfalse' => array( '__path__', '__path__', array( 'action' => 'install', 'type' => 'plugin', 'plugin' => 'package/package.php' ), 'error', true ), 'type rejects nonfalse' => array( '__path__', '__path__', array( 'action' => 'update', 'type' => 'theme', 'plugin' => 'package/package.php' ), 'error', true ), 'action false inert' => array( false, '__path__', array( 'action' => 'install', 'type' => 'plugin', 'plugin' => 'package/package.php' ), false, false ), 'type false inert' => array( false, '__path__', array( 'action' => 'update', 'type' => 'theme', 'plugin' => 'package/package.php' ), false, false ) ); }
+		/** @return array{NativePluginUpdater,ControllableReleaseAdapter,FakeOptionDatabase,string,array<string,string>} */
+		private function coreHandoffSubject( string $type = 'plugin' ): array {
+			if ( 'plugin' === $type ) list( $updater, $adapter, $database ) = $this->subject(); else {
+				$archive = $this->archive(); $descriptor = $this->descriptor( $archive ); $adapter = new ControllableReleaseAdapter( $descriptor, $archive ); $database = new FakeOptionDatabase( 100 ); $uri = $this->uri();
+				$binding = BindingRecord::create( array( 'canonical_repository_locator' => 'owner/package', 'canonical_update_uri' => $uri, 'installed_package_identity' => 'package', 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'release_channel' => 'stable', 'stable_repository_identity' => 'repo:1', 'target_type' => 'theme', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8' ) );
+				$configuration = array( 'headers' => array( 'Author' => 'A', 'Description' => 'D', 'Name' => 'Package', 'PluginURI' => $uri, 'RequiresPHP' => '8.2', 'RequiresWP' => '6.8', 'UpdateURI' => $uri, 'Version' => '1.0.0' ), 'installed_package_identity' => 'package', 'policy' => 'manual', 'target_type' => 'theme', 'update_uri' => $uri );
+				$policy = array( 'archive_root' => 'package', 'configuration_update_uri' => $uri, 'header_file' => 'style.css', 'installed_package_identity' => 'package', 'metadata_name' => 'Package', 'offer_update_uri' => $uri, 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package', 'staged_package_update_uri' => $uri, 'target_type' => 'theme', 'wordpress_runtime_version' => '6.8' ); $updater = NativePluginUpdater::fromConfiguration( $configuration, $binding, $adapter, $database, $policy ); self::assertInstanceOf( NativePluginUpdater::class, $updater );
+			}
+			$path = tempnam( sys_get_temp_dir(), 'ran-core-handoff-' ); self::assertIsString( $path ); $this->paths[] = $path; chmod( $path, 0600 ); file_put_contents( $path, 'core archive' ); $identity = 'theme' === $type ? 'package' : 'package/package.php';
+			$GLOBALS['ran_wp_release_updater_test_filter_callbacks']['ran_wp_release_updater_v1_core_artifact_handoff'] = static fn() => \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact::forCoreUpdate( $path, hash_file( 'sha256', $path ), $type, $identity, '2.0.0' );
+			return array( $updater, $adapter, $database, $path, array( 'action' => 'update', 'type' => $type, 'plugin' === $type ? 'plugin' : 'theme' => $identity ) );
+		}
+		private function coreStaged( string $type = 'plugin', string $mismatch = '' ): string {
+			$root = 'root' === $mismatch ? 'other' : 'package'; $parent = sys_get_temp_dir() . '/ran-core-stage-' . bin2hex( random_bytes( 5 ) ); $path = $parent . '/' . $root; mkdir( $path, 0700, true ); $this->paths[] = $parent; $header = 'theme' === $type ? 'style.css' : 'package.php'; if ( 'header' === $mismatch ) $header = 'other.php'; $name = 'theme' === $type ? 'Theme Name' : 'Plugin Name'; $version = 'version' === $mismatch ? '1.0.0' : '2.0.0'; $uri = 'uri' === $mismatch ? 'https://updates.example.test/other' : $this->uri(); file_put_contents( $path . '/' . $header, "<?php\n/*\n{$name}: Package\nVersion: {$version}\nUpdate URI: {$uri}\n*/" ); return $path;
+		}
+		private function assertCorePassive( ControllableReleaseAdapter $adapter, FakeOptionDatabase $database ): void { self::assertSame( array( 0, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) ); self::assertSame( array(), $database->preparedSql() ); self::assertSame( array(), $database->readOptionNames() ); self::assertSame( array(), $database->rows() ); }
 		/** @return array{NativePluginUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
 		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false ): array {
 			$archivePath = $this->archive();
