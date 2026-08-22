@@ -168,7 +168,7 @@
       "id": "native-wordpress-lifecycle",
       "area": "native",
       "legacy_evidence": ["tests/WordPress/NativePluginUpdaterTest.php::testRegistersOnlyTheBetaNativeHooksIdempotently", "tests/WordPress/NativePluginUpdaterTest.php::testAutomaticRollbackFinalReadbackRetainsOffer"],
-      "neutral_evidence": ["Tests\\WordPress\\NativePluginUpdaterTest::testConstructionConsumesCurrentInspectionBeforeOffersAndRegistersExactlyOnce", "Tests\\WordPress\\NativePluginUpdaterTest::testInstalledMutationCannotCompleteAgainstTheArchiveManifest"],
+      "neutral_evidence": ["Tests\\WordPress\\NativePluginUpdaterTest::testStateConstructionAndRegisterArePassive", "Tests\\WordPress\\NativePluginUpdaterTest::testInstalledMutationCannotCompleteAgainstTheArchiveManifest"],
       "legacy_outcome": "active GitHub composition owns native hooks, rollback readback and offer continuity",
       "neutral_outcome": "uncomposed",
       "disposition": "deferred_3_3",
