@@ -158,8 +158,8 @@ final class RequestBroker
 			throw new RuntimeException( 'Invalid runtime environment.' );
 		}
 		$this->version( $environment['php_version'] );
-		$this->version( $environment['wordpress_version'] );
-		$compatible = array_values( array_filter( $this->candidates, fn ( array $candidate ): bool => $this->compare( $candidate['php_floor'], $environment['php_version'] ) <= 0 && $this->compare( $candidate['wordpress_floor'], $environment['wordpress_version'] ) <= 0 ) );
+		$wordpressVersion = $this->wordpressVersion( $environment['wordpress_version'] );
+		$compatible = array_values( array_filter( $this->candidates, fn ( array $candidate ): bool => $this->compare( $candidate['php_floor'], $environment['php_version'] ) <= 0 && $this->compare( $candidate['wordpress_floor'], $wordpressVersion ) <= 0 ) );
 		if ( array() === $compatible ) {
 			throw new RuntimeException( 'No compatible runtime.' );
 		}
@@ -169,6 +169,15 @@ final class RequestBroker
 			throw new RuntimeException( 'Equal runtime versions disagree.' );
 		}
 		return $compatible[0];
+	}
+
+	private function wordpressVersion( string $value ): string
+	{
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\z/D', $value ) ) {
+			$value .= '.0';
+		}
+		$this->version( $value );
+		return $value;
 	}
 
 	/** @return array{core:list<string>,prerelease:list<string>} */

@@ -48,6 +48,16 @@ final class RequestBrokerTest extends TestCase
 		self::assertSame( 'copy-9', $result['marker'] );
 	}
 
+	public function testTwoPartWordPressRuntimeVersionSelectsACompatibleCopy(): void
+	{
+		$copy = $this->copy( 'copy', '0.1.0-beta.2', 'a' );
+		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>1,"wordpress_version"=>"7.0")); echo json_encode(array("result"=>$result,"marker"=>file_exists($data["marker"])));', array( 'copy' => $copy, 'marker' => $this->parent . '/selected.txt' ) );
+
+		self::assertTrue( $result['result']['loaded'] );
+		self::assertSame( array(), $result['result']['diagnostics'] );
+		self::assertTrue( $result['marker'] );
+	}
+
 	public function testEqualVersionDifferentRevisionFailsClosedWithoutLoadingEitherRuntime(): void
 	{
 		$left = $this->copy( 'left', '0.1.0-beta.2', 'a' );
