@@ -6,12 +6,12 @@ $markerRoot = $markerFile ? realpath( dirname( $markerFile ) ) : false;
 $expectedSourceRoot = is_string( $markerRoot ) ? $markerRoot . '/site/wp-content/plugins/ran-wp-release-updater' : '';
 if ( ! is_string( $sourceRoot ) || $expectedSourceRoot !== realpath( $sourceRoot ) || ! is_file( $expectedSourceRoot . '/bootstrap.php' ) || ! is_file( $expectedSourceRoot . '/runtime.php' ) ) throw new RuntimeException( 'Harness source must be the copied disposable updater source.' );
 require_once $expectedSourceRoot . '/bootstrap.php';
-require_once $expectedSourceRoot . '/runtime.php';
+$activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 1, 'wordpress_version' => $GLOBALS['wp_version'] ) );
+if ( true !== ( $activation['loaded'] ?? null ) ) throw new RuntimeException( 'Harness could not activate the selected updater runtime.' );
 
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubCredentialResolver;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter;
-use RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater;
 
 if ( ! function_exists( 'is_plugin_active' ) ) {
 	require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -181,19 +181,17 @@ function build_target( string $type, string $identity, string $uri, string $arch
 		'target_type'               => $type,
 		'update_uri'                => $uri,
 	);
-	$adapter = new GitHubReleaseAdapter( $binding, new GitHubCredentialResolver( static fn (): string => 'phase24-token' ) );
-	$updater = NativePluginUpdater::fromConfiguration(
+	$updater = GitHubReleaseAdapter::registerFromConfiguration(
 		$configuration,
 		$binding,
-		$adapter,
+		new GitHubCredentialResolver( static fn (): string => 'phase24-token' ),
 		$GLOBALS['wpdb'],
 		$archivePolicy
 	);
-	if ( ! $updater instanceof NativePluginUpdater ) {
+	if ( ! is_object( $updater ) ) {
 		throw new RuntimeException( 'Could not construct updater for ' . $type );
 	}
 
-	$updater->register();
 	$packageObservation = (object) array( 'calls' => 0, 'package' => null );
 	add_filter(
 		'upgrader_pre_download',

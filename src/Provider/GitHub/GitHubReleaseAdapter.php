@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\Provider\GitHub;
 
 use InvalidArgumentException;
+use RuntimeException;
+use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
-use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
-use RuntimeException;
+use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
+use RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater;
 
-/** Bounded, target-bound GitHub release reader. It owns no WordPress hooks or state. */
+/** Bounded, target-bound GitHub release reader. Instances own no hooks or state; the static factory is the concrete GitHub composition root. */
 final class GitHubReleaseAdapter implements ReleaseAdapter
 {
 	private const API_HOST = 'api.github.com';
@@ -32,6 +34,21 @@ final class GitHubReleaseAdapter implements ReleaseAdapter
 
 	/** @var array<string, mixed> */
 	private array $binding;
+
+	/** @param array<string, mixed> $configuration @param array<string, mixed> $archivePolicy */
+	public static function registerFromConfiguration(
+		array $configuration, BindingRecord $binding, ?GitHubCredentialResolver $credentials, object $wpdb,
+		array $archivePolicy, ?PackageIdentityValidator $validator = null
+	): ?NativePluginUpdater {
+		try {
+			$adapter = new self($binding, $credentials);
+		} catch (InvalidArgumentException) {
+			return null;
+		}
+		$updater = NativePluginUpdater::fromConfiguration($configuration, $binding, $adapter, $wpdb, $archivePolicy, $validator);
+		if ($updater instanceof NativePluginUpdater) $updater->register();
+		return $updater;
+	}
 
 	public function __construct(
 		private BindingRecord $bindingRecord,

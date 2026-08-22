@@ -86,6 +86,20 @@ namespace {
 			return $path;
 		}
 	}
+
+	if (! function_exists('add_filter')) {
+		function add_filter(string $hook, mixed $callback, int $priority, int $arguments): void
+		{
+			$GLOBALS['ran_wp_release_updater_test_hooks'][] = array('filter', $hook, $callback, $priority, $arguments);
+		}
+	}
+
+	if (! function_exists('add_action')) {
+		function add_action(string $hook, mixed $callback, int $priority, int $arguments): void
+		{
+			$GLOBALS['ran_wp_release_updater_test_hooks'][] = array('action', $hook, $callback, $priority, $arguments);
+		}
+	}
 }
 
 namespace Tests\Provider {
@@ -136,6 +150,49 @@ final class GitHubReleaseAdapterTest extends TestCase
 		self::assertSame(0, $calls);
 		self::assertSame(array(), $GLOBALS['ran_github_requests']);
 		self::assertSame(array(), $GLOBALS['ran_github_temp_paths']);
+	}
+
+	public function testProductionCompositionActivatesSelectedRootAndRemainsDormantUntilOffer(): void
+	{
+		$root = dirname(__DIR__, 2);
+		$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
+		require $root . '/bootstrap.php';
+		$broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
+		self::assertSame(
+			array('loaded' => true, 'diagnostics' => array()),
+			$broker->activate(array('php_version' => '8.2.0', 'runtime_protocol' => 1, 'wordpress_version' => '6.8.0'))
+		);
+
+		$calls = 0;
+		$binding = $this->binding();
+		$configuration = array(
+			'headers' => array('Author' => 'Test', 'Description' => 'Test', 'Name' => 'Repository', 'PluginURI' => 'https://github.com/owner/repository', 'RequiresPHP' => '8.2', 'RequiresWP' => '6.8', 'UpdateURI' => 'https://github.com/owner/repository', 'Version' => '1.0.0'),
+			'installed_package_identity' => 'repository/repository.php', 'policy' => 'automatic', 'target_type' => 'plugin', 'update_uri' => 'https://github.com/owner/repository',
+		);
+		$updater = GitHubReleaseAdapter::registerFromConfiguration(
+			$configuration, $binding,
+			new GitHubCredentialResolver(static function () use (&$calls): string { ++$calls; return 'private-token'; }),
+			new class {}, array('archive_root' => 'repository')
+		);
+
+		self::assertNotNull($updater);
+		foreach (array(BindingRecord::class, GitHubCredentialResolver::class, GitHubReleaseAdapter::class, '\\RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePluginUpdater') as $class) {
+			self::assertSame($root, dirname((new \ReflectionClass($class))->getFileName(), str_contains($class, 'Provider\\GitHub') ? 4 : 3), $class);
+		}
+		self::assertSame(0, $calls);
+		self::assertSame(array(), $GLOBALS['ran_github_requests']);
+		self::assertCount(10, $GLOBALS['ran_wp_release_updater_test_hooks']);
+		$updater->register();
+		self::assertCount(10, $GLOBALS['ran_wp_release_updater_test_hooks']);
+
+		$invalid = $configuration;
+		$invalid['policy'] = 'unsupported';
+		self::assertNull(GitHubReleaseAdapter::registerFromConfiguration($invalid, $binding, null, new class {}, array()));
+		$facts = $binding->toArray(); unset($facts['binding_hash']); $facts['provider_code'] = 'gitlab';
+		self::assertNull(GitHubReleaseAdapter::registerFromConfiguration($configuration, BindingRecord::create($facts), null, new class {}, array()));
+		self::assertSame(0, $calls);
+		self::assertSame(array(), $GLOBALS['ran_github_requests']);
+		self::assertCount(10, $GLOBALS['ran_wp_release_updater_test_hooks']);
 	}
 
 	public function testCredentialsResolveOncePerTopLevelChainAndFailBeforeHttp(): void
