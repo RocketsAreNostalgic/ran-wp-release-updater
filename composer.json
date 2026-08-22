@@ -12,6 +12,11 @@
   "conflict": {
     "ran/wp-github-release-updater": "*"
   },
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
+  },
   "support": {
     "issues": "https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues",
     "security": "https://github.com/RocketsAreNostalgic/ran-wp-release-updater/security/advisories/new",

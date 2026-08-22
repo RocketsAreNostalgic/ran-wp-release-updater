@@ -18,9 +18,21 @@ cut to one package or the other.
 
 ## Development status
 
-The repository currently contains only the reviewed fresh-lineage seed. It is
-not installable as an updater runtime until the neutral kernel and its tests
-land. Do not depend on a branch or commit as though it were a release.
+The repository now contains the unreleased neutral kernel and its
+selected-runtime broker. Provider composition, live transport, and a supported
+installation path have not landed. Do not depend on a branch or commit as
+though it were a release.
+
+The kernel uses opaque provider identities, full canonical Update URI equality,
+locally verified SHA-256 archive custody, and binding-aware target fences.
+Add-ons cannot register another updater runtime or extend it at request time.
+
+The native lifecycle currently fails closed unless WordPress selects its
+`direct` filesystem method. Its custody checks trust code already running as
+the WordPress filesystem user: peer PHP with that same operating-system access
+can rewrite plugin files outside any updater hook and is not sandboxed by this
+library. The updater still compares the extracted and installed file inventory
+with the inspected archive before accepting completion.
 
 Run the repository gate with:
 
