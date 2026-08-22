@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\Archive;
 
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
-use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 use WeakMap;
@@ -18,6 +17,7 @@ final class PackageIdentityValidator {
 	private const MAX_ARCHIVE_ENTRIES = 10000;
 	private const MAX_HEADER_BYTES = 8192;
 	private const MAX_COMPRESSION_RATIO = 100;
+	private const PROSPECTIVE_POLICY_KEYS = array( 'artifact_sha256', 'artifact_size', 'canonical_update_uri', 'php_runtime_version', 'target_type', 'version', 'wordpress_runtime_version' );
 	private const POLICY_KEYS = array( 'archive_root', 'configuration_update_uri', 'header_file', 'installed_package_identity', 'metadata_name', 'offer_update_uri', 'php_runtime_version', 'provider_code', 'repository_identity', 'repository_locator', 'staged_package_update_uri', 'target_type', 'wordpress_runtime_version' );
 	private ?\Closure $afterOpen = null;
 	private WeakMap $receiptProofs;
@@ -26,14 +26,34 @@ final class PackageIdentityValidator {
 	private function __clone(): void {}
 
 	/** @return array{package_root:string,main_file:string}|null */
-	public function inspectProspective( IdentityDescriptor $descriptor, BindingRecord $binding, string $archivePath ): ?array {
-		try {
-			BindingRecord::assertDescriptorBinding( $descriptor, $binding );
-		} catch ( \InvalidArgumentException ) {
+	public function inspectProspective( array $policy, string $archivePath ): ?array {
+		if ( count( $policy ) !== count( self::PROSPECTIVE_POLICY_KEYS ) ) {
 			return null;
 		}
-		$facts    = $descriptor->toArray();
-		$runtime  = $binding->toArray();
+		foreach ( self::PROSPECTIVE_POLICY_KEYS as $key ) {
+			if ( ! array_key_exists( $key, $policy ) ) {
+				return null;
+			}
+		}
+		if (
+			! is_string( $policy['artifact_sha256'] )
+			|| 1 !== preg_match( '/\A[a-f0-9]{64}\z/D', $policy['artifact_sha256'] )
+			|| ! is_int( $policy['artifact_size'] )
+			|| $policy['artifact_size'] < 1
+			|| $policy['artifact_size'] > IdentityDescriptor::MAX_ARTIFACT_BYTES
+			|| ! is_string( $policy['canonical_update_uri'] )
+			|| CanonicalUpdateUri::canonicalize( $policy['canonical_update_uri'] ) !== $policy['canonical_update_uri']
+			|| ! in_array( $policy['target_type'], array( 'plugin', 'theme' ), true )
+			|| ! is_string( $policy['version'] )
+			|| null === ReleaseVersion::normalize( $policy['version'] )
+			|| ! is_string( $policy['php_runtime_version'] )
+			|| null === ReleaseVersion::normalizeHeader( $policy['php_runtime_version'] )
+			|| ! is_string( $policy['wordpress_runtime_version'] )
+			|| null === ReleaseVersion::normalizeHeader( $policy['wordpress_runtime_version'] )
+		) {
+			return null;
+		}
+		$facts = $policy;
 		$identity = $this->archiveIdentity( $archivePath, $facts );
 		if ( null === $identity || ! class_exists( '\\ZipArchive' ) ) {
 			return null;
@@ -95,7 +115,7 @@ final class PackageIdentityValidator {
 				$isPluginHeader = 2 === count( $parts )
 					&& ! $path['directory']
 					&& str_ends_with( $parts[1], '.php' );
-				$header = 'theme' === $facts['target_type']
+				$header = 'theme' === $policy['target_type']
 					? ( $isThemeHeader ? 'style.css' : null )
 					: (
 						$isPluginHeader
@@ -108,8 +128,8 @@ final class PackageIdentityValidator {
 				$contents = self::readHeader( $zip, $name );
 				$metadata = null === $contents
 					? null
-					: self::headerValue( $contents, 'theme' === $facts['target_type'] ? 'Theme Name' : 'Plugin Name' );
-				if ( 'plugin' === $facts['target_type'] && null === $metadata ) {
+					: self::headerValue( $contents, 'theme' === $policy['target_type'] ? 'Theme Name' : 'Plugin Name' );
+				if ( 'plugin' === $policy['target_type'] && null === $metadata ) {
 					continue;
 				}
 				if ( null === $contents || null === $metadata ) {
@@ -122,12 +142,12 @@ final class PackageIdentityValidator {
 				if (
 					null === $uri
 					|| null === $version
-					|| $facts['canonical_update_uri'] !== CanonicalUpdateUri::canonicalize( $uri )
-					|| 0 !== ReleaseVersion::compare( $version, $facts['version'] )
+					|| $policy['canonical_update_uri'] !== CanonicalUpdateUri::canonicalize( $uri )
+					|| 0 !== ReleaseVersion::compare( $version, $policy['version'] )
 					|| ! is_string( $php )
-					|| ! self::meetsRequirement( $runtime['php_runtime_version'], $php )
+					|| ! self::meetsRequirement( $policy['php_runtime_version'], $php )
 					|| ! is_string( $wordpress )
-					|| ! self::meetsRequirement( $runtime['wordpress_runtime_version'], $wordpress )
+					|| ! self::meetsRequirement( $policy['wordpress_runtime_version'], $wordpress )
 					|| null !== $candidate
 				) {
 					return null;

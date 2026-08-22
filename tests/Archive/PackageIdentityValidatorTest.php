@@ -6,7 +6,6 @@ namespace Tests\Archive;
 
 use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
-use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 
 final class PackageIdentityValidatorTest extends TestCase {
@@ -34,13 +33,13 @@ final class PackageIdentityValidatorTest extends TestCase {
 		$plugin = $this->archive( array( 'example-plugin/loader.php' => '<?php return true;', 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$theme = $this->archive( array( 'example-theme/style.css' => $this->header( 'Theme Name', 'Example Theme' ) ) );
 		$validator = new PackageIdentityValidator();
-		self::assertSame( array( 'package_root' => 'example-plugin', 'main_file' => 'example-plugin.php' ), $validator->inspectProspective( $this->descriptor( $plugin, 'plugin', 'example-plugin/example-plugin.php' ), $this->binding( 'plugin', 'example-plugin/example-plugin.php' ), $plugin ) );
-		self::assertSame( array( 'package_root' => 'example-theme', 'main_file' => 'style.css' ), $validator->inspectProspective( $this->descriptor( $theme, 'theme', 'example-theme' ), $this->binding( 'theme', 'example-theme' ), $theme ) );
+		self::assertSame( array( 'package_root' => 'example-plugin', 'main_file' => 'example-plugin.php' ), $validator->inspectProspective( $this->prospectivePolicy( $plugin, 'plugin' ), $plugin ) );
+		self::assertSame( array( 'package_root' => 'example-theme', 'main_file' => 'style.css' ), $validator->inspectProspective( $this->prospectivePolicy( $theme, 'theme' ), $theme ) );
 	}
 
 	public function testProspectiveInspectionRejectsAmbiguousPluginHeaders(): void {
 		$archive = $this->archive( array( 'example-plugin/a.php' => $this->header( 'Plugin Name', 'Example Plugin' ), 'example-plugin/b.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
-		self::assertNull( ( new PackageIdentityValidator() )->inspectProspective( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $this->binding( 'plugin', 'example-plugin/example-plugin.php' ), $archive ) );
+		self::assertNull( ( new PackageIdentityValidator() )->inspectProspective( $this->prospectivePolicy( $archive, 'plugin' ), $archive ) );
 	}
 
 	/** @dataProvider prospectiveUnsafeArchives */
@@ -136,8 +135,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		);
 		self::assertNull(
 			$validator->inspectProspective(
-				$this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ),
-				$this->binding( 'plugin', 'example-plugin/example-plugin.php' ),
+				$this->prospectivePolicy( $archive, 'plugin' ),
 				$archive
 			)
 		);
@@ -261,26 +259,21 @@ final class PackageIdentityValidatorTest extends TestCase {
 	/** @return array{package_root:string,main_file:string}|null */
 	private function prospectivePlugin( string $archive ): ?array {
 		return ( new PackageIdentityValidator() )->inspectProspective(
-			$this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ),
-			$this->binding( 'plugin', 'example-plugin/example-plugin.php' ),
+			$this->prospectivePolicy( $archive, 'plugin' ),
 			$archive
 		);
 	}
 
-	private function binding( string $type, string $identity ): BindingRecord {
-		return BindingRecord::create(
-			array(
-				'canonical_repository_locator' => 'owner/package',
-				'canonical_update_uri' => 'https://updates.example.test/owner/package',
-				'installed_package_identity' => $identity,
-				'php_runtime_version' => '8.2',
-				'provider_code' => 'neutral',
-				'release_channel' => 'stable',
-				'stable_repository_identity' => 'repo:1',
-				'target_type' => $type,
-				'update_policy' => 'manual',
-				'wordpress_runtime_version' => '6.8',
-			)
+	/** @return array<string,mixed> */
+	private function prospectivePolicy( string $archive, string $type ): array {
+		return array(
+			'artifact_sha256' => hash_file( 'sha256', $archive ),
+			'artifact_size' => filesize( $archive ),
+			'canonical_update_uri' => 'https://updates.example.test/owner/package',
+			'php_runtime_version' => '8.2',
+			'target_type' => $type,
+			'version' => '1.0.0',
+			'wordpress_runtime_version' => '6.8',
 		);
 	}
 

@@ -111,6 +111,9 @@ use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubCredentialResolver;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter;
+use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService;
+use RAN\WPReleaseUpdater\V1\Provider\GitHub\ProspectiveReleaseArtifact;
+use RAN\WPReleaseUpdater\V1\Provider\GitHub\ProspectiveReleaseInspection;
 use RuntimeException;
 
 final class GitHubReleaseAdapterTest extends TestCase
@@ -240,6 +243,15 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$invalidDescriptor = IdentityDescriptor::create($facts);
 
 		$calls = 0;
+		$service = $this->service(
+			$this->binding(),
+			new GitHubCredentialResolver(
+				static function () use (&$calls): string {
+					++$calls;
+					return 'private-token';
+				}
+			)
+		);
 		$adapter = new GitHubReleaseAdapter(
 			$this->binding(),
 			new GitHubCredentialResolver(
@@ -255,7 +267,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			array(
 				static fn (): IdentityDescriptor => $adapter->inspect('not-a-release'),
 				static fn (): TemporaryArtifact => $adapter->acquire($invalidDescriptor),
-				static fn (): array => $adapter->inspectProspective('not-a-release'),
+				static fn (): ProspectiveReleaseInspection => $service->inspectProspective('not-a-release'),
 			) as $operation
 		) {
 			try {
@@ -268,6 +280,46 @@ final class GitHubReleaseAdapterTest extends TestCase
 
 		self::assertSame(0, $calls);
 		self::assertSame(array(), $GLOBALS['ran_github_requests']);
+	}
+
+	public function testProspectiveConfigurationAndZeroIdentityFailBeforeCredentialsOrHttp(): void
+	{
+		$calls = 0;
+		$resolver = new GitHubCredentialResolver(
+			static function () use (&$calls): string {
+				++$calls;
+				return 'private-token';
+			}
+		);
+		$configuration = $this->serviceConfiguration($this->binding());
+		$invalid = array(
+			array_replace($configuration, array('stable_repository_identity' => '0')),
+			array_replace($configuration, array('canonical_repository_locator' => 'owner')),
+			array_replace($configuration, array('canonical_update_uri' => 'https://github.com/other/repository')),
+			array_replace($configuration, array('target_type' => 'package')),
+			array_replace($configuration, array('release_channel' => 'nightly')),
+			array_replace($configuration, array('php_runtime_version' => 'eight.two')),
+			array_merge($configuration, array('unexpected' => true)),
+		);
+		foreach ($invalid as $facts) {
+			try {
+				new GitHubReleaseService($facts, $resolver);
+				self::fail('Invalid prospective configuration unexpectedly constructed.');
+			} catch (\InvalidArgumentException) {
+				self::addToAssertionCount(1);
+			}
+		}
+
+		$service = new GitHubReleaseService($configuration, $resolver);
+		try {
+			$service->inspectProspective('0');
+			self::fail('GitHub release zero unexpectedly reached provider work.');
+		} catch (\InvalidArgumentException) {
+			self::addToAssertionCount(1);
+		}
+		self::assertSame(0, $calls);
+		self::assertSame(array(), $GLOBALS['ran_github_requests']);
+		self::assertSame(array(), $GLOBALS['ran_github_temp_paths']);
 	}
 
 	public function testListingSortsStableNumericIdentitiesAndReturnsReleaseDetails(): void
@@ -356,7 +408,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 	public function testListingUsesTwoBoundedPagesAndReturnsAtMostEightCandidates(): void
 	{
 		$credentialCalls = 0;
-		$adapter = new GitHubReleaseAdapter(
+		$service = $this->service(
 			$this->binding(),
 			new GitHubCredentialResolver(
 				static function () use (&$credentialCalls): string {
@@ -380,7 +432,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$this->response(200, $pageTwo),
 		);
 
-		$result = $adapter->listReleases(
+		$result = $service->listReleases(
 			array('etag' => '"prior"')
 		);
 
@@ -780,7 +832,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			. "Update URI: https://github.com/owner/repository\n"
 			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 		);
-		$adapter = new GitHubReleaseAdapter(
+		$service = $this->service(
 			$this->binding(),
 			new GitHubCredentialResolver(
 				static function () use (&$calls): string {
@@ -795,7 +847,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$archive
 		);
 
-		$facts = $adapter->inspectProspective('7', 'v1.2.3');
+		$facts = $service->inspectProspective('7', 'v1.2.3')->toArray();
 
 		self::assertSame('7', $facts['release_identity']);
 		self::assertSame('v1.2.3', $facts['tag']);
@@ -811,7 +863,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 	public function testPrivateThemeProspectiveFlowResolvesOncePerChainAndDiscards(): void
 	{
 		$calls = 0;
-		$adapter = new GitHubReleaseAdapter(
+		$service = $this->service(
 			$this->binding('stable', 'theme'),
 			new GitHubCredentialResolver(
 				static function () use (&$calls): string {
@@ -823,7 +875,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$GLOBALS['ran_github_responses'] = array(
 			$this->response(200, array($this->release(7, 'v1.2.3'))),
 		);
-		$candidate = $adapter->listReleases()['candidates'][0];
+		$candidate = $service->listReleases()['candidates'][0];
 		self::assertSame(1, $calls);
 		self::assertSame('7', $candidate['release_identity']);
 
@@ -838,10 +890,10 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$archive
 		);
 
-		$facts = $adapter->inspectProspective(
+		$facts = $service->inspectProspective(
 			$candidate['release_identity'],
 			$candidate['tag']
-		);
+		)->toArray();
 
 		self::assertSame(2, $calls);
 		self::assertSame('theme', $facts['target_type']);
@@ -849,6 +901,24 @@ final class GitHubReleaseAdapterTest extends TestCase
 		self::assertSame('style.css', $facts['main_file']);
 		foreach ($GLOBALS['ran_github_requests'] as $request) {
 			self::assertSame('Bearer private-token', $request[1]['headers']['Authorization']);
+		}
+		$this->assertAllTemporaryPathsAbsent();
+	}
+
+	public function testPublicPluginProspectiveFlowSendsNoAuthorization(): void
+	{
+		$archive = $this->prospectiveArchive(
+			"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n"
+			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
+		);
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+
+		$inspection = $this->service($this->binding())->inspectProspective('7', 'v1.2.3');
+
+		self::assertSame('plugin', $inspection->toArray()['target_type']);
+		foreach ($GLOBALS['ran_github_requests'] as $request) {
+			self::assertArrayNotHasKey('Authorization', $request[1]['headers']);
 		}
 		$this->assertAllTemporaryPathsAbsent();
 	}
@@ -863,7 +933,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 					. "Update URI: https://github.com/owner/repository\n*/",
 			)
 		);
-		$adapter = new GitHubReleaseAdapter($this->binding());
+		$service = $this->service($this->binding());
 		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(
 			7,
 			'v1.2.3',
@@ -873,10 +943,210 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$this->expectException(RuntimeException::class);
 		$this->expectExceptionMessage('release package is invalid');
 		try {
-			$adapter->inspectProspective('7', 'v1.2.3');
+			$service->inspectProspective('7', 'v1.2.3');
 		} finally {
 			$this->assertAllTemporaryPathsAbsent();
 		}
+	}
+
+	public function testProspectiveAcquisitionRepeatsProofAndTransfersExactCustody(): void
+	{
+		$calls = 0;
+		$archive = $this->prospectiveArchive(
+			"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n"
+			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
+		);
+		$service = $this->service(
+			$this->binding(),
+			new GitHubCredentialResolver(
+				static function () use (&$calls): string {
+					++$calls;
+					return 'private-token';
+				}
+			)
+		);
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		$inspection = $service->inspectProspective('7', 'v1.2.3');
+		$persisted = ProspectiveReleaseInspection::rehydrate($inspection->toArray());
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+
+		$owned = $service->acquireProspective($persisted, $persisted->fingerprintValue());
+
+		self::assertInstanceOf(ProspectiveReleaseArtifact::class, $owned);
+		self::assertSame($persisted->toArray(), $owned->inspection()->toArray());
+		self::assertSame(2, $calls);
+		self::assertCount(12, $GLOBALS['ran_github_requests']);
+		$artifact = $owned->claimTemporaryArtifact();
+		$path = $artifact->inspect(static fn (string $path): string => $path);
+		self::assertFileExists($path);
+		unset($owned);
+		self::assertFileExists($path);
+		self::assertTrue($artifact->discard());
+		self::assertFileDoesNotExist($path);
+	}
+
+	public function testProspectiveAcquisitionRejectsWrongFingerprintBeforeCredentialOrHttp(): void
+	{
+		$archive = $this->prospectiveArchive(
+			"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n"
+			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
+		);
+		$service = $this->service($this->binding());
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		$inspection = $service->inspectProspective('7', 'v1.2.3');
+		$requests = count($GLOBALS['ran_github_requests']);
+		$calls = 0;
+		$service = $this->service(
+			$this->binding(),
+			new GitHubCredentialResolver(static function () use (&$calls): string { ++$calls; return 'private-token'; })
+		);
+
+		try {
+			$service->acquireProspective($inspection, 'v1:' . str_repeat('0', 64));
+			self::fail('A stale fingerprint must fail before provider work.');
+		} catch (\InvalidArgumentException) {
+			self::addToAssertionCount(1);
+		}
+		self::assertSame(0, $calls);
+		self::assertCount($requests, $GLOBALS['ran_github_requests']);
+		$this->assertAllTemporaryPathsAbsent();
+	}
+
+	public function testProspectiveAcquisitionDiscardsAChangedArchiveProof(): void
+	{
+		$calls = 0;
+		$header = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n"
+			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/";
+		$initial = $this->prospectiveArchive($header);
+		$changed = $this->prospectiveArchive($header, array('repository/payload.php' => '<?php return true;'));
+		$service = $this->service(
+			$this->binding(),
+			new GitHubCredentialResolver(static function () use (&$calls): string { ++$calls; return 'private-token'; })
+		);
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $initial);
+		$inspection = $service->inspectProspective('7', 'v1.2.3');
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $changed);
+
+		try {
+			$service->acquireProspective($inspection, $inspection->fingerprintValue());
+			self::fail('Changed archive facts must reject reacquisition.');
+		} catch (RuntimeException $exception) {
+			self::assertStringContainsString('changed before acquisition', $exception->getMessage());
+		}
+		self::assertSame(2, $calls);
+		$this->assertAllTemporaryPathsAbsent();
+	}
+
+	public function testProspectiveAcquisitionDiscardsChangedReleaseFacts(): void
+	{
+		$archive = $this->prospectiveArchive(
+			"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n"
+			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
+		);
+		$service = $this->service($this->binding());
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		$inspection = $service->inspectProspective('7', 'v1.2.3');
+		$responses = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		$responses[2] = $this->response(200, array('sha' => str_repeat('b', 40)));
+		$GLOBALS['ran_github_responses'] = $responses;
+
+		try {
+			$service->acquireProspective($inspection, $inspection->fingerprintValue());
+			self::fail('Changed release facts must reject reacquisition.');
+		} catch (RuntimeException $exception) {
+			self::assertStringContainsString('changed before acquisition', $exception->getMessage());
+		}
+		$this->assertAllTemporaryPathsAbsent();
+	}
+
+	public function testProspectiveAcquisitionDiscardsAChangedHostileArchive(): void
+	{
+		$header = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n"
+			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/";
+		$initial = $this->prospectiveArchive($header);
+		$hostile = $this->prospectiveArchive(
+			$header,
+			array('repository/other.php' => str_replace('Repository', 'Other', $header))
+		);
+		$service = $this->service($this->binding());
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $initial);
+		$inspection = $service->inspectProspective('7', 'v1.2.3');
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $hostile);
+
+		try {
+			$service->acquireProspective($inspection, $inspection->fingerprintValue());
+			self::fail('A hostile changed archive must reject reacquisition.');
+		} catch (RuntimeException $exception) {
+			self::assertStringContainsString('release package is invalid', $exception->getMessage());
+		}
+		$this->assertAllTemporaryPathsAbsent();
+	}
+
+	public function testProspectiveInspectionFingerprintRejectsChangedRuntimeAndPackageFacts(): void
+	{
+		$archive = $this->prospectiveArchive(
+			"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n"
+			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
+		);
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		$inspection = $this->service($this->binding())->inspectProspective('7', 'v1.2.3');
+		$facts = $inspection->toArray();
+		unset($facts['fingerprint']);
+		$changedRuntime = ProspectiveReleaseInspection::create(array_replace($facts, array('php_runtime_version' => '8.3')));
+		$changedRoot = ProspectiveReleaseInspection::create(array_replace($facts, array('package_root' => 'renamed')));
+
+		self::assertNotSame($inspection->fingerprintValue(), $changedRuntime->fingerprintValue());
+		self::assertNotSame($inspection->fingerprintValue(), $changedRoot->fingerprintValue());
+		$tampered = $inspection->toArray();
+		$tampered['main_file'] = 'other.php';
+		$this->expectException(\InvalidArgumentException::class);
+		ProspectiveReleaseInspection::rehydrate($tampered);
+	}
+
+	public function testProspectiveInspectionUsesExactKeysAndDefensiveAccessors(): void
+	{
+		$archive = $this->prospectiveArchive(
+			"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			. "Update URI: https://github.com/owner/repository\n"
+			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
+		);
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		$inspection = $this->service($this->binding())->inspectProspective('7', 'v1.2.3');
+		self::assertSame('7', $inspection->releaseIdentity());
+		self::assertSame('v1.2.3', $inspection->tag());
+		$copy = $inspection->toArray();
+		$copy['release_identity'] = 'changed';
+		self::assertSame('7', $inspection->releaseIdentity());
+
+		$facts = $inspection->toArray();
+		unset($facts['fingerprint']);
+		try {
+			ProspectiveReleaseInspection::create(array_merge($facts, array('unexpected' => true)));
+			self::fail('Unknown prospective facts must fail closed.');
+		} catch (\InvalidArgumentException) {
+			self::addToAssertionCount(1);
+		}
+		$opaque = ProspectiveReleaseInspection::create(
+			array_replace($facts, array('release_identity' => 'release:opaque'))
+		);
+		$calls = 0;
+		$service = $this->service(
+			$this->binding(),
+			new GitHubCredentialResolver(static function () use (&$calls): string { ++$calls; return 'private-token'; })
+		);
+		try {
+			$service->acquireProspective($opaque, $opaque->fingerprintValue());
+			self::fail('Provider-private numeric validation must reject opaque GitHub IDs.');
+		} catch (\InvalidArgumentException) {
+			self::addToAssertionCount(1);
+		}
+		self::assertSame(0, $calls);
 	}
 
 	/** @dataProvider unsafeRedirectProvider */
@@ -1042,6 +1312,28 @@ final class GitHubReleaseAdapterTest extends TestCase
 				'update_policy' => 'automatic',
 				'wordpress_runtime_version' => '6.8.0',
 			)
+		);
+	}
+
+	private function service(
+		BindingRecord $binding,
+		?GitHubCredentialResolver $credentials = null
+	): GitHubReleaseService {
+		return new GitHubReleaseService($this->serviceConfiguration($binding), $credentials);
+	}
+
+	/** @return array<string,mixed> */
+	private function serviceConfiguration(BindingRecord $binding): array
+	{
+		$facts = $binding->toArray();
+		return array(
+			'canonical_repository_locator' => $facts['canonical_repository_locator'],
+			'canonical_update_uri' => $facts['canonical_update_uri'],
+			'php_runtime_version' => $facts['php_runtime_version'],
+			'release_channel' => $facts['release_channel'],
+			'stable_repository_identity' => $facts['stable_repository_identity'],
+			'target_type' => $facts['target_type'],
+			'wordpress_runtime_version' => $facts['wordpress_runtime_version'],
 		);
 	}
 
