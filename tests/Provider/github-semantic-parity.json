@@ -1,0 +1,198 @@
+{
+  "executable_gate": "composer check:phase3",
+  "executable_proof": "tests/Integration/paired-github-provider-proof.php",
+  "legacy_source_sha": "4586ffe4105565cf19f8b2e842fb78bd2e96d304",
+  "neutral_source_sha": "b526119e1789a007cb810246d42520204cc8ed24",
+  "rows": [
+    {
+      "id": "discovery-stable-prerelease",
+      "area": "discovery",
+      "legacy_evidence": ["tests/Artifact/GitHubReleaseArtifactServiceTest.php::testListingSortsAndFiltersReleaseChannels"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testListingSortsStableNumericIdentitiesAndReturnsReleaseDetails", "Tests\\Provider\\GitHubReleaseAdapterTest::testPrereleaseListingKeepsSemverOrderingWithinItsChannel"],
+      "legacy_outcome": "stable filters prereleases; prerelease orders stable promotion above beta",
+      "neutral_outcome": "stable filters prereleases; prerelease orders stable promotion above beta",
+      "disposition": "preserved",
+      "difference": ""
+    },
+    {
+      "id": "discovery-bounds-conditional",
+      "area": "discovery",
+      "legacy_evidence": ["tests/Artifact/GitHubReleaseArtifactServiceTest.php::testConditionalListingRetainsValidatorsAndBoundsRequests"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testListingUsesTwoBoundedPagesAndReturnsAtMostEightCandidates", "Tests\\Provider\\GitHubReleaseAdapterTest::testConditionalNotModifiedAndRateLimitRemainClosedProviderState"],
+      "legacy_outcome": "bounded conditional listing",
+      "neutral_outcome": "two pages, eight candidates, first-page validators only",
+      "disposition": "strengthened",
+      "difference": "The neutral adapter publishes explicit two-page and eight-candidate ceilings."
+    },
+    {
+      "id": "transport-public-private",
+      "area": "transport",
+      "legacy_evidence": ["tests/Artifact/GitHubReleaseArtifactServiceTest.php::testPrivateRedirectDropsAuthorizationOutsideGitHubApi", "tests/Artifact/GitHubReleaseArtifactServiceTest.php::testCallableCredentialsResolveOncePerRequestChain"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testCredentialsResolveOncePerTopLevelChainAndFailBeforeHttp", "Tests\\Provider\\GitHubReleaseAdapterTest::testPrivateCredentialIsStrippedOnAssetRedirectAndCustodyTransfersOnce"],
+      "legacy_outcome": "public omits authorization; private resolves once and strips authorization off API origin",
+      "neutral_outcome": "public omits authorization; private resolves once and strips authorization off API origin",
+      "disposition": "preserved",
+      "difference": ""
+    },
+    {
+      "id": "identity-provenance",
+      "area": "identity",
+      "legacy_evidence": ["tests/Artifact/GitHubReleaseArtifactServiceTest.php::testDescriptorBindsReleaseCommitZipAndImmutableState", "tests/Artifact/GitHubReleaseArtifactServiceTest.php::testRepositoryIdentityIsCheckedForManagedRequests"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testInspectionBindsExactNumericRepositoryReleaseCommitAndAsset", "Tests\\Provider\\GitHubReleaseAdapterTest::testInspectionRejectsChangedOrAmbiguousIdentity"],
+      "legacy_outcome": "release, commit, repository and ZIP identity remain continuous",
+      "neutral_outcome": "release, commit, repository and ZIP identity remain continuous; provider numbers must be native positive integers",
+      "disposition": "strengthened",
+      "difference": "The neutral adapter separates provider JSON integer admission from persisted opaque identity strings."
+    },
+    {
+      "id": "inspection-zip-contract",
+      "area": "inspection",
+      "legacy_evidence": ["tests/Artifact/GitHubReleaseArtifactServiceTest.php::testExactDescriptionRejectsInvalidZipContracts", "tests/Artifact/GitHubReleaseArtifactServiceTest.php::testZipSuffixIsCaseInsensitiveButIdentityPreservesExactName"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testInspectionPreservesUppercaseZipSuffixIdentity", "Tests\\Provider\\GitHubReleaseAdapterTest::testInspectionRejectsChangedOrAmbiguousIdentity"],
+      "legacy_outcome": "exactly one uploaded bounded ZIP with trusted SHA-256 evidence",
+      "neutral_outcome": "exactly one uploaded bounded ZIP with trusted SHA-256 evidence",
+      "disposition": "preserved",
+      "difference": ""
+    },
+    {
+      "id": "redirect-signed-expiry",
+      "area": "transport",
+      "legacy_evidence": ["tests/Artifact/GitHubReleaseArtifactServiceTest.php::testUnsafeAndExpiredRedirectsFailBeforeFollowing", "tests/Artifact/GitHubReleaseArtifactServiceTest.php::testExcessiveRedirectsFailClosedAndCleanUp"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testUnsafeExpiredAndExcessRedirectsFailClosed", "Tests\\Provider\\GitHubReleaseAdapterTest::testSecondRedirectAndDownloadedDigestMismatchCleanOwnedFile"],
+      "legacy_outcome": "unsafe, expired and excess redirects fail before custody transfer",
+      "neutral_outcome": "unsafe, expired, calendar-normalized and excess redirects fail before custody transfer",
+      "disposition": "strengthened",
+      "difference": "Azure and AWS calendar values require an exact UTC round trip."
+    },
+    {
+      "id": "rate-and-auth-failures",
+      "area": "failure",
+      "legacy_evidence": ["tests/Artifact/GitHubReleaseArtifactServiceTest.php::testOversizedReleaseResponseAndOrdinaryForbiddenStayDistinct", "tests/Artifact/GitHubReleaseArtifactServiceTest.php::testRateLimitCooldownIsBounded"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testAuthenticatedAuthorizationFailuresAreNotRateLimits", "Tests\\Provider\\GitHubReleaseAdapterTest::testConditionalNotModifiedAndRateLimitRemainClosedProviderState"],
+      "legacy_outcome": "ordinary authorization failure is distinct from bounded rate limiting",
+      "neutral_outcome": "ordinary authorization failure is distinct from bounded rate limiting",
+      "disposition": "preserved",
+      "difference": ""
+    },
+    {
+      "id": "artifact-custody",
+      "area": "artifact",
+      "legacy_evidence": ["tests/Artifact/GitHubReleaseArtifactServiceTest.php::testAcquireDescribedDownloadsOnceAndTransfersCustodyOnce", "tests/Artifact/GitHubReleaseArtifactServiceTest.php::testDownloadedSizeAndDigestAreCheckedAgainstGitHubEvidence"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testPrivateCredentialIsStrippedOnAssetRedirectAndCustodyTransfersOnce", "Tests\\Provider\\GitHubReleaseAdapterTest::testTemporaryArtifactRejectsReplacementAndNeverDeletesUnownedBytes"],
+      "legacy_outcome": "verified bytes transfer once and replacement is not trusted",
+      "neutral_outcome": "verified bytes transfer once and replacement is not trusted or deleted as owned",
+      "disposition": "strengthened",
+      "difference": "Cleanup is conditional on unchanged device and inode custody."
+    },
+    {
+      "id": "archive-plugin-theme",
+      "area": "archive",
+      "legacy_evidence": ["tests/WordPress/ReleasePackageIdentityValidatorTest.php::testPluginHeaderUsesTwoPartPatchZeroShorthand", "tests/WordPress/ReleasePackageIdentityValidatorTest.php::testThemeRootStyleSheetIsValidatedWithoutPluginParsing"],
+      "neutral_evidence": ["Tests\\Archive\\PackageIdentityValidatorTest::testAcceptsAnExactPluginAndThemeWithoutExtraction", "Tests\\Archive\\PackageIdentityValidatorTest::testFailsClosedForDigestSizeUriTargetAndMetadataMismatches"],
+      "legacy_outcome": "plugin and theme archives bind package metadata and Update URI",
+      "neutral_outcome": "plugin and theme archives bind package metadata, full Update URI, descriptor and canonical manifest",
+      "disposition": "strengthened",
+      "difference": "The neutral validator carries a one-use local proof and canonical archive manifest."
+    },
+    {
+      "id": "manual-automatic-truth",
+      "area": "policy",
+      "legacy_evidence": ["tests/WordPress/NativePluginUpdaterTest.php::testSiteControlledNativeAutoUpdateRequiresTheAutomaticProfile", "tests/WordPress/NativePluginUpdaterTest.php::testAutomaticPolicyRejectsAMutablePublishedRelease"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testMutableReleaseRemainsManualOnlyAndPrereleaseThemeIsBound", "Tests\\WordPress\\NativePluginUpdaterTest::testOfferRechecksRuntimeUriUsesUniqueInfoSlugAndDefaultDeniesAutomatic"],
+      "legacy_outcome": "automatic requires exact immutable assurance; mutable releases remain manual",
+      "neutral_outcome": "automatic requires exact immutable and provenance assurance; mutable releases remain manual",
+      "disposition": "strengthened",
+      "difference": "The adapter attests facts only; WordPress policy remains separately site controlled."
+    },
+    {
+      "id": "provider-request-budgets",
+      "area": "performance",
+      "legacy_evidence": ["tests/Artifact/GitHubReleaseArtifactServiceTest.php::testNativeZipOnlyUpdateUsesFiveOfferAndFourFreshInstallRequests", "tests/Artifact/GitHubReleaseArtifactServiceTest.php::testProspectiveZipOnlyJourneyUsesTwoListAndFourRequestsPerExactPass"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testListingUsesTwoBoundedPagesAndReturnsAtMostEightCandidates", "Tests\\Provider\\GitHubReleaseAdapterTest::testInspectionBindsExactNumericRepositoryReleaseCommitAndAsset", "Tests\\Provider\\GitHubReleaseAdapterTest::testPrivateCredentialIsStrippedOnAssetRedirectAndCustodyTransfersOnce"],
+      "legacy_outcome": "active native and prospective journeys have explicit request ceilings",
+      "neutral_outcome": "direct adapter listing uses at most two requests, inspection uses three, and acquisition uses three plus at most one redirect",
+      "disposition": "narrowed",
+      "difference": "The direct provider budget is deterministic now; the composed native journey budget must be measured in Phase 3.3."
+    },
+    {
+      "id": "coordination-rebind",
+      "area": "coordination",
+      "legacy_evidence": ["tests/WordPress/ReleaseOperationCoordinatorTest.php::testExpiredOwnerCannotPublishOrReleaseAfterTakeover", "tests/WordPress/ReleaseOperationCoordinatorTest.php::testProcessesWithDifferentConfigurationStillShareDatabaseOwnership"],
+      "neutral_evidence": ["Tests\\WordPress\\ReleaseOperationCoordinatorTest::testLiveRebindSurvivesRestartAndFencesTheStaleWriter", "Tests\\WordPress\\ReleaseOperationCoordinatorTest::testEveryProviderRepositoryUriAndPolicySwitchFencesStaleState"],
+      "legacy_outcome": "database-time leases fence stale discovery and install owners",
+      "neutral_outcome": "one self-contained target row fences stale owners and full binding switches",
+      "disposition": "strengthened",
+      "difference": "The Pareto-approved one-row state replaces the legacy multi-slot coordinator without provider cache state."
+    },
+    {
+      "id": "diagnostics-passivity",
+      "area": "diagnostics",
+      "legacy_evidence": ["tests/BootstrapTest.php::testRuntimeDiagnosticsProviderIsPassiveAndRedacted", "tests/WordPress/NativePluginUpdaterTest.php::testCompletionClearsOfferAndDiagnosticsStayPassive"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testDormantLoadAndConstructionPerformNoWork", "Tests\\WordPress\\NativePluginUpdaterTest::testPassiveSeamsDoNotAcquireAndDiagnosticsNeverExposeCallerInput"],
+      "legacy_outcome": "passive bounded diagnostics do not expose credentials or paths",
+      "neutral_outcome": "dormant adapter and passive bounded diagnostics perform no acquisition and expose no caller input",
+      "disposition": "strengthened",
+      "difference": "Provider construction is also proven remote- and credential-inert."
+    },
+    {
+      "id": "refresh-object-cleanup",
+      "area": "refresh",
+      "legacy_evidence": ["tests/WordPress/NativePluginUpdaterTest.php::testRefreshCacheReturnsFalseWhenCoreTransientDeletionIsItsOnlySuccess"],
+      "neutral_evidence": ["Tests\\WordPress\\NativePluginUpdaterTest::testRefreshClearsDiagnosticsAndDestroysPendingOwnedArchive"],
+      "legacy_outcome": "refresh invalidates updater-owned request and cached state",
+      "neutral_outcome": "refresh invalidates request-local diagnostics and pending owned artifact only",
+      "disposition": "narrowed",
+      "difference": "The dormant neutral candidate has no provider cache or production cache owner; cache invalidation cannot be claimed."
+    },
+    {
+      "id": "provider-cache",
+      "area": "cache",
+      "legacy_evidence": ["tests/WordPress/NativePluginUpdaterTest.php::testCurrentDescriptorSurvivesRepeatedNotModifiedRevalidation"],
+      "neutral_evidence": [],
+      "legacy_outcome": "conditional provider results persist in target-specific cache state",
+      "neutral_outcome": "absent",
+      "disposition": "intentionally_removed",
+      "difference": "Phase 2 Pareto review deleted the unowned cache; a real composition must re-earn any cache in a separate bounded slice."
+    },
+    {
+      "id": "prospective-product-api",
+      "area": "prospective",
+      "legacy_evidence": ["tests/WordPress/ReleaseCandidatePreflightTest.php::testInspectExactReturnsZipIdentityAndDiscardsReviewedArtifact"],
+      "neutral_evidence": [],
+      "legacy_outcome": "legacy updater exposes a GitHub-shaped prospective facade",
+      "neutral_outcome": "absent",
+      "disposition": "intentionally_removed",
+      "difference": "The orphaned speculative prospective generation was deleted; Phase 4 must use the consumer's actual neutral facade."
+    },
+    {
+      "id": "native-wordpress-lifecycle",
+      "area": "native",
+      "legacy_evidence": ["tests/WordPress/NativePluginUpdaterTest.php::testRegistersOnlyTheBetaNativeHooksIdempotently", "tests/WordPress/NativePluginUpdaterTest.php::testAutomaticRollbackFinalReadbackRetainsOffer"],
+      "neutral_evidence": ["Tests\\WordPress\\NativePluginUpdaterTest::testConstructionConsumesCurrentInspectionBeforeOffersAndRegistersExactlyOnce", "Tests\\WordPress\\NativePluginUpdaterTest::testInstalledMutationCannotCompleteAgainstTheArchiveManifest"],
+      "legacy_outcome": "active GitHub composition owns native hooks, rollback readback and offer continuity",
+      "neutral_outcome": "uncomposed",
+      "disposition": "deferred_3_3",
+      "difference": "Direct neutral lifecycle seams are proven, but no selected GitHub target composition exists yet."
+    },
+    {
+      "id": "automatic-wordpress-run",
+      "area": "automatic",
+      "legacy_evidence": ["tests/WordPress/NativePluginUpdaterTest.php::testAutomaticThemeCompletionSurvivesRepeatedNotModifiedRevalidation"],
+      "neutral_evidence": ["Tests\\WordPress\\NativePluginUpdaterTest::testThemeIdentityUsesThemeHooksAndRejectsPluginStyleIdentity"],
+      "legacy_outcome": "active GitHub composition completes an automatic theme lifecycle",
+      "neutral_outcome": "uncomposed",
+      "disposition": "deferred_3_3",
+      "difference": "Automatic eligibility facts exist, but an actual selected-runtime WordPress run belongs to Phase 3.3."
+    },
+    {
+      "id": "selected-runtime-composition",
+      "area": "runtime",
+      "legacy_evidence": ["tests/RuntimeTest.php::testRegistersAThemeOnNativeThemeHooksWithoutCredentialWork"],
+      "neutral_evidence": ["Tests\\Runtime\\RequestBrokerTest::testDifferentPhysicalCopiesUseOneBrokerAndLoadOnlyTheHighestCompatibleRuntime"],
+      "legacy_outcome": "selected runtime activates GitHub plugin and theme targets",
+      "neutral_outcome": "uncomposed",
+      "disposition": "deferred_3_3",
+      "difference": "The neutral broker selects one runtime, but provider-to-native target composition has not landed."
+    }
+  ]
+}

@@ -24,6 +24,11 @@
   },
   "scripts": {
     "check": "@validate:strict",
+    "check:phase3": [
+      "@validate:strict",
+      "@test:parity"
+    ],
+    "test:parity": "php tests/Integration/paired-github-provider-proof.php",
     "validate:strict": "composer validate --strict --no-check-publish"
   },
   "config": {
