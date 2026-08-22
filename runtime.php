@@ -16,12 +16,13 @@ $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseVersion' => 'src/Contract/ReleaseVersion.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\BindingRecord' => 'src/Contract/BindingRecord.php',
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\ValidatedPackage' => 'src/Archive/ValidatedPackage.php',
+	'RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact' => 'src/Archive/TemporaryArtifact.php',
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\PackageIdentityValidator' => 'src/Archive/PackageIdentityValidator.php',
+	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseAdapter' => 'src/Contract/ReleaseAdapter.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\ReleaseOperationCoordinator' => 'src/WordPress/ReleaseOperationCoordinator.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\AcquisitionReceipt' => 'src/Contract/AcquisitionReceipt.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePluginUpdater' => 'src/WordPress/NativePluginUpdater.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubCredentialResolver' => 'src/Provider/GitHub/GitHubCredentialResolver.php',
-	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubTemporaryArtifact' => 'src/Provider/GitHub/GitHubTemporaryArtifact.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseAdapter' => 'src/Provider/GitHub/GitHubReleaseAdapter.php',
 );
 

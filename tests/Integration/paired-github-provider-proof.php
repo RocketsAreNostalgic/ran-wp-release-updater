@@ -8,7 +8,6 @@ declare(strict_types=1);
  */
 
 const PAIRED_LEGACY_REVISION = '4586ffe4105565cf19f8b2e842fb78bd2e96d304';
-const PAIRED_NEUTRAL_REVISION = 'b526119e1789a007cb810246d42520204cc8ed24';
 
 final class WP_Error
 {
@@ -269,6 +268,22 @@ try {
 		}
 	);
 
+	$revisionProcess = proc_open(
+		array('git', '-C', $currentRoot, 'rev-parse', 'HEAD'),
+		array(1 => array('pipe', 'w'), 2 => array('pipe', 'w')),
+		$revisionPipes
+	);
+	paired_assert(is_resource($revisionProcess), 'Could not resolve the neutral revision.');
+	$neutralRevision = trim((string) stream_get_contents($revisionPipes[1]));
+	$revisionErrors = trim((string) stream_get_contents($revisionPipes[2]));
+	fclose($revisionPipes[1]);
+	fclose($revisionPipes[2]);
+	paired_assert(
+		0 === proc_close($revisionProcess)
+			&& 1 === preg_match('/\A[a-f0-9]{40}\z/D', $neutralRevision),
+		'Could not resolve the neutral revision: ' . $revisionErrors
+	);
+
 	$headProcess = proc_open(
 		array(
 			'git',
@@ -276,7 +291,7 @@ try {
 			$currentRoot,
 			'diff',
 			'--quiet',
-			PAIRED_NEUTRAL_REVISION,
+			$neutralRevision,
 			'--',
 			'src',
 			'bootstrap.php',
@@ -532,11 +547,12 @@ try {
 	$newAdapter = new \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter($newBinding, $newCredentials);
 	$newDescriptor = $newAdapter->inspect('77', 'v1.2.3');
 	$newArtifact = $newAdapter->acquire($newDescriptor);
-	$newDigest = $newArtifact->inspect(static fn (string $path): string => (string) hash_file('sha256', $path));
-	$newPath = $newArtifact->claim();
+	list($newDigest, $newPath) = $newArtifact->inspect(
+		static fn (string $path): array => array((string) hash_file('sha256', $path), $path)
+	);
 	paired_assert(is_file($newPath) && $newDigest === hash_file('sha256', $newPath), 'Neutral custody bytes failed.');
-	paired_assert($newArtifact->discard() === false, 'Neutral artifact retained cleanup after claim.');
-	paired_assert(@unlink($newPath), 'Could not clean claimed neutral artifact.');
+	paired_assert($newArtifact->discard(), 'Neutral artifact cleanup failed.');
+	paired_assert(! file_exists($newPath), 'Neutral artifact cleanup retained the temporary file.');
 
 	$oldDescriptorTuple = array($oldDescriptor->releaseId(), $oldDescriptor->tag(), $oldDescriptor->version(), $oldDescriptor->commit(), $oldDescriptor->zipAsset()->id(), $oldDescriptor->zipAsset()->name(), $oldDescriptor->zipAsset()->size(), $oldDescriptor->zipAsset()->sha256(), $oldDescriptor->isImmutable());
 	$newFacts = $newDescriptor->toArray();
@@ -552,7 +568,7 @@ try {
 	echo json_encode(
 		array(
 			'legacy_revision' => PAIRED_LEGACY_REVISION,
-			'neutral_revision' => PAIRED_NEUTRAL_REVISION,
+			'neutral_revision' => $neutralRevision,
 			'scenarios' => array(
 				'ordinary_forbidden',
 				'prerelease_theme_inspection',

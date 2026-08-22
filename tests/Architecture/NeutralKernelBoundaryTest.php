@@ -65,13 +65,14 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			'RAN\\WPReleaseUpdater\\V1\\Contract\\IdentityDescriptor',
 			'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseVersion',
 			'RAN\\WPReleaseUpdater\\V1\\Contract\\BindingRecord',
+			'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseAdapter',
 			'RAN\\WPReleaseUpdater\\V1\\Archive\\ValidatedPackage',
+			'RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact',
 			'RAN\\WPReleaseUpdater\\V1\\Archive\\PackageIdentityValidator',
 			'RAN\\WPReleaseUpdater\\V1\\WordPress\\ReleaseOperationCoordinator',
 			'RAN\\WPReleaseUpdater\\V1\\Contract\\AcquisitionReceipt',
 			'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePluginUpdater',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubCredentialResolver',
-			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubTemporaryArtifact',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseAdapter',
 		) as $class ) {
 			$levels = str_starts_with( $class, 'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\' ) ? 4 : 3;
@@ -84,7 +85,8 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		$provider = $root . '/src/Provider/GitHub';
 		self::assertFileExists( $provider . '/GitHubCredentialResolver.php' );
 		self::assertFileExists( $provider . '/GitHubReleaseAdapter.php' );
-		self::assertFileExists( $provider . '/GitHubTemporaryArtifact.php' );
+		self::assertFileDoesNotExist( $provider . '/GitHubTemporaryArtifact.php' );
+		self::assertFileExists( $root . '/src/Archive/TemporaryArtifact.php' );
 		foreach ( glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE ) ?: array() as $file ) {
 			self::assertStringNotContainsString( 'GitHub', (string) file_get_contents( $file ), $file );
 		}

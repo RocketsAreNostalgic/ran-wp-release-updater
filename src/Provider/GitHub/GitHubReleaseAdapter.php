@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\Provider\GitHub;
 
 use InvalidArgumentException;
+use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
+use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RuntimeException;
 
 /** Bounded, target-bound GitHub release reader. It owns no WordPress hooks or state. */
-final class GitHubReleaseAdapter
+final class GitHubReleaseAdapter implements ReleaseAdapter
 {
 	private const API_HOST = 'api.github.com';
 	private const API_ORIGIN = 'https://' . self::API_HOST;
@@ -194,7 +196,7 @@ final class GitHubReleaseAdapter
 		);
 	}
 
-	public function acquire(IdentityDescriptor $descriptor): GitHubTemporaryArtifact
+	public function acquire(IdentityDescriptor $descriptor): TemporaryArtifact
 	{
 		BindingRecord::assertDescriptorBinding($descriptor, $this->bindingRecord);
 		$facts = $descriptor->toArray();
@@ -235,7 +237,7 @@ final class GitHubReleaseAdapter
 			}
 
 			$this->repositoryIdentity($token);
-			return new GitHubTemporaryArtifact($path, $sha256, $identity);
+			return new TemporaryArtifact($path, $sha256, $identity);
 		} catch (\Throwable $exception) {
 			self::removeOwnedFile($path, $initialIdentity);
 			throw $exception;

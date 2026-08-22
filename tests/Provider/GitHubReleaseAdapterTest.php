@@ -91,11 +91,12 @@ namespace {
 namespace Tests\Provider {
 
 use PHPUnit\Framework\TestCase;
+use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
+use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubCredentialResolver;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter;
-use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubTemporaryArtifact;
 use RuntimeException;
 
 final class GitHubReleaseAdapterTest extends TestCase
@@ -131,6 +132,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$adapter = new GitHubReleaseAdapter($this->binding(), $resolver);
 
 		self::assertInstanceOf(GitHubReleaseAdapter::class, $adapter);
+		self::assertInstanceOf(ReleaseAdapter::class, $adapter);
 		self::assertSame(0, $calls);
 		self::assertSame(array(), $GLOBALS['ran_github_requests']);
 		self::assertSame(array(), $GLOBALS['ran_github_temp_paths']);
@@ -648,6 +650,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		);
 
 		$artifact = $adapter->acquire($descriptor);
+		self::assertInstanceOf(TemporaryArtifact::class, $artifact);
 
 		self::assertSame(2, $calls);
 		self::assertCount(7, $GLOBALS['ran_github_requests']);
@@ -665,11 +668,10 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$GLOBALS['ran_github_requests'][5][1]['limit_response_size']
 		);
 		self::assertSame('zip-data', $artifact->inspect('file_get_contents'));
-		$path = $artifact->claim();
+		$path = $artifact->inspect(static fn (string $path): string => $path);
 		self::assertFileExists($path);
 		unset($artifact);
-		self::assertFileExists($path);
-		self::assertTrue(unlink($path));
+		self::assertFileDoesNotExist($path);
 	}
 
 	/** @dataProvider unsafeRedirectProvider */
@@ -808,16 +810,11 @@ final class GitHubReleaseAdapterTest extends TestCase
 		file_put_contents($path, 'replacement');
 		chmod($path, 0600);
 
-		try {
-			$artifact->claim();
-			self::fail('A replaced temporary artifact must not transfer.');
-		} catch (RuntimeException) {
-			self::assertFalse($artifact->discard());
-			unset($artifact);
-			self::assertFileExists($path);
-			self::assertSame('replacement', file_get_contents($path));
-			self::assertTrue(unlink($path));
-		}
+		self::assertFalse($artifact->discard());
+		unset($artifact);
+		self::assertFileExists($path);
+		self::assertSame('replacement', file_get_contents($path));
+		self::assertTrue(unlink($path));
 	}
 
 	private function binding(
