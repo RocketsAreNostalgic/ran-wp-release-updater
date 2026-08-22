@@ -110,7 +110,7 @@ final class NativePluginUpdater {
 	public function filterAutoUpdate( ?bool $update, mixed $item ): ?bool {
 		if ( ! is_object( $item ) || ! $this->matchesItemIdentity( $item ) ) return $update;
 		$descriptor = $this->parseToken( is_string( $item->package ?? null ) ? $item->package : '' );
-		return $this->directFilesystem() && $descriptor instanceof IdentityDescriptor && $this->automaticEligible( $descriptor );
+		return $this->directFilesystem() && $descriptor instanceof IdentityDescriptor && $this->newerThanInstalled( $descriptor ) && $this->automaticEligible( $descriptor );
 	}
 
 	/** @param array<string,mixed> $hookExtra */
@@ -123,7 +123,7 @@ final class NativePluginUpdater {
 		if ( false !== $reply ) return $this->failure( 'unverified_pre_download_result' );
 		$this->clearPending( false );
 		$token = $this->parseToken( $package );
-		if ( ! $this->directFilesystem() || ! $token instanceof IdentityDescriptor || ! $this->manualEligible( $token ) ) {
+		if ( ! $this->directFilesystem() || ! $token instanceof IdentityDescriptor || ! $this->newerThanInstalled( $token ) || ! $this->manualEligible( $token ) ) {
 			return $this->failure( 'unverified_pre_download' );
 		}
 		if ( ! $this->claimDiscovery() ) return $this->failure( 'binding_fence_lost' );
@@ -131,6 +131,7 @@ final class NativePluginUpdater {
 			$fresh = $this->adapter->inspect( $token->releaseIdentity(), $token->toArray()['tag'] );
 			BindingRecord::assertDescriptorBinding( $fresh, $this->binding );
 		} catch ( \Throwable ) { return $this->failure( 'acquisition_failed' ); }
+		if ( ! $this->newerThanInstalled( $fresh ) ) return $this->failure( 'unverified_pre_download' );
 		if ( ! hash_equals( $token->fingerprintValue(), $fresh->fingerprintValue() ) ) {
 			return $this->failure( 'remote_release_changed' );
 		}
@@ -194,6 +195,7 @@ final class NativePluginUpdater {
 	private function matchesRuntimeUri( string $runtimeUri ): bool { return $this->updateUri === CanonicalUpdateUri::canonicalizeBoundaries( array( 'archive_preflight' => $this->binding->toArray()['canonical_update_uri'], 'configuration' => $this->updateUri, 'offer' => $runtimeUri, 'staged_package' => $this->headers['UpdateURI'] ) ); }
 	private function manualEligible( IdentityDescriptor $descriptor ): bool { $facts = $descriptor->toArray()['assurance_facts']; foreach ( array( 'exact_artifact_identity', 'exact_commit_identity', 'exact_reacquisition_supported', 'exact_release_identity', 'repository_identity_stable', 'trusted_digest_source' ) as $fact ) if ( true !== $facts[ $fact ] ) return false; return true; }
 	private function automaticEligible( IdentityDescriptor $descriptor ): bool { $facts = $descriptor->toArray()['assurance_facts']; return 'automatic' === $this->policy && $this->manualEligible( $descriptor ) && true === $facts['publication_immutable'] && true === $facts['provenance_verified']; }
+	private function newerThanInstalled( IdentityDescriptor $descriptor ): bool { return ReleaseVersion::RELATIONSHIP_NEWER === ReleaseVersion::relationship( $descriptor->toArray()['version'], $this->headers['Version'] ); }
 	private function informationSlug(): string { return 'ran-wp-release-updater-' . substr( hash( 'sha256', $this->targetType . "\0" . $this->installedIdentity ), 0, 24 ); }
 	private function matchesItemIdentity( object $item ): bool { $identity = 'plugin' === $this->targetType ? ( $item->plugin ?? null ) : ( $item->theme ?? null ); return is_string( $identity ) && hash_equals( $this->installedIdentity, $identity ); }
 	/** @param array<string,mixed> $extra */ private function matchesOperation( array $extra ): bool { $identity = 'plugin' === $this->targetType ? ( $extra['plugin'] ?? null ) : ( $extra['theme'] ?? null ); if ( ! is_string( $identity ) || ! hash_equals( $this->installedIdentity, $identity ) ) return false; return ( ! array_key_exists( 'action', $extra ) || 'update' === $extra['action'] ) && ( ! array_key_exists( 'type', $extra ) || $this->targetType === $extra['type'] ); }

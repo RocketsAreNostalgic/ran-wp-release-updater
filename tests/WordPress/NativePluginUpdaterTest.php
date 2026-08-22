@@ -78,6 +78,19 @@ namespace Tests\WordPress {
 			self::assertFalse( $offer['autoupdate'] );
 			self::assertFalse( $updater->filterAutoUpdate( true, (object) array( 'plugin' => 'package/package.php', 'package' => $offer['package'] ) ) );
 		}
+		public function testCanonicalStaleAndOlderTokensAreRejectedAtAutomaticAndDownloadAdmission(): void {
+			list( $updater, $adapter, , $descriptor, $binding ) = $this->subject( 'automatic' );
+			foreach ( array( '1.0.0', '0.9.0' ) as $version ) {
+				$facts = $descriptor->toArray();
+				unset( $facts['fingerprint'] );
+				$facts['version'] = $version;
+				$facts['tag'] = 'v' . $version;
+				$token = $this->token( IdentityDescriptor::create( $facts ), $binding );
+				self::assertFalse( $updater->filterAutoUpdate( true, (object) array( 'plugin' => 'package/package.php', 'package' => $token ) ) );
+				self::assertInstanceOf( \WP_Error::class, $updater->filterPreDownload( false, $token, null, $this->extra() ) );
+			}
+			self::assertSame( array( 0, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
 		public function testNoncanonicalAndTamperedTokensAreRejectedWithoutInstallCalls(): void {
 			list( $updater, $adapter ) = $this->subject();
 			$offer = $this->offer( $updater );
@@ -130,6 +143,18 @@ namespace Tests\WordPress {
 			self::assertInstanceOf( \WP_Error::class, $updater->filterPreDownload( false, $offer['package'], null, $this->extra() ) );
 			self::assertSame( array( 1, 2, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
 			self::assertContains( 'remote_release_changed', $updater->diagnostics() );
+		}
+		public function testFreshInspectionMustRemainNewerThanTheInstalledHeader(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject();
+			$offer = $this->offer( $updater );
+			$facts = $descriptor->toArray();
+			unset( $facts['fingerprint'] );
+			$facts['version'] = '1.0.0';
+			$facts['tag'] = 'v1.0.0';
+			$adapter->inspectDescriptor = IdentityDescriptor::create( $facts );
+			self::assertInstanceOf( \WP_Error::class, $updater->filterPreDownload( false, $offer['package'], null, $this->extra() ) );
+			self::assertSame( array( 1, 2, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertContains( 'unverified_pre_download', $updater->diagnostics() );
 		}
 		public function testOfferOnlyShutdownReleasesAndAutomaticInstallPromotesLease(): void {
 			list( $firstUpdater, , $database ) = $this->subject();
@@ -285,6 +310,10 @@ namespace Tests\WordPress {
 				'installed_package_identity' => 'package/package.php', 'prerelease' => $prerelease, 'provider_code' => 'neutral',
 				'release_identity' => 'release:2', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package',
 				'tag' => 'v2.0.0', 'target_type' => 'plugin', 'version' => '2.0.0' ) );
+		}
+		private function token( IdentityDescriptor $descriptor, BindingRecord $binding ): string {
+			$value = array( 'binding_hash' => $binding->bindingHash(), 'descriptor' => $descriptor->toArray(), 'schema' => 1 );
+			return 'ran-wp-release-updater:v1:' . rtrim( strtr( base64_encode( json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) ), '+/', '-_' ), '=' );
 		}
 		/** @return array<string,mixed> */
 		private function claim( BindingState $state ): array {
