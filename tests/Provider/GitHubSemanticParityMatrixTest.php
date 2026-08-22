@@ -44,7 +44,7 @@ final class GitHubSemanticParityMatrixTest extends TestCase
 			$matrix['legacy_source_sha']
 		);
 		self::assertSame(
-			'b526119e1789a007cb810246d42520204cc8ed24',
+			'38f29a32ca182c7acde496ecf3e2c60f3f66d906',
 			$matrix['neutral_source_sha']
 		);
 		self::assertSame(
@@ -105,7 +105,7 @@ final class GitHubSemanticParityMatrixTest extends TestCase
 		self::assertSame(self::AREAS, $actualAreas);
 	}
 
-	public function testEveryClaimedNeutralFixtureIsRunnableAndDeferredRowsStayVisible(): void
+	public function testEveryClaimedNeutralFixtureIsRunnableAndNoDeferredRowsRemain(): void
 	{
 		$testFiles = array(
 			'Tests\\Archive\\PackageIdentityValidatorTest' => dirname(__DIR__)
@@ -141,14 +141,7 @@ final class GitHubSemanticParityMatrixTest extends TestCase
 			}
 		}
 
-		self::assertSame(
-			array(
-				'native-wordpress-lifecycle',
-				'automatic-wordpress-run',
-				'selected-runtime-composition',
-			),
-			$deferred
-		);
+		self::assertSame(array(), $deferred);
 		self::assertSame(
 			array('provider-cache', 'prospective-product-api'),
 			$removed

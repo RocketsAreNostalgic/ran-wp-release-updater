@@ -2,7 +2,7 @@
   "executable_gate": "composer check:phase3",
   "executable_proof": "tests/Integration/paired-github-provider-proof.php",
   "legacy_source_sha": "4586ffe4105565cf19f8b2e842fb78bd2e96d304",
-  "neutral_source_sha": "b526119e1789a007cb810246d42520204cc8ed24",
+  "neutral_source_sha": "38f29a32ca182c7acde496ecf3e2c60f3f66d906",
   "rows": [
     {
       "id": "discovery-stable-prerelease",
@@ -168,31 +168,31 @@
       "id": "native-wordpress-lifecycle",
       "area": "native",
       "legacy_evidence": ["tests/WordPress/NativePluginUpdaterTest.php::testRegistersOnlyTheBetaNativeHooksIdempotently", "tests/WordPress/NativePluginUpdaterTest.php::testAutomaticRollbackFinalReadbackRetainsOffer"],
-      "neutral_evidence": ["Tests\\WordPress\\NativePluginUpdaterTest::testStateConstructionAndRegisterArePassive", "Tests\\WordPress\\NativePluginUpdaterTest::testInstalledMutationCannotCompleteAgainstTheArchiveManifest"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testProductionCompositionActivatesSelectedRootAndRemainsDormantUntilOffer", "Tests\\WordPress\\NativePluginUpdaterTest::testStateConstructionAndRegisterArePassive", "Tests\\WordPress\\NativePluginUpdaterTest::testInstalledMutationCannotCompleteAgainstTheArchiveManifest"],
       "legacy_outcome": "active GitHub composition owns native hooks, rollback readback and offer continuity",
-      "neutral_outcome": "uncomposed",
-      "disposition": "deferred_3_3",
-      "difference": "Direct neutral lifecycle seams are proven, but no selected GitHub target composition exists yet."
+      "neutral_outcome": "selected-root GitHub composition registers the native lifecycle once without credential or HTTP work before an offer, then completes disposable WordPress Core success and rollback readback",
+      "disposition": "strengthened",
+      "difference": "The concrete factory and disposable WordPress proof close native composition; wiring an installed Booster Core consumer remains Phase 4 work."
     },
     {
       "id": "automatic-wordpress-run",
       "area": "automatic",
       "legacy_evidence": ["tests/WordPress/NativePluginUpdaterTest.php::testAutomaticThemeCompletionSurvivesRepeatedNotModifiedRevalidation"],
-      "neutral_evidence": ["Tests\\WordPress\\NativePluginUpdaterTest::testThemeIdentityUsesThemeHooksAndRejectsPluginStyleIdentity"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testProductionCompositionActivatesSelectedRootAndRemainsDormantUntilOffer", "Tests\\WordPress\\NativePluginUpdaterTest::testOfferRechecksRuntimeUriUsesUniqueInfoSlugAndDefaultDeniesAutomatic", "Tests\\WordPress\\NativePluginUpdaterTest::testThemeIdentityUsesThemeHooksAndRejectsPluginStyleIdentity"],
       "legacy_outcome": "active GitHub composition completes an automatic theme lifecycle",
-      "neutral_outcome": "uncomposed",
-      "disposition": "deferred_3_3",
-      "difference": "Automatic eligibility facts exist, but an actual selected-runtime WordPress run belongs to Phase 3.3."
+      "neutral_outcome": "selected-root GitHub composition completes disposable automatic plugin and theme success and rollback under WordPress Core while eligibility remains fail-closed",
+      "disposition": "strengthened",
+      "difference": "The automatic lifecycle is proven in disposable WordPress; wiring an installed Booster Core consumer remains Phase 4 work."
     },
     {
       "id": "selected-runtime-composition",
       "area": "runtime",
       "legacy_evidence": ["tests/RuntimeTest.php::testRegistersAThemeOnNativeThemeHooksWithoutCredentialWork"],
-      "neutral_evidence": ["Tests\\Runtime\\RequestBrokerTest::testDifferentPhysicalCopiesUseOneBrokerAndLoadOnlyTheHighestCompatibleRuntime"],
+      "neutral_evidence": ["Tests\\Provider\\GitHubReleaseAdapterTest::testProductionCompositionActivatesSelectedRootAndRemainsDormantUntilOffer", "Tests\\Runtime\\RequestBrokerTest::testDifferentPhysicalCopiesUseOneBrokerAndLoadOnlyTheHighestCompatibleRuntime"],
       "legacy_outcome": "selected runtime activates GitHub plugin and theme targets",
-      "neutral_outcome": "uncomposed",
-      "disposition": "deferred_3_3",
-      "difference": "The neutral broker selects one runtime, but provider-to-native target composition has not landed."
+      "neutral_outcome": "selected runtime loads the concrete GitHub composition root and it registers one configured target",
+      "disposition": "narrowed",
+      "difference": "The factory composes a configured target, but an installed Core consumer that discovers and supplies target configuration remains Phase 4 work."
     }
   ]
 }

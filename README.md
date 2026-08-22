@@ -19,10 +19,11 @@ cut to one package or the other.
 ## Development status
 
 The repository now contains the unreleased neutral kernel, its selected-runtime
-broker, and the dormant built-in GitHub release-protocol adapter. Target
-composition and activation have not landed, so there is no supported
-installation path and loading the adapter performs no remote or credential
-work. Do not depend on a branch or commit as though it were a release.
+broker, the built-in GitHub release-protocol adapter, and a concrete GitHub
+composition entrypoint for the forthcoming Core migration. Constructing and
+registering that entrypoint performs no remote or credential work. No installed
+production consumer calls it yet, so there is still no supported installation
+path. Do not depend on a branch or commit as though it were a release.
 
 The kernel uses opaque provider identities, full canonical Update URI equality,
 locally verified SHA-256 archive custody, and binding-aware target fences.
@@ -35,7 +36,7 @@ can rewrite plugin files outside any updater hook and is not sandboxed by this
 library. The updater still compares the extracted and installed file inventory
 with the inspected archive before accepting completion.
 
-Run the repository gate with:
+Validate the Composer package metadata with:
 
 ```sh
 composer check
