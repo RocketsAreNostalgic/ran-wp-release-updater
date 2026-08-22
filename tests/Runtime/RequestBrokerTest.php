@@ -35,6 +35,19 @@ final class RequestBrokerTest extends TestCase
 		}
 	}
 
+	public function testMoreThanEightUniqueCopiesAreAdmittedAndOnlyTheHighestRuntimeLoads(): void
+	{
+		$copies = array();
+		for ( $index = 1; $index <= 9; ++$index ) {
+			$copies[] = $this->copy( 'copy-' . $index, '0.1.0-beta.' . $index, 'a' );
+		}
+		$result = $this->probe( 'foreach ($data["copies"] as $copy) require $copy . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>1,"wordpress_version"=>"6.8.0")); echo json_encode(array("result"=>$result,"diagnostics"=>$broker->diagnostics(),"marker"=>file_get_contents($data["marker"])));', array( 'copies' => $copies, 'marker' => $this->parent . '/selected.txt' ) );
+		self::assertTrue( $result['result']['loaded'] );
+		self::assertSame( array(), $result['result']['diagnostics'] );
+		self::assertSame( 9, $result['diagnostics']['candidate_count'] );
+		self::assertSame( 'copy-9', $result['marker'] );
+	}
+
 	public function testEqualVersionDifferentRevisionFailsClosedWithoutLoadingEitherRuntime(): void
 	{
 		$left = $this->copy( 'left', '0.1.0-beta.2', 'a' );
@@ -57,6 +70,16 @@ final class RequestBrokerTest extends TestCase
 		$legacy = $this->probe( '$GLOBALS["ran_wp_github_release_updater_v1_broker"]=new stdClass(); require $data["copy"] . "/bootstrap.php"; $result=$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(array("php_version"=>"8.2.0","runtime_protocol"=>1,"wordpress_version"=>"6.8.0")); echo json_encode($result);', array( 'copy' => $copy ) );
 		self::assertFalse( $legacy['loaded'] );
 		self::assertSame( array( 'legacy_conflict_inactive' ), array_column( $legacy['diagnostics'], 'code' ) );
+	}
+
+	public function testDiagnosticsAreBoundedForRepeatedInvalidAndLateRegistrations(): void
+	{
+		$copy = $this->copy( 'copy', '0.1.0-beta.2', 'a' );
+		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; for ($index=0; $index<17; ++$index) $broker->registerCandidate($data["copy"] . "/wrong.json"); $invalid=$broker->diagnostics(); $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>1,"wordpress_version"=>"6.8.0")); for ($index=0; $index<17; ++$index) $broker->registerCandidate($data["copy"] . "/runtime-copy.json"); echo json_encode(array("invalid"=>$invalid,"late"=>$broker->diagnostics()));', array( 'copy' => $copy ) );
+		self::assertCount( 16, $result['invalid']['diagnostics'] );
+		self::assertSame( array( 'candidate_invalid' ), array_values( array_unique( array_column( $result['invalid']['diagnostics'], 'code' ) ) ) );
+		self::assertCount( 16, $result['late']['diagnostics'] );
+		self::assertSame( array( 'late_candidate_rejected' ), array_values( array_unique( array_column( $result['late']['diagnostics'], 'code' ) ) ) );
 	}
 
 	public function testSameProtocolForeignBrokerWithAnIncompleteShapeIsReplacedFailClosed(): void

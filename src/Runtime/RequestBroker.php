@@ -16,6 +16,7 @@ use Throwable;
 final class RequestBroker
 {
 	private const COPY_KEYS = array( 'package_revision', 'package_version', 'php_floor', 'runtime_file', 'runtime_protocol', 'wordpress_floor' );
+	private const MAX_DIAGNOSTICS = 16;
 	private const SHA256 = '/\A[a-f0-9]{64}\z/D';
 
 	/** @var list<array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string}> */
@@ -35,22 +36,18 @@ final class RequestBroker
 	public function registerCandidate( string $copyFile ): bool
 	{
 		if ( $this->activationAttempted ) {
-			$this->diagnostics[] = array( 'code' => 'late_candidate_rejected' );
-			return false;
-		}
-		if ( count( $this->candidates ) >= 8 ) {
-			$this->diagnostics[] = array( 'code' => 'candidate_limit_rejected' );
+			$this->diagnose( 'late_candidate_rejected' );
 			return false;
 		}
 
 		try {
 			$candidate = $this->candidate( $copyFile );
 		} catch ( Throwable ) {
-			$this->diagnostics[] = array( 'code' => 'candidate_invalid' );
+			$this->diagnose( 'candidate_invalid' );
 			return false;
 		}
 		if ( isset( $this->candidateRoots[ $candidate['source_root'] ] ) ) {
-			$this->diagnostics[] = array( 'code' => 'duplicate_candidate_rejected' );
+			$this->diagnose( 'duplicate_candidate_rejected' );
 			return false;
 		}
 
@@ -69,27 +66,27 @@ final class RequestBroker
 	public function activate( array $environment ): array
 	{
 		if ( $this->activationAttempted ) {
-			$this->diagnostics[] = array( 'code' => 'activation_already_attempted' );
+			$this->diagnose( 'activation_already_attempted' );
 			return $this->result( false );
 		}
 		$this->activationAttempted = true;
 
 		if ( $this->legacyConflict() ) {
-			$this->diagnostics[] = array( 'code' => 'legacy_conflict_inactive' );
+			$this->diagnose( 'legacy_conflict_inactive' );
 			return $this->result( false );
 		}
 
 		try {
 			$selected = $this->select( $environment );
 		} catch ( Throwable ) {
-			$this->diagnostics[] = array( 'code' => 'runtime_selection_inactive' );
+			$this->diagnose( 'runtime_selection_inactive' );
 			return $this->result( false );
 		}
 
 		try {
 			require_once $selected['runtime_file'];
 		} catch ( Throwable ) {
-			$this->diagnostics[] = array( 'code' => 'runtime_load_failed' );
+			$this->diagnose( 'runtime_load_failed' );
 			return $this->result( false );
 		}
 
@@ -116,6 +113,14 @@ final class RequestBroker
 	private function result( bool $loaded ): array
 	{
 		return array( 'loaded' => $loaded, 'diagnostics' => $this->diagnostics );
+	}
+
+	private function diagnose( string $code ): void
+	{
+		if ( self::MAX_DIAGNOSTICS === count( $this->diagnostics ) ) {
+			array_shift( $this->diagnostics );
+		}
+		$this->diagnostics[] = array( 'code' => $code );
 	}
 
 	/** @return array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string} */
