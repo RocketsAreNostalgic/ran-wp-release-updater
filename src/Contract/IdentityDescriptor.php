@@ -119,7 +119,7 @@ final readonly class IdentityDescriptor
             && CanonicalUpdateUri::canonicalize($value['canonical_update_uri']) === $value['canonical_update_uri'] && is_bool($value['prerelease'])
             && self::validAssuranceFacts($value['assurance_facts']) && ( 'stable' === $value['channel'] || 'prerelease' === $value['channel'] )
             && ( 'stable' !== $value['channel'] || ! $value['prerelease'] ) && is_string($value['version']) && null !== ReleaseVersion::normalize($value['version'])
-            && is_string($value['artifact_filename']) && 1 === preg_match('/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/D', $value['artifact_filename'])
+            && is_string($value['artifact_filename']) && 1 === preg_match('/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di', $value['artifact_filename'])
             && is_int($value['artifact_size']) && $value['artifact_size'] >= 1 && $value['artifact_size'] <= self::MAX_ARTIFACT_BYTES && self::isSha256($value['artifact_sha256']);
     }
 

@@ -70,8 +70,23 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			'RAN\\WPReleaseUpdater\\V1\\WordPress\\ReleaseOperationCoordinator',
 			'RAN\\WPReleaseUpdater\\V1\\Contract\\AcquisitionReceipt',
 			'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePluginUpdater',
+			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubCredentialResolver',
+			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubTemporaryArtifact',
+			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseAdapter',
 		) as $class ) {
-			self::assertSame( $root, dirname( ( new \ReflectionClass( $class ) )->getFileName(), 3 ), $class );
+			$levels = str_starts_with( $class, 'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\' ) ? 4 : 3;
+			self::assertSame( $root, dirname( ( new \ReflectionClass( $class ) )->getFileName(), $levels ), $class );
+		}
+	}
+
+	public function testGitHubProtocolIsConfinedToTheSelectedProviderDirectory(): void {
+		$root = dirname( __DIR__, 2 );
+		$provider = $root . '/src/Provider/GitHub';
+		self::assertFileExists( $provider . '/GitHubCredentialResolver.php' );
+		self::assertFileExists( $provider . '/GitHubReleaseAdapter.php' );
+		self::assertFileExists( $provider . '/GitHubTemporaryArtifact.php' );
+		foreach ( glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE ) ?: array() as $file ) {
+			self::assertStringNotContainsString( 'GitHub', (string) file_get_contents( $file ), $file );
 		}
 	}
 }

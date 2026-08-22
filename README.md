@@ -18,10 +18,11 @@ cut to one package or the other.
 
 ## Development status
 
-The repository now contains the unreleased neutral kernel and its
-selected-runtime broker. Provider composition, live transport, and a supported
-installation path have not landed. Do not depend on a branch or commit as
-though it were a release.
+The repository now contains the unreleased neutral kernel, its selected-runtime
+broker, and the dormant built-in GitHub release-protocol adapter. Target
+composition and activation have not landed, so there is no supported
+installation path and loading the adapter performs no remote or credential
+work. Do not depend on a branch or commit as though it were a release.
 
 The kernel uses opaque provider identities, full canonical Update URI equality,
 locally verified SHA-256 archive custody, and binding-aware target fences.
