@@ -84,8 +84,8 @@ try {
 	}
 	copy_tree( $pluginRoot, $sitePath . '/wp-content/plugins/ran-wp-release-updater', array( 'tests', '.git', '.github', 'node_modules', 'vendor' ) );
 
-	$pluginUri = 'https://phase24-updates.example.test/owner/plugin';
-	$themeUri  = 'https://phase24-updates.example.test/owner/theme';
+	$pluginUri = 'https://github.com/phase24-owner/phase24-plugin';
+	$themeUri  = 'https://github.com/phase24-owner/phase24-theme';
 	$pluginArchive = make_fixture_archive( $sitePath, 'phase24-plugin', $pluginUri, 'plugin', '2.0.0', false );
 	$themeArchive  = make_fixture_archive( $sitePath, 'phase24-theme', $themeUri, 'theme', '2.0.0', true );
 
@@ -112,7 +112,7 @@ try {
 		"\$table_prefix = 'wp_';\n" .
 		"define( 'WP_DEBUG', false );\n" .
 		"define( 'FS_METHOD', 'direct' );\n" .
-		"define( 'AUTOMATIC_UPDATER_DISABLED', true );\n" .
+		"define( 'AUTOMATIC_UPDATER_DISABLED', false );\n" .
 		"define( 'DISABLE_WP_CRON', true );\n" .
 		"define( 'DOING_CRON', '1' === getenv( 'RAN_WP_RELEASE_UPDATER_DOING_CRON' ) );\n" .
 		"if ( ! defined( 'ABSPATH' ) ) define( 'ABSPATH', dirname( __FILE__ ) . '/' );\n" .
@@ -145,12 +145,18 @@ try {
 
 	$phaseOutput = array();
 	$successfulDigests = array();
-	foreach ( array( array( 'success', 'plugin' ), array( 'success', 'theme' ), array( 'failure', 'plugin' ), array( 'failure', 'theme' ) ) as $phase ) {
-		$phaseFile = $base . '/phase24-' . $phase[0] . '-' . $phase[1] . '.json';
+	foreach ( array( 'manual', 'automatic' ) as $policy ) foreach ( array( 'plugin', 'theme' ) as $type ) foreach ( array( 'success', 'failure' ) as $phaseMode ) {
+		$phase = array( $policy, $phaseMode, $type );
+		if ( 'success' === $phaseMode ) {
+			if ( 'plugin' === $type ) create_fixture_plugin( $sitePath, 'phase24-plugin', $pluginUri ); else create_fixture_theme( $sitePath, 'phase24-theme', $themeUri );
+		}
+		$phaseFile = $base . '/phase24-' . implode( '-', $phase ) . '.json';
 		$phaseEnv = $probeEnv;
-		$phaseEnv['RAN_WP_RELEASE_UPDATER_MODE'] = $phase[0];
-		$phaseEnv['RAN_WP_RELEASE_UPDATER_TARGET_TYPE'] = $phase[1];
-		$phaseEnv['RAN_WP_RELEASE_UPDATER_DOING_CRON'] = 'plugin' === $phase[1] ? '1' : '0';
+		$phaseEnv['RAN_WP_RELEASE_UPDATER_MODE'] = $phaseMode;
+		$phaseEnv['RAN_WP_RELEASE_UPDATER_TARGET_TYPE'] = $type;
+		$phaseEnv['RAN_WP_RELEASE_UPDATER_POLICY'] = $policy;
+		$phaseEnv['RAN_WP_RELEASE_UPDATER_ARCHIVE'] = 'plugin' === $type ? ( 'success' === $phaseMode ? $pluginArchive : $phaseEnv['RAN_WP_RELEASE_UPDATER_PLUGIN_FAILURE_ARCHIVE'] ) : ( 'success' === $phaseMode ? $themeArchive : $phaseEnv['RAN_WP_RELEASE_UPDATER_THEME_FAILURE_ARCHIVE'] );
+		$phaseEnv['RAN_WP_RELEASE_UPDATER_DOING_CRON'] = 'automatic' === $policy ? '1' : '0';
 		$phaseEnv['RAN_WP_RELEASE_UPDATER_OUTPUT'] = $phaseFile;
 		run_command( array( $wpCliPhp, $wpCliCmd, '--path=' . $sitePath, 'eval-file', $pluginRoot . '/tests/Integration/phase-2.4-wordpress-core-proof-harness.php' ), $sitePath, $phaseEnv, true );
 		$one = json_decode( (string) file_get_contents( $phaseFile ), true, 64, JSON_THROW_ON_ERROR );
@@ -161,10 +167,20 @@ try {
 			&& true === ( $one['activation_readback']['plugin_active'] ?? null )
 			&& true === ( $one['activation_readback']['theme_active'] ?? null )
 			&& true === ( $one['post_shutdown']['network_guard_installed'] ?? null )
-			&& is_int( $one['post_shutdown']['blocked_http_requests'] ?? null )
+			&& is_array( $one['post_shutdown']['http'] ?? null )
 			&& true === ( $one['post_shutdown']['network_guard_proved'] ?? null )
-			&& $one['post_shutdown']['blocked_http_requests'] >= 1
-			&& $one['post_shutdown']['blocked_http_requests'] <= 16
+			&& ( 'automatic' === $policy ? 1 : 0 ) === ( $one['post_shutdown']['mail_attempts'] ?? null )
+			&& true === ( $one['post_shutdown']['mail_short_circuited'] ?? null )
+			&& 1 === ( $one['post_shutdown']['http']['guard'] ?? null )
+			&& 0 === ( $one['post_shutdown']['http']['blocked'] ?? null )
+			&& array() === ( $one['post_shutdown']['http']['blocked_urls'] ?? null )
+			&& 13 + ( 'automatic' === $policy && 'plugin' === $type && 'success' === $phaseMode ? 1 : 0 ) === ( $one['post_shutdown']['http']['allowed'] ?? null )
+			&& 2 === ( $one['post_shutdown']['http']['asset_writes'] ?? null )
+			&& ( 'automatic' === $policy ? 2 : 0 ) === ( $one['post_shutdown']['http']['core_denied'] ?? null )
+			&& 13 === ( $one['post_shutdown']['http']['credentialed'] ?? null )
+			&& 0 === ( $one['post_shutdown']['http']['credential_leaks'] ?? null )
+			&& ( 'automatic' === $policy && 'plugin' === $type && 'success' === $phaseMode ? 1 : 0 ) === ( $one['post_shutdown']['http']['loopback'] ?? null )
+			&& true === ( $one['post_shutdown']['credential_absent_from_evidence'] ?? null )
 			&& true === ( $one['post_shutdown']['backup_absent'] ?? null )
 			&& true === ( $one['post_shutdown']['maintenance_absent'] ?? null )
 			&& is_array( $database )
@@ -172,15 +188,21 @@ try {
 			&& 'no' === ( $database['target_autoload'] ?? null )
 			&& 1 === ( $database['target_schema'] ?? null )
 			&& 0 === ( $database['state_row_count'] ?? null );
-		$successProof = 'success' === $phase[0]
+		$successProof = 'success' === $phaseMode
 			&& true === ( $one['core_upgrade']['upgraded'] ?? null )
 			&& null === ( $one['core_upgrade']['result_code'] ?? null )
 			&& '1.0.0' === ( $one['core_upgrade']['version_before'] ?? null )
 			&& '2.0.0' === ( $one['core_upgrade']['version_after'] ?? null )
 			&& false === ( $one['core_upgrade']['backup_cleaned'] ?? null )
 			&& true === ( $one['core_upgrade']['maintenance_file_absent'] ?? null )
+			&& true === ( $one['core_upgrade']['offer_token_used'] ?? null )
+			&& 1 === ( $one['core_upgrade']['package_handoff_calls'] ?? null )
+			&& ( 'automatic' === $policy ) === ( $one['core_upgrade']['cron_context'] ?? null )
+			&& ( 'automatic' === $policy ) === ( $one['core_upgrade']['automatic_result_observed'] ?? null )
+			&& ( 'manual' !== $policy || 'plugin' !== $type || true === ( $one['core_upgrade']['manual_plugin_was_deactivated'] ?? null ) )
+			&& ( 'plugin' !== $type || 'automatic' !== $policy || true === ( $one['core_upgrade']['automatic_plugin_was_active'] ?? null ) )
 			&& '2.0.0' === ( $one['post_shutdown']['version'] ?? null );
-		$failureProof = 'failure' === $phase[0]
+		$failureProof = 'failure' === $phaseMode
 			&& true === ( $one['core_upgrade']['failed'] ?? null )
 			&& 'phase24_injected_post_copy_failure' === ( $one['core_upgrade']['result_code'] ?? null )
 			&& '2.0.0' === ( $one['core_upgrade']['version_before'] ?? null )
@@ -190,14 +212,20 @@ try {
 			&& true === ( $one['core_upgrade']['injected_post_copy']['backup_present'] ?? null )
 			&& true === ( $one['core_upgrade']['rollback_backup_path_exists'] ?? null )
 			&& false === ( $one['core_upgrade']['maintenance_file_exists'] ?? null )
+			&& true === ( $one['core_upgrade']['offer_token_used'] ?? null )
+			&& 1 === ( $one['core_upgrade']['package_handoff_calls'] ?? null )
+			&& ( 'automatic' === $policy ) === ( $one['core_upgrade']['cron_context'] ?? null )
+			&& ( 'automatic' === $policy ) === ( $one['core_upgrade']['automatic_result_observed'] ?? null )
+			&& ( 'manual' !== $policy || 'plugin' !== $type || true === ( $one['core_upgrade']['manual_plugin_was_deactivated'] ?? null ) )
+			&& ( 'plugin' !== $type || 'automatic' !== $policy || true === ( $one['core_upgrade']['automatic_plugin_was_active'] ?? null ) )
 			&& '2.0.0' === ( $one['post_shutdown']['version'] ?? null )
-			&& ( $successfulDigests[ $phase[1] ] ?? null ) === ( $one['post_shutdown']['digest'] ?? null )
-			&& ( $successfulDigests[ $phase[1] ] ?? null ) !== ( $one['core_upgrade']['injected_post_copy']['destination_digest'] ?? null );
+			&& ( $successfulDigests[ $policy . ':' . $type ] ?? null ) === ( $one['post_shutdown']['digest'] ?? null )
+			&& ( $successfulDigests[ $policy . ':' . $type ] ?? null ) !== ( $one['core_upgrade']['injected_post_copy']['destination_digest'] ?? null );
 		if ( ! $commonProof || ( ! $successProof && ! $failureProof ) ) {
 			throw new RuntimeException( 'Core proof assertion failed for ' . implode( ':', $phase ) . ': ' . substr( json_encode( $one, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ), 0, 12000 ) );
 		}
-		if ( 'success' === $phase[0] ) {
-			$successfulDigests[ $phase[1] ] = $one['post_shutdown']['digest'] ?? null;
+		if ( 'success' === $phaseMode ) {
+			$successfulDigests[ $policy . ':' . $type ] = $one['post_shutdown']['digest'] ?? null;
 		}
 		$phaseOutput[ implode( ':', $phase ) ] = $one;
 		unlink( $phaseFile );
@@ -208,7 +236,7 @@ try {
 			$wpCliCmd,
 			'--path=' . $sitePath,
 			'eval',
-			'echo wp_json_encode( array( "plugin_active" => is_plugin_active( "phase24-plugin/phase24-plugin.php" ), "theme_active" => wp_get_theme()->get_stylesheet() === "phase24-theme", "update_plugins" => get_site_transient( "update_plugins" ), "update_themes" => get_site_transient( "update_themes" ) ), JSON_PRETTY_PRINT );',
+			'echo wp_json_encode( array( "plugin_active" => is_plugin_active( "phase24-plugin/phase24-plugin.php" ), "theme_active" => wp_get_theme()->get_stylesheet() === "phase24-theme" ), JSON_PRETTY_PRINT );',
 		),
 		$sitePath,
 		$cliEnv,
@@ -370,7 +398,7 @@ function copy_tree( string $source, string $destination, array $exclude = array(
 
 function create_fixture_plugin( string $site, string $identity, string $uri ): void {
 	$root = $site . '/wp-content/plugins/' . $identity;
-	if ( ! mkdir( $root, 0700, true ) && ! is_dir( $root ) ) {
+	if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 		throw new RuntimeException( 'Could not create fixture plugin directory.' );
 	}
 	file_put_contents( $root . '/' . $identity . '.php', "<?php\n/*\nPlugin Name: Phase24 Plugin\nVersion: 1.0.0\nUpdate URI: {$uri}\n*/\n// phase24-plugin-v1\n" );
@@ -378,7 +406,7 @@ function create_fixture_plugin( string $site, string $identity, string $uri ): v
 
 function create_fixture_theme( string $site, string $identity, string $uri ): void {
 	$root = $site . '/wp-content/themes/' . $identity;
-	if ( ! mkdir( $root, 0700, true ) && ! is_dir( $root ) ) {
+	if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 		throw new RuntimeException( 'Could not create fixture theme directory.' );
 	}
 	file_put_contents( $root . '/style.css', "/*\nTheme Name: Phase24 Theme\nVersion: 1.0.0\nUpdate URI: {$uri}\n*/\n" );
