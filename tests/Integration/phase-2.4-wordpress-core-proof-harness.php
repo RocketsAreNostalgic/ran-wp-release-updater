@@ -126,15 +126,14 @@ function build_target( string $type, string $identity, string $uri, string $arch
 			'channel'                       => 'stable',
 			'commit_identity'               => 'phase24-commit:' . $type,
 			'installed_package_identity'     => $identity,
-			'publication_immutable'          => true,
 			'prerelease'                    => false,
 			'provider_code'                 => 'neutral',
 			'release_identity'              => 'release-' . $type . ':2',
 			'repository_identity'           => 'repo:phase24',
 			'repository_locator'            => 'phase24/' . $type,
-		'tag'                           => 'v' . $releaseVersion,
+			'tag'                           => 'v' . $releaseVersion,
 			'target_type'                   => $type,
-		'version'                       => $releaseVersion,
+			'version'                       => $releaseVersion,
 		)
 	);
 
@@ -425,8 +424,21 @@ function readback_options( array $target ): array {
 		'target_autoload' => is_array( $targetRow ) ? $targetRow['autoload'] : null,
 		'target_schema' => is_array( $targetDecoded ) ? ( $targetDecoded['state_schema'] ?? null ) : null,
 		'target_value' => $targetValue,
-		'state_value'  => $stateValue,
+		'state_row_count' => option_prefix_count( 'ran_wp_release_updater_state_v1_' ),
 	);
+}
+
+function option_prefix_count( string $prefix ): int {
+	if ( ! isset( $GLOBALS['wpdb'] ) ) {
+		return -1;
+	}
+	$count = $GLOBALS['wpdb']->get_var(
+		$GLOBALS['wpdb']->prepare(
+			'SELECT COUNT(*) FROM ' . $GLOBALS['wpdb']->options . ' WHERE option_name LIKE %s',
+			$GLOBALS['wpdb']->esc_like( $prefix ) . '%'
+		)
+	);
+	return is_string( $count ) && ctype_digit( $count ) ? (int) $count : -1;
 }
 
 /** @return array{option_value:string,autoload:string}|null */

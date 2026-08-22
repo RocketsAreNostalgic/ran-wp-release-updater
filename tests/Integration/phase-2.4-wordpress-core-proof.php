@@ -169,11 +169,9 @@ try {
 			&& true === ( $one['post_shutdown']['maintenance_absent'] ?? null )
 			&& is_array( $database )
 			&& true === ( $database['target_exists'] ?? null )
-			&& true === ( $database['state_exists'] ?? null )
 			&& 'no' === ( $database['target_autoload'] ?? null )
-			&& 'no' === ( $database['state_autoload'] ?? null )
 			&& 1 === ( $database['target_schema'] ?? null )
-			&& 1 === ( $database['state_schema'] ?? null );
+			&& 0 === ( $database['state_row_count'] ?? null );
 		$successProof = 'success' === $phase[0]
 			&& true === ( $one['core_upgrade']['upgraded'] ?? null )
 			&& null === ( $one['core_upgrade']['result_code'] ?? null )
