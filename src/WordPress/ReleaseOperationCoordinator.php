@@ -88,6 +88,14 @@ final class ReleaseOperationCoordinator {
 		if ( null === $json || ! self::cas( $wpdb, $name, $raw, $json, $current->leaseDeadline() ) || ! self::sameRaw( $wpdb, $name, $json ) ) return self::lost( $current );
 		return array( 'current' => $updated, 'result' => 'rebound' );
 	}
+	/** @return array{current:BindingState|null,result:string} */
+	public static function renewPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim, int $seconds ): array {
+		return self::transitionPersistentBindingState( $wpdb, $expected, $claim, $seconds, 'renewed' );
+	}
+	/** @return array{current:BindingState|null,result:string} */
+	public static function releasePersistentBindingState( object $wpdb, BindingState $expected, mixed $claim ): array {
+		return self::transitionPersistentBindingState( $wpdb, $expected, $claim, null, 'released' );
+	}
 	/** @return array{current:BindingState|null,now?:int,result:string} */
 	public static function verifyPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim ): array {
 		if ( ! self::database( $wpdb ) ) return self::lost();
@@ -108,7 +116,9 @@ final class ReleaseOperationCoordinator {
 		}
 		$last = self::verifyPersistentBindingState( $wpdb, $expected, $claim );
 		if ( 'verified' !== $last['result'] ) return self::lost( $last['current'] );
-		return array( 'current' => $last['current'], 'now' => $last['now'], 'receipt' => $accepted, 'result' => 'completed' );
+		$released = self::releasePersistentBindingState( $wpdb, $expected, $claim );
+		if ( 'released' !== $released['result'] ) return self::lost( $released['current'] );
+		return array( 'current' => $released['current'], 'now' => $last['now'], 'receipt' => $accepted, 'result' => 'completed' );
 	}
 	private static function name( BindingRecord $binding ): string {
 		return self::PREFIX . BindingRecord::targetFenceKey( array( 'installed_package_identity' => $binding->toArray()['installed_package_identity'] ) );
@@ -119,6 +129,27 @@ final class ReleaseOperationCoordinator {
 		$json = self::json( $state->toArray() );
 		if ( null === $json || ! self::insert( $wpdb, $name, $json ) || ! self::sameRaw( $wpdb, $name, $json ) ) return self::lost();
 		return array( 'current' => $state, 'result' => 'claimed' );
+	}
+	/** @return array{current:BindingState|null,result:string} */
+	private static function transitionPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim, ?int $seconds, string $result ): array {
+		if ( ! self::database( $wpdb ) || ( null !== $seconds && $seconds < 1 ) ) return self::lost();
+		$now = self::time( $wpdb );
+		if ( null === $now || ( null !== $seconds && $seconds > BindingState::MAX_SAFE_INTEGER - $now ) ) return self::lost();
+		$name = self::name( $expected->binding() );
+		$raw = self::read( $wpdb, $name );
+		$current = null === $raw ? null : self::state( $raw );
+		if ( null === $current || ! self::same( $current, $expected ) || ! self::claim( $current, $claim )
+			|| $now > $current->leaseDeadline() || BindingState::MAX_SAFE_INTEGER === $current->fenceEpoch() ) return self::lost( $current );
+		if ( null !== $seconds && BindingState::MAX_SAFE_INTEGER === $current->leaseDeadline() ) return self::lost( $current );
+		$deadline = null === $seconds ? 1 : max( $current->leaseDeadline() + 1, $now + $seconds );
+		try {
+			$next = BindingState::create( $current->binding(), $current->ownerToken(), $deadline, $current->bindingGeneration(), $current->fenceEpoch() + 1 );
+		} catch ( InvalidArgumentException ) {
+			return self::lost( $current );
+		}
+		$json = self::json( $next->toArray() );
+		if ( null === $json || ! self::cas( $wpdb, $name, $raw, $json, $current->leaseDeadline() ) || ! self::sameRaw( $wpdb, $name, $json ) ) return self::lost( $current );
+		return array( 'current' => $next, 'result' => $result );
 	}
 	private static function state( string $raw ): ?BindingState {
 		try { return BindingState::rehydrate( json_decode( $raw, true, 64, JSON_THROW_ON_ERROR ) ); } catch ( \JsonException|InvalidArgumentException ) { return null; }
