@@ -128,9 +128,27 @@ PHP );
 		$root = $this->parent . '/' . $name;
 		mkdir( $root . '/src/Runtime', 0700, true );
 		foreach ( array( 'bootstrap.php', 'src/Runtime/RequestBroker.php' ) as $file ) copy( dirname( __DIR__, 2 ) . '/' . $file, $root . '/' . $file );
-		file_put_contents( $root . '/runtime-copy.json', json_encode( array( 'package_revision' => str_repeat( $revision, 64 ), 'package_version' => $version, 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 1, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
-		file_put_contents( $root . '/runtime.php', "<?php\nfile_put_contents('" . addslashes( $this->parent . '/selected.txt' ) . "', basename(__DIR__));\n" );
+		file_put_contents( $root . '/runtime.php', "<?php\n// " . $revision . "\nfile_put_contents('" . addslashes( $this->parent . '/selected.txt' ) . "', basename(__DIR__));\n" );
+		file_put_contents( $root . '/runtime-copy.json', json_encode( array( 'package_revision' => $this->identity( $root ), 'package_version' => $version, 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 1, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
 		return $root;
+	}
+
+	private function identity( string $root ): string
+	{
+		$files = array( 'bootstrap.php', 'runtime.php' );
+		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/src', \FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $iterator as $file ) {
+			if ( $file->isFile() && 'php' === $file->getExtension() ) {
+				$files[] = substr( $file->getPathname(), strlen( $root ) + 1 );
+			}
+		}
+		sort( $files, SORT_STRING );
+		$payload = '';
+		foreach ( $files as $file ) {
+			$payload .= $file . "\0" . hash_file( 'sha256', $root . '/' . $file ) . "\n";
+		}
+
+		return hash( 'sha256', $payload );
 	}
 
 	private function remove( string $path ): void

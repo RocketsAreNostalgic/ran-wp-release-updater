@@ -44,6 +44,17 @@ final class RuntimeCopyIdentityTest extends TestCase
 		self::assertSame( array( 'runtime_selection_inactive' ), array_column( $result['diagnostics'], 'code' ) );
 	}
 
+	public function testCopiedSourceChangeWithoutManifestUpdateIsRejectedBeforeSelection(): void
+	{
+		$copy = $this->packageCopy( 'changed-without-manifest' );
+		file_put_contents( $copy . '/src/Runtime/RequestBroker.php', (string) file_get_contents( $copy . '/src/Runtime/RequestBroker.php' ) . "\n// Changed without updating the manifest.\n" );
+
+		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; echo json_encode($GLOBALS["ran_wp_release_updater_v1_broker"]->diagnostics());', array( 'copy' => $copy ) );
+
+		self::assertSame( 0, $result['candidate_count'] );
+		self::assertSame( array( 'candidate_invalid' ), array_column( $result['diagnostics'], 'code' ) );
+	}
+
 	public function testSelectedRuntimeRejectsAnInterfaceLoadedFromAnotherRootBeforeRequire(): void
 	{
 		$selected = $this->packageCopy( 'selected' );
