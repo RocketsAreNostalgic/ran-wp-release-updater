@@ -40,8 +40,8 @@ final class NativePluginUpdater {
 	private bool $queuedMultiRun = false;
 	private bool $shutdownScheduled = false;
 	/** @var list<string> */ private array $diagnostics = array();
-	/** @var array{candidate_release_identity:string|null,candidate_tag:string|null,candidate_validation_code:string|null,failure_code:string|null,header_version:string|null,last_check:int|null,offered_version:string|null,relationship:string|null} */
-	private array $status = array( 'candidate_release_identity' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'failure_code' => null, 'header_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null );
+	/** @var array{candidate_header_version:string|null,candidate_tag:string|null,candidate_validation_code:string|null,candidate_version:string|null,failure_code:string|null,installed_version:string|null,last_check:int|null,offered_version:string|null,relationship:string|null} */
+	private array $status = array( 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'candidate_header_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null );
 	private ?AcquisitionReceipt $pendingReceipt = null;
 	private ?TemporaryArtifact $coreArtifact = null;
 	private ?string $coreExpectedVersion = null;
@@ -80,7 +80,7 @@ final class NativePluginUpdater {
 	public function filterUpdate( mixed $update, array $packageData, string $packageIdentity, array $locales ): mixed {
 		unset( $locales ); if ( ! hash_equals( $this->installedIdentity, $packageIdentity ) ) return $update;
 		$installed = is_string( $packageData['Version'] ?? null ) ? $packageData['Version'] : '';
-		$this->status = self::emptyStatus(); $this->status['header_version'] = $installed; $this->status['last_check'] = time();
+		$this->status = self::emptyStatus(); $this->status['installed_version'] = $installed; $this->status['last_check'] = time();
 		$runtimeUri = is_string( $packageData['UpdateURI'] ?? null ) ? $packageData['UpdateURI'] : '';
 		if ( null === ReleaseVersion::normalizeHeader( $installed ) || ! $this->matchesRuntimeUri( $runtimeUri ) ) {
 			return $this->diagnose( 'runtime_package_identity_invalid', $update );
@@ -205,7 +205,7 @@ final class NativePluginUpdater {
 	/** Finalization is deliberately after Core rollback and backup cleanup. */
 	public function finalizePendingInstall(): void { if ( ! $this->pending ) { $this->clearPending(); return; } try { $destination = is_array( $this->installResult ) && is_string( $this->installResult['destination'] ?? null ) ? $this->installResult['destination'] : null; $manifest = is_string( $destination ) ? self::regularFileManifest( $destination ) : null; if ( $this->coreArtifact instanceof TemporaryArtifact ) { if ( ! $this->installResultCaptured || ( ! $this->completionObserved && ! $this->multiRun ) || ! is_string( $destination ) || ! is_array( $this->stagedManifest ) || ! is_array( $manifest ) || ! hash_equals( self::manifestHash( $this->stagedManifest ), self::manifestHash( $manifest ) ) || ! is_string( $this->coreExpectedVersion ) || ! $this->matchesStagedMetadata( $destination, $this->coreExpectedVersion ) ) $this->diagnose( 'outcome_uncertain', null ); return; } $verified = $this->verifyCurrent(); $archiveManifestVerified = false; if ( null !== $verified && $this->pendingReceipt instanceof AcquisitionReceipt && is_array( $manifest ) ) { try { AcquisitionReceipt::assertArchiveManifest( $this->pendingReceipt, $verified['current'], $this->descriptor, $verified['now'], self::manifestHash( $manifest ), count( $manifest ), self::manifestExpandedBytes( $manifest ) ); $archiveManifestVerified = true; $this->state = $verified['current']; } catch ( InvalidArgumentException ) { $archiveManifestVerified = false; } } if ( ! $this->installResultCaptured || ( ! $this->completionObserved && ! $this->multiRun ) || ! $archiveManifestVerified || ! is_string( $destination ) || ! is_array( $this->stagedManifest ) || ! is_array( $manifest ) || ! hash_equals( self::manifestHash( $this->stagedManifest ), self::manifestHash( $manifest ) ) || ! $this->matchesStagedMetadata( $destination ) ) { $this->diagnose( 'outcome_uncertain', null ); return; } $completed = ReleaseOperationCoordinator::completePersistentInstall( $this->wpdb, $this->state, $this->claim, $this->pendingReceipt, $this->descriptor ); $this->diagnose( 'completed' === $completed['result'] ? 'update_completed' : 'outcome_uncertain', null ); } finally { $this->clearPending(); } }
 	/** @return list<string> */ public function diagnostics(): array { return $this->diagnostics; }
-	/** @return array{candidate_release_identity:string|null,candidate_tag:string|null,candidate_validation_code:string|null,failure_code:string|null,header_version:string|null,last_check:int|null,offered_version:string|null,relationship:string|null} */ public function status(): array { return $this->status; }
+	/** @return array{candidate_header_version:string|null,candidate_tag:string|null,candidate_validation_code:string|null,candidate_version:string|null,failure_code:string|null,installed_version:string|null,last_check:int|null,offered_version:string|null,relationship:string|null} */ public function status(): array { return $this->status; }
 	public function refresh(): void { $this->diagnostics = array(); $this->status = self::emptyStatus(); $this->queuedMultiRun = false; $this->clearPending(); }
 
 	/** @param array<string,mixed> $configuration */
@@ -261,7 +261,7 @@ final class NativePluginUpdater {
 		if ( ! is_array( $candidates ) || count( $candidates ) > 8 ) { $this->status['candidate_validation_code'] = 'candidate_list_invalid'; return null; }
 		foreach ( $candidates as $candidate ) {
 			if ( ! is_array( $candidate ) || ! is_string( $candidate['release_identity'] ?? null ) || ! is_string( $candidate['tag'] ?? null ) || ! is_string( $candidate['version'] ?? null ) ) { $this->status['candidate_validation_code'] = 'candidate_invalid'; continue; }
-			$this->status['candidate_release_identity'] = $candidate['release_identity']; $this->status['candidate_tag'] = $candidate['tag']; $this->status['relationship'] = ReleaseVersion::relationship( $candidate['version'], $installed );
+			$this->status['candidate_tag'] = $candidate['tag']; $this->status['candidate_version'] = $candidate['version']; $this->status['relationship'] = ReleaseVersion::relationship( $candidate['version'], $installed );
 			if ( ReleaseVersion::RELATIONSHIP_NEWER !== $this->status['relationship'] ) { $this->status['candidate_validation_code'] = 'candidate_not_newer'; continue; }
 			try { $descriptor = $this->adapter->inspect( $candidate['release_identity'], $candidate['tag'] ); BindingRecord::assertDescriptorBinding( $descriptor, $this->binding ); } catch ( \Throwable ) { $this->status['candidate_validation_code'] = 'candidate_inspection_failed'; continue; }
 			$facts = $descriptor->toArray();
@@ -269,6 +269,7 @@ final class NativePluginUpdater {
 			try { $artifact = $this->adapter->acquire( $descriptor ); $valid = $artifact->inspect( fn( string $path ) => $this->validator->validate( $descriptor, $this->archivePolicy, $path ) ); } catch ( \Throwable ) { $this->status['candidate_validation_code'] = 'candidate_validation_failed'; continue; }
 			$this->status['candidate_validation_code'] = $valid->code();
 			if ( ! $valid->isValid() ) continue;
+			$this->status['candidate_header_version'] = $facts['version'];
 			$this->descriptor = $descriptor; return $descriptor;
 		}
 		return null;
@@ -299,7 +300,7 @@ final class NativePluginUpdater {
 	/** @return array{current:BindingState,now:int}|null */ private function verifyCurrent(): ?array { if ( ! $this->state instanceof BindingState ) return null; $verified = ReleaseOperationCoordinator::verifyPersistentBindingState( $this->wpdb, $this->state, $this->claim ); return 'verified' === $verified['result'] && $verified['current'] instanceof BindingState && is_int( $verified['now'] ?? null ) ? array( 'current' => $verified['current'], 'now' => $verified['now'] ) : null; }
 	private function clearPending( bool $release = true ): void { $coreArtifact = $this->coreArtifact; if ( ! ( $coreArtifact instanceof TemporaryArtifact ) ) $this->removeOwnedArchive( $this->pendingArchive, $this->ownedArchiveDirectory ); $this->pending = false; $this->extractionAdmitted = false; $this->stagedSource = null; $this->stagedManifest = null; $this->pendingArchive = null; $this->ownedArchiveDirectory = null; $this->pendingArchiveIdentity = null; $this->pendingReceipt = null; $this->coreArtifact = null; $this->coreExpectedVersion = null; $this->installResultCaptured = false; $this->installResult = null; $this->completionObserved = false; $this->multiRun = false; if ( $coreArtifact instanceof TemporaryArtifact ) $coreArtifact->discard(); if ( $release && $this->leaseHeld && $this->state instanceof BindingState ) ReleaseOperationCoordinator::releasePersistentBindingState( $this->wpdb, $this->state, $this->claim ); if ( $release ) { $this->state = null; $this->claim = null; $this->leaseHeld = false; } }
 	private function diagnose( string $code, mixed $return ): mixed { if ( count( $this->diagnostics ) === self::MAX_DIAGNOSTICS ) array_shift( $this->diagnostics ); $this->diagnostics[] = $code; $this->status['failure_code'] = $code; return $return; }
-	/** @return array{candidate_release_identity:null,candidate_tag:null,candidate_validation_code:null,failure_code:null,header_version:null,last_check:null,offered_version:null,relationship:null} */ private static function emptyStatus(): array { return array( 'candidate_release_identity' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'failure_code' => null, 'header_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ); }
+	/** @return array{candidate_header_version:null,candidate_tag:null,candidate_validation_code:null,candidate_version:null,failure_code:null,installed_version:null,last_check:null,offered_version:null,relationship:null} */ private static function emptyStatus(): array { return array( 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'candidate_header_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ); }
 	private function failure( string $code ): mixed { $this->diagnose( $code, null ); return class_exists( '\\WP_Error' ) ? new \WP_Error( 'ran_wp_release_updater_' . $code, 'The update operation was not admitted.' ) : false; }
 	private function directFilesystem(): bool { return function_exists( 'get_filesystem_method' ) && 'direct' === get_filesystem_method(); }
 	/** @return array{directory:string,path:string}|null */ private function copyOwnedArchive( string $source ): ?array {
