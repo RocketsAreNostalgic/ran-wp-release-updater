@@ -378,6 +378,7 @@ namespace Tests\WordPress {
 			$updater->observeCompletion( null, array( 'action' => 'update', 'type' => 'plugin', 'plugins' => array( 'package/package.php' ) ) );
 			$updater->finalizePendingInstall();
 			self::assertContains( 'update_completed', $updater->diagnostics() );
+			self::assertNull( $updater->status()['failure_code'] );
 		}
 		/** @return array<string,string> */
 		private function extra(): array {
