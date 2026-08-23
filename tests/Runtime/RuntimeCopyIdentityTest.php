@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace RAN\WPReleaseUpdater\V1\Tests\Runtime;
+namespace Tests\Runtime;
 
 use FilesystemIterator;
 use PHPUnit\Framework\TestCase;
@@ -42,6 +42,19 @@ final class RuntimeCopyIdentityTest extends TestCase
 
 		self::assertFalse( $result['loaded'] );
 		self::assertSame( array( 'runtime_selection_inactive' ), array_column( $result['diagnostics'], 'code' ) );
+	}
+
+	public function testSelectedRuntimeRejectsAnInterfaceLoadedFromAnotherRootBeforeRequire(): void
+	{
+		$selected = $this->packageCopy( 'selected' );
+		$foreign = $this->parent . '/foreign';
+		mkdir( $foreign . '/src/Contract', 0700, true );
+		file_put_contents( $foreign . '/src/Contract/ReleaseAdapter.php', "<?php\nnamespace RAN\\WPReleaseUpdater\\V1\\Contract; interface ReleaseAdapter {}\n" );
+
+		$result = $this->probe( 'require $data["foreign"] . "/src/Contract/ReleaseAdapter.php"; try { require $data["selected"] . "/runtime.php"; echo json_encode(array("result" => "loaded")); } catch (RuntimeException $error) { echo json_encode(array("result" => "rejected", "message" => $error->getMessage())); }', array( 'foreign' => $foreign, 'selected' => $selected ) );
+
+		self::assertSame( 'rejected', $result['result'] );
+		self::assertSame( 'A lifecycle symbol was loaded outside the selected runtime root.', $result['message'] );
 	}
 
 	private function packageCopy( string $name ): string

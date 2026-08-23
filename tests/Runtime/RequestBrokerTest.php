@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace RAN\WPReleaseUpdater\V1\Tests\Runtime;
+namespace Tests\Runtime;
 
 use PHPUnit\Framework\TestCase;
 

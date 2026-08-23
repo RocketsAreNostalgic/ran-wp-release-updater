@@ -26,10 +26,45 @@ final class ReleaseOperationCoordinatorTest extends TestCase
 		$database->setTime( 101 ); $rebound = ReleaseOperationCoordinator::persistPersistentBindingState( $database, $first['current'], $claim, $next ); self::assertSame( 'rebound', $rebound['result'] ); self::assertSame( 2, $rebound['current']->bindingGeneration() ); self::assertSame( 2, $rebound['current']->fenceEpoch() ); self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::verifyPersistentBindingState( $database, $first['current'], $claim )['result'] );
 		$database->setTime( 121 ); $restart = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $next, str_repeat( 'b', 64 ), 20 ); self::assertSame( 'claimed', $restart['result'] ); self::assertSame( $next->toArray(), $restart['current']->binding()->toArray() ); self::assertSame( 3, $restart['current']->bindingGeneration() ); self::assertCount( 1, $database->rows() );
 	}
+	public function testMultisiteContextsUseTheNetworkOptionsTableAndOneFence(): void
+	{
+		$database = new FakeOptionDatabase( 100 );
+		$network = new class( $database, 'wp_options' ) {
+			public string $base_prefix = 'wp_';
+			public string $options;
+			public function __construct( private FakeOptionDatabase $database, string $options ) { $this->options = $options; }
+			public function prepare( string $sql, mixed ...$args ): string { return $this->database->prepare( $sql, ...$args ); }
+			public function get_var( string $query ): string|int|null { return $this->database->get_var( $query ); }
+			public function query( string $query ): int { return $this->database->query( $query ); }
+		};
+		$subsite = new class( $database, 'wp_2_options' ) {
+			public string $base_prefix = 'wp_';
+			public string $options;
+			public function __construct( private FakeOptionDatabase $database, string $options ) { $this->options = $options; }
+			public function prepare( string $sql, mixed ...$args ): string { return $this->database->prepare( $sql, ...$args ); }
+			public function get_var( string $query ): string|int|null { return $this->database->get_var( $query ); }
+			public function query( string $query ): int { return $this->database->query( $query ); }
+		};
+		$binding = $this->binding();
+		$claimed = ReleaseOperationCoordinator::claimPersistentBindingState( $network, $binding, str_repeat( 'a', 64 ), 20 );
+		$blocked = ReleaseOperationCoordinator::claimPersistentBindingState( $subsite, $binding, str_repeat( 'b', 64 ), 20 );
+
+		self::assertSame( 'claimed', $claimed['result'] );
+		self::assertSame( 'binding_fence_lost', $blocked['result'] );
+		self::assertNotEmpty( $database->preparedSql() );
+		self::assertSame( array(), array_values( array_filter( $database->preparedSql(), static fn ( string $sql ): bool => str_contains( $sql, 'wp_2_options' ) ) ) );
+		self::assertNotSame( array(), array_values( array_filter( $database->preparedSql(), static fn ( string $sql ): bool => str_contains( $sql, 'wp_options' ) ) ) );
+	}
 	public function testExactValueCasAndLiveLeaseRejectRacesAndTakeover(): void
 	{
 		$database = new FakeOptionDatabase( 100 ); $binding = $this->binding(); $first = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 ); $name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'installed_package_identity' => 'x/x.php' ) ); $database->mutateOnNextWrite( $name, static function ( FakeOptionDatabase $database ) use ( $name ): void { $database->forceOptionValue( $name, '{}' ); } ); $next = BindingRecord::create( array_merge( $this->facts(), array( 'update_policy' => 'automatic' ) ) );
 		self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::persistPersistentBindingState( $database, $first['current'], $this->claim( $first['current'] ), $next )['result'] ); self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'b', 64 ), 20 )['result'] );
+	}
+	public function testClaimRejectsEquivalentValuesWithAnUnexpectedKeyOrder(): void
+	{
+		$database = new FakeOptionDatabase( 100 ); $binding = $this->binding(); $claimed = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		$claim = $this->claim( $claimed['current'] ); $reordered = array( 'owner_token' => $claim['owner_token'], 'binding_generation' => $claim['binding_generation'], 'binding_hash' => $claim['binding_hash'], 'lease_deadline' => $claim['lease_deadline'] );
+		self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::verifyPersistentBindingState( $database, $claimed['current'], $reordered )['result'] );
 	}
 	public function testEveryProviderRepositoryUriAndPolicySwitchFencesStaleState(): void
 	{

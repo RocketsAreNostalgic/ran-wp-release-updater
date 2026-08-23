@@ -177,27 +177,33 @@ final class ReleaseOperationCoordinator {
 		return is_string( $value ) && ctype_digit( $value ) && (int) $value <= BindingState::MAX_SAFE_INTEGER ? (int) $value : null;
 	}
 	private static function read( object $wpdb, string $name ): ?string {
-		$sql = $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", $name ); $value = $wpdb->get_var( $sql );
+		$table = self::optionsTable( $wpdb ); if ( null === $table ) return null;
+		$sql = $wpdb->prepare( "SELECT option_value FROM {$table} WHERE option_name = %s LIMIT 1", $name ); $value = $wpdb->get_var( $sql );
 		return is_string( $value ) && strlen( $value ) <= self::MAX_JSON ? $value : null;
 	}
 	private static function sameRaw( object $wpdb, string $name, string $expected ): bool { $actual = self::read( $wpdb, $name );
 		return is_string( $actual ) && hash_equals( $expected, $actual );
 	}
-	private static function insert( object $wpdb, string $name, string $value ): bool { $sql = "INSERT INTO {$wpdb->options} (option_name,option_value,autoload) VALUES (%s,%s,'no')";
+	private static function insert( object $wpdb, string $name, string $value ): bool { $table = self::optionsTable( $wpdb ); if ( null === $table ) return false; $sql = "INSERT INTO {$table} (option_name,option_value,autoload) VALUES (%s,%s,'no')";
 		return 1 === $wpdb->query( $wpdb->prepare( $sql, $name, $value ) );
 	}
-	private static function cas( object $wpdb, string $name, string $old, string $new, int $deadline, bool $expired = false ): bool { $operator = $expired ? '>' : '<=';
-		$sql = "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND BINARY option_value = BINARY %s AND UNIX_TIMESTAMP() {$operator} %d";
+	private static function cas( object $wpdb, string $name, string $old, string $new, int $deadline, bool $expired = false ): bool { $table = self::optionsTable( $wpdb ); if ( null === $table ) return false; $operator = $expired ? '>' : '<=';
+		$sql = "UPDATE {$table} SET option_value = %s WHERE option_name = %s AND BINARY option_value = BINARY %s AND UNIX_TIMESTAMP() {$operator} %d";
 		return 1 === $wpdb->query( $wpdb->prepare( $sql, $new, $name, $old, $deadline ) );
 	}
 	private static function json( array $value ): ?string { try { $json = json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ); }
 		catch ( \JsonException ) { return null; }
 		return strlen( $json ) <= self::MAX_JSON ? $json : null;
 	}
-	private static function database( object $wpdb ): bool { return isset( $wpdb->options ) && is_string( $wpdb->options )
-			&& 1 === preg_match( '/\A[A-Za-z0-9_]+\z/D', $wpdb->options )
+	private static function database( object $wpdb ): bool { return null !== self::optionsTable( $wpdb )
 			&& is_callable( array( $wpdb, 'prepare' ) ) && is_callable( array( $wpdb, 'query' ) )
 			&& is_callable( array( $wpdb, 'get_var' ) );
+	}
+	private static function optionsTable( object $wpdb ): ?string {
+		if ( property_exists( $wpdb, 'base_prefix' ) ) {
+			return is_string( $wpdb->base_prefix ) && 1 === preg_match( '/\A[A-Za-z0-9_]*\z/D', $wpdb->base_prefix ) ? $wpdb->base_prefix . 'options' : null;
+		}
+		return isset( $wpdb->options ) && is_string( $wpdb->options ) && 1 === preg_match( '/\A[A-Za-z0-9_]+\z/D', $wpdb->options ) ? $wpdb->options : null;
 	}
 	private static function hash( mixed $value ): bool { return is_string( $value ) && 1 === preg_match( '/\A[a-f0-9]{64}\z/D', $value ); }
 	/** @return array{current:BindingState|null,result:string} */

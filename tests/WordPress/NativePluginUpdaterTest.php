@@ -73,6 +73,18 @@ namespace Tests\WordPress {
 			self::assertTrue( $automaticOffer['autoupdate'] );
 			self::assertTrue( $automaticUpdater->filterAutoUpdate( false, (object) array( 'plugin' => 'package/package.php', 'package' => $automaticOffer['package'] ) ) );
 		}
+		public function testStatusProjectsOnlyTheObservedOfferAndFailureAndRefreshClearsIt(): void {
+			list( $updater, $adapter, $database ) = $this->subject();
+			self::assertSame( array( 'candidate_release_identity' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'failure_code' => null, 'header_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
+			self::assertSame( array( 0, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) ); self::assertSame( array(), $database->preparedSql() );
+			$this->offer( $updater );
+			$status = $updater->status();
+			self::assertSame( 'release:2', $status['candidate_release_identity'] ); self::assertSame( 'v2.0.0', $status['candidate_tag'] ); self::assertSame( 'archive_identity_verified', $status['candidate_validation_code'] ); self::assertSame( '1.0.0', $status['header_version'] ); self::assertIsInt( $status['last_check'] ); self::assertSame( '2.0.0', $status['offered_version'] ); self::assertSame( 'newer', $status['relationship'] ); self::assertNull( $status['failure_code'] );
+			$updater->filterUpdate( false, array( 'Version' => 'bad', 'UpdateURI' => $this->uri() ), 'package/package.php', array() );
+			self::assertSame( 'runtime_package_identity_invalid', $updater->status()['failure_code'] );
+			$updater->refresh();
+			self::assertSame( array( 'candidate_release_identity' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'failure_code' => null, 'header_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
+		}
 		public function testPrereleaseChannelOfferIsManualAndAutomaticIsDenied(): void {
 			list( $updater ) = $this->subject( 'manual', null, 'prerelease', true );
 			$offer = $this->offer( $updater );
