@@ -1,0 +1,23 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Contract;
+
+require_once dirname(__DIR__, 2) . '/src/Contract/CanonicalUpdateUri.php';
+require_once dirname(__DIR__, 2) . '/src/Contract/IdentityDescriptor.php';
+require_once dirname(__DIR__, 2) . '/src/Contract/BindingRecord.php';
+
+use InvalidArgumentException;
+use PHPUnit\Framework\TestCase;
+use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
+use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
+
+final class BindingRecordTest extends TestCase {
+	public function testHashChangesForEveryLiveBindingSwitch(): void { $facts = $this->facts(); $base = BindingRecord::create( $facts )->bindingHash(); foreach ( array( 'provider_code' => 'gitlab', 'canonical_repository_locator' => 'other/repo', 'canonical_update_uri' => 'https://example.com/other/repo', 'update_policy' => 'automatic' ) as $key => $value ) self::assertNotSame( $base, BindingRecord::create( array_merge( $facts, array( $key => $value ) ) )->bindingHash(), $key ); }
+	public function testDescriptorAndBindingMustRemainExactPair(): void { $descriptor = IdentityDescriptor::create( $this->descriptorFacts() ); $binding = BindingRecord::create( $this->facts() ); self::assertSame( $descriptor, BindingRecord::assertDescriptorBinding( $descriptor, $binding ) ); foreach ( array( 'provider_code' => 'gitlab', 'canonical_repository_locator' => 'other/repo', 'canonical_update_uri' => 'https://example.com/other/repo' ) as $key => $value ) { $this->expectException( InvalidArgumentException::class ); BindingRecord::assertDescriptorBinding( $descriptor, BindingRecord::create( array_merge( $this->facts(), array( $key => $value ) ) ) ); } }
+	public function testRehydrateRejectsForgedOrOpenSnapshots(): void { $snapshot = BindingRecord::create( $this->facts() )->toArray(); self::assertSame( $snapshot, BindingRecord::rehydrate( $snapshot )->toArray() ); foreach ( array( array_merge( $snapshot, array( 'binding_hash' => str_repeat( 'f', 64 ) ) ), array_merge( $snapshot, array( 'unexpected' => true ) ) ) as $invalid ) { try { BindingRecord::rehydrate( $invalid ); self::fail( 'Invalid binding rehydrated.' ); } catch ( InvalidArgumentException ) { self::addToAssertionCount( 1 ); } } }
+	public function testTargetFenceIsOnlyTargetIdentity(): void { self::assertSame( BindingRecord::targetFenceKey( array( 'installed_package_identity' => 'x/x.php' ) ), BindingRecord::targetFenceKey( array( 'installed_package_identity' => 'x/x.php' ) ) ); }
+	/** @return array<string,mixed> */ private function facts(): array { return array( 'canonical_repository_locator' => 'owner/repo', 'canonical_update_uri' => 'https://example.com/owner/repo', 'installed_package_identity' => 'x/x.php', 'php_runtime_version' => '8.2', 'provider_code' => 'github', 'release_channel' => 'stable', 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8' ); }
+	/** @return array<string,mixed> */ private function descriptorFacts(): array { return array( 'artifact_filename' => 'x.zip', 'artifact_identity' => 'asset:1', 'artifact_sha256' => str_repeat( 'a', 64 ), 'artifact_size' => 1, 'assurance_facts' => array( 'exact_artifact_identity' => true, 'exact_commit_identity' => true, 'exact_reacquisition_supported' => true, 'exact_release_identity' => true, 'provenance_verified' => true, 'publication_immutable' => true, 'repository_identity_stable' => true, 'trusted_digest_source' => true ), 'canonical_update_uri' => 'https://example.com/owner/repo', 'channel' => 'stable', 'commit_identity' => 'commit:1', 'installed_package_identity' => 'x/x.php', 'prerelease' => false, 'provider_code' => 'github', 'release_identity' => '42', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/repo', 'tag' => 'v1', 'target_type' => 'plugin', 'version' => '1.0.0' ); }
+}
