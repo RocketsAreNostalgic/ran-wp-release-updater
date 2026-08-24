@@ -38,6 +38,7 @@
     "lint:php": "find src tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l",
     "test:unit": "phpunit --configuration phpunit.xml",
     "test:parity": "php tests/Integration/paired-github-provider-proof.php",
+    "test:wordpress-bulk": "php tests/Integration/wordpress-native-mixed-bulk-proof.php",
     "validate:strict": "composer validate --strict --no-check-publish"
   },
   "config": {
