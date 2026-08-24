@@ -112,6 +112,10 @@ $archives               = array(
 	'ordinary'  => (string) getenv( 'RAN_WP_RELEASE_UPDATER_ORDINARY_ARCHIVE' ),
 	'managed-b' => (string) getenv( 'RAN_WP_RELEASE_UPDATER_MANAGED_B_ARCHIVE' ),
 );
+$expectedArchiveManifests = array(
+	'managed-a' => archive_file_manifest( $archives['managed-a'], 'managed-a' ),
+	'managed-b' => archive_file_manifest( $archives['managed-b'], 'managed-b' ),
+);
 $beforeOwnedDirectories = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR ) ?: array();
 $managedA               = build_mixed_bulk_target( $type, 'managed-a', 'Managed A', $archives['managed-a'] );
 $managedB               = build_mixed_bulk_target( $type, 'managed-b', 'Managed B', $archives['managed-b'] );
@@ -168,20 +172,21 @@ foreach ( $ids as $identity ) {
 	$results[ $identity ]     = false !== $one && ! is_wp_error( $one );
 	$resultCodes[ $identity ] = is_wp_error( $one ) ? $one->get_error_code() : null;
 }
-$versions = array();
-foreach ( $ids as $identity ) {
-	$versions[ $identity ] = target_version( $type, $identity );
-}
-$active     = active_states( $type, $ids );
 $outputPath = (string) getenv( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK_OUTPUT' );
 add_action(
 	'shutdown',
-	static function () use ( $outputPath, $type, $mode, $ids, $results, $resultCodes, $versions, $activeBefore, $active, $beforeBytes, $injected, $observations, $archives, $managedA, $managedB, $beforeOwnedDirectories, &$networkCalls ): void {
+	static function () use ( $outputPath, $type, $mode, $ids, $results, $resultCodes, $activeBefore, $beforeBytes, $injected, $observations, $archives, $expectedArchiveManifests, $managedA, $managedB, $beforeOwnedDirectories, &$networkCalls ): void {
 		global $wpdb;
 		$afterOwnedDirectories = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR ) ?: array();
 		$newOwnedDirectories   = array_values( array_diff( $afterOwnedDirectories, $beforeOwnedDirectories ) );
+		$versions              = array();
+		foreach ( $ids as $identity ) {
+			$versions[ $identity ] = target_version( $type, $identity );
+		}
+		$active                 = active_states( $type, $ids );
 		$adapterEvidence       = array();
 		$updaterEvidence       = array();
+		$manifestEvidence      = array();
 		foreach ( array(
 			'managed-a' => $managedA,
 			'managed-b' => $managedB,
@@ -194,6 +199,13 @@ add_action(
 			$updaterEvidence[ $slug ] = array(
 				'diagnostics'  => $target['updater']->diagnostics(),
 				'failure_code' => $target['updater']->status()['failure_code'],
+			);
+			$installedManifest            = target_file_manifest( $type, $target['identity'] );
+			$expectedManifest             = $expectedArchiveManifests[ $slug ] ?? array();
+			$manifestEvidence[ $slug ]    = array(
+				'expected'   => $expectedManifest,
+				'installed'  => $installedManifest,
+				'exact_match' => $expectedManifest === $installedManifest,
 			);
 		}
 		$tokens              = array( $managedA['offer']['package'], $managedB['offer']['package'] );
@@ -217,10 +229,12 @@ add_action(
 		$backupsAbsent   = ! is_dir( $backupRoot . '/managed-a' ) && ! is_dir( $backupRoot . '/ordinary' ) && ! is_dir( $backupRoot . '/managed-b' );
 		$success         = 'success' === $mode;
 		$expectedResults = $success ? array( true, true, true ) : array( false, true, true );
-		$failureExact    = ! $success && 'mixed_bulk_injected_post_copy_failure' === $resultCodes[ $ids[0] ] && null === $resultCodes[ $ids[1] ] && null === $resultCodes[ $ids[2] ];
+		$failureExact    = ! $success && 'ran_wp_release_updater_unverified_install_result' === $resultCodes[ $ids[0] ] && null === $resultCodes[ $ids[1] ] && null === $resultCodes[ $ids[2] ];
+		$manifestExact   = $success ? ( $manifestEvidence['managed-a']['exact_match'] && $manifestEvidence['managed-b']['exact_match'] ) : $manifestEvidence['managed-b']['exact_match'];
 		$pass            = $ids === array_keys( $results )
 			&& $expectedResults === array_values( $results )
 			&& ! in_array( false, $observationEvidence, true )
+			&& $manifestExact
 			&& ! str_starts_with( $archives['ordinary'], 'ran-wp-release-updater:v1:' )
 			&& array( 1, 2, 2 ) === $adapterEvidence['managed-a']['calls']
 			&& array( 1, 2, 2 ) === $adapterEvidence['managed-b']['calls']
@@ -244,10 +258,12 @@ add_action(
 					&& $injected['backup_present']
 					&& $beforeBytes[ $ids[0] ] === $bytesAfter[ $ids[0] ]
 					&& array( '1.0.0', '2.0.0', '2.0.0' ) === array_values( $versions )
-					&& ! in_array( 'update_completed', $updaterEvidence['managed-a']['diagnostics'], true )
+					&& in_array( 'unverified_install_result', $updaterEvidence['managed-a']['diagnostics'], true )
+					&& 'unverified_install_result' === $updaterEvidence['managed-a']['failure_code']
 					&& in_array( 'update_completed', $updaterEvidence['managed-b']['diagnostics'], true )
 			);
 		$evidence        = compact( 'pass', 'type', 'mode', 'results', 'resultCodes', 'versions', 'activeBefore', 'active', 'injected', 'observationEvidence', 'adapterEvidence', 'updaterEvidence', 'leasesReleased', 'networkCalls', 'newOwnedDirectories', 'bytesAfter' );
+		$evidence['manifestEvidence'] = $manifestEvidence;
 		file_put_contents( $outputPath, json_encode( $evidence, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
 	},
 	PHP_INT_MAX
@@ -365,6 +381,9 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 		'updater'  => $updater,
 	);
 }
+function target_install_path( string $type, string $identity ): string {
+	return 'plugin' === $type ? WP_PLUGIN_DIR . '/' . dirname( $identity ) : WP_CONTENT_DIR . '/themes/' . $identity;
+}
 function prime_mixed_bulk_transient( string $type, array $ids, array $managedA, array $managedB, string $ordinaryArchive ): void {
 	$transient = (object) array(
 		'last_checked' => time(),
@@ -407,17 +426,73 @@ function prime_mixed_bulk_transient( string $type, array $ids, array $managedA, 
 	set_site_transient( 'plugin' === $type ? 'update_plugins' : 'update_themes', $transient, 60 );
 }
 function target_path( string $type, string $identity ): string {
-	return 'plugin' === $type ? WP_PLUGIN_DIR . '/' . $identity : WP_CONTENT_DIR . '/themes/' . $identity . '/style.css';
+	return 'plugin' === $type ? target_install_path( $type, $identity ) . '/' . basename( $identity ) : target_install_path( $type, $identity ) . '/style.css';
+}
+function archive_file_manifest( string $archive, string $root ): array {
+	$zip = new \ZipArchive();
+	if ( true !== $zip->open( $archive ) ) {
+		throw new RuntimeException( 'The fixture archive could not be inspected for manifest.' );
+	}
+	$manifest   = array();
+	$entryCount = $zip->numFiles;
+	if ( ! is_int( $entryCount ) ) {
+		throw new RuntimeException( 'The fixture archive manifest could not be enumerated.' );
+	}
+	$rootPrefix = $root . '/';
+	for ( $i = 0; $i < $entryCount; ++$i ) {
+		$name = $zip->getNameIndex( $i );
+		if ( ! is_string( $name ) || '/' === substr( $name, -1 ) ) {
+			continue;
+		}
+		if ( ! str_starts_with( $name, $rootPrefix ) ) {
+			continue;
+		}
+		$normalized = substr( $name, strlen( $rootPrefix ) );
+		if ( '' === $normalized ) {
+			continue;
+		}
+		$bytes = $zip->getFromIndex( $i );
+		if ( ! is_string( $bytes ) ) {
+			throw new RuntimeException( 'The fixture archive manifest contains unreadable content.' );
+		}
+		$manifest[ $normalized ] = hash( 'sha256', $bytes );
+	}
+	$zip->close();
+	ksort( $manifest );
+	return $manifest;
+}
+function target_file_manifest( string $type, string $identity ): array {
+	$base = target_install_path( $type, $identity );
+	if ( ! is_dir( $base ) ) {
+		return array();
+	}
+	$manifest = array();
+	$iterator = new \RecursiveIteratorIterator(
+		new \RecursiveDirectoryIterator( $base, \FilesystemIterator::SKIP_DOTS )
+	);
+	$basePosix = str_replace( '\\', '/', $base . '/' );
+	foreach ( $iterator as $file ) {
+		if ( ! $file->isFile() ) {
+			continue;
+		}
+		$fullPath = str_replace( '\\', '/', $file->getPathname() );
+		$relative = str_starts_with( $fullPath, $basePosix ) ? substr( $fullPath, strlen( $basePosix ) ) : null;
+		if ( ! is_string( $relative ) || '' === $relative ) {
+			continue;
+		}
+		$manifest[ $relative ] = hash_file( 'sha256', $fullPath );
+		if ( ! is_string( $manifest[ $relative ] ) ) {
+			throw new RuntimeException( 'The fixture installed-manifest could not read every file.' );
+		}
+	}
+	ksort( $manifest );
+	return $manifest;
 }
 function target_bytes( string $type, string $identity ): string {
 	return (string) file_get_contents( target_path( $type, $identity ) );
 }
 function target_version( string $type, string $identity ): ?string {
-	if ( 'plugin' === $type ) {
-		$data = get_plugin_data( target_path( $type, $identity ), false, false );
-		return $data ['Version'] ?? null;
-	}
-	return wp_get_theme( $identity )->get( 'Version' ) ?: null;
+	return target_header_version_from_bytes( $type, target_bytes( $type, $identity ) );
 }
 function active_states( string $type, array $ids ): array {
 	$active = array();
