@@ -611,7 +611,7 @@ final class GitHubReleaseService
 		$expected = $this->binding['stable_repository_identity'];
 		$repository = $this->jsonSuccess(
 			$this->request(
-				$this->repositoryApiUrl(),
+				$this->api('/repositories/' . rawurlencode($expected)),
 				$token,
 				array(),
 				self::RELEASE_RESPONSE_LIMIT
