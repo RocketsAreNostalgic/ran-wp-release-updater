@@ -11,11 +11,21 @@ const REPOSITORY = "RocketsAreNostalgic/ran-wp-release-updater";
 const RELEASE_BRANCH = "release-please--branches--main--components--ran/wp-release-updater";
 const RELEASE_PATHS = [".release-please-manifest.json", "CHANGELOG.md", "runtime-copy.json"];
 const PENDING_LABEL = "autorelease: pending"; const TAGGED_LABEL = "autorelease: tagged"; const BOT_LOGIN = "github-actions[bot]"; const API_VERSION = "2022-11-28"; const IMMUTABLE_RELEASES_API_VERSION = "2026-03-10";
+const LEGACY_BOOTSTRAP_PARENT_SHA = "ec9e1058939b3d699fb49eb700dded1a2caddb19";
+const LEGACY_BOOTSTRAP_RUNTIME_COPY_BLOB = "ec1170ddb999e78bb2f30814e3760c468763e399";
 
 function git(root, args) { return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim(); }
 function blob(root, sha, file) { const entry = git(root, ["ls-tree", sha, "--", file]); if (!/^100644 blob [a-f0-9]{40}\t/.test(entry)) refuse("release_content_drift", `${file} must be an ordinary non-executable Git blob`); return execFileSync("git", ["show", `${sha}:${file}`], { cwd: root, encoding: "utf8" }); }
 function contents(root, sha) { return { manifest: blob(root, sha, ".release-please-manifest.json"), runtimeCopy: blob(root, sha, "runtime-copy.json"), composer: blob(root, sha, "composer.json"), changelog: blob(root, sha, "CHANGELOG.md") }; }
-function parentContents(root, sha) { const files = [".release-please-manifest.json", "runtime-copy.json", "CHANGELOG.md"]; const present = files.filter((file) => git(root, ["ls-tree", sha, "--", file])); if (!present.length) return null; if (present.length !== files.length) refuse("release_content_drift", "parent release metadata is incomplete"); return contents(root, sha); }
+function treeEntry(root, sha, file) { const match = /^(\d+) (\w+) ([a-f0-9]{40})\t/.exec(git(root, ["ls-tree", sha, "--", file])); return match ? { mode: match[1], type: match[2], sha: match[3] } : null; }
+export function classifyParentReleaseMetadata(sha, entries) {
+  const { manifest, runtimeCopy, changelog } = entries;
+  if (manifest === null && runtimeCopy === null && changelog === null) return "absent";
+  if (sha === LEGACY_BOOTSTRAP_PARENT_SHA && manifest === null && changelog === null && runtimeCopy?.mode === "100644" && runtimeCopy.type === "blob" && runtimeCopy.sha === LEGACY_BOOTSTRAP_RUNTIME_COPY_BLOB) return "legacy_bootstrap";
+  if (manifest === null || runtimeCopy === null || changelog === null) refuse("release_content_drift", "parent release metadata is incomplete");
+  return "complete";
+}
+function parentContents(root, sha) { const state = classifyParentReleaseMetadata(sha, { manifest: treeEntry(root, sha, ".release-please-manifest.json"), runtimeCopy: treeEntry(root, sha, "runtime-copy.json"), changelog: treeEntry(root, sha, "CHANGELOG.md") }); return state === "complete" ? contents(root, sha) : null; }
 
 export function revisionAt(root, sha) {
   const files = git(root, ["ls-tree", "-r", "--name-only", sha]).split("\n").filter((file) => file === "bootstrap.php" || file === "runtime.php" || /^src\/.+\.php$/.test(file)).sort();
