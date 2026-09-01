@@ -392,7 +392,7 @@ function fixture_http_response( string $url, array $args, string $type, string $
 		}
 	}
 	$locator = 'phase24-owner/phase24-' . $type;
-	$repository = 'https://api.github.com/repositories/101';
+	$repository = 'https://api.github.com/repos/' . $locator;
 	$release = 'https://api.github.com/repos/' . $locator . '/releases/201';
 	$commit = 'https://api.github.com/repos/' . $locator . '/commits/' . rawurlencode( 'success' === getenv( 'RAN_WP_RELEASE_UPDATER_MODE' ) ? 'v2.0.0' : 'v3.0.0' );
 	$asset = 'https://api.github.com/repos/' . $locator . '/releases/assets/301';
