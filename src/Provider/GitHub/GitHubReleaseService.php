@@ -637,7 +637,7 @@ final class GitHubReleaseService
 		$headers = array_merge(
 			array(
 				'Accept' => 'application/vnd.github+json',
-				'User-Agent' => 'ran-wp-release-updater/0.1.0-beta.1',
+				'User-Agent' => 'ran-wp-release-updater',
 				'X-GitHub-Api-Version' => '2022-11-28',
 			),
 			$headers

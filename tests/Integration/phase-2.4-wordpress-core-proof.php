@@ -3,8 +3,8 @@
 declare( strict_types = 1 );
 
 $pluginRoot = realpath( __DIR__ . '/../../' ) ?: __DIR__ . '/../../';
-$wpRoot     = dirname( $pluginRoot, 3 );
-$wpRoot     = getenv( 'RAN_WP_RELEASE_UPDATER_LOCAL_WP_ROOT' ) ?: $wpRoot;
+$wpRootInput = getenv( 'RAN_WP_RELEASE_UPDATER_LOCAL_WP_ROOT' );
+$wpRoot     = is_string( $wpRootInput ) && '' !== $wpRootInput ? realpath( $wpRootInput ) : false;
 
 $marker    = 'RAN_WP_RELEASE_UPDATER_PHASE24';
 $base      = '/private/tmp/' . strtolower( $marker ) . '-' . bin2hex( random_bytes( 16 ) );
@@ -24,8 +24,13 @@ $dbPassword = false === $dbPassRaw ? '' : $dbPassRaw;
 if ( '/private/tmp' !== realpath( dirname( $base ) ) || file_exists( $base ) || is_link( $base ) ) {
 	throw new RuntimeException( 'Refusing to run harness outside /private/tmp.' );
 }
-if ( ! is_dir( $wpRoot ) ) {
-	throw new RuntimeException( 'Could not resolve local WordPress root.' );
+if (
+	false === $wpRoot
+	|| ! is_file( $wpRoot . '/wp-load.php' )
+	|| ! is_file( $wpRoot . '/wp-settings.php' )
+	|| ! is_file( $wpRoot . '/wp-includes/version.php' )
+) {
+	throw new RuntimeException( 'Could not resolve a safe local WordPress root.' );
 }
 
 $mysqld = getenv( 'RAN_UPDATER_MYSQLD_BIN' ) ?: '/Applications/Local.app/Contents/Resources/extraResources/lightning-services/mysql-8.4.0/bin/darwin-arm64/bin/mysqld';
@@ -124,7 +129,8 @@ try {
 	if ( ! is_file( $wpCliCmd ) || ! is_file( $wpCliPhp ) || ! is_executable( $wpCliPhp ) ) {
 		throw new RuntimeException( 'Required local WP-CLI or PHP 8.2 runtime is unavailable.' );
 	}
-	run_command( array( $wpCliPhp, $wpCliCmd, '--path=' . $sitePath, 'core', 'install', '--skip-email', '--url=http://127.0.0.1', '--title=phase24', '--admin_user=admin', '--admin_password=password123!', '--admin_email=admin@example.test' ), $sitePath, $cliEnv, true );
+	$adminPassword = bin2hex( random_bytes( 32 ) );
+	run_command( array( $wpCliPhp, $wpCliCmd, '--path=' . $sitePath, 'core', 'install', '--skip-email', '--url=http://127.0.0.1', '--title=phase24', '--admin_user=admin', '--prompt=admin_password', '--admin_email=admin@example.test' ), $sitePath, $cliEnv, true, $adminPassword . "\n" );
 	run_command( array( $wpCliPhp, $wpCliCmd, '--path=' . $sitePath, 'plugin', 'activate', 'phase24-plugin' ), $sitePath, $cliEnv, true );
 	run_command( array( $wpCliPhp, $wpCliCmd, '--path=' . $sitePath, 'theme', 'activate', 'phase24-theme' ), $sitePath, $cliEnv, true );
 
@@ -302,7 +308,7 @@ try {
 
 echo json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . PHP_EOL;
 
-function run_command( array $command, string $cwd, ?array $env = null, bool $requireZero = true ): array {
+function run_command( array $command, string $cwd, ?array $env = null, bool $requireZero = true, string $stdin = '' ): array {
 	$process = proc_open(
 		$command,
 		array(
@@ -316,6 +322,14 @@ function run_command( array $command, string $cwd, ?array $env = null, bool $req
 	);
 	if ( ! is_resource( $process ) ) {
 		throw new RuntimeException( 'Could not run command: ' . implode( ' ', $command ) );
+	}
+	if ( '' !== $stdin && false === fwrite( $pipes[0], $stdin ) ) {
+		fclose( $pipes[0] );
+		proc_terminate( $process );
+		fclose( $pipes[1] );
+		fclose( $pipes[2] );
+		proc_close( $process );
+		throw new RuntimeException( 'Could not provide command input.' );
 	}
 	fclose( $pipes[0] );
 	$stdout = stream_get_contents( $pipes[1] );
