@@ -30,6 +30,10 @@ final class IntegrationProofSecurityContractTest extends TestCase {
 			self::assertStringContainsString( '--prompt=admin_password', $proof );
 			self::assertStringContainsString( 'bin2hex( random_bytes( 32 ) )', $proof );
 			self::assertStringContainsString( 'fwrite( $pipes[0], $stdin )', $proof );
+			self::assertStringContainsString( 'proc_terminate(', $proof );
+			self::assertStringContainsString( 'fclose( $pipes[1] );', $proof );
+			self::assertStringContainsString( 'fclose( $pipes[2] );', $proof );
+			self::assertStringContainsString( 'proc_close(', $proof );
 		}
 	}
 

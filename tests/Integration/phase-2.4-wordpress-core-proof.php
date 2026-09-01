@@ -325,6 +325,10 @@ function run_command( array $command, string $cwd, ?array $env = null, bool $req
 	}
 	if ( '' !== $stdin && false === fwrite( $pipes[0], $stdin ) ) {
 		fclose( $pipes[0] );
+		proc_terminate( $process );
+		fclose( $pipes[1] );
+		fclose( $pipes[2] );
+		proc_close( $process );
 		throw new RuntimeException( 'Could not provide command input.' );
 	}
 	fclose( $pipes[0] );

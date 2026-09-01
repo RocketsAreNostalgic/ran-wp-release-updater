@@ -10,6 +10,7 @@ final class ReleaseWorkflowContractTest extends TestCase {
 
 	public function testReleaseWorkflowAndJsonVersionUpdaterAreExact(): void {
 		$workflow = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/release-please.yml' );
+		$ci       = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/ci.yml' );
 		$config = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/release-please-config.json' ), true, 512, JSON_THROW_ON_ERROR );
 
 		self::assertStringContainsString( 'workflow_run:', $workflow );
@@ -19,6 +20,8 @@ final class ReleaseWorkflowContractTest extends TestCase {
 		self::assertStringContainsString( 'group: updater-exact-release-publisher', $workflow );
 		self::assertStringContainsString( 'timeout-minutes: 15', $workflow );
 		self::assertStringContainsString( 'RAN_RELEASE_PUBLISHER_MUTATE: \'1\'', $workflow );
+		self::assertStringContainsString( 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0', $ci );
+		self::assertStringContainsString( "node-version: '24'", $ci );
 		self::assertSame( 'json', $config['packages']['.']['extra-files'][0]['type'] );
 		self::assertSame( 'runtime-copy.json', $config['packages']['.']['extra-files'][0]['path'] );
 		self::assertSame( '$.package_version', $config['packages']['.']['extra-files'][0]['jsonpath'] );

@@ -1,4 +1,4 @@
-export const BETA = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta\.(0|[1-9][0-9]*)$/;
+export const BETA = /^0\.1\.0-beta\.(0|[1-9][0-9]*)$/;
 export const UNRELEASED = "0.0.0";
 
 export class PublisherRefusal extends Error {
@@ -33,7 +33,7 @@ export function runtimeCopy(raw) {
 }
 
 function firstNotes(changelog, version) {
-  const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); const heading = new RegExp(`^## (?:\\[${escaped}\\]|${escaped}(?:\\s|$))`, "m");
+  const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); const date = "\\([0-9]{4}-[0-9]{2}-[0-9]{2}\\)"; const heading = new RegExp(`^## (?:${escaped} ${date}|\\[${escaped}\\]\\(https://github\\.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v[^)\\s]+\\.\\.\\.v${escaped}\\) ${date})\\n`, "m");
   const start = changelog.search(heading);
   if (start < 0 || changelog.match(/^## (?:\[|[0-9])/m)?.index !== start) refuse("release_notes_missing", "candidate must prepend its changelog section");
   const tail = changelog.slice(start);
@@ -71,12 +71,13 @@ export function verifyReleaseDelta(parent, candidate) {
   const prefix = "# Changelog\n\n";
   const escapedBefore = before.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const escapedAfter = after.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const date = "\\([0-9]{4}-[0-9]{2}-[0-9]{2}\\)";
   const parentHeading = before === UNRELEASED
     ? /^## \[Unreleased\]\n/m
-    : new RegExp(`^## (?:${escapedBefore} \\([^)\\n]+\\)|\\[${escapedBefore}\\]\\([^)\\n]+\\))\\n`, "m");
+    : new RegExp(`^## (?:${escapedBefore} ${date}|\\[${escapedBefore}\\]\\(https://github\\.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v[^)\\s]+\\.\\.\\.v${escapedBefore}\\) ${date})\\n`, "m");
   const candidateHeading = before === UNRELEASED
-    ? new RegExp(`^## ${escapedAfter} \\([^)\\n]+\\)\\n`, "m")
-    : new RegExp(`^## \\[${escapedAfter}\\]\\([^)\\n]+\\)\\n`, "m");
+    ? new RegExp(`^## ${escapedAfter} ${date}\\n`, "m")
+    : new RegExp(`^## \\[${escapedAfter}\\]\\(https://github\\.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v${escapedBefore}\\.\\.\\.v${escapedAfter}\\) ${date}\\n`, "m");
   const parentMatch = parentHeading.exec(parent.changelog);
   const candidateMatch = candidateHeading.exec(candidate.changelog);
   if (!parent.changelog.startsWith(prefix) || !candidate.changelog.startsWith(prefix) || parentMatch?.index !== prefix.length || candidateMatch?.index !== prefix.length) refuse("release_content_drift", "CHANGELOG heading or prefix is not an exact Release Please insertion");

@@ -2,9 +2,8 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PublisherRefusal, candidateIdentity, manifestVersion, refuse, runtimeCopy, verifyReleaseDelta } from "./release-publisher-content.mjs";
+import { BETA, PublisherRefusal, candidateIdentity, manifestVersion, refuse, runtimeCopy, verifyReleaseDelta } from "./release-publisher-content.mjs";
 
 export { PublisherRefusal, candidateIdentity, verifyReleaseDelta };
 const FULL_SHA = /^[a-f0-9]{40}$/;
@@ -46,7 +45,7 @@ export function decidePublication(input) {
   const pull = exact[0];
   if (pull?.state !== "closed" || typeof pull?.merged_at !== "string" || pull?.draft !== false || pull?.head?.ref !== RELEASE_BRANCH || pull?.head?.repo?.id !== repositoryId || pull?.head?.repo?.full_name !== repository || pull?.base?.ref !== "main" || !FULL_SHA.test(pull?.base?.sha ?? "") || pull?.base?.repo?.id !== repositoryId || pull?.base?.repo?.full_name !== repository || pull?.user?.login !== BOT_LOGIN || pull?.title !== `chore(main): release ${identity.version}` || !Number.isInteger(pull?.number) || pull.number < 1 || !FULL_SHA.test(pull?.head?.sha ?? "") || pull.head.sha === candidateSha) refuse("release_pr_invalid", "release PR identity is invalid");
   if (commit?.sha !== candidateSha || commit.parents?.length !== 2 || commit.parents[0]?.sha !== pull.base.sha || commit.parents[1]?.sha !== pull.head.sha || commit.tree?.sha !== pull.head_tree_sha) refuse("release_pr_not_normal_merge", "candidate must be the normal two-parent merge of the exact Release Please head");
-  if (typeof commit.parentVersion !== "string" || (commit.parentVersion !== "0.0.0" && !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta\.(0|[1-9][0-9]*)$/.test(commit.parentVersion))) refuse("release_parent_version_invalid", "release parent version is invalid");
+  if (typeof commit.parentVersion !== "string" || (commit.parentVersion !== "0.0.0" && !BETA.test(commit.parentVersion))) refuse("release_parent_version_invalid", "release parent version is invalid");
   if (!Array.isArray(commit.changedPaths) || JSON.stringify(commit.changedPaths) !== JSON.stringify(RELEASE_PATHS)) refuse("release_paths_invalid", "release changed paths are not exact");
   if (commit.parentVersion === identity.version) refuse("release_version_unchanged", "release did not advance the manifest");
   const pending = labels(pull).includes(PENDING_LABEL); const tagged = labels(pull).includes(TAGGED_LABEL);
