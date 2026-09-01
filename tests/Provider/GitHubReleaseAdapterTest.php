@@ -544,6 +544,29 @@ final class GitHubReleaseAdapterTest extends TestCase
 		self::assertTrue($facts['assurance_facts']['publication_immutable']);
 		self::assertTrue($facts['assurance_facts']['provenance_verified']);
 		self::assertCount(3, $GLOBALS['ran_github_requests']);
+		self::assertSame(
+			'https://api.github.com/repos/owner/repository',
+			$GLOBALS['ran_github_requests'][0][0]
+		);
+	}
+
+	public function testInspectionRejectsLocatorThatDoesNotMatchStableRepositoryIdentity(): void
+	{
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array('id' => 100)),
+		);
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('repository identity changed');
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->inspect('7');
+		} finally {
+			self::assertCount(1, $GLOBALS['ran_github_requests']);
+			self::assertSame(
+				'https://api.github.com/repos/owner/repository',
+				$GLOBALS['ran_github_requests'][0][0]
+			);
+		}
 	}
 
 	public function testMutableReleaseRemainsManualOnlyAndPrereleaseThemeIsBound(): void
