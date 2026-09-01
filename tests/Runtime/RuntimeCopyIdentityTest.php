@@ -83,7 +83,8 @@ final class RuntimeCopyIdentityTest extends TestCase
 
 	private function writeRuntimeCopy( string $root ): void
 	{
-		file_put_contents( $root . '/runtime-copy.json', json_encode( array( 'package_revision' => $this->identity( $root ), 'package_version' => '0.1.0-beta.1', 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 1, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
+		$checkedIn = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		file_put_contents( $root . '/runtime-copy.json', json_encode( array( 'package_revision' => $this->identity( $root ), 'package_version' => $checkedIn['package_version'], 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 1, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
 	}
 
 	private function identity( string $root ): string

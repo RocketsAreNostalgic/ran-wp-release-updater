@@ -440,7 +440,7 @@ function github_request_contract( array $args, bool $asset ): bool {
 		&& 0 === ( $args['redirection'] ?? null )
 		&& 10 === ( $args['timeout'] ?? null )
 		&& 'Bearer phase24-token' === ( $headers['Authorization'] ?? null )
-		&& 'ran-wp-release-updater/0.1.0-beta.1' === ( $headers['User-Agent'] ?? null )
+		&& 'ran-wp-release-updater' === ( $headers['User-Agent'] ?? null )
 		&& '2022-11-28' === ( $headers['X-GitHub-Api-Version'] ?? null )
 		&& ( $asset ? 'application/octet-stream' : 'application/vnd.github+json' ) === ( $headers['Accept'] ?? null );
 }

@@ -4,9 +4,10 @@
 verified WordPress plugin and theme releases through WordPress Core's native
 update lifecycle.
 
-This fresh package line is under development. It has no supported public
-release yet. Its first planned prerelease is `v0.1.0-beta.1`; it does not
-continue the version history of `ran/wp-github-release-updater`.
+This fresh package line begins at `v0.1.0-beta.1`; it does not continue the
+version history of `ran/wp-github-release-updater`. Consult the GitHub Releases
+page for supported published versions rather than treating a branch or commit
+as a release.
 
 The package namespace is `RAN\WPReleaseUpdater\V1`. The initial production
 catalog will contain the built-in GitHub adapter only. Additional providers
@@ -35,6 +36,22 @@ the WordPress filesystem user: peer PHP with that same operating-system access
 can rewrite plugin files outside any updater hook and is not sandboxed by this
 library. The updater still compares the extracted and installed file inventory
 with the inspected archive before accepting completion.
+
+## Internationalization
+
+This Composer library is embedded by host plugins and themes. It does not own
+or load a WordPress text domain or translation catalog.
+
+Diagnostic and error codes remain stable and untranslated. Exception text is
+developer-facing and is not localized presentation text.
+
+Configured user-facing plugin information, such as a name or description,
+belongs to the host and should already be localized through the host text
+domain.
+
+The generic English `WP_Error` message is fallback text only. Consumers that
+present updater failures should map `ran_wp_release_updater_*` codes to
+host-localized messages rather than parse or rely on that fallback.
 
 Validate the Composer package metadata with:
 
