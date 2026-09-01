@@ -10,10 +10,6 @@ use RuntimeException;
 final class TemporaryArtifact
 {
 	private ?bool $discardResult = null;
-	private ?string $coreTargetType = null;
-	private ?string $coreTargetIdentifier = null;
-	private ?string $coreExpectedVersion = null;
-	private bool $coreUpdateAccepted = false;
 
 	/** @param array<string, int> $identity */
 	public function __construct(
@@ -34,23 +30,6 @@ final class TemporaryArtifact
 		$this->discard();
 	}
 
-	public static function forCoreUpdate(string $path, string $sha256, string $type, string $identifier, string $expectedVersion): self
-	{
-		if (! self::validCoreTarget($type, $identifier)
-			|| 1 !== preg_match('/\A[A-Za-z0-9][A-Za-z0-9._+-]{0,63}\z/D', $expectedVersion)) {
-			throw new \InvalidArgumentException('The Core update artifact is invalid.');
-		}
-		$identity = self::fileIdentity($path);
-		if (! is_array($identity)) {
-			throw new \InvalidArgumentException('The temporary archive is invalid.');
-		}
-		$artifact = new self($path, $sha256, $identity);
-		$artifact->coreTargetType = $type;
-		$artifact->coreTargetIdentifier = $identifier;
-		$artifact->coreExpectedVersion = $expectedVersion;
-		return $artifact;
-	}
-
 	/** Inspect the exact bytes without transferring cleanup ownership. */
 	public function inspect(callable $inspector): mixed
 	{
@@ -59,19 +38,6 @@ final class TemporaryArtifact
 		}
 
 		return $inspector($this->path);
-	}
-
-	public function acceptCoreUpdate(string $type, string $identifier, string $action, string $path): string
-	{
-		if ($this->coreUpdateAccepted || ! is_string($this->coreTargetType)
-			|| ! is_string($this->coreTargetIdentifier) || ! is_string($this->coreExpectedVersion)
-			|| 'update' !== $action || ! hash_equals($this->coreTargetType, $type)
-			|| ! hash_equals($this->coreTargetIdentifier, $identifier) || ! hash_equals($this->path, $path)) {
-			throw new RuntimeException('The Core update artifact is unavailable.');
-		}
-		$this->inspect(static fn(string $currentPath): string => $currentPath);
-		$this->coreUpdateAccepted = true;
-		return $this->coreExpectedVersion;
 	}
 
 	/** Delete only the exact unchanged file while this object owns it. */
@@ -116,14 +82,5 @@ final class TemporaryArtifact
 			'uid' => (int) $stat['uid'], 'gid' => (int) $stat['gid'],
 			'size' => (int) $stat['size'], 'mtime' => (int) $stat['mtime'],
 			'ctime' => (int) $stat['ctime']);
-	}
-
-	private static function validCoreTarget(string $type, string $identifier): bool
-	{
-		if ('theme' === $type) {
-			return 1 === preg_match('/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $identifier);
-		}
-		return 'plugin' === $type
-			&& 1 === preg_match('/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D', $identifier);
 	}
 }
