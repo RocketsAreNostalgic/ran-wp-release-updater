@@ -2,7 +2,8 @@
 
 declare( strict_types = 1 );
 $root          = realpath( __DIR__ . '/../../' ) ?: dirname( __DIR__, 2 );
-$wpRoot        = getenv( 'RAN_WP_RELEASE_UPDATER_LOCAL_WP_ROOT' ) ?: dirname( $root, 3 );
+$wpRootInput   = getenv( 'RAN_WP_RELEASE_UPDATER_LOCAL_WP_ROOT' );
+$wpRoot        = is_string( $wpRootInput ) && '' !== $wpRootInput ? realpath( $wpRootInput ) : false;
 $marker        = 'RAN_WP_RELEASE_UPDATER_MIXED_BULK';
 $base          = '/private/tmp/' . strtolower( $marker ) . '-' . bin2hex( random_bytes( 16 ) );
 $markerFile    = $base . '/' . $marker . '.marker';
@@ -18,7 +19,15 @@ $result        = array(
 	'marker' => $marker,
 	'status' => 'errored',
 );
-if ( '/private/tmp' !== realpath( dirname( $base ) ) || file_exists( $base ) || is_link( $base ) || ! is_dir( $wpRoot ) ) {
+if (
+	'/private/tmp' !== realpath( dirname( $base ) )
+	|| file_exists( $base )
+	|| is_link( $base )
+	|| false === $wpRoot
+	|| ! is_file( $wpRoot . '/wp-load.php' )
+	|| ! is_file( $wpRoot . '/wp-settings.php' )
+	|| ! is_file( $wpRoot . '/wp-includes/version.php' )
+) {
 	throw new RuntimeException( 'Refusing an unsafe disposable mixed-bulk proof root.' );
 }
 if ( ! mkdir( $base, 0700 ) || $base !== realpath( $base ) || ! file_put_contents( $markerFile, $marker . "\n" ) ) {
@@ -58,7 +67,8 @@ try {
 		'DB_USER'     => 'root',
 		'DB_PASSWORD' => '',
 	);
-	run( array( $php, $wp, '--path=' . $site, 'core', 'install', '--skip-email', '--url=http://127.0.0.1', '--title=mixed-bulk', '--admin_user=admin', '--admin_password=password123!', '--admin_email=admin@example.test' ), $site, $env );
+	$adminPassword = bin2hex( random_bytes( 32 ) );
+	run( array( $php, $wp, '--path=' . $site, 'core', 'install', '--skip-email', '--url=http://127.0.0.1', '--title=mixed-bulk', '--admin_user=admin', '--prompt=admin_password', '--admin_email=admin@example.test' ), $site, $env, $adminPassword . "\n" );
 	$scenarios = array( array( 'plugin', 'success' ), array( 'theme', 'success' ), array( 'plugin', 'failure' ), array( 'theme', 'failure' ) );
 	$proofs    = array();
 	foreach ( $scenarios as $scenario ) {
@@ -114,7 +124,7 @@ try {
 	}
 }
 echo json_encode( $result, JSON_UNESCAPED_SLASHES ) . PHP_EOL;
-function run( array $command, string $cwd, array $env = array() ): void {
+function run( array $command, string $cwd, array $env = array(), string $stdin = '' ): void {
 	$p = proc_open(
 		$command,
 		array(
@@ -128,6 +138,10 @@ function run( array $command, string $cwd, array $env = array() ): void {
 	);
 	if ( ! is_resource( $p ) ) {
 		throw new RuntimeException( 'Could not run command.' );
+	}
+	if ( '' !== $stdin && false === fwrite( $pipes[0], $stdin ) ) {
+		fclose( $pipes[0] );
+		throw new RuntimeException( 'Could not provide command input.' );
 	}
 	fclose( $pipes[0] );
 	$out = stream_get_contents( $pipes[1] ) . stream_get_contents( $pipes[2] );
