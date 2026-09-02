@@ -22,6 +22,7 @@ $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\ReleaseOperationCoordinator' => 'src/WordPress/ReleaseOperationCoordinator.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\AcquisitionReceipt' => 'src/Contract/AcquisitionReceipt.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePluginUpdater' => 'src/WordPress/NativePluginUpdater.php',
+	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseReadUnavailable' => 'src/Provider/GitHub/GitHubReleaseReadUnavailable.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubCredentialResolver' => 'src/Provider/GitHub/GitHubCredentialResolver.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\ProspectiveReleaseInspection' => 'src/Provider/GitHub/ProspectiveReleaseInspection.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\ProspectiveReleaseArtifact' => 'src/Provider/GitHub/ProspectiveReleaseArtifact.php',

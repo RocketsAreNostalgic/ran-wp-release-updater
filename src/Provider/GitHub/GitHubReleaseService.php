@@ -242,9 +242,9 @@ final class GitHubReleaseService
 				$path
 			);
 			if (self::rateLimit($response)['limited']) {
-				throw new RuntimeException('GitHub rate limited the artifact request.');
+				throw new GitHubReleaseReadUnavailable('GitHub rate limited the artifact request.');
 			}
-			self::requireSuccess($response);
+			self::requireSuccess($response, false);
 			$identity = self::fileIdentity($path);
 			if (
 				null === $identity
@@ -417,7 +417,8 @@ final class GitHubReleaseService
 				array(),
 				self::RELEASE_RESPONSE_LIMIT
 			),
-			self::RELEASE_RESPONSE_LIMIT
+			self::RELEASE_RESPONSE_LIMIT,
+			false
 		);
 		$releaseIdentity = self::providerIdentity($release['id'] ?? null);
 		if (
@@ -456,7 +457,8 @@ final class GitHubReleaseService
 				array(),
 				self::COMMIT_RESPONSE_LIMIT
 			),
-			self::COMMIT_RESPONSE_LIMIT
+			self::COMMIT_RESPONSE_LIMIT,
+			false
 		);
 		$commitIdentity = is_string($commit['sha'] ?? null)
 			? strtolower($commit['sha'])
@@ -683,7 +685,7 @@ final class GitHubReleaseService
 		?string $filename
 	): array {
 		if (! function_exists('wp_safe_remote_get') || ! function_exists('is_wp_error')) {
-			throw new RuntimeException('WordPress safe HTTP is unavailable.');
+			throw new GitHubReleaseReadUnavailable('WordPress safe HTTP is unavailable.');
 		}
 
 		$args = array(
@@ -699,7 +701,7 @@ final class GitHubReleaseService
 
 		$response = wp_safe_remote_get($url, $args);
 		if (is_wp_error($response) || ! is_array($response)) {
-			throw new RuntimeException('The GitHub request failed.');
+			throw new GitHubReleaseReadUnavailable('The GitHub request failed.');
 		}
 		self::responseCode($response);
 		if (null === $filename) {
@@ -710,13 +712,17 @@ final class GitHubReleaseService
 	}
 
 	/** @return array<string, mixed> */
-	private function jsonSuccess(array $response, int $limit): array
+	private function jsonSuccess(
+		array $response,
+		int $limit,
+		bool $missingIsReadUnavailable = true
+	): array
 	{
 		$rateLimit = self::rateLimit($response);
 		if ($rateLimit['limited']) {
-			throw new RuntimeException('GitHub rate limited the release request.');
+			throw new GitHubReleaseReadUnavailable('GitHub rate limited the release request.');
 		}
-		self::requireSuccess($response);
+		self::requireSuccess($response, $missingIsReadUnavailable);
 		return self::decodeObject(self::responseBody($response, $limit));
 	}
 
@@ -736,9 +742,12 @@ final class GitHubReleaseService
 	}
 
 	/** @param array<string, mixed> $response */
-	private static function requireSuccess(array $response): void
+	private static function requireSuccess(array $response, bool $missingIsReadUnavailable = true): void
 	{
 		$status = self::responseCode($response);
+		if (in_array($status, array(401, 403), true) || ($missingIsReadUnavailable && 404 === $status)) {
+			throw new GitHubReleaseReadUnavailable('GitHub returned an unexpected response.');
+		}
 		if ($status < 200 || $status > 299) {
 			throw new RuntimeException('GitHub returned an unexpected response.');
 		}
@@ -748,7 +757,7 @@ final class GitHubReleaseService
 	private static function responseCode(array $response): int
 	{
 		if (! function_exists('wp_remote_retrieve_response_code')) {
-			throw new RuntimeException('The WordPress HTTP response API is unavailable.');
+			throw new GitHubReleaseReadUnavailable('The WordPress HTTP response API is unavailable.');
 		}
 		$status = wp_remote_retrieve_response_code($response);
 		if (is_string($status) && 1 === preg_match('/\A[1-5]\d{2}\z/D', $status)) {
@@ -765,7 +774,7 @@ final class GitHubReleaseService
 	private static function responseHeader(array $response, string $name): ?string
 	{
 		if (! function_exists('wp_remote_retrieve_header')) {
-			throw new RuntimeException('The WordPress HTTP response API is unavailable.');
+			throw new GitHubReleaseReadUnavailable('The WordPress HTTP response API is unavailable.');
 		}
 		$value = wp_remote_retrieve_header($response, $name);
 		return is_string($value) || is_numeric($value) ? (string) $value : null;
@@ -775,7 +784,7 @@ final class GitHubReleaseService
 	private static function responseBody(array $response, int $limit): string
 	{
 		if (! function_exists('wp_remote_retrieve_body')) {
-			throw new RuntimeException('The WordPress HTTP response API is unavailable.');
+			throw new GitHubReleaseReadUnavailable('The WordPress HTTP response API is unavailable.');
 		}
 		$body = wp_remote_retrieve_body($response);
 		if (! is_string($body) || strlen($body) > $limit) {

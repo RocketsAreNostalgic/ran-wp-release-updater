@@ -111,6 +111,7 @@ use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubCredentialResolver;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter;
+use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseReadUnavailable;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\ProspectiveReleaseArtifact;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\ProspectiveReleaseInspection;
@@ -224,7 +225,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$this->binding(),
 			new GitHubCredentialResolver(static fn (): string => 'bad token')
 		);
-		$this->expectException(RuntimeException::class);
+		$this->expectException(GitHubReleaseReadUnavailable::class);
 		try {
 			$invalid->listReleases();
 		} finally {
@@ -488,40 +489,80 @@ final class GitHubReleaseAdapterTest extends TestCase
 		self::assertSame(array(), $limited['candidates']);
 	}
 
-	public function testOrdinaryForbiddenIsNotMisreportedAsRateLimit(): void
+	/** @dataProvider readUnavailableStatusProvider */
+	public function testAuthenticatedAuthorizationFailuresAreNotRateLimits(int $status): void
 	{
-		$GLOBALS['ran_github_responses'] = array($this->response(403, null));
-		$this->expectException(RuntimeException::class);
+		$GLOBALS['ran_github_responses'] = array($this->response($status, null));
+		$this->expectException(GitHubReleaseReadUnavailable::class);
 		$this->expectExceptionMessage('unexpected response');
 		(new GitHubReleaseAdapter($this->binding()))->listReleases();
 	}
 
-	/** @dataProvider authenticatedFailureProvider */
-	public function testAuthenticatedAuthorizationFailuresAreNotRateLimits(int $status): void
+	/** @return iterable<string,array{0:int}> */
+	public static function readUnavailableStatusProvider(): iterable
 	{
-		$adapter = new GitHubReleaseAdapter(
-			$this->binding(),
-			new GitHubCredentialResolver(static fn (): string => 'private-token')
-		);
-		$GLOBALS['ran_github_responses'] = array($this->response($status, null));
+		yield 'unauthorized' => array(401);
+		yield 'forbidden' => array(403);
+		yield 'not found' => array(404);
+	}
 
+	public function testTransportAndCredentialFailuresSignalUnavailableRead(): void
+	{
+		$GLOBALS['ran_github_responses'] = array(new \WP_Error('transport', 'not connected'));
+		$this->expectException(GitHubReleaseReadUnavailable::class);
 		try {
-			$adapter->listReleases();
-			self::fail('An authorization failure must reject the listing.');
-		} catch (RuntimeException $exception) {
-			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
-			self::assertSame(
-				'Bearer private-token',
-				$GLOBALS['ran_github_requests'][0][1]['headers']['Authorization']
-			);
+			(new GitHubReleaseAdapter($this->binding()))->listReleases();
+		} catch (GitHubReleaseReadUnavailable $exception) {
+			self::assertSame('The GitHub request failed.', $exception->getMessage());
+			throw $exception;
 		}
 	}
 
-	/** @return iterable<string,array{0:int}> */
-	public static function authenticatedFailureProvider(): iterable
+	public function testInvalidCredentialSignalsUnavailableReadBeforeHttp(): void
 	{
-		yield 'unauthorized' => array(401);
-		yield 'ordinary forbidden' => array(403);
+		$adapter = new GitHubReleaseAdapter(
+			$this->binding(),
+			new GitHubCredentialResolver(static fn (): string => 'bad token')
+		);
+
+		$this->expectException(GitHubReleaseReadUnavailable::class);
+		$this->expectExceptionMessage('credential is invalid');
+		try {
+			$adapter->listReleases();
+		} finally {
+			self::assertSame(array(), $GLOBALS['ran_github_requests']);
+		}
+	}
+
+	public function testUnavailableCredentialSignalsUnavailableReadBeforeHttp(): void
+	{
+		$adapter = new GitHubReleaseAdapter(
+			$this->binding(),
+			new GitHubCredentialResolver(
+				static function (): string { throw new RuntimeException('credential source failed'); }
+			)
+		);
+
+		$this->expectException(GitHubReleaseReadUnavailable::class);
+		$this->expectExceptionMessage('credential is unavailable');
+		try {
+			$adapter->listReleases();
+		} finally {
+			self::assertSame(array(), $GLOBALS['ran_github_requests']);
+		}
+	}
+
+	public function testServerErrorsRemainGenericRuntimeFailures(): void
+	{
+		$GLOBALS['ran_github_responses'] = array($this->response(500, null));
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('unexpected response');
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->listReleases();
+		} catch (GitHubReleaseReadUnavailable $exception) {
+			self::fail('Server failures must not request credential fallback.');
+			throw $exception;
+		}
 	}
 
 	public function testInspectionBindsExactNumericRepositoryReleaseCommitAndAsset(): void
@@ -547,6 +588,56 @@ final class GitHubReleaseAdapterTest extends TestCase
 		self::assertSame(
 			'https://api.github.com/repos/owner/repository',
 			$GLOBALS['ran_github_requests'][0][0]
+		);
+	}
+
+	public function testInspectionTreatsMissingConcreteReleaseAsGenericCandidateFailure(): void
+	{
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array('id' => 99)),
+			$this->response(404, null),
+		);
+
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
+			self::fail('A missing concrete release must fail without credential fallback.');
+		} catch (RuntimeException $exception) {
+			self::assertNotInstanceOf(GitHubReleaseReadUnavailable::class, $exception);
+			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
+		}
+
+		self::assertSame(
+			array(
+				'https://api.github.com/repos/owner/repository',
+				'https://api.github.com/repos/owner/repository/releases/7',
+			),
+			array_column($GLOBALS['ran_github_requests'], 0)
+		);
+	}
+
+	public function testInspectionTreatsMissingConcreteCommitAsGenericCandidateFailure(): void
+	{
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array('id' => 99)),
+			$this->response(200, $this->release(7, 'v1.2.3')),
+			$this->response(404, null),
+		);
+
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
+			self::fail('A missing concrete commit must fail without credential fallback.');
+		} catch (RuntimeException $exception) {
+			self::assertNotInstanceOf(GitHubReleaseReadUnavailable::class, $exception);
+			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
+		}
+
+		self::assertSame(
+			array(
+				'https://api.github.com/repos/owner/repository',
+				'https://api.github.com/repos/owner/repository/releases/7',
+				'https://api.github.com/repos/owner/repository/commits/v1.2.3',
+			),
+			array_column($GLOBALS['ran_github_requests'], 0)
 		);
 	}
 
@@ -1263,13 +1354,41 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$this->response(429, null, array('retry-after' => '30')),
 		);
 
-		$this->expectException(RuntimeException::class);
+		$this->expectException(GitHubReleaseReadUnavailable::class);
 		$this->expectExceptionMessage('rate limited the artifact request');
 		try {
 			$adapter->acquire($descriptor);
 		} finally {
 			$this->assertAllTemporaryPathsAbsent();
 		}
+	}
+
+	public function testAcquisitionAssetNotFoundIsGenericAndCleansOwnedFile(): void
+	{
+		$adapter = new GitHubReleaseAdapter($this->binding());
+		$GLOBALS['ran_github_responses'] = $this->inspectionResponses(7, 'v1.2.3');
+		$descriptor = $adapter->inspect('7');
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array('id' => 99)),
+			$this->response(404, null),
+		);
+
+		try {
+			$adapter->acquire($descriptor);
+			self::fail('A missing release asset must fail.');
+		} catch (RuntimeException $exception) {
+			self::assertNotInstanceOf(GitHubReleaseReadUnavailable::class, $exception);
+			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
+			$this->assertAllTemporaryPathsAbsent();
+		}
+
+		self::assertSame(
+			array(
+				'https://api.github.com/repos/owner/repository',
+				'https://api.github.com/repos/owner/repository/releases/assets/8',
+			),
+			array_slice(array_column($GLOBALS['ran_github_requests'], 0), 3)
+		);
 	}
 
 	public function testOversizedStreamIsRejectedAndCleanedBeforeDigesting(): void
