@@ -591,6 +591,56 @@ final class GitHubReleaseAdapterTest extends TestCase
 		);
 	}
 
+	public function testInspectionTreatsMissingConcreteReleaseAsGenericCandidateFailure(): void
+	{
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array('id' => 99)),
+			$this->response(404, null),
+		);
+
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
+			self::fail('A missing concrete release must fail without credential fallback.');
+		} catch (RuntimeException $exception) {
+			self::assertNotInstanceOf(GitHubReleaseReadUnavailable::class, $exception);
+			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
+		}
+
+		self::assertSame(
+			array(
+				'https://api.github.com/repos/owner/repository',
+				'https://api.github.com/repos/owner/repository/releases/7',
+			),
+			array_column($GLOBALS['ran_github_requests'], 0)
+		);
+	}
+
+	public function testInspectionTreatsMissingConcreteCommitAsGenericCandidateFailure(): void
+	{
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array('id' => 99)),
+			$this->response(200, $this->release(7, 'v1.2.3')),
+			$this->response(404, null),
+		);
+
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
+			self::fail('A missing concrete commit must fail without credential fallback.');
+		} catch (RuntimeException $exception) {
+			self::assertNotInstanceOf(GitHubReleaseReadUnavailable::class, $exception);
+			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
+		}
+
+		self::assertSame(
+			array(
+				'https://api.github.com/repos/owner/repository',
+				'https://api.github.com/repos/owner/repository/releases/7',
+				'https://api.github.com/repos/owner/repository/commits/v1.2.3',
+			),
+			array_column($GLOBALS['ran_github_requests'], 0)
+		);
+	}
+
 	public function testInspectionRejectsLocatorThatDoesNotMatchStableRepositoryIdentity(): void
 	{
 		$GLOBALS['ran_github_responses'] = array(
@@ -1331,6 +1381,14 @@ final class GitHubReleaseAdapterTest extends TestCase
 			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
 			$this->assertAllTemporaryPathsAbsent();
 		}
+
+		self::assertSame(
+			array(
+				'https://api.github.com/repos/owner/repository',
+				'https://api.github.com/repos/owner/repository/releases/assets/8',
+			),
+			array_slice(array_column($GLOBALS['ran_github_requests'], 0), 3)
+		);
 	}
 
 	public function testOversizedStreamIsRejectedAndCleanedBeforeDigesting(): void

@@ -417,7 +417,8 @@ final class GitHubReleaseService
 				array(),
 				self::RELEASE_RESPONSE_LIMIT
 			),
-			self::RELEASE_RESPONSE_LIMIT
+			self::RELEASE_RESPONSE_LIMIT,
+			false
 		);
 		$releaseIdentity = self::providerIdentity($release['id'] ?? null);
 		if (
@@ -456,7 +457,8 @@ final class GitHubReleaseService
 				array(),
 				self::COMMIT_RESPONSE_LIMIT
 			),
-			self::COMMIT_RESPONSE_LIMIT
+			self::COMMIT_RESPONSE_LIMIT,
+			false
 		);
 		$commitIdentity = is_string($commit['sha'] ?? null)
 			? strtolower($commit['sha'])
@@ -710,13 +712,17 @@ final class GitHubReleaseService
 	}
 
 	/** @return array<string, mixed> */
-	private function jsonSuccess(array $response, int $limit): array
+	private function jsonSuccess(
+		array $response,
+		int $limit,
+		bool $missingIsReadUnavailable = true
+	): array
 	{
 		$rateLimit = self::rateLimit($response);
 		if ($rateLimit['limited']) {
 			throw new GitHubReleaseReadUnavailable('GitHub rate limited the release request.');
 		}
-		self::requireSuccess($response);
+		self::requireSuccess($response, $missingIsReadUnavailable);
 		return self::decodeObject(self::responseBody($response, $limit));
 	}
 
