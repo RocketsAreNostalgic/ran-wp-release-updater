@@ -1313,6 +1313,26 @@ final class GitHubReleaseAdapterTest extends TestCase
 		}
 	}
 
+	public function testAcquisitionAssetNotFoundIsGenericAndCleansOwnedFile(): void
+	{
+		$adapter = new GitHubReleaseAdapter($this->binding());
+		$GLOBALS['ran_github_responses'] = $this->inspectionResponses(7, 'v1.2.3');
+		$descriptor = $adapter->inspect('7');
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array('id' => 99)),
+			$this->response(404, null),
+		);
+
+		try {
+			$adapter->acquire($descriptor);
+			self::fail('A missing release asset must fail.');
+		} catch (RuntimeException $exception) {
+			self::assertNotInstanceOf(GitHubReleaseReadUnavailable::class, $exception);
+			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
+			$this->assertAllTemporaryPathsAbsent();
+		}
+	}
+
 	public function testOversizedStreamIsRejectedAndCleanedBeforeDigesting(): void
 	{
 		$adapter = new GitHubReleaseAdapter($this->binding());

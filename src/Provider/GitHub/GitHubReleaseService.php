@@ -244,7 +244,7 @@ final class GitHubReleaseService
 			if (self::rateLimit($response)['limited']) {
 				throw new GitHubReleaseReadUnavailable('GitHub rate limited the artifact request.');
 			}
-			self::requireSuccess($response);
+			self::requireSuccess($response, false);
 			$identity = self::fileIdentity($path);
 			if (
 				null === $identity
@@ -736,10 +736,10 @@ final class GitHubReleaseService
 	}
 
 	/** @param array<string, mixed> $response */
-	private static function requireSuccess(array $response): void
+	private static function requireSuccess(array $response, bool $missingIsReadUnavailable = true): void
 	{
 		$status = self::responseCode($response);
-		if (in_array($status, array(401, 403, 404), true)) {
+		if (in_array($status, array(401, 403), true) || ($missingIsReadUnavailable && 404 === $status)) {
 			throw new GitHubReleaseReadUnavailable('GitHub returned an unexpected response.');
 		}
 		if ($status < 200 || $status > 299) {
