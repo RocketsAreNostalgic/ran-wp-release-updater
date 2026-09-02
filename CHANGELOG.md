@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.0-beta.2](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.1...v0.1.0-beta.2) (2026-09-02)
+
+
+### Bug Fixes
+
+* **github:** keep missing asset failures generic ([d2296ca](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/d2296ca950bf3c2fe46771ac52e3c63d3b637b57))
+* **github:** keep stale candidate failures generic ([7b81459](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/7b814596f917df687616ed7403958f85480d3edf))
+* **github:** preserve typed release read failures ([0837229](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/0837229cf435c1643401a0a7561513e541d48180))
+* **github:** preserve typed release read failures ([8058377](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/8058377d48f6d68ff221ee6f8321af7ed26ce3bd))
+
 ## 0.1.0-beta.1 (2026-09-01)
 
 
