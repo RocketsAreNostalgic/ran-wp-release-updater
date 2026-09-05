@@ -224,8 +224,8 @@ PHP;
 		file_put_contents($probe, $prefix . "\n" . $body);
 		$temporary = dirname(__DIR__, 2) . '/.workspaces/p0.3/php-tmp';
 		$command = 'TMPDIR=' . escapeshellarg($temporary) . ' TMP=' . escapeshellarg($temporary)
-			. ' TEMP=' . escapeshellarg($temporary) . ' PHPRC=/dev/null PHP_INI_SCAN_DIR= '
-			. escapeshellarg(PHP_BINARY) . ' -n -d sys_temp_dir=' . escapeshellarg($temporary) . ' ' . escapeshellarg($probe);
+			. ' TEMP=' . escapeshellarg($temporary) . ' '
+			. escapeshellarg(PHP_BINARY) . ' -d sys_temp_dir=' . escapeshellarg($temporary) . ' ' . escapeshellarg($probe);
 		exec($command, $output, $status);
 		self::assertSame(0, $status, implode("\n", $output));
 		return json_decode(implode("\n", $output), true, 512, JSON_THROW_ON_ERROR);
