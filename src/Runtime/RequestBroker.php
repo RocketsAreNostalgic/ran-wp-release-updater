@@ -678,14 +678,17 @@ final class RequestBroker
 		$file = $value['installed_file'];
 		$normalized = is_string( $file ) ? str_replace( '\\', '/', $file ) : '';
 		$isAbsolute = str_starts_with( $normalized, '/' ) || 1 === preg_match( '/\A[A-Za-z]:\//D', $normalized );
+		$isUnc = str_starts_with( $normalized, '//' );
+		$uncParts = $isUnc ? explode( '/', substr( $normalized, 2 ) ) : array();
 		if (
 			! is_string( $file )
 			|| '' === $file
 			|| 4096 < strlen( $file )
 			|| ! $isAbsolute
 			|| 1 === preg_match( '/[\x00-\x1f\x7f]/', $file )
-			|| str_contains( $normalized, '//' )
-			|| 1 === preg_match( '#/(?:\.?\.?)(?:/|$)#', $normalized )
+			|| ( ! $isUnc && str_contains( $normalized, '//' ) )
+			|| ( $isUnc && ( 2 > count( $uncParts ) || in_array( '', $uncParts, true ) ) )
+			|| 1 === preg_match( '#/(?:\.?\.?)(?:/|$)#', $isUnc ? substr( $normalized, 1 ) : $normalized )
 		) {
 			return 'installed_file_invalid';
 		}

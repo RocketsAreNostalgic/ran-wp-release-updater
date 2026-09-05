@@ -21,7 +21,7 @@ final class RequestBrokerTest extends TestCase
 		$this->remove( $this->parent );
 	}
 
-	public function testDeclarationPathsAcceptOnlyPosixOrDriveQualifiedAbsoluteForms(): void
+	public function testDeclarationPathsAcceptPosixDriveQualifiedAndUncAbsoluteForms(): void
 	{
 		$broker = new \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker();
 		$method = new \ReflectionMethod( $broker, 'declarationCode' );
@@ -37,12 +37,12 @@ final class RequestBrokerTest extends TestCase
 			'maximum_artifact_bytes' => 52_428_800,
 		);
 
-		foreach ( array( '/plugins/example/example.php', 'C:/plugins/example/example.php', 'D:\\plugins\\example\\example.php' ) as $path ) {
+		foreach ( array( '/plugins/example/example.php', 'C:/plugins/example/example.php', 'D:\\plugins\\example\\example.php', '//server/share/plugins/example/example.php', '\\\\server\\share\\plugins\\example\\example.php' ) as $path ) {
 			$declaration['installed_file'] = $path;
 			self::assertNull( $method->invoke( $broker, $declaration ), $path );
 		}
 
-		foreach ( array( 'relative/example.php', 'C:relative/example.php', '//server/share/example.php', 'C://plugins/example.php', 'C:/plugins/../example.php', '/plugins//example.php' ) as $path ) {
+		foreach ( array( 'relative/example.php', 'C:relative/example.php', '/plugins/example.php/', 'C:/plugins/example.php/', '//server', '//server/', '///server/share/example.php', '//server//share/example.php', '//server/share//example.php', '//server/share/example.php/', '//server/./example.php', '//server/share/../example.php', "//server/share/plugins/\x00example.php", 'C://plugins/example.php', 'C:/plugins/../example.php', '/plugins//example.php' ) as $path ) {
 			$declaration['installed_file'] = $path;
 			self::assertSame( 'installed_file_invalid', $method->invoke( $broker, $declaration ), $path );
 		}

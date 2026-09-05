@@ -169,7 +169,90 @@ PHP, array( 'version' => $version ) );
 		return array(
 			'missing' => array( 'missing' ),
 			'array' => array( array() ),
+			'unrecognized development suffix' => array( '6.9-beta1-60740-unsafe' ),
+			'overlong' => array( str_repeat( '1', 101 ) ),
 		);
+	}
+
+	public function testWordPressVersionNormalizerAcceptsOnlySupportedCoreAndExistingSemVerForms(): void
+	{
+		require_once dirname( __DIR__, 2 ) . '/src/Runtime/RequestBroker.php';
+		require_once dirname( __DIR__, 2 ) . '/src/Runtime/SelectedRuntimeState.php';
+		foreach ( array(
+			'6.9-beta1-60740' => '6.9.0-beta.1',
+			'6.9-beta1' => '6.9.0-beta.1',
+			'6.9-alpha-60740-src' => '6.9.0-alpha.0',
+			'6.9-RC1-src' => '6.9.0-rc.1',
+			'6.9-rc1' => '6.9.0-rc.1',
+			'6.9.1-rc1-src' => '6.9.1-rc.1',
+			'6.9.3-src' => '6.9.3-src',
+			'6.9.0-beta.1' => '6.9.0-beta.1',
+		) as $input => $expected ) {
+			self::assertSame( $expected, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalizeWordPressVersion( $input ), $input );
+		}
+		self::assertNull( \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalizeWordPressVersion( '6.9-beta1-60740-unsafe' ) );
+		self::assertNull( \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalizeWordPressVersion( str_repeat( '1', 101 ) ) );
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'supportedWordPressDevelopmentVersions' )]
+	public function testScheduledActivationNormalizesSupportedWordPressDevelopmentVersions( string $version ): void
+	{
+		$result = $this->probe( <<<'PHP'
+$GLOBALS['wp_version'] = $data['version'];
+$registrar = require $data['bootstrap'];
+do_action('after_setup_theme');
+echo json_encode(array('diagnostics' => $registrar->diagnostics()['diagnostics'], 'state' => $GLOBALS['ran_wp_release_updater_v1_broker']->diagnostics()['state']));
+PHP, array( 'version' => $version ) );
+
+		self::assertSame( 'active', $result['state'], $version );
+		self::assertSame( array(), $result['diagnostics'], $version );
+	}
+
+	/** @return array<string,array{string}> */
+	public static function supportedWordPressDevelopmentVersions(): array
+	{
+		return array(
+			'beta revision' => array( '6.9-beta1-60740' ),
+			'beta package' => array( '6.9-beta1' ),
+			'alpha source build' => array( '6.9-alpha-60740-src' ),
+			'release candidate source build' => array( '6.9-RC1-src' ),
+			'full SemVer prerelease' => array( '6.9.0-beta.1' ),
+		);
+	}
+
+	public function testScheduledActivationKeepsWordPressReleaseCandidateBelowTheStableFloor(): void
+	{
+		$result = $this->probe( <<<'PHP'
+$GLOBALS['wp_version'] = '6.5-RC1-60740';
+$registrar = require $data['bootstrap'];
+do_action('after_setup_theme');
+echo json_encode(array('diagnostics' => $registrar->diagnostics()['diagnostics'], 'state' => $GLOBALS['ran_wp_release_updater_v1_broker']->diagnostics()['state']));
+PHP );
+
+		self::assertSame( 'inactive', $result['state'] );
+		self::assertSame( array( array( 'code' => 'runtime_selection_inactive' ) ), $result['diagnostics'] );
+	}
+
+	public function testScheduledActivationRegistersATargetOnAWordPressBetaBuild(): void
+	{
+		$result = $this->probe( <<<'PHP'
+$plugins = dirname(__FILE__) . '/plugins';
+mkdir($plugins . '/example', 0700, true);
+define('WP_PLUGIN_DIR', $plugins);
+$file = $plugins . '/example/example.php';
+file_put_contents($file, "<?php\n/*\nPlugin Name: Example\nVersion: 1.0.0\nUpdate URI: https://github.com/owner/example\n*/\n");
+$GLOBALS['wpdb'] = new stdClass();
+$GLOBALS['wp_version'] = '6.9-beta1-60740';
+$registrar = require $data['bootstrap'];
+$handle = $registrar->plugin('github', $file, 'owner/example', '123');
+$queued = $handle->register();
+do_action('after_setup_theme');
+echo json_encode(array('queued' => $queued, 'state' => $GLOBALS['ran_wp_release_updater_v1_broker']->diagnostics()['state'], 'status' => $handle->status()));
+PHP );
+
+		self::assertTrue( $result['queued'] );
+		self::assertSame( 'active', $result['state'] );
+		self::assertSame( 'target_active', $result['status']['code'] );
 	}
 
 	public function testRequestBrokerPublicAbiHasTheFrozenEightMethods(): void

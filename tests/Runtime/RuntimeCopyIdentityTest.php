@@ -142,11 +142,32 @@ PHP,
 		$copy = $this->packageCopy( 'changed-without-manifest' );
 		file_put_contents( $copy . '/src/Runtime/RequestBroker.php', (string) file_get_contents( $copy . '/src/Runtime/RequestBroker.php' ) . "\n// Changed without updating the manifest.\n" );
 
-		$result = $this->probe( '$registrar = require $data["copy"] . "/bootstrap.php"; echo json_encode(array("diagnostics" => $registrar->diagnostics(), "published" => array_key_exists("ran_wp_release_updater_v1_broker", $GLOBALS)));', array( 'copy' => $copy ) );
+		$result = $this->probe( '$registrar = require $data["copy"] . "/bootstrap.php"; echo json_encode(array("diagnostics" => $registrar->diagnostics(), "published" => array_key_exists("ran_wp_release_updater_v1_broker", $GLOBALS), "broker_class" => class_exists("RAN\\WPReleaseUpdater\\V1\\Runtime\\RequestBroker", false), "state_class" => class_exists("RAN\\WPReleaseUpdater\\V1\\Runtime\\SelectedRuntimeState", false)));', array( 'copy' => $copy ) );
 
 		self::assertFalse( $result['published'] );
+		self::assertFalse( $result['broker_class'] );
+		self::assertFalse( $result['state_class'] );
 		self::assertSame( 'conflict', $result['diagnostics']['state'] );
 		self::assertSame( array( 'protocol_conflict_inactive' ), array_column( $result['diagnostics']['diagnostics'], 'code' ) );
+	}
+
+	public function testInvalidFirstCopyCannotDefineSharedRuntimeClassesBeforeAValidLaterCopyBoots(): void
+	{
+		$invalid = $this->packageCopy( 'invalid-first' );
+		$valid = $this->packageCopy( 'valid-later' );
+		file_put_contents( $invalid . '/runtime-copy.json', '{' );
+
+		$result = $this->probe(
+			'$invalid=require $data["invalid"] . "/bootstrap.php"; $afterInvalid=array("broker"=>class_exists("RAN\\WPReleaseUpdater\\V1\\Runtime\\RequestBroker",false),"state"=>class_exists("RAN\\WPReleaseUpdater\\V1\\Runtime\\SelectedRuntimeState",false),"published"=>array_key_exists("ran_wp_release_updater_v1_broker",$GLOBALS),"diagnostics"=>$invalid->diagnostics()); $valid=require $data["valid"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"] ?? null; $activation=is_object($broker) ? $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>2,"wordpress_version"=>"6.8.0")) : null; echo json_encode(array("after_invalid"=>$afterInvalid,"broker"=>is_object($broker),"activation"=>$activation));',
+			array( 'invalid' => $invalid, 'valid' => $valid )
+		);
+
+		self::assertFalse( $result['after_invalid']['broker'] );
+		self::assertFalse( $result['after_invalid']['state'] );
+		self::assertFalse( $result['after_invalid']['published'] );
+		self::assertSame( 'conflict', $result['after_invalid']['diagnostics']['state'] );
+		self::assertTrue( $result['broker'] );
+		self::assertTrue( $result['activation']['loaded'] );
 	}
 
 	#[DataProvider( 'malformedRuntimeCopyProvider' )]
@@ -154,6 +175,16 @@ PHP,
 	{
 		$copy = $this->packageCopy( 'malformed-runtime-copy' );
 		file_put_contents( $copy . '/runtime-copy.json', $manifest );
+
+		$this->assertProvenanceRejected( $copy );
+	}
+
+	public function testSemanticallyInvalidRuntimeVersionIsRejectedBeforeSharedRuntimeClassesLoad(): void
+	{
+		$copy = $this->packageCopy( 'invalid-runtime-version' );
+		$manifest = json_decode( (string) file_get_contents( $copy . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		$manifest['package_version'] = 'not-a-version';
+		file_put_contents( $copy . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );
 
 		$this->assertProvenanceRejected( $copy );
 	}

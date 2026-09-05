@@ -100,14 +100,14 @@ final class InstalledPackageResolverTest extends TestCase
 		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parseHeader( $splitColon, 'plugin' )['code'] );
 	}
 
-	public function testPathLexiconAcceptsPosixAndDriveQualifiedPathsOnly(): void
+	public function testPathLexiconAcceptsPosixDriveQualifiedAndUncPaths(): void
 	{
 		$method = new \ReflectionMethod( InstalledPackageResolver::class, 'validPath' );
 		$resolver = $this->resolver();
-		foreach ( array( '/srv/wordpress/wp-content/plugins/example/main.php', 'C:/WordPress/wp-content/plugins/example/main.php', 'D:\\WordPress\\wp-content\\themes\\example\\style.css' ) as $path ) {
+		foreach ( array( '/srv/wordpress/wp-content/plugins/example/main.php', 'C:/WordPress/wp-content/plugins/example/main.php', 'D:\\WordPress\\wp-content\\themes\\example\\style.css', '//server/share/plugins/example/main.php', '\\\\server\\share\\plugins\\example\\main.php' ) as $path ) {
 			self::assertTrue( $method->invoke( $resolver, $path ), $path );
 		}
-		foreach ( array( 'C:WordPress/wp-content/plugins/example/main.php', '/srv/wordpress/../outside/main.php', 'C:/WordPress/../outside/main.php', '/srv/wordpress//plugins/example/main.php', '\\\\server\\share\\plugins\\example\\main.php', "C:/WordPress/wp-content/plugins/example/\x00main.php", "C:/WordPress/wp-content/plugins/example/\x1fmain.php" ) as $path ) {
+		foreach ( array( 'C:WordPress/wp-content/plugins/example/main.php', '/srv/wordpress/../outside/main.php', 'C:/WordPress/../outside/main.php', '/srv/wordpress//plugins/example/main.php', '/srv/wordpress/main.php/', 'C:/WordPress/main.php/', '//server', '//server/', '///server/share/plugins/example/main.php', '//server//share/plugins/example/main.php', '//server/share//plugins/example/main.php', '//server/share/plugins/example/main.php/', '//server/./plugins/example/main.php', '//server/share/../example/main.php', "//server/share/plugins/\x00main.php", "C:/WordPress/wp-content/plugins/example/\x00main.php", "C:/WordPress/wp-content/plugins/example/\x1fmain.php" ) as $path ) {
 			self::assertFalse( $method->invoke( $resolver, $path ), $path );
 		}
 	}
@@ -139,6 +139,8 @@ final class InstalledPackageResolverTest extends TestCase
 		self::assertSame('installed_header_verified', PackageIdentityValidator::parseHeader($this->pluginHeader() . "\x00", 'plugin')['code']);
 		self::assertSame('installed_header_invalid', PackageIdentityValidator::parseHeader($this->themeHeader('Template: ../parent'), 'theme')['code']);
 		self::assertSame('installed_requirement_incompatible', $resolver->resolve($this->declaration('plugin', $this->file('plugins/requirements/main.php', $this->pluginHeader("\nRequires PHP: 99.0\n"))))['code']);
+		$GLOBALS['wp_version'] = '6.9-beta1-60740';
+		self::assertSame('installed_requirement_incompatible', $resolver->resolve($this->declaration('plugin', $this->file('plugins/requires-newer-wordpress/main.php', $this->pluginHeader("\nRequires at least: 6.10\n"))))['code']);
 		$changed = $this->file('plugins/changed/main.php', $this->pluginHeader());
 		$property = new \ReflectionProperty(InstalledPackageResolver::class, 'afterFirstRead');
 		$property->setValue($resolver, static function (string $file): void { file_put_contents($file, "<?php\n/* Plugin Name: Changed\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n*/\n"); });

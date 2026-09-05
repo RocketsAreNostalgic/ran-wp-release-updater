@@ -9,6 +9,8 @@ namespace RAN\WPReleaseUpdater\V1\Runtime;
  */
 final class SelectedRuntimeState
 {
+	private const MAX_WORDPRESS_VERSION_LENGTH = 100;
+
 	/** @var array<string,true> */
 	private array $operations = array();
 
@@ -69,7 +71,7 @@ final class SelectedRuntimeState
 				array(
 					'php_version' => PHP_VERSION,
 					'runtime_protocol' => 2,
-					'wordpress_version' => $GLOBALS['wp_version'] ?? null,
+					'wordpress_version' => self::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null ),
 				)
 			);
 		} catch ( \Throwable ) {
@@ -92,6 +94,33 @@ final class SelectedRuntimeState
 		if ( $this->validType( $type ) ) {
 			$this->operations[ $type ] = true;
 		}
+	}
+
+	/** @internal Normalizes WordPress core's bounded development-version forms. */
+	public static function normalizeWordPressVersion( mixed $value ): ?string
+	{
+		if ( ! is_string( $value ) || self::MAX_WORDPRESS_VERSION_LENGTH < strlen( $value ) ) {
+			return null;
+		}
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\z/D', $value, $matches ) ) {
+			return $matches[1] . '.' . $matches[2] . '.0';
+		}
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?-src\z/D', $value, $matches ) ) {
+			return $matches[1] . '.' . $matches[2] . '.' . ( '' !== ( $matches[3] ?? '' ) ? $matches[3] : '0' ) . '-src';
+		}
+		if (
+			1 === preg_match(
+				'/\A(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?-(?:(alpha)|(beta|rc)([1-9]\d*))(?:-(?:[1-9]\d*|src)(?:-src)?)?\z/Di',
+				$value,
+				$matches
+			)
+		) {
+			$prerelease = '' !== ( $matches[4] ?? '' )
+				? 'alpha.0'
+				: strtolower( $matches[5] ) . '.' . $matches[6];
+			return $matches[1] . '.' . $matches[2] . '.' . ( '' !== ( $matches[3] ?? '' ) ? $matches[3] : '0' ) . '-' . $prerelease;
+		}
+		return 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?\z/D', $value ) ? $value : null;
 	}
 
 	private function validType( string $type ): bool

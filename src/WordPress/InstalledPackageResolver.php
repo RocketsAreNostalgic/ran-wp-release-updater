@@ -111,10 +111,15 @@ final class InstalledPackageResolver
 	{
 		$path = str_replace('\\', '/', $path);
 		$drive = 1 === preg_match('/\A[A-Za-z]:\//', $path);
+		$unc = str_starts_with($path, '//');
 		if ('' === $path || strlen($path) > 4096 || (!$drive && !str_starts_with($path, '/')) || 1 === preg_match('/[\x00-\x1f\x7f]/', $path)) {
 			return false;
 		}
-		foreach (explode('/', substr($path, $drive ? 3 : 1)) as $part) {
+		$parts = explode('/', substr($path, $drive ? 3 : ($unc ? 2 : 1)));
+		if ($unc && count($parts) < 2) {
+			return false;
+		}
+		foreach ($parts as $part) {
 			if ('' === $part || '.' === $part || '..' === $part) {
 				return false;
 			}
@@ -285,8 +290,9 @@ final class InstalledPackageResolver
 		if ('' !== $headers['RequiresPHP'] && (null === ReleaseVersion::normalizeHeader($headers['RequiresPHP']) || ReleaseVersion::compare(PHP_VERSION, $headers['RequiresPHP']) < 0)) {
 			return true;
 		}
-		$wordpress = is_string($GLOBALS['wp_version'] ?? null) ? $GLOBALS['wp_version'] : '0';
-		return '' !== $headers['RequiresWP'] && (null === ReleaseVersion::normalizeHeader($headers['RequiresWP']) || ReleaseVersion::compare($wordpress, $headers['RequiresWP']) < 0);
+		$wordpress = \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalizeWordPressVersion($GLOBALS['wp_version'] ?? null);
+		$comparison = is_string($wordpress) ? ReleaseVersion::compare($wordpress, $headers['RequiresWP']) : null;
+		return '' !== $headers['RequiresWP'] && (null === ReleaseVersion::normalizeHeader($headers['RequiresWP']) || null === $comparison || $comparison < 0);
 	}
 
 	private function sameStat(array $one, mixed $two): bool

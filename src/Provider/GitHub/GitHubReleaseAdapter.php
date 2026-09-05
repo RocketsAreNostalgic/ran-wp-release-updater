@@ -58,6 +58,10 @@ final class GitHubReleaseAdapter implements ReleaseAdapter
 		if ( ! is_object( $GLOBALS['wpdb'] ?? null ) || ! function_exists( 'add_filter' ) ) {
 			return array( 'native' => null, 'code' => 'target_composition_failed' );
 		}
+		$wordpressVersion = SelectedRuntimeState::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null );
+		if ( ! is_string( $wordpressVersion ) ) {
+			return array( 'native' => null, 'code' => 'target_composition_failed' );
+		}
 		$binding = BindingRecord::create(
 			array(
 				'canonical_repository_locator' => $locator,
@@ -72,7 +76,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter
 				'target_type' => $declaration['target_type'],
 				'theme_template' => $headers['Template'],
 				'update_policy' => $declaration['update_policy'],
-				'wordpress_runtime_version' => is_string( $GLOBALS['wp_version'] ?? null ) ? $GLOBALS['wp_version'] : '6.5.0',
+				'wordpress_runtime_version' => $wordpressVersion,
 			)
 		);
 		$resolver = new GitHubCredentialResolver( $declaration['credential_resolver'] );
