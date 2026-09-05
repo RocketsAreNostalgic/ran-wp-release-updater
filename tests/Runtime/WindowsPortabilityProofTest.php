@@ -46,7 +46,10 @@ final class WindowsPortabilityProofTest extends TestCase
 		} else {
 			self::assertStringStartsWith( '/', $package );
 		}
-		self::assertTrue( $result['activation']['loaded'] );
+		self::assertTrue(
+			$result['activation']['loaded'],
+			json_encode( $result['activation'], JSON_THROW_ON_ERROR )
+		);
 		self::assertSame( 'target_active', $result['plugin']['code'] );
 		self::assertSame( 'target_active', $result['theme']['code'] );
 		self::assertSame( 19, $result['hooks'] );
