@@ -18,8 +18,8 @@ prompts for filesystem credentials.
 
 | Failure code | Applies to | Cleanup and retry rule |
 | --- | --- | --- |
-| `invalid_configuration`, `invalid_release`, `runtime_not_ready`, `runtime_unavailable`, `credential_unavailable`, `repository_access_unavailable`, `release_unavailable`, `package_incompatible`, `operation_failed` | The applicable operation | No owned archive means `not_applicable`; a cleaned allocated archive reports `complete`. A terminal runtime loss is not retried by this source. |
-| `rate_limited` | Any operation | `not_applicable` and an integer `retry_after` of 1–86,400 seconds. The caller schedules any retry. |
+| `invalid_configuration`, `invalid_release`, `runtime_not_ready`, `runtime_unavailable`, `credential_unavailable`, `repository_access_unavailable`, `release_unavailable`, `package_incompatible`, `operation_failed` | The applicable operation | No owned archive means `not_applicable`; a cleaned allocated archive reports `complete`, and an undischargeable owned archive reports `failed`. A terminal runtime loss is not retried by this source. |
+| `rate_limited` | Any operation | Pre-allocation limits report `not_applicable`; a post-allocation failure reports `complete` after cleanup or `failed` when ownership cannot be discharged. The bounded `retry_after` is an integer from 1–86,400 seconds; the caller schedules any retry. |
 | `release_changed` | `acquire()` | The fresh proof did not match the stored fingerprint. Its owned archive is synchronously removed and reports `complete`, or `failed` when cleanup cannot be discharged. |
 | `cleanup_failed` | Inspection or acquisition cleanup | `failed`. It means cleanup was the only failure; a primary bounded failure code is otherwise retained. |
 | `releases_not_modified` | `list()` | A successful conditional `304` result with `not_applicable`; it creates no candidate work. |

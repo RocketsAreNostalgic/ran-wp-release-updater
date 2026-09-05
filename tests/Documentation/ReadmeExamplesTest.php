@@ -90,8 +90,7 @@ final class ReadmeExamplesTest extends TestCase
 		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
 			foreach ( array( 'happy', 'liveness', 'discard' ) as $scenario ) {
-				$command = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root )
-					. ' ' . escapeshellarg( $script ) . ' ' . escapeshellarg( $type ) . ' ' . escapeshellarg( $scenario );
+				$command = $this->childPhpCommand( $script, array( $type, $scenario ) );
 				$output = array();
 				exec( $command, $output, $status );
 				self::assertSame( 0, $status, implode( "\n", $output ) );
@@ -119,7 +118,7 @@ final class ReadmeExamplesTest extends TestCase
 	{
 		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
 		$fence = '$source = $registrar->releases(provider: "github", packageType: "plugin", repository: "acme/consumer", repositoryId: "99"); add_action("init", static function (): void {});';
-		$command = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root ) . ' ' . escapeshellarg( $script ) . ' plugin fence-list ' . escapeshellarg( base64_encode( $fence ) );
+		$command = $this->childPhpCommand( $script, array( 'plugin', 'fence-list', base64_encode( $fence ) ) );
 		exec( $command, $output, $status );
 		self::assertNotSame( 0, $status, 'A release fence without an operation must fail its proof.' );
 	}
@@ -142,12 +141,27 @@ final class ReadmeExamplesTest extends TestCase
 	private function assertReleaseSourceFence( string $type, string $scenario, string $fence ): void
 	{
 		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
-		$command = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root )
-			. ' ' . escapeshellarg( $script ) . ' ' . escapeshellarg( $type ) . ' ' . escapeshellarg( $scenario ) . ' ' . escapeshellarg( base64_encode( $fence ) );
+		$command = $this->childPhpCommand( $script, array( $type, $scenario, base64_encode( $fence ) ) );
 		exec( $command, $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		$result = json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
 		self::assertSame( $scenario, $result['scenario'] );
+	}
+
+	/** @param list<string> $arguments */
+	private function childPhpCommand( string $script, array $arguments ): string
+	{
+		$command = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root );
+		$extensionDirectory = ini_get( 'extension_dir' );
+		$zipLibrary = is_string( $extensionDirectory ) ? $extensionDirectory . DIRECTORY_SEPARATOR . ( DIRECTORY_SEPARATOR === '\\' ? 'php_zip.dll' : 'zip.so' ) : '';
+		if ( extension_loaded( 'zip' ) && is_file( $zipLibrary ) ) {
+			$command .= ' -d extension=' . escapeshellarg( $zipLibrary );
+		}
+		$command .= ' ' . escapeshellarg( $script );
+		foreach ( $arguments as $argument ) {
+			$command .= ' ' . escapeshellarg( $argument );
+		}
+		return $command;
 	}
 
 	private function assertPlugin( string $example, bool $private ): void
