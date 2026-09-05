@@ -27,7 +27,7 @@ PHP );
 		self::assertSame( array(), $result['code'] );
 	}
 
-	public function testSeparateCleanProtocolTwoRequestSelectsOnlyItsOwnBroker(): void
+	public function testSeparateCleanProtocolThreeRequestSelectsOnlyItsOwnBroker(): void
 	{
 		$result = $this->probe( <<<'PHP'
 $registrar = require $data['bootstrap'];
@@ -36,7 +36,7 @@ $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
 echo json_encode(array('protocol' => $broker->protocolVersion(), 'state' => $registrar->diagnostics()['state'], 'candidates' => $broker->diagnostics()['candidate_count'], 'legacy' => isset($GLOBALS['ran_wp_github_release_updater_v1_broker'])));
 PHP );
 
-		self::assertSame( 2, $result['protocol'] );
+		self::assertSame( 3, $result['protocol'] );
 		self::assertSame( 'active', $result['state'] );
 		self::assertSame( 1, $result['candidates'] );
 		self::assertFalse( $result['legacy'] );
@@ -255,7 +255,7 @@ PHP );
 		self::assertSame( 'target_active', $result['status']['code'] );
 	}
 
-	public function testRequestBrokerPublicAbiHasTheFrozenEightMethods(): void
+	public function testRequestBrokerPublicAbiHasTheProtocolThreeMethods(): void
 	{
 		$result = $this->probe( <<<'PHP'
 require_once dirname($data['bootstrap']) . '/src/Runtime/RequestBroker.php';
@@ -265,7 +265,7 @@ sort($methods, SORT_STRING);
 echo json_encode($methods);
 PHP );
 
-		self::assertSame( array( 'activate', 'diagnostics', 'protocolVersion', 'refreshTarget', 'registerCandidate', 'registerTarget', 'targetDiagnostics', 'targetStatus' ), $result );
+		self::assertSame( array( 'activate', 'diagnostics', 'protocolVersion', 'refreshTarget', 'registerCandidate', 'registerTarget', 'releaseSource', 'targetDiagnostics', 'targetStatus' ), $result );
 	}
 
 	public function testBootstrapStateStaysWithTheFirstProtocolCellWhileTheSelectedRuntimeComesFromTheWinningCopy(): void
@@ -298,7 +298,7 @@ echo json_encode(array('unchanged' => $existing === $GLOBALS['ran_wp_release_upd
 PHP );
 
 		self::assertTrue( $result['unchanged'] );
-		self::assertSame( 2, $result['protocol'] );
+		self::assertSame( 3, $result['protocol'] );
 		self::assertSame( 'conflict', $result['state'] );
 		self::assertSame( 'protocol_conflict_inactive', $result['code'] );
 		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['diagnostics'] );
@@ -315,10 +315,11 @@ file_put_contents($foreignRoot . '/src/Runtime/RequestBroker.php', <<<'FOREIGN'
 namespace RAN\WPReleaseUpdater\V1\Runtime;
 final class RequestBroker {
 	private function called(string $method): void { $GLOBALS['p02_foreign_calls'][$method] = ($GLOBALS['p02_foreign_calls'][$method] ?? 0) + 1; }
-	public function protocolVersion(): int { $this->called(__FUNCTION__); return 2; }
+	public function protocolVersion(): int { $this->called(__FUNCTION__); return 3; }
 	public function registerCandidate(string $copyFile): bool { $this->called(__FUNCTION__); return true; }
 	public function activate(array $environment): array { $this->called(__FUNCTION__); return array(); }
 	public function registerTarget(array $declaration): array { $this->called(__FUNCTION__); return array(); }
+	public function releaseSource(array $declaration): array { $this->called(__FUNCTION__); return array(); }
 	public function targetStatus(int $id): array { $this->called(__FUNCTION__); return array(); }
 	public function targetDiagnostics(int $id): array { $this->called(__FUNCTION__); return array(); }
 	public function refreshTarget(int $id): bool { $this->called(__FUNCTION__); return true; }
@@ -432,7 +433,7 @@ PHP );
 		foreach ( $files as $file ) {
 			$payload .= $file . "\0" . hash_file( 'sha256', $root . '/' . $file ) . "\n";
 		}
-		file_put_contents( $root . '/runtime-copy.json', json_encode( array( 'package_revision' => hash( 'sha256', $payload ), 'package_version' => $version, 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 2, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
+		file_put_contents( $root . '/runtime-copy.json', json_encode( array( 'package_revision' => hash( 'sha256', $payload ), 'package_version' => $version, 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 3, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
 		return $root;
 	}
 

@@ -29,8 +29,6 @@ $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\ProspectiveReleaseArtifact' => 'src/Provider/GitHub/ProspectiveReleaseArtifact.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseService' => 'src/Provider/GitHub/GitHubReleaseService.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseAdapter' => 'src/Provider/GitHub/GitHubReleaseAdapter.php',
-	'RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseFailure' => 'src/Runtime/ReleaseFailure.php',
-	'RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseSource' => 'src/Runtime/ReleaseSource.php',
 );
 
 foreach ( $ran_wp_release_updater_runtime_files as $ran_wp_release_updater_runtime_class => $ran_wp_release_updater_runtime_relative ) {
@@ -75,15 +73,23 @@ $ran_wp_release_updater_broker_origin = static function( mixed $broker, mixed $p
 
 /* The sealed catalog is deliberately local to this selected runtime. */
 $ran_wp_release_updater_provider_catalog = array(
-	'github' => array(
-		'native' => static function( array $d, array $resolved, array $headers, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
-			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::composeFromDeclaration( $d, $resolved, $headers, $identity, $networkId, $selectedRuntimeState );
-		},
-		'release' => static function( array $d, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
-			$service = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::fromReleaseDeclaration( $d, $state );
-			return new \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource( $service, $state );
-		},
-	),
+	'github' => static function(
+		array $d,
+		array $resolved,
+		array $headers,
+		string $identity,
+		int $networkId,
+		mixed $selectedRuntimeState
+	): array {
+		return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::composeFromDeclaration(
+			$d,
+			$resolved,
+			$headers,
+			$identity,
+			$networkId,
+			$selectedRuntimeState,
+		);
+	},
 );
 
 return new class(
@@ -97,7 +103,7 @@ return new class(
 	private array $targets = array();
 	private ?int $networkId;
 
-	/** @param array<string,array{native:Closure,release:Closure}> $providerCatalog */
+	/** @param array<string,Closure> $providerCatalog */
 	public function __construct( private mixed $broker, private mixed $brokerProvenance, private mixed $selectedRuntimeState, private array $providerCatalog, private Closure $brokerOrigin )
 	{
 		$this->networkId = $this->networkId();
@@ -111,7 +117,7 @@ return new class(
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 			|| ! is_callable( array( $this->broker, 'protocolVersion' ) )
 			|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-			|| 3 !== $this->broker->protocolVersion()
+			|| 2 !== $this->broker->protocolVersion()
 			|| isset( $GLOBALS['ran_wp_github_release_updater_v1_broker'] )
 			|| function_exists( 'ran_wp_github_release_updater_v1_has_registered_target' )
 		) {
@@ -170,7 +176,7 @@ return new class(
 			}
 			return $this->failure( $id, 'target_declaration_conflict' );
 		}
-		$provider = $this->providerCatalog[ $d['provider_code'] ?? '' ]['native'] ?? null;
+		$provider = $this->providerCatalog[ $d['provider_code'] ?? '' ] ?? null;
 		if ( ! $provider instanceof Closure ) {
 			return $this->failure( $id, 'unsupported_provider' );
 		}
@@ -201,7 +207,7 @@ return new class(
 					|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 					|| ! is_callable( array( $this->broker, 'protocolVersion' ) )
 					|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-					|| 3 !== $this->broker->protocolVersion()
+					|| 2 !== $this->broker->protocolVersion()
 					|| isset( $GLOBALS['ran_wp_github_release_updater_v1_broker'] )
 					|| function_exists( 'ran_wp_github_release_updater_v1_has_registered_target' )
 				) {
@@ -260,35 +266,6 @@ return new class(
 		$this->targets[ $key ] = array( 'declaration' => $d, 'handle' => $handle );
 		return $this->accepted( $id, 'target_active', $key, $handle );
 	}
-	/** @param array<string,mixed> $declaration @return array{accepted:bool,code:string,source_handle:object|null} */
-	public function releaseSource( array $declaration ): array
-	{
-		if ( ! $this->live() ) return $this->releaseFailure( 'runtime_unavailable' );
-		$state = $this->selectedRuntimeState;
-		if ( ! $state instanceof \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState ) return $this->releaseFailure( 'runtime_unavailable' );
-		$readiness = $state->releaseReadinessCode();
-		if ( null !== $readiness ) return $this->releaseFailure( $readiness );
-		if (
-			( defined( 'FS_METHOD' ) && 'direct' !== FS_METHOD )
-			|| ( ! defined( 'FS_METHOD' ) && ! ( ( $GLOBALS['wp_filesystem'] ?? null ) instanceof \WP_Filesystem_Direct ) )
-		) {
-			return $this->releaseFailure( 'filesystem_unsupported' );
-		}
-		$compose = $this->providerCatalog[ $declaration['provider_code'] ?? '' ]['release'] ?? null;
-		if ( ! $compose instanceof Closure ) return $this->releaseFailure( 'provider_unavailable' );
-		try {
-			$source = $compose( $declaration, $state );
-		} catch ( \InvalidArgumentException ) {
-			return $this->releaseFailure( 'invalid_configuration' );
-		} catch ( Throwable ) {
-			return $this->releaseFailure( 'runtime_unavailable' );
-		}
-		return $source instanceof \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource
-			? array( 'accepted' => true, 'code' => 'release_source_ready', 'source_handle' => $source )
-			: $this->releaseFailure( 'runtime_unavailable' );
-	}
-	/** @return array{accepted:false,code:string,source_handle:null} */
-	private function releaseFailure( string $code ): array { return array( 'accepted' => false, 'code' => $code, 'source_handle' => null ); }
 	private function networkId(): ?int
 	{
 		try {

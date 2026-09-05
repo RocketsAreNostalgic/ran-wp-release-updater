@@ -28,13 +28,13 @@ final class GitHubCredentialResolver
 		try {
 			$credential = ( $this->source )();
 		} catch ( \Throwable $exception ) {
-			throw new GitHubReleaseReadUnavailable( 'The GitHub credential is unavailable.', 0, $exception );
+			throw new GitHubReleaseReadUnavailable( 'The GitHub credential is unavailable.', 1001, $exception );
 		}
 		if ( null === $credential ) {
 			return null;
 		}
 		if ( ! is_string( $credential ) || 1 > strlen( $credential ) || 512 < strlen( $credential ) || 1 !== preg_match( '/\A[\x21-\x7e]+\z/D', $credential ) ) {
-			throw new GitHubReleaseReadUnavailable( 'The GitHub credential is invalid.' );
+			throw new GitHubReleaseReadUnavailable( 'The GitHub credential is invalid.', 1001 );
 		}
 		return $credential;
 	}

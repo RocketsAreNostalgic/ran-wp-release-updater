@@ -41,20 +41,24 @@ final class ReadmeExamplesTest extends TestCase
 	public function testEveryReadmePhpFenceIsSyntaxValidAndItsRegistrationContractExecutes(): void
 	{
 		$examples = $this->phpExamples();
-		self::assertCount( 6, $examples, 'Update this proof when adding, removing, or materially changing a README PHP example.' );
+		self::assertCount( 8, $examples, 'Update this proof when adding, removing, or materially changing a README PHP example.' );
 		self::assertStringContainsString( 'Plugin Name: Example Plugin', $examples[0] );
 		self::assertStringContainsString( '$registrar->plugin(', $examples[1] );
 		self::assertStringContainsString( '$releaseUpdater->diagnostics()', $examples[2] );
 		self::assertStringContainsString( 'EXAMPLE_PLUGIN_GITHUB_TOKEN', $examples[3] );
-		self::assertStringContainsString( '$registrar->theme(', $examples[4] );
-		self::assertStringContainsString( 'get_theme_root( $stylesheet )', $examples[5] );
+		self::assertStringContainsString( '$registrar->theme(', $examples[6] );
+		self::assertStringContainsString( 'get_theme_root( $stylesheet )', $examples[7] );
 
 		$this->assertScript( 'header.php', $examples[0], 'echo json_encode(["header" => true]);', array( 'header' => true ) );
 		$this->assertPlugin( $examples[1], false );
 		$this->assertStatusMethods( $examples[1], $examples[2] );
 		$this->assertPlugin( $examples[3], true );
-		$this->assertTheme( $examples[4] );
-		$this->assertManagedTheme( $examples[5] );
+		$this->assertTheme( $examples[6] );
+		$this->assertManagedTheme( $examples[7] );
+		self::assertStringContainsString( '$registrar->releases(', $examples[4] );
+		self::assertStringContainsString( '$registrar->releases(', $examples[5] );
+		$this->assertReleaseSourceFence( 'plugin', 'fence-list', $examples[4] );
+		$this->assertReleaseSourceFence( 'theme', 'fence-inspect', $examples[5] );
 	}
 
 	public function testPublicGuidesStayForwardLookingAndLinkTheProviderArchitecture(): void
@@ -81,13 +85,69 @@ final class ReadmeExamplesTest extends TestCase
 		self::assertStringContainsString( '52,428,800-byte', $readme );
 	}
 
+	public function testReleaseSourceExamplesExecuteThroughThePublicBootstrap(): void
+	{
+		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
+		foreach ( array( 'plugin', 'theme' ) as $type ) {
+			foreach ( array( 'happy', 'liveness', 'discard' ) as $scenario ) {
+				$command = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root )
+					. ' ' . escapeshellarg( $script ) . ' ' . escapeshellarg( $type ) . ' ' . escapeshellarg( $scenario );
+				$output = array();
+				exec( $command, $output, $status );
+				self::assertSame( 0, $status, implode( "\n", $output ) );
+				$result = json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
+				self::assertSame( $type, $result['type'] );
+				self::assertSame( $scenario, $result['scenario'] );
+				self::assertSame( 'runtime_not_ready', $result['before'] );
+				self::assertSame( 3, $result['credential_operations'] );
+				self::assertSame( array( 'requests' => 1, 'zips' => 0 ), $result['http']['list'] );
+				self::assertSame( array( 'requests' => 6, 'zips' => 1 ), $result['http']['inspect'] );
+				self::assertSame( array( 'requests' => 6, 'zips' => 1 ), $result['http']['acquire'] );
+			}
+		}
+	}
+
+	public function testReleaseManagementAcquisitionFenceExecutesAgainstThePublicSource(): void
+	{
+		$fences = $this->phpFences( dirname( __DIR__, 2 ) . '/docs/release-management.md' );
+		self::assertCount( 1, $fences );
+		self::assertStringContainsString( '$source->acquire(', $fences[0] );
+		$this->assertReleaseSourceFence( 'plugin', 'fence-acquire', $fences[0] );
+	}
+
+	public function testReleaseFenceCannotPassWhenItsCallbackDoesNoOperation(): void
+	{
+		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
+		$fence = '$source = $registrar->releases(provider: "github", packageType: "plugin", repository: "acme/consumer", repositoryId: "99"); add_action("init", static function (): void {});';
+		$command = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root ) . ' ' . escapeshellarg( $script ) . ' plugin fence-list ' . escapeshellarg( base64_encode( $fence ) );
+		exec( $command, $output, $status );
+		self::assertNotSame( 0, $status, 'A release fence without an operation must fail its proof.' );
+	}
+
 	/** @return list<string> */
 	private function phpExamples(): array
 	{
-		$readme = file_get_contents( dirname( __DIR__, 2 ) . '/README.md' );
-		self::assertIsString( $readme );
-		preg_match_all( '/```php\\n(.*?)\\n```/s', $readme, $matches );
+		return $this->phpFences( dirname( __DIR__, 2 ) . '/README.md' );
+	}
+
+	/** @return list<string> */
+	private function phpFences( string $path ): array
+	{
+		$contents = file_get_contents( $path );
+		self::assertIsString( $contents );
+		preg_match_all( '/```php\\n(.*?)\\n```/s', $contents, $matches );
 		return $matches[1];
+	}
+
+	private function assertReleaseSourceFence( string $type, string $scenario, string $fence ): void
+	{
+		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
+		$command = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root )
+			. ' ' . escapeshellarg( $script ) . ' ' . escapeshellarg( $type ) . ' ' . escapeshellarg( $scenario ) . ' ' . escapeshellarg( base64_encode( $fence ) );
+		exec( $command, $output, $status );
+		self::assertSame( 0, $status, implode( "\n", $output ) );
+		$result = json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
+		self::assertSame( $scenario, $result['scenario'] );
 	}
 
 	private function assertPlugin( string $example, bool $private ): void

@@ -89,7 +89,7 @@ $handle = 'plugin' === $data['type']
 	: $registrar->theme('github', $data['installed'], 'acme/example', '123456789', 'stable', 'manual', $resolver);
 $handle->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 2, 'wordpress_version' => '6.8.0'));
+$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0'));
 $handoff = (new ReflectionProperty($broker, 'handoff'))->getValue($broker);
 $targets = (new ReflectionProperty($handoff, 'targets'))->getValue($handoff);
 $conciseHandle = array_values($targets)[0]['handle'];
@@ -263,7 +263,7 @@ PHP;
 		foreach ($files as $file) $payload .= $file . "\0" . hash_file('sha256', $copy . '/' . $file) . "\n";
 		file_put_contents($copy . '/runtime-copy.json', json_encode(array(
 			'package_revision' => hash('sha256', $payload), 'package_version' => '0.1.0-beta.3', 'php_floor' => '8.2.0',
-			'runtime_file' => 'runtime.php', 'runtime_protocol' => 2, 'wordpress_floor' => '6.5.0',
+			'runtime_file' => 'runtime.php', 'runtime_protocol' => 3, 'wordpress_floor' => '6.5.0',
 		), JSON_THROW_ON_ERROR));
 		return $copy;
 	}

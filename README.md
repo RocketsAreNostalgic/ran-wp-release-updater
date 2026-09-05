@@ -229,6 +229,47 @@ supported consumer API. GitHub is its only built-in provider today. See
 [Provider architecture](docs/provider-architecture.md) for the maintainer-facing
 composition boundary and extension rules.
 
+## Read releases without registering an update target
+
+Create a request-local source during early plugin or theme loading, then run
+operations after the normal early WordPress lifecycle. It adds no native update
+binding and never installs an archive.
+
+```php
+$source = $registrar->releases(
+ provider: 'github', packageType: 'plugin', repository: 'acme/example-plugin',
+ repositoryId: '123456789'
+);
+add_action( 'init', static function () use ( $source ): void {
+ $listing = $source->list();
+ if ( $listing['ok'] ) { /* use release metadata candidates */ }
+} );
+```
+
+```php
+$source = $registrar->releases(
+ provider: 'github', packageType: 'theme', repository: 'acme/example-theme',
+ repositoryId: '987654321'
+);
+add_action( 'init', static function () use ( $source ): void {
+ $inspection = $source->inspect( releaseId: '42', expectedTag: 'v1.2.3' );
+ if ( $inspection['ok'] ) { /* retain the opaque v2 fingerprint */ }
+} );
+```
+
+Results always contain `ok`, `code`, `value`, `retry_after`, and
+`cleanup_status`; failures have a null value. Store an inspection fingerprint
+unchanged and pass it to `acquire()` for a fresh proof. Library credentials and
+source caching are request-local; an application may retain selected facts or
+conditional metadata within its own scoped storage. The same positive
+`maximumArtifactBytes` limit applies.
+An acquired artifact allows only scoped `inspect()` and `discard()`; copy inside
+the reader, then discard it. Guard failures are `RuntimeException` codes 1001,
+1002, and 1003 for unavailable, runtime-unavailable, and busy use.
+
+See [release-source operations](docs/release-management.md) for conditional
+listing, retries, acquisition, and consumer cleanup.
+
 ## Publish a compatible GitHub Release
 
 Each release consumed by the updater must satisfy all of the following.

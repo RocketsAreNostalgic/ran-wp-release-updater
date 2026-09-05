@@ -46,7 +46,7 @@ $ran_wp_release_updater_package_origin = static function( string $root, ?string 
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['package_version'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['php_floor'] )
 			|| 'runtime.php' !== $copy['runtime_file']
-			|| 3 !== $copy['runtime_protocol']
+			|| 2 !== $copy['runtime_protocol']
 			|| ! is_string( $copy['wordpress_floor'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['wordpress_floor'] )
 		) {
@@ -213,15 +213,14 @@ $ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_br
 	&& is_callable( array( $ran_wp_release_updater_broker, 'protocolVersion' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'registerCandidate' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'activate' ) )
-		&& is_callable( array( $ran_wp_release_updater_broker, 'registerTarget' ) )
-		&& is_callable( array( $ran_wp_release_updater_broker, 'releaseSource' ) )
+	&& is_callable( array( $ran_wp_release_updater_broker, 'registerTarget' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'targetStatus' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'targetDiagnostics' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'refreshTarget' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'diagnostics' ) );
 if ( $ran_wp_release_updater_broker_compatible ) {
 	try {
-		$ran_wp_release_updater_broker_compatible = 3 === $ran_wp_release_updater_broker->protocolVersion();
+		$ran_wp_release_updater_broker_compatible = 2 === $ran_wp_release_updater_broker->protocolVersion();
 	} catch ( Throwable ) {
 		$ran_wp_release_updater_broker_compatible = false;
 	}
@@ -240,7 +239,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 
 		public function protocolVersion(): int
 		{
-			return 3;
+			return 2;
 		}
 
 		public function registerCandidate( string $copyFile ): bool
@@ -265,7 +264,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		public function diagnostics(): array
 		{
 			return array(
-				'protocol_version' => 3,
+				'protocol_version' => 2,
 				'state' => 'conflict',
 				'activation_attempted' => false,
 				'candidate_count' => 0,
@@ -284,12 +283,6 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 				'submission_id' => 0,
 				'code' => 'protocol_conflict_inactive',
 			);
-		}
-
-		public function releaseSource( array $declaration ): array
-		{
-			unset( $declaration );
-			return array( 'accepted' => false, 'code' => 'runtime_unavailable', 'source_handle' => null );
 		}
 
 		/** @return array<string,mixed> */
@@ -346,303 +339,6 @@ return new class( $ran_wp_release_updater_broker ) {
 	public function theme( string $provider, string $stylesheetFile, string $repository, string $repositoryId, string $channel = 'stable', string $updatePolicy = 'manual', ?callable $credentials = null, mixed $maximumArtifactBytes = 52428800 ): object
 	{
 		return $this->target( 'theme', $stylesheetFile, $provider, $repository, $repositoryId, $channel, $updatePolicy, $credentials, $maximumArtifactBytes );
-	}
-
-	public function releases( string $provider, string $packageType, string $repository, string $repositoryId, string $channel = 'stable', ?callable $credentials = null, mixed $maximumArtifactBytes = 52428800 ): object
-	{
-		$declaration = array(
-			'provider_code' => $provider,
-			'target_type' => $packageType,
-			'repository_locator' => $repository,
-			'repository_identity' => $repositoryId,
-			'channel' => $channel,
-			'credential_resolver' => $credentials,
-			'maximum_artifact_bytes' => $maximumArtifactBytes,
-		);
-		return new class( $this->broker, $declaration ) {
-			private ?object $selected = null;
-			private bool $terminal = false;
-
-			public function __construct( private object $broker, private array $declaration )
-			{
-			}
-
-			public function list( array $conditional = array() ): array
-			{
-				if ( $this->terminalNow() ) return $this->failure( 'runtime_unavailable' );
-				if ( ! $this->validConditional( $conditional ) ) return $this->failure( 'invalid_configuration' );
-				return $this->call( 'list', array( $conditional ) );
-			}
-
-			public function inspect( string $releaseId, string $expectedTag ): array
-			{
-				if ( $this->terminalNow() ) return $this->failure( 'runtime_unavailable' );
-				if ( ! $this->opaque( $releaseId, 191 ) || ! $this->opaque( $expectedTag, 191 ) ) return $this->failure( 'invalid_release' );
-				return $this->call( 'inspect', array( $releaseId, $expectedTag ) );
-			}
-
-			public function acquire( string $releaseId, string $expectedTag, string $expectedFingerprint ): array
-			{
-				if ( $this->terminalNow() ) return $this->failure( 'runtime_unavailable' );
-				if ( ! $this->opaque( $releaseId, 191 ) || ! $this->opaque( $expectedTag, 191 ) || 1 !== preg_match( '/\\Av2:[a-f0-9]{64}\\z/D', $expectedFingerprint ) ) return $this->failure( 'invalid_release' );
-				return $this->call( 'acquire', array( $releaseId, $expectedTag, $expectedFingerprint ) );
-			}
-
-			private function call( string $method, array $arguments ): array
-			{
-				if ( ! is_object( $this->selected ) ) {
-					try {
-						$resolved = $this->broker->releaseSource( $this->declaration );
-					} catch ( Throwable ) {
-						$this->terminal = true;
-						return $this->failure( 'runtime_unavailable' );
-					}
-					if ( ! $this->validResolution( $resolved ) ) {
-						$this->terminal = true;
-						return $this->failure( 'runtime_unavailable' );
-					}
-					if ( ! $resolved['accepted'] ) {
-						if ( 'runtime_unavailable' === $resolved['code'] ) $this->terminal = true;
-						return $this->failure( $resolved['code'] );
-					}
-					$this->selected = $resolved['source_handle'];
-				}
-				try {
-					$result = $this->selected->{$method}( ...$arguments );
-				} catch ( Throwable ) {
-					$this->terminal = true;
-					return $this->failure( 'runtime_unavailable' );
-				}
-				try {
-					$valid = $this->validResult( $method, $result ) && ! $this->terminalNow();
-				} catch ( Throwable ) {
-					$valid = false;
-				}
-				if ( ! $valid ) {
-					$this->terminal = true;
-					return $this->failure( 'runtime_unavailable', $this->discardMalformedArtifact( $method, $result ) );
-				}
-				if ( 'runtime_unavailable' === $result['code'] ) $this->terminal = true;
-				return $result;
-			}
-
-			private function validResolution( mixed $value ): bool
-			{
-				if ( ! is_array( $value ) || array_keys( $value ) !== array( 'accepted', 'code', 'source_handle' ) || ! is_bool( $value['accepted'] ) || ! is_string( $value['code'] ) ) return false;
-				if ( $value['accepted'] ) return 'release_source_ready' === $value['code'] && is_object( $value['source_handle'] );
-				return null === $value['source_handle'] && in_array( $value['code'], array( 'invalid_configuration', 'runtime_not_ready', 'runtime_unavailable', 'provider_unavailable', 'filesystem_unsupported' ), true );
-			}
-
-			private function terminalNow(): bool
-			{
-				if ( $this->terminal ) return true;
-				try {
-					$diagnostics = $this->broker->diagnostics();
-					$this->terminal = ! is_array( $diagnostics ) || in_array( $diagnostics['state'] ?? null, array( 'inactive', 'conflict' ), true );
-				} catch ( Throwable ) {
-					$this->terminal = true;
-				}
-				return $this->terminal;
-			}
-
-			private function validResult( string $operation, mixed $result ): bool
-			{
-				if ( ! $this->keys( $result, array( 'ok', 'code', 'value', 'retry_after', 'cleanup_status' ) )
-					|| ! is_bool( $result['ok'] ) || ! is_string( $result['code'] ) ) {
-					return false;
-				}
-				$cleanup = $result['cleanup_status'];
-				if ( $result['ok'] ) {
-					if ( null !== $result['retry_after'] ) {
-						return false;
-					}
-					return match ( $operation ) {
-						'list' => 'not_applicable' === $cleanup && $this->validListing( $result['value'] )
-							&& $result['code'] === ( $result['value']['not_modified'] ? 'releases_not_modified' : 'releases_listed' ),
-						'inspect' => 'release_inspected' === $result['code'] && 'complete' === $cleanup && $this->validInspection( $result['value'] ),
-						'acquire' => 'release_acquired' === $result['code'] && 'retained' === $cleanup
-							&& $this->keys( $result['value'], array( 'inspection', 'artifact' ) )
-							&& $this->validInspection( $result['value']['inspection'] ) && $this->ownedArtifact( $result['value']['artifact'] ),
-						default => false,
-					};
-				}
-				$codes = array( 'invalid_configuration', 'invalid_release', 'runtime_not_ready', 'runtime_unavailable',
-					'provider_unavailable', 'filesystem_unsupported', 'credential_unavailable', 'repository_access_unavailable',
-					'rate_limited', 'release_unavailable', 'package_incompatible', 'release_changed', 'operation_failed', 'cleanup_failed' );
-				if ( null !== $result['value'] || ! in_array( $result['code'], $codes, true )
-					|| ! in_array( $cleanup, array( 'not_applicable', 'complete', 'failed' ), true )
-					|| ( 'list' === $operation && ( 'not_applicable' !== $cleanup || in_array( $result['code'], array( 'invalid_release', 'package_incompatible', 'release_changed', 'cleanup_failed' ), true ) ) )
-					|| ( 'release_changed' === $result['code'] && ( 'acquire' !== $operation || 'not_applicable' === $cleanup ) )
-					|| ( 'cleanup_failed' === $result['code'] && 'failed' !== $cleanup )
-					|| ( in_array( $result['code'], array( 'invalid_configuration', 'invalid_release', 'runtime_not_ready', 'provider_unavailable', 'filesystem_unsupported', 'credential_unavailable' ), true ) && 'not_applicable' !== $cleanup ) ) {
-					return false;
-				}
-				return 'rate_limited' === $result['code']
-					? is_int( $result['retry_after'] ) && 1 <= $result['retry_after'] && 86400 >= $result['retry_after']
-					: null === $result['retry_after'];
-			}
-
-			private function validListing( mixed $value ): bool
-			{
-				if ( ! $this->keys( $value, array( 'candidates', 'conditional', 'not_modified', 'rate_limit', 'search_exhausted' ) )
-					|| ! is_array( $value['candidates'] ) || ! array_is_list( $value['candidates'] ) || count( $value['candidates'] ) > 8
-					|| ! is_bool( $value['not_modified'] ) || ! is_bool( $value['search_exhausted'] )
-					|| ( $value['not_modified'] && array() !== $value['candidates'] )
-					|| ! $this->keys( $value['conditional'], array( 'etag', 'last_modified' ) )
-					|| ! $this->keys( $value['rate_limit'], array( 'limited', 'remaining', 'reset_at', 'retry_after' ) ) ) {
-					return false;
-				}
-				foreach ( array( 'etag' => 512, 'last_modified' => 128 ) as $key => $limit ) {
-					$item = $value['conditional'][ $key ];
-					if ( null !== $item && ( ! is_string( $item ) || strlen( $item ) > $limit || 1 !== preg_match( '/\A[\x20-\x7E]*\z/D', $item ) ) ) {
-						return false;
-					}
-				}
-				$rate = $value['rate_limit'];
-				if ( false !== $rate['limited'] || 0 !== $rate['retry_after'] ) {
-					return false;
-				}
-				foreach ( array( 'remaining', 'reset_at' ) as $key ) {
-					if ( null !== $rate[ $key ] && ( ! is_int( $rate[ $key ] ) || 0 > $rate[ $key ] ) ) {
-						return false;
-					}
-				}
-				foreach ( $value['candidates'] as $candidate ) {
-					if ( ! $this->keys( $candidate, array( 'details_url', 'expected_asset_names', 'prerelease', 'publication_immutable', 'published_at', 'release_identity', 'tag', 'version' ) )
-						|| ! $this->publicUrl( $candidate['details_url'] ) || ! is_array( $candidate['expected_asset_names'] )
-						|| ! array_is_list( $candidate['expected_asset_names'] ) || 2 < count( $candidate['expected_asset_names'] )
-						|| ! is_bool( $candidate['prerelease'] ) || ! is_bool( $candidate['publication_immutable'] )
-						|| ! $this->matches( $candidate['published_at'], '/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\z/D' )
-						|| ! $this->boundedIdentity( $candidate['release_identity'] ) || ! $this->boundedIdentity( $candidate['tag'] )
-						|| ! is_string( $candidate['version'] ) || null === \RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion::normalize( $candidate['version'] ) ) {
-						return false;
-					}
-					foreach ( $candidate['expected_asset_names'] as $name ) {
-						if ( ! $this->matches( $name, '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di' ) ) {
-							return false;
-						}
-					}
-				}
-				return true;
-			}
-
-			private function validInspection( mixed $value ): bool
-			{
-				$keys = array( 'artifact_filename', 'artifact_identity', 'artifact_sha256', 'artifact_size', 'assurance_facts',
-					'canonical_update_uri', 'channel', 'commit_identity', 'main_file', 'maximum_artifact_bytes', 'package_root',
-					'php_runtime_version', 'provider_code', 'release_identity', 'repository_identity', 'repository_locator',
-					'tag', 'target_type', 'version', 'wordpress_runtime_version', 'fingerprint' );
-				$assurance = array( 'exact_artifact_identity', 'exact_commit_identity', 'exact_reacquisition_supported',
-					'exact_release_identity', 'provenance_verified', 'publication_immutable', 'repository_identity_stable', 'trusted_digest_source' );
-				if ( ! $this->keys( $value, $keys ) || ! $this->keys( $value['assurance_facts'], $assurance )
-					|| ! is_int( $value['artifact_size'] ) || 1 > $value['artifact_size']
-					|| ! is_int( $value['maximum_artifact_bytes'] ) || $value['artifact_size'] > $value['maximum_artifact_bytes']
-					|| ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true )
-					|| ! in_array( $value['channel'], array( 'stable', 'prerelease' ), true ) ) {
-					return false;
-				}
-				foreach ( $assurance as $key ) {
-					if ( ! is_bool( $value['assurance_facts'][ $key ] ) ) {
-						return false;
-					}
-				}
-				foreach ( array( 'artifact_identity', 'commit_identity', 'release_identity', 'repository_identity', 'tag' ) as $key ) {
-					if ( ! $this->boundedIdentity( $value[ $key ] ) ) {
-						return false;
-					}
-				}
-				foreach ( array( 'php_runtime_version', 'wordpress_runtime_version' ) as $key ) {
-					if ( ! is_string( $value[ $key ] ) || null === \RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion::normalizeHeader( $value[ $key ] ) ) {
-						return false;
-					}
-				}
-				if ( ! is_string( $value['version'] ) || null === \RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion::normalize( $value['version'] )
-					|| ! $this->boundedIdentity( $value['repository_locator'], 255 )
-					|| ! $this->matches( $value['provider_code'], '/\A[a-z][a-z0-9_-]{0,31}\z/D' )
-					|| ! $this->matches( $value['artifact_filename'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di' )
-					|| ! $this->matches( $value['artifact_sha256'], '/\A[a-f0-9]{64}\z/D' )
-					|| ! $this->matches( $value['package_root'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D' )
-					|| ( 'theme' === $value['target_type'] ? 'style.css' !== $value['main_file'] : ! $this->matches( $value['main_file'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D' ) )
-					|| ! is_string( $value['canonical_update_uri'] )
-					|| $value['canonical_update_uri'] !== \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $value['canonical_update_uri'] )
-					|| ! $this->matches( $value['fingerprint'], '/\Av2:[a-f0-9]{64}\z/D' ) ) {
-					return false;
-				}
-				$facts = $value;
-				unset( $facts['fingerprint'] );
-				return hash_equals( 'v2:' . hash( 'sha256', json_encode( $facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ), $value['fingerprint'] );
-			}
-
-			private function keys( mixed $value, array $keys ): bool
-			{
-				return is_array( $value ) && array_keys( $value ) === $keys;
-			}
-
-			private function matches( mixed $value, string $pattern ): bool
-			{
-				return is_string( $value ) && 1 === preg_match( $pattern, $value );
-			}
-
-			private function boundedIdentity( mixed $value, int $limit = 191 ): bool
-			{
-				return is_string( $value ) && $this->opaque( $value, $limit );
-			}
-
-			private function publicUrl( mixed $value ): bool
-			{
-				if ( ! $this->boundedIdentity( $value, 2048 ) || str_contains( $value, '\\' ) ) {
-					return false;
-				}
-				$parts = parse_url( $value );
-				return is_array( $parts ) && 'https' === strtolower( $parts['scheme'] ?? '' )
-					&& isset( $parts['host'], $parts['path'] ) && '' !== $parts['host']
-					&& ! array_intersect( array( 'user', 'pass', 'port', 'query', 'fragment' ), array_keys( $parts ) );
-			}
-
-			private function ownedArtifact( mixed $artifact ): bool
-			{
-				if ( ! is_object( $artifact ) || 'RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact' !== $artifact::class ) {
-					return false;
-				}
-				$source = ( new ReflectionClass( $this->selected ) )->getFileName();
-				$file = ( new ReflectionClass( $artifact ) )->getFileName();
-				return is_string( $source ) && is_string( $file )
-					&& realpath( $file ) === realpath( dirname( $source, 2 ) . '/Archive/TemporaryArtifact.php' );
-			}
-
-			private function discardMalformedArtifact( string $operation, mixed $result ): string
-			{
-				if ( 'list' === $operation ) {
-					return 'not_applicable';
-				}
-				$artifact = is_array( $result ) && is_array( $result['value'] ?? null ) ? ( $result['value']['artifact'] ?? null ) : null;
-				try {
-					if ( 'acquire' === $operation && $this->ownedArtifact( $artifact ) ) {
-						return $artifact->discard() || $artifact->discard() ? 'complete' : 'failed';
-					}
-				} catch ( Throwable ) {
-					return 'failed';
-				}
-				$cleanup = is_array( $result ) ? ( $result['cleanup_status'] ?? null ) : null;
-				return in_array( $cleanup, array( 'not_applicable', 'complete', 'failed' ), true ) ? $cleanup : 'failed';
-			}
-
-			private function validConditional( array $value ): bool
-			{
-				foreach ( $value as $key => $item ) if ( ! in_array( $key, array( 'etag', 'last_modified' ), true ) || ( null !== $item && ! is_string( $item ) ) ) return false;
-				return true;
-			}
-
-			private function opaque( string $value, int $limit ): bool
-			{
-				return '' !== $value && strlen( $value ) <= $limit && 1 === preg_match( '//u', $value ) && 1 === preg_match( '/\\A[^\\p{C}\\p{Z}\\s]+\\z/u', $value );
-			}
-
-			private function failure( string $code, string $cleanup = 'not_applicable' ): array
-			{
-				return array( 'ok' => false, 'code' => $code, 'value' => null, 'retry_after' => null, 'cleanup_status' => $cleanup );
-			}
-		};
 	}
 
 	/** @return array<string,mixed> */

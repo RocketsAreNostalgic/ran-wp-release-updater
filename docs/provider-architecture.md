@@ -69,3 +69,15 @@ accepted GitHub asset metadata and retained compressed ZIP bytes in the
 temporary file, not underlying network transfer; the request timeout still
 applies. It does not relax the independent expanded-archive byte, entry-count,
 compression-ratio, digest, or custody checks.
+
+## Release sources
+
+`releases()` creates a request-local source without an installed-file
+declaration, native hooks, or installation authority. Its `list()`,
+`inspect()`, and `acquire()` operations return `ok`, `code`, `value`,
+`retry_after`, and `cleanup_status`. Inspection supplies an opaque `v2:`
+fingerprint, and acquisition requires it for a fresh proof. Credentials remain
+request-local. Consumers copy verified bytes only inside artifact `inspect()`,
+then call `discard()`; callback, runtime, or cleanup failure requires removal
+of the consumer's provisional copy. Guard failures use RuntimeException codes
+1001, 1002, and 1003.
