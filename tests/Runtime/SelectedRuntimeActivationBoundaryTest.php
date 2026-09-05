@@ -249,6 +249,28 @@ PHP );
 		self::assertTrue( $result['runtime_failed'] );
 	}
 
+	public function testPreloadedForeignBrokerClassCannotCreateTheSharedBroker(): void
+	{
+		$result = $this->probe( <<<'PHP'
+$foreign = dirname(__FILE__) . '/foreign-broker-class.php';
+file_put_contents($foreign, "<?php\nnamespace RAN\\WPReleaseUpdater\\V1\\Runtime;\nfinal class RequestBroker {}\n");
+require $foreign;
+$registrar = require $data['bootstrap'];
+$handle = $registrar->plugin('github', '/missing.php', 'acme/example', '123');
+$registered = $handle->register();
+try { $handoff = require dirname($data['bootstrap']) . '/runtime.php'; $handoff->boot(array(), array()); $runtime_failed = false; } catch (Throwable) { $runtime_failed = true; }
+echo json_encode(array('broker_created' => array_key_exists('ran_wp_release_updater_v1_broker', $GLOBALS), 'registered' => $registered, 'state' => $registrar->diagnostics()['state'], 'code' => $handle->status()['code'], 'diagnostics' => $registrar->diagnostics()['diagnostics'], 'hooks' => isset($GLOBALS['wp_filter']['after_setup_theme']), 'runtime_failed' => $runtime_failed));
+PHP );
+
+		self::assertFalse( $result['broker_created'] );
+		self::assertFalse( $result['registered'] );
+		self::assertSame( 'conflict', $result['state'] );
+		self::assertSame( 'protocol_conflict_inactive', $result['code'] );
+		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['diagnostics'] );
+		self::assertFalse( $result['hooks'] );
+		self::assertTrue( $result['runtime_failed'] );
+	}
+
 	public function testForeignProtocolFirstStaysUntouchedAndScheduledReplacementTerminalizesTheQueuedHandle(): void
 	{
 		$foreign = $this->probe( <<<'PHP'

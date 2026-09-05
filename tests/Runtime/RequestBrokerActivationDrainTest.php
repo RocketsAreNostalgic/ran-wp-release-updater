@@ -110,7 +110,7 @@ PHP, array( 'copy' => $copy, 'unseen' => $unseen ) );
 	{
 		$load = $this->package( 'load-failure', "<?php\nthrow new RuntimeException('load');\n" );
 		$conflict = $this->package( 'conflict', $this->runtime() );
-		$result = $this->probe( <<<'PHP'
+		$loadResult = $this->probe( <<<'PHP'
 require $data['load'] . '/bootstrap.php';
 $load=$GLOBALS['ran_wp_release_updater_v1_broker'];
 $queued=$load->registerTarget(array('target_type'=>'plugin','installed_file'=>'/queued.php','provider_code'=>'github','repository_locator'=>'acme/queued','repository_identity'=>'7','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null,'maximum_artifact_bytes'=>52428800));
@@ -118,24 +118,27 @@ $environment=array('php_version'=>'8.2.0','runtime_protocol'=>2,'wordpress_versi
 $firstLoad=$load->activate($environment);
 $statusLoad=$load->targetStatus($queued['submission_id']);
 $againLoad=$load->activate($environment);
-$GLOBALS['ran_wp_release_updater_v1_broker']=null;
+echo json_encode(array('first_load'=>$firstLoad,'status_load'=>$statusLoad,'again_load'=>$againLoad));
+PHP, array( 'load' => $load ) );
+		$conflictResult = $this->probe( <<<'PHP'
 require $data['conflict'] . '/bootstrap.php';
 $conflict=$GLOBALS['ran_wp_release_updater_v1_broker'];
+$environment=array('php_version'=>'8.2.0','runtime_protocol'=>2,'wordpress_version'=>'6.8.0');
 $GLOBALS['ran_wp_github_release_updater_v1_broker']=new stdClass();
 $firstConflict=$conflict->activate($environment);
 $stateConflict=$conflict->diagnostics()['state'];
 $againConflict=$conflict->activate($environment);
-echo json_encode(array('first_load'=>$firstLoad,'status_load'=>$statusLoad,'again_load'=>$againLoad,'first_conflict'=>$firstConflict,'state_conflict'=>$stateConflict,'again_conflict'=>$againConflict,'conflict_diagnostics'=>$conflict->diagnostics()['diagnostics']));
-PHP, array( 'load' => $load, 'conflict' => $conflict ) );
+echo json_encode(array('first_conflict'=>$firstConflict,'state_conflict'=>$stateConflict,'again_conflict'=>$againConflict,'conflict_diagnostics'=>$conflict->diagnostics()['diagnostics']));
+PHP, array( 'conflict' => $conflict ) );
 
-		self::assertSame( 'runtime_load_failed', $result['first_load']['code'] );
-		self::assertSame( 'runtime_load_failed', $result['status_load']['code'] );
-		self::assertSame( 'runtime_load_failed', $result['again_load']['code'] );
-		self::assertSame( 'protocol_conflict_inactive', $result['first_conflict']['code'] );
-		self::assertSame( 'conflict', $result['state_conflict'] );
-		self::assertSame( 'conflict', $result['again_conflict']['state'] );
-		self::assertSame( 'protocol_conflict_inactive', $result['again_conflict']['code'] );
-		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['conflict_diagnostics'] );
+		self::assertSame( 'runtime_load_failed', $loadResult['first_load']['code'] );
+		self::assertSame( 'runtime_load_failed', $loadResult['status_load']['code'] );
+		self::assertSame( 'runtime_load_failed', $loadResult['again_load']['code'] );
+		self::assertSame( 'protocol_conflict_inactive', $conflictResult['first_conflict']['code'] );
+		self::assertSame( 'conflict', $conflictResult['state_conflict'] );
+		self::assertSame( 'conflict', $conflictResult['again_conflict']['state'] );
+		self::assertSame( 'protocol_conflict_inactive', $conflictResult['again_conflict']['code'] );
+		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $conflictResult['conflict_diagnostics'] );
 	}
 
 	public function testQueuedRegistrarHandleDoesNotResubmitAfterTerminalCompositionFailure(): void
@@ -178,33 +181,41 @@ PHP, array( 'bootstrap' => dirname( __DIR__, 2 ) . '/bootstrap.php' ) );
 		$unseen = $this->package( 'retained-unseen', $this->runtime() );
 		$load = $this->package( 'retained-load', "<?php\nthrow new RuntimeException('load');\n" );
 		$composition = $this->package( 'retained-composition', $this->runtime() );
-		$result = $this->probe( <<<'PHP'
+		$stale = $this->probe( <<<'PHP'
 $environment=array('php_version'=>'8.2.0','runtime_protocol'=>2,'wordpress_version'=>'6.8.0');
 $registrar=require $data['active'] . '/bootstrap.php';$handle=$registrar->plugin('github','/active.php','acme/active','1');$handle->register();$broker=$GLOBALS['ran_wp_release_updater_v1_broker'];$broker->activate($environment);$before=$broker->diagnostics();$GLOBALS['ran_wp_release_updater_v1_broker']=new stdClass();$stale=array('known'=>$broker->registerCandidate($data['active'].'/runtime-copy.json'),'unseen'=>$broker->registerCandidate($data['unseen'].'/runtime-copy.json'),'target'=>$broker->registerTarget(array('target_type'=>'plugin','installed_file'=>'/late.php','provider_code'=>'github','repository_locator'=>'acme/late','repository_identity'=>'2','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null)),'refresh'=>$handle->refresh(),'status'=>$handle->status(),'diagnostics'=>$handle->diagnostics(),'again'=>$broker->activate($environment),'counts'=>$broker->diagnostics());
-$GLOBALS['ran_wp_release_updater_v1_broker']=null;$loadRegistrar=require $data['load'].'/bootstrap.php';$loadHandle=$loadRegistrar->plugin('github','/load.php','acme/load','3');$loadHandle->register();$loadBroker=$GLOBALS['ran_wp_release_updater_v1_broker'];$firstLoad=$loadBroker->activate($environment);$loadTerminal=array('candidate'=>$loadBroker->registerCandidate($data['load'].'/runtime-copy.json'),'target'=>$loadBroker->registerTarget(array('target_type'=>'plugin','installed_file'=>'/after-load.php','provider_code'=>'github','repository_locator'=>'acme/after-load','repository_identity'=>'4','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null)),'again'=>$loadBroker->activate($environment),'status'=>$loadHandle->status(),'counts'=>$loadBroker->diagnostics());
-$GLOBALS['ran_wp_release_updater_v1_broker']=null;$compositionRegistrar=require $data['composition'].'/bootstrap.php';$compositionHandle=$compositionRegistrar->plugin('github','/composition.php','acme/composition','5');$compositionHandle->register();$compositionBroker=$GLOBALS['ran_wp_release_updater_v1_broker'];$compositionBroker->activate($environment);$compositionTerminal=array('again'=>$compositionHandle->register(),'status'=>$compositionHandle->status(),'diagnostics'=>$compositionHandle->diagnostics(),'candidate'=>$compositionBroker->registerCandidate($data['composition'].'/runtime-copy.json'),'activation'=>$compositionBroker->activate($environment),'counts'=>$compositionBroker->diagnostics());
-echo json_encode(array('before'=>$before,'stale'=>$stale,'load'=>$loadTerminal,'composition'=>$compositionTerminal));
-PHP, array( 'active' => $active, 'unseen' => $unseen, 'load' => $load, 'composition' => $composition ) );
+echo json_encode(array('before'=>$before,'stale'=>$stale));
+PHP, array( 'active' => $active, 'unseen' => $unseen ) );
+		$loadTerminal = $this->probe( <<<'PHP'
+$environment=array('php_version'=>'8.2.0','runtime_protocol'=>2,'wordpress_version'=>'6.8.0');
+$loadRegistrar=require $data['load'].'/bootstrap.php';$loadHandle=$loadRegistrar->plugin('github','/load.php','acme/load','3');$loadHandle->register();$loadBroker=$GLOBALS['ran_wp_release_updater_v1_broker'];$loadBroker->activate($environment);$terminal=array('candidate'=>$loadBroker->registerCandidate($data['load'].'/runtime-copy.json'),'target'=>$loadBroker->registerTarget(array('target_type'=>'plugin','installed_file'=>'/after-load.php','provider_code'=>'github','repository_locator'=>'acme/after-load','repository_identity'=>'4','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null)),'again'=>$loadBroker->activate($environment),'status'=>$loadHandle->status(),'counts'=>$loadBroker->diagnostics());
+echo json_encode($terminal);
+PHP, array( 'load' => $load ) );
+		$compositionTerminal = $this->probe( <<<'PHP'
+$environment=array('php_version'=>'8.2.0','runtime_protocol'=>2,'wordpress_version'=>'6.8.0');
+$compositionRegistrar=require $data['composition'].'/bootstrap.php';$compositionHandle=$compositionRegistrar->plugin('github','/composition.php','acme/composition','5');$compositionHandle->register();$compositionBroker=$GLOBALS['ran_wp_release_updater_v1_broker'];$compositionBroker->activate($environment);$terminal=array('again'=>$compositionHandle->register(),'status'=>$compositionHandle->status(),'diagnostics'=>$compositionHandle->diagnostics(),'candidate'=>$compositionBroker->registerCandidate($data['composition'].'/runtime-copy.json'),'activation'=>$compositionBroker->activate($environment),'counts'=>$compositionBroker->diagnostics());
+echo json_encode($terminal);
+PHP, array( 'composition' => $composition ) );
 
-		self::assertTrue( $result['before']['activation_attempted'] );
-		self::assertFalse( $result['stale']['known'] );
-		self::assertFalse( $result['stale']['unseen'] );
-		self::assertFalse( $result['stale']['target']['accepted'] );
-		self::assertSame( 'protocol_conflict_inactive', $result['stale']['target']['code'] );
-		self::assertFalse( $result['stale']['refresh'] );
-		self::assertSame( 'protocol_conflict_inactive', $result['stale']['status']['code'] );
-		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['stale']['diagnostics']['diagnostics'] );
-		self::assertSame( 'protocol_conflict_inactive', $result['stale']['again']['code'] );
-		self::assertSame( $result['before']['candidate_count'], $result['stale']['counts']['candidate_count'] );
-		self::assertSame( $result['before']['submission_count'], $result['stale']['counts']['submission_count'] );
-		self::assertSame( 'runtime_load_failed', $result['load']['status']['code'] );
-		self::assertFalse( $result['load']['candidate'] );
-		self::assertSame( 'runtime_load_failed', $result['load']['target']['code'] );
-		self::assertSame( 'runtime_load_failed', $result['load']['again']['code'] );
-		self::assertSame( 'target_composition_failed', $result['composition']['status']['code'] );
-		self::assertFalse( $result['composition']['again'] );
-		self::assertTrue( $result['composition']['candidate'] );
-		self::assertTrue( $result['composition']['activation']['loaded'] );
+		self::assertTrue( $stale['before']['activation_attempted'] );
+		self::assertFalse( $stale['stale']['known'] );
+		self::assertFalse( $stale['stale']['unseen'] );
+		self::assertFalse( $stale['stale']['target']['accepted'] );
+		self::assertSame( 'protocol_conflict_inactive', $stale['stale']['target']['code'] );
+		self::assertFalse( $stale['stale']['refresh'] );
+		self::assertSame( 'protocol_conflict_inactive', $stale['stale']['status']['code'] );
+		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $stale['stale']['diagnostics']['diagnostics'] );
+		self::assertSame( 'protocol_conflict_inactive', $stale['stale']['again']['code'] );
+		self::assertSame( $stale['before']['candidate_count'], $stale['stale']['counts']['candidate_count'] );
+		self::assertSame( $stale['before']['submission_count'], $stale['stale']['counts']['submission_count'] );
+		self::assertSame( 'runtime_load_failed', $loadTerminal['status']['code'] );
+		self::assertFalse( $loadTerminal['candidate'] );
+		self::assertSame( 'runtime_load_failed', $loadTerminal['target']['code'] );
+		self::assertSame( 'runtime_load_failed', $loadTerminal['again']['code'] );
+		self::assertSame( 'target_composition_failed', $compositionTerminal['status']['code'] );
+		self::assertFalse( $compositionTerminal['again'] );
+		self::assertTrue( $compositionTerminal['candidate'] );
+		self::assertTrue( $compositionTerminal['activation']['loaded'] );
 	}
 
 	public function testActiveHandleProjectsUpdateCompletedDiagnosticsWithoutTerminalisingTheBroker(): void

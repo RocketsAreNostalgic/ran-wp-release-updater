@@ -8,6 +8,16 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 if ( ! class_exists( RequestBroker::class, false ) ) {
 	require_once __DIR__ . '/src/Runtime/RequestBroker.php';
 }
+$ran_wp_release_updater_broker_source = realpath( __DIR__ . '/src/Runtime/RequestBroker.php' );
+$ran_wp_release_updater_broker_class_source = false;
+try {
+	$ran_wp_release_updater_broker_class_source = ( new ReflectionClass( RequestBroker::class ) )->getFileName();
+	$ran_wp_release_updater_broker_class_source = is_string( $ran_wp_release_updater_broker_class_source ) ? realpath( $ran_wp_release_updater_broker_class_source ) : false;
+} catch ( Throwable ) {
+	$ran_wp_release_updater_broker_class_source = false;
+}
+$ran_wp_release_updater_can_create_broker = is_string( $ran_wp_release_updater_broker_source )
+	&& $ran_wp_release_updater_broker_source === $ran_wp_release_updater_broker_class_source;
 if ( ! class_exists( SelectedRuntimeState::class, false ) ) {
 	require_once __DIR__ . '/src/Runtime/SelectedRuntimeState.php';
 }
@@ -15,7 +25,7 @@ $ran_wp_release_updater_broker = $GLOBALS['ran_wp_release_updater_v1_broker'] ??
 $ran_wp_release_updater_created_broker = false;
 $ran_wp_release_updater_can_schedule = false;
 $ran_wp_release_updater_boundary_missed = false;
-if ( null === $ran_wp_release_updater_broker ) {
+if ( null === $ran_wp_release_updater_broker && $ran_wp_release_updater_can_create_broker ) {
 	if ( function_exists( 'doing_action' ) && function_exists( 'did_action' ) && function_exists( 'add_action' ) ) {
 		try {
 			$ran_wp_release_updater_running = doing_action( 'after_setup_theme' );
