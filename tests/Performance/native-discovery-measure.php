@@ -115,7 +115,7 @@ namespace Tests\Performance {
         return array('http_calls' => $GLOBALS ['native_measure'] ['http_calls'], 'body_bytes' => $GLOBALS ['native_measure'] ['body_bytes'], 'streamed_bytes' => $GLOBALS ['native_measure'] ['streamed_bytes'], 'acquisitions' => $GLOBALS ['native_measure'] ['acquisitions'], 'validation_opens' => $GLOBALS ['native_measure'] ['validation_opens']);
     }
     /** One PHP request: N copied bootstraps, M queued registrar targets, then one activation. */
-    function native_measure_shared_request(array $roots, int $targets, string $scenario, bool $callbackControl = false, string $targetType = 'plugin'):array {
+    function native_measure_shared_request(array $roots, int $targets, string $scenario, bool $callbackControl = false, string $targetType = 'plugin', bool $callbackRevoked = false):array {
         native_measure_assert($roots !== array() && count($roots) === count(array_unique($roots)), 'Physical runtime roots are not distinct.');
         $temp = getenv('RAN_NATIVE_MEASURE_TEMP')?:sys_get_temp_dir();
         $GLOBALS ['native_measure'] = array('temp' => $temp, 'scenario' => $scenario, 'changed' => false, 'after_offer' => false, 'http_calls' => 0, 'body_bytes' => 0, 'streamed_bytes' => 0, 'acquisitions' => 0, 'validation_opens' => 0, 'temporary' => array());
@@ -152,8 +152,9 @@ namespace Tests\Performance {
         $credentialCalls = 0;
         foreach($targetFixtures as $index => $fixture) {
             $file = $installedRoot.'/'.$fixture ['repository'].'/'.('plugin' === $targetType?$fixture ['repository'].'.php':'style.css');
-            $resolver = $callbackControl?static function() use(& $credentialCalls):?string {
+            $resolver = $callbackControl?static function() use(& $credentialCalls, $callbackRevoked):?string {
                 ++ $credentialCalls;
+                if($callbackRevoked && $credentialCalls > 3) throw new \RuntimeException('Credential revoked.');
                 return null;
             }
             :null;
@@ -199,9 +200,10 @@ namespace Tests\Performance {
             $GLOBALS ['native_measure'] ['zip'] = $item ['fixture'] ['zip'];
             $beforeStep = native_measure_counters();
             $again = $item ['native']-> filterUpdate(false, array('Version' => '1.0.0', 'UpdateURI' => $item ['fixture'] ['uri']), $item ['identity'], array());
-            native_measure_assert(is_array($again), 'Repeated discovery did not offer an update.');
+            if($callbackRevoked) native_measure_assert(false === $again, 'Revoked callback discovery did not fail closed.');
+            else native_measure_assert(is_array($again), 'Repeated discovery did not offer an update.');
             $steps ['repeated_discovery_'.$index] = native_measure_delta($beforeStep);
-            if('plugin' === $targetType) {
+            if('plugin' === $targetType && ! $callbackRevoked) {
                 $beforeStep = native_measure_counters();
                 $information = $item ['native']-> filterPluginInformation(false, 'plugin_information', (object) array('slug' => 'ran-wp-release-updater-'.substr(hash('sha256', 'plugin'."\0".$item ['identity']), 0, 24)));
                 $steps ['information_'.$index] = native_measure_delta($beforeStep);
@@ -262,7 +264,7 @@ namespace Tests\Performance {
     }
     function native_measure_shared_worker(array $args):void {
         $roots = explode('|', (string) getenv('RAN_NATIVE_MEASURE_ROOTS'));
-        echo json_encode(native_measure_shared_request($roots, (int)($args [2] ??1), $args [3] ??'cold', '--callback-control' ===($args [4] ??null), $args [5] ??'plugin'), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        echo json_encode(native_measure_shared_request($roots, (int)($args [2] ??1), $args [3] ??'cold', '--callback-control' ===($args [4] ??null), $args [5] ??'plugin', '--callback-revoked' ===($args [6] ??null)), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
     }
     function native_measure_copy(string $from, string $to):void {
         mkdir($to, 0700, true);
@@ -275,8 +277,8 @@ namespace Tests\Performance {
             else copy($file-> getPathname(), $destination);
         }
     }
-    function native_measure_child(array $roots, string $scratch, int $targets, string $scenario, bool $callbackControl = false, string $targetType = 'plugin'):array {
-        $command = array(PHP_BINARY, '-d', 'sys_temp_dir='.$scratch, __FILE__, '--shared-worker', (string) $targets, $scenario, $callbackControl?'--callback-control':'--literal-null', $targetType);
+    function native_measure_child(array $roots, string $scratch, int $targets, string $scenario, bool $callbackControl = false, string $targetType = 'plugin', bool $callbackRevoked = false):array {
+        $command = array(PHP_BINARY, '-d', 'sys_temp_dir='.$scratch, __FILE__, '--shared-worker', (string) $targets, $scenario, $callbackControl?'--callback-control':'--literal-null', $targetType, $callbackRevoked?'--callback-revoked':'--callback-stable');
         $environment = array('RAN_NATIVE_MEASURE_ROOTS' => implode('|', $roots), 'RAN_NATIVE_MEASURE_TEMP' => $scratch);
         foreach(array('PATH', 'TMPDIR', 'PHPRC', 'PHP_INI_SCAN_DIR') as $name) {
             $value = getenv($name);
@@ -330,6 +332,7 @@ namespace Tests\Performance {
         $controlCopy = $scratch.'/callback-control';
         native_measure_copy($root, $controlCopy);
         $out ['controls'] = array('callback_returning_null_repeated_plugin' => native_measure_child(array($controlCopy), $scratch, 1, 'repeated', true));
+		$out ['controls'] ['callback_revoked_repeated_plugin'] = native_measure_child(array($controlCopy), $scratch, 1, 'repeated', true, 'plugin', true);
         $themeControls = array();
         foreach(array('cold', 'repeated', 'refresh', 'install', 'changed') as $scenario) {
             $themeCopy = $scratch.'/theme-control-'.$scenario;
@@ -338,6 +341,7 @@ namespace Tests\Performance {
         }
         $out ['controls'] ['theme_1copy_1target'] = $themeControls;
         native_measure_assert($out ['controls'] ['callback_returning_null_repeated_plugin'] ['credential_callback_calls'] > 0, 'Callback-returning-null control did not invoke its resolver.');
+		native_measure_assert(4 === $out ['controls'] ['callback_revoked_repeated_plugin'] ['credential_callback_calls'], 'Revoked callback control did not re-resolve before the second discovery.');
         file_put_contents($root.'/.workspaces/evidence/native-discovery-measure.json', json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
         echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR).PHP_EOL;
     }

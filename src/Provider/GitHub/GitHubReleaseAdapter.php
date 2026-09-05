@@ -112,6 +112,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter
 				$archivePolicy,
 				null,
 				$selectedRuntimeState,
+				null === $declaration['credential_resolver'],
 			),
 			'code' => 'target_composition_failed',
 		);
@@ -125,14 +126,15 @@ final class GitHubReleaseAdapter implements ReleaseAdapter
 		object $wpdb,
 		array $archivePolicy,
 		?PackageIdentityValidator $validator = null,
-		?SelectedRuntimeState $selectedRuntimeState = null
+		?SelectedRuntimeState $selectedRuntimeState = null,
+		bool $nativeDiscoveryReuse = false
 	): ?NativePluginUpdater {
 		try {
 			$adapter = new self($binding, $credentials);
 		} catch (InvalidArgumentException) {
 			return null;
 		}
-		$updater = NativePluginUpdater::fromConfiguration($configuration, $binding, $adapter, $wpdb, $archivePolicy, $validator, $selectedRuntimeState);
+		$updater = NativePluginUpdater::fromConfiguration($configuration, $binding, $adapter, $wpdb, $archivePolicy, $validator, $selectedRuntimeState, $nativeDiscoveryReuse);
 		if ($updater instanceof NativePluginUpdater) {
 			$updater->register();
 		}

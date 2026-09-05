@@ -41,19 +41,24 @@ final class NativePluginUpdater {
 	/** @var array{candidate_header_version:string|null,candidate_tag:string|null,candidate_validation_code:string|null,candidate_version:string|null,failure_code:string|null,installed_version:string|null,last_check:int|null,offered_version:string|null,relationship:string|null} */
 	private array $status = array( 'candidate_header_version' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null );
 	private ?AcquisitionReceipt $pendingReceipt = null;
+	/** @var array{claim:array<string,mixed>,descriptor:IdentityDescriptor,installed:string}|null */
+	private ?array $discoverySnapshot = null;
+	private int $discoveryEpoch = 0;
 
 	/** @param array<string,string> $headers @param array<string,mixed> $archivePolicy */
 	private function __construct(
 		private string $targetType, private string $installedIdentity, private string $updateUri, private string $policy,
 		private array $headers, private BindingRecord $binding, private ReleaseAdapter $adapter, private object $wpdb,
-		private array $archivePolicy, private PackageIdentityValidator $validator, private ?SelectedRuntimeState $selectedRuntimeState = null
+		private array $archivePolicy, private PackageIdentityValidator $validator, private ?SelectedRuntimeState $selectedRuntimeState = null,
+		private bool $nativeDiscoveryReuse = false
 	) {}
 
 	/** @param array<string,mixed> $configuration @param array<string,mixed> $archivePolicy */
 	public static function fromConfiguration(
 		array $configuration, BindingRecord $binding, ReleaseAdapter $adapter, object $wpdb, array $archivePolicy,
 		?PackageIdentityValidator $validator = null,
-		?SelectedRuntimeState $selectedRuntimeState = null
+		?SelectedRuntimeState $selectedRuntimeState = null,
+		bool $nativeDiscoveryReuse = false
 	): ?self {
 		$bindingFacts = $binding->toArray();
 		if (
@@ -67,7 +72,7 @@ final class NativePluginUpdater {
 		if ( ! is_string( $uri ) ) return null;
 		return new self(
 			$configuration['target_type'], $configuration['installed_package_identity'], $uri, $configuration['policy'],
-			$configuration['headers'], $binding, $adapter, $wpdb, $archivePolicy, $validator ?? new PackageIdentityValidator(), $selectedRuntimeState
+			$configuration['headers'], $binding, $adapter, $wpdb, $archivePolicy, $validator ?? new PackageIdentityValidator(), $selectedRuntimeState, $nativeDiscoveryReuse
 		);
 	}
 
@@ -203,6 +208,7 @@ final class NativePluginUpdater {
 		if ( ! $this->live() || ! $this->matchesTargetIdentity( $hookExtra ) ) {
 			return $reply;
 		}
+		$this->clearDiscoverySnapshot();
 		if ( ! $this->matchesOperation( $hookExtra ) ) {
 			return false !== $reply && ! $reply instanceof \WP_Error ? $this->failure( 'unverified_pre_download_result' ) : $reply;
 		}
@@ -423,6 +429,7 @@ final class NativePluginUpdater {
 	{
 		unset( $upgrader );
 		if ( $this->live() && $this->matchesCompletion( $hookExtra ) ) {
+			$this->clearDiscoverySnapshot();
 			$this->completionObserved = true;
 		}
 	}
@@ -498,6 +505,7 @@ final class NativePluginUpdater {
 		}
 		$this->diagnostics = array();
 		$this->status = self::emptyStatus();
+		$this->clearDiscoverySnapshot();
 		$this->queuedMultiRun = false;
 		$this->clearPending();
 		return true;
@@ -505,7 +513,11 @@ final class NativePluginUpdater {
 
 	private function live(): bool
 	{
-		return ! $this->selectedRuntimeState instanceof SelectedRuntimeState || $this->selectedRuntimeState->brokerIsLive();
+		$live = ! $this->selectedRuntimeState instanceof SelectedRuntimeState || $this->selectedRuntimeState->brokerIsLive();
+		if ( ! $live ) {
+			$this->clearDiscoverySnapshot();
+		}
+		return $live;
 	}
 
 	private function beginOperation(): void
@@ -584,6 +596,7 @@ final class NativePluginUpdater {
 	}
 	private function claimDiscovery(): bool {
 		if ( $this->leaseHeld && null !== $this->verifyCurrent() ) return true;
+		$this->clearDiscoverySnapshot();
 		$this->leaseHeld = false; $this->state = null; $this->claim = null;
 		try { $owner = bin2hex( random_bytes( 32 ) ); } catch ( \Throwable ) { return false; }
 		$claimed = ReleaseOperationCoordinator::claimPersistentBindingState( $this->wpdb, $this->binding, $owner, 600 );
@@ -591,7 +604,15 @@ final class NativePluginUpdater {
 		$this->state = $claimed['current']; $this->claim = $this->claim( $this->state ); $this->leaseHeld = true;
 		$this->scheduleFinalization(); return true;
 	}
+	/** claimDiscovery() has established the current binding fence before discovery. */
 	private function discover( string $installed ): ?IdentityDescriptor {
+		$normalizedInstalled = ReleaseVersion::normalizeHeader( $installed );
+		if ( ! is_string( $normalizedInstalled ) ) return null;
+		$reused = $this->reusableDiscovery( $normalizedInstalled );
+		if ( $reused instanceof IdentityDescriptor ) return $reused;
+		$this->clearDiscoverySnapshot();
+		$discoveryClaim = $this->claim;
+		$discoveryEpoch = $this->discoveryEpoch;
 		try { $listed = $this->adapter->listReleases(); $candidates = $listed['candidates'] ?? null; } catch ( \Throwable ) { $this->status['candidate_validation_code'] = 'release_list_failed'; return null; }
 		if ( ! is_array( $candidates ) || count( $candidates ) > 8 ) { $this->status['candidate_validation_code'] = 'candidate_list_invalid'; return null; }
 		foreach ( $candidates as $candidate ) {
@@ -605,10 +626,25 @@ final class NativePluginUpdater {
 			$this->status['candidate_validation_code'] = $valid->code();
 			if ( ! $valid->isValid() ) continue;
 			$this->status['candidate_header_version'] = $facts['version'];
-			$this->descriptor = $descriptor; return $descriptor;
+			$this->descriptor = $descriptor;
+			if ( $this->nativeDiscoveryReuse && is_array( $discoveryClaim ) && null !== $this->verifyCurrent() && $this->live() && $this->discoveryEpoch === $discoveryEpoch && $this->claim === $discoveryClaim ) $this->discoverySnapshot = array( 'claim' => $discoveryClaim, 'descriptor' => $descriptor, 'installed' => $normalizedInstalled );
+			return $descriptor;
 		}
 		return null;
 	}
+	private function reusableDiscovery( string $installed ): ?IdentityDescriptor {
+		if ( ! $this->nativeDiscoveryReuse || ! is_array( $this->discoverySnapshot ) || ! is_array( $this->claim ) || $this->discoverySnapshot['installed'] !== $installed || $this->discoverySnapshot['claim'] !== $this->claim ) return null;
+		$descriptor = $this->discoverySnapshot['descriptor'];
+		$facts = $descriptor->toArray();
+		$this->status['candidate_tag'] = $facts['tag'];
+		$this->status['candidate_version'] = $facts['version'];
+		$this->status['candidate_header_version'] = $facts['version'];
+		$this->status['candidate_validation_code'] = 'archive_identity_verified';
+		$this->status['relationship'] = ReleaseVersion::relationship( $facts['version'], $installed );
+		$this->descriptor = $descriptor;
+		return $descriptor;
+	}
+	private function clearDiscoverySnapshot(): void { ++$this->discoveryEpoch; $this->discoverySnapshot = null; }
 	private function token( IdentityDescriptor $descriptor ): ?string {
 		$value = array( 'binding_hash' => $this->binding->bindingHash(), 'descriptor' => $descriptor->toArray(), 'schema' => 1 );
 		try { $json = json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ); } catch ( \JsonException ) { return null; }
@@ -633,7 +669,7 @@ final class NativePluginUpdater {
 	/** @return array{directory:string,path:string}|null */ private function validatedCopy( string $path, IdentityDescriptor $descriptor ): ?array { try { $proof = $this->validator->validate( $descriptor, $this->archivePolicy, $path ); } catch ( \Throwable ) { return null; } return $proof->isValid() ? $this->copyOwnedArchive( $path ) : null; }
 	/** @return array<string,mixed> */ private function claim( BindingState $state ): array { return array( 'binding_generation' => $state->bindingGeneration(), 'binding_hash' => $state->binding()->bindingHash(), 'lease_deadline' => $state->leaseDeadline(), 'owner_token' => $state->ownerToken() ); }
 	/** @return array{current:BindingState,now:int}|null */ private function verifyCurrent(): ?array { if ( ! $this->state instanceof BindingState ) return null; $verified = ReleaseOperationCoordinator::verifyPersistentBindingState( $this->wpdb, $this->state, $this->claim ); return 'verified' === $verified['result'] && $verified['current'] instanceof BindingState && is_int( $verified['now'] ?? null ) ? array( 'current' => $verified['current'], 'now' => $verified['now'] ) : null; }
-	private function clearPending( bool $release = true ): void { $this->removeOwnedArchive( $this->pendingArchive, $this->ownedArchiveDirectory ); $this->pending = false; $this->extractionAdmitted = false; $this->stagedManifest = null; $this->pendingArchive = null; $this->ownedArchiveDirectory = null; $this->pendingArchiveIdentity = null; $this->pendingReceipt = null; $this->installResultCaptured = false; $this->installResult = null; $this->completionObserved = false; $this->multiRun = false; if ( $release && $this->leaseHeld && $this->state instanceof BindingState ) ReleaseOperationCoordinator::releasePersistentBindingState( $this->wpdb, $this->state, $this->claim ); if ( $release ) { $this->state = null; $this->claim = null; $this->leaseHeld = false; } }
+	private function clearPending( bool $release = true ): void { $this->clearDiscoverySnapshot(); $this->removeOwnedArchive( $this->pendingArchive, $this->ownedArchiveDirectory ); $this->pending = false; $this->extractionAdmitted = false; $this->stagedManifest = null; $this->pendingArchive = null; $this->ownedArchiveDirectory = null; $this->pendingArchiveIdentity = null; $this->pendingReceipt = null; $this->installResultCaptured = false; $this->installResult = null; $this->completionObserved = false; $this->multiRun = false; if ( $release && $this->leaseHeld && $this->state instanceof BindingState ) ReleaseOperationCoordinator::releasePersistentBindingState( $this->wpdb, $this->state, $this->claim ); if ( $release ) { $this->state = null; $this->claim = null; $this->leaseHeld = false; } }
 	private function diagnose( string $code, mixed $return ): mixed { if ( count( $this->diagnostics ) === self::MAX_DIAGNOSTICS ) array_shift( $this->diagnostics ); $this->diagnostics[] = $code; $this->status['failure_code'] = 'update_completed' === $code ? null : $code; return $return; }
 	/** @return array{candidate_header_version:null,candidate_tag:null,candidate_validation_code:null,candidate_version:null,failure_code:null,installed_version:null,last_check:null,offered_version:null,relationship:null} */ private static function emptyStatus(): array { return array( 'candidate_header_version' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ); }
 	private function failure( string $code ): mixed { $this->diagnose( $code, null ); return class_exists( '\\WP_Error' ) ? new \WP_Error( 'ran_wp_release_updater_' . $code, 'The update operation was not admitted.' ) : false; }

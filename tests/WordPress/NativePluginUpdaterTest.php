@@ -26,6 +26,7 @@ namespace Tests\WordPress {
 	require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 	require_once dirname( __DIR__ ) . '/Support/ControllableReleaseAdapter.php';
 	use PHPUnit\Framework\TestCase;
+	use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 	use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 	use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 	use RAN\WPReleaseUpdater\V1\Runtime\RequestBroker;
@@ -78,6 +79,89 @@ namespace Tests\WordPress {
 			$automaticOffer = $this->offer( $automaticUpdater );
 			self::assertTrue( $automaticOffer['autoupdate'] );
 			self::assertTrue( $automaticUpdater->filterAutoUpdate( false, (object) array( 'plugin' => 'package/package.php', 'package' => $automaticOffer['package'] ) ) );
+		}
+		public function testEligibleNativeDiscoveryReusesOnlyItsValidatedRequestSnapshot(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true );
+			$this->offer( $updater );
+			$this->offer( $updater );
+			$information = $updater->filterPluginInformation( false, 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', 'plugin' . "\0" . 'package/package.php' ), 0, 24 ) ) );
+			self::assertIsObject( $information );
+			self::assertSame( '2.0.0', $information->version );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'archive_identity_verified', $updater->status()['candidate_validation_code'] );
+
+			self::assertIsArray( $updater->filterUpdate( false, array( 'Version' => '1.1.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertTrue( $updater->refresh() );
+			$this->offer( $updater );
+			self::assertSame( array( 3, 3, 3 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
+		public function testReentrantMatchingInstallAttemptPreventsDiscoveryFromPublishingASnapshot(): void {
+			$validator = new PackageIdentityValidator();
+			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true, $validator );
+			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen->setValue( $validator, static function ( string $path ) use ( $updater ): void {
+				unset( $path );
+				$updater->filterPreDownload( new \WP_Error( 'interrupted', 'Interrupted.' ), '', null, array( 'plugin' => 'package/package.php' ) );
+			} );
+			$this->offer( $updater );
+			$this->offer( $updater );
+			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
+		public function testReentrantRefreshPreventsDiscoveryFromPublishingASnapshot(): void {
+			$validator = new PackageIdentityValidator();
+			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true, $validator );
+			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen->setValue( $validator, static function ( string $path ) use ( $updater ): void { unset( $path ); $updater->refresh(); } );
+			$this->offer( $updater );
+			$this->offer( $updater );
+			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
+		public function testClaimTakeoverAndExpiryReclaimNeverReuseASnapshot(): void {
+			list( $updater, $adapter, $database, , $binding ) = $this->subject( 'manual', null, 'stable', false, null, true );
+			$this->offer( $updater );
+			$name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'network_id' => 1, 'target_type' => 'plugin', 'installed_package_identity' => 'package/package.php' ) );
+			$state = BindingState::rehydrate( json_decode( $database->rows()[ $name ]['option_value'], true, 32, JSON_THROW_ON_ERROR ) );
+			$successor = BindingState::create( $binding, str_repeat( 'b', 64 ), 101, $state->bindingGeneration() + 1, $state->fenceEpoch() + 1 );
+			$database->forceOptionValue( $name, json_encode( $successor->toArray(), JSON_THROW_ON_ERROR ) );
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			$database->setTime( 102 );
+			$this->offer( $updater );
+			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
+		public function testFailedDiscoveryAndRuntimeDisplacementNeverReuseASnapshot(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject( 'manual', null, 'stable', false, null, true );
+			$facts = $descriptor->toArray(); unset( $facts['fingerprint'] ); $facts['tag'] = 'v2.0.1';
+			$adapter->inspectDescriptor = IdentityDescriptor::create( $facts );
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			$adapter->inspectDescriptor = $descriptor;
+			$this->offer( $updater );
+			self::assertSame( array( 2, 2, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
+		public function testRuntimeDisplacementAndRestoreNeverReuseASnapshot(): void {
+			$state = new SelectedRuntimeState();
+			$broker = new RequestBroker( false, $state );
+			$state->bind( $broker );
+			$GLOBALS['ran_wp_release_updater_v1_broker'] = $broker;
+			(new \ReflectionProperty( $broker, 'state' ))->setValue( $broker, 'active' );
+			try {
+				list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, $state, true );
+				$this->offer( $updater );
+				$GLOBALS['ran_wp_release_updater_v1_broker'] = new \stdClass();
+				self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+				$GLOBALS['ran_wp_release_updater_v1_broker'] = $broker;
+				$this->offer( $updater );
+				self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			} finally {
+				unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
+			}
+		}
+		public function testMatchingCompletionInvalidatesDiscoverySnapshot(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true );
+			$this->offer( $updater );
+			$updater->observeCompletion( null, array( 'action' => 'update', 'type' => 'plugin', 'plugins' => array( 'package/package.php' ) ) );
+			$this->offer( $updater );
+			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
 		}
 		public function testStatusProjectsOnlyTheObservedOfferAndFailureAndRefreshClearsIt(): void {
 			list( $updater, $adapter, $database ) = $this->subject();
@@ -400,13 +484,13 @@ namespace Tests\WordPress {
 			self::assertContains( 'unverified_pre_download_result', $updater->diagnostics() );
 		}
 		/** @return array{NativePluginUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
-		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selectedRuntimeState = null ): array {
+		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selectedRuntimeState = null, bool $nativeDiscoveryReuse = false, ?PackageIdentityValidator $validator = null ): array {
 			$archivePath = $this->archive();
 			$descriptor = $this->descriptor( $archivePath, $channel, $prerelease );
 			$binding = $this->binding( $mode, $channel );
 			$adapter = new ControllableReleaseAdapter( $descriptor, $archivePath, $this->temporaryDirectory );
 			$database ??= new FakeOptionDatabase( 100 );
-			$updater = NativePluginUpdater::fromConfiguration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), null, $selectedRuntimeState );
+			$updater = NativePluginUpdater::fromConfiguration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selectedRuntimeState, $nativeDiscoveryReuse );
 			self::assertInstanceOf( NativePluginUpdater::class, $updater );
 			return array( $updater, $adapter, $database, $descriptor, $binding );
 		}

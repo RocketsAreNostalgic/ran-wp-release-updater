@@ -131,6 +131,13 @@ results. Registration itself does not contact GitHub, resolve a credential,
 read an archive, or enter installation. Provider work begins during a normal
 WordPress update check.
 
+When no credentials callback is configured, a successful discovery result can
+be reused within the same request while the installed version and target
+ownership remain unchanged. `refresh()` clears that result so the next check
+discovers releases again. A credentials callback remains fresh even when it
+returns `null`. Installation always rechecks the release and acquires a fresh
+archive.
+
 ### Registration timing and multiple copies
 
 Require `bootstrap.php` from the plugin's main file, before `plugins_loaded`.
