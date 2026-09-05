@@ -31,6 +31,7 @@ final class GitHubReleaseService
 	);
 	private const CONFIGURATION_KEYS = array(
 		'canonical_repository_locator', 'canonical_update_uri', 'php_runtime_version',
+		'maximum_artifact_bytes',
 		'release_channel', 'stable_repository_identity', 'target_type',
 		'wordpress_runtime_version',
 	);
@@ -47,6 +48,8 @@ final class GitHubReleaseService
 		if (
 			! self::exactKeys($configuration, self::CONFIGURATION_KEYS)
 			|| ! self::validLocator($configuration['canonical_repository_locator'])
+			|| ! is_int($configuration['maximum_artifact_bytes'])
+			|| 0 >= $configuration['maximum_artifact_bytes']
 			|| ! is_string($configuration['stable_repository_identity'])
 			|| self::canonicalDecimal($configuration['stable_repository_identity']) !== $configuration['stable_repository_identity']
 			|| ! self::validReleaseUri(
@@ -238,7 +241,7 @@ final class GitHubReleaseService
 				$this->repositoryApiUrl() . '/releases/assets/' . $artifactIdentity,
 				$token,
 				array('Accept' => 'application/octet-stream'),
-				IdentityDescriptor::MAX_ARTIFACT_BYTES,
+				$this->binding['maximum_artifact_bytes'],
 				$path
 			);
 			if (self::rateLimit($response)['limited']) {
@@ -251,7 +254,7 @@ final class GitHubReleaseService
 				|| 1 !== $identity['nlink']
 				|| 0600 !== ($identity['mode'] & 0777)
 				|| $identity['size'] !== $facts['artifact_size']
-				|| $identity['size'] > IdentityDescriptor::MAX_ARTIFACT_BYTES
+				|| $identity['size'] > $this->binding['maximum_artifact_bytes']
 			) {
 				throw new RuntimeException('The downloaded GitHub artifact is invalid.');
 			}
@@ -329,6 +332,7 @@ final class GitHubReleaseService
 						'artifact_sha256' => $release['artifact_sha256'],
 						'artifact_size' => $release['artifact_size'],
 						'canonical_update_uri' => $release['canonical_update_uri'],
+						'maximum_artifact_bytes' => $this->binding['maximum_artifact_bytes'],
 						'php_runtime_version' => $this->binding['php_runtime_version'],
 						'target_type' => $release['target_type'],
 						'version' => $release['version'],
@@ -467,7 +471,7 @@ final class GitHubReleaseService
 			throw new RuntimeException('The GitHub commit identity is invalid.');
 		}
 
-		$asset = self::zipAsset($release['assets'] ?? null);
+			$asset = $this->zipAsset($release['assets'] ?? null);
 		$immutable = $release['immutable'];
 
 		return array(
@@ -529,6 +533,7 @@ final class GitHubReleaseService
 				return false;
 			}
 		}
+		if ( ! is_int( $facts['artifact_size'] ?? null ) || $facts['artifact_size'] > $this->binding['maximum_artifact_bytes'] ) return false;
 		foreach (array('php_runtime_version', 'wordpress_runtime_version') as $runtime) {
 			if (array_key_exists($runtime, $facts)
 				&& (! is_string($facts[$runtime]) || ! hash_equals($this->binding[$runtime], $facts[$runtime]))) {
@@ -690,7 +695,7 @@ final class GitHubReleaseService
 
 		$args = array(
 			'headers' => $headers,
-			'limit_response_size' => $limit + 1,
+			'limit_response_size' => PHP_INT_MAX === $limit ? PHP_INT_MAX : $limit + 1,
 			'redirection' => 0,
 			'timeout' => self::HTTP_TIMEOUT,
 		);
@@ -938,7 +943,7 @@ final class GitHubReleaseService
 	}
 
 	/** @return array{identity:string,name:string,sha256:string,size:int} */
-	private static function zipAsset(mixed $assets): array
+	private function zipAsset(mixed $assets): array
 	{
 		if (! is_array($assets) || ! array_is_list($assets)) {
 			throw new RuntimeException('The GitHub release artifacts are invalid.');
@@ -968,7 +973,7 @@ final class GitHubReleaseService
 		if (
 			null === $identity
 			|| null === $size
-			|| $size > IdentityDescriptor::MAX_ARTIFACT_BYTES
+			|| $size > $this->binding['maximum_artifact_bytes']
 			|| 'uploaded' !== ($asset['state'] ?? null)
 			|| 1 !== preg_match('/\Asha256:([a-f0-9]{64})\z/D', $digest, $digestMatch)
 		) {

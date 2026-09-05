@@ -54,7 +54,31 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		$root = dirname( __DIR__, 2 );
 		self::assertFileDoesNotExist( $root . '/runtime-catalogue.json' );
 		self::assertFileDoesNotExist( $root . '/src/Runtime/Composition/Github.php' );
-		self::assertStringNotContainsString( 'registerTarget', (string) file_get_contents( $root . '/src/Runtime/RequestBroker.php' ) );
+		$broker = (string) file_get_contents( $root . '/src/Runtime/RequestBroker.php' );
+		$runtime = (string) file_get_contents( $root . '/runtime.php' );
+		self::assertStringContainsString( 'registerTarget', $broker );
+		self::assertStringContainsString( 'public function boot', $runtime );
+		self::assertStringNotContainsString( 'bitbucket', $runtime );
+		self::assertStringNotContainsString( 'gitlab', $runtime );
+	}
+
+	public function testRuntimeCatalogOnlyDispatchesToTheSealedGitHubAdapter(): void {
+		$root = dirname( __DIR__, 2 );
+		$runtime = (string) file_get_contents( $root . '/runtime.php' );
+		$catalog = strstr( $runtime, '/* The sealed catalog is deliberately local to this selected runtime. */' );
+
+		self::assertIsString( $catalog );
+		self::assertStringContainsString( "'github'", $catalog );
+		self::assertStringContainsString( 'GitHubReleaseAdapter::', $catalog );
+		self::assertStringNotContainsString( 'github.com', $catalog );
+		self::assertDoesNotMatchRegularExpression(
+			'/repository_(?:locator|identity).*preg_match|preg_match.*repository_(?:locator|identity)/s',
+			$catalog
+		);
+		self::assertStringNotContainsString( 'new GitHubCredentialResolver', $catalog );
+		self::assertStringNotContainsString( 'BindingRecord::create', $catalog );
+		self::assertStringNotContainsString( "'archive_root'", $catalog );
+		self::assertStringNotContainsString( "'configuration_update_uri'", $catalog );
 	}
 
 	public function testSelectedRuntimeEntrypointOwnsEveryLifecycleClass(): void {

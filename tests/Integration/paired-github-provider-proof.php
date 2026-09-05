@@ -211,11 +211,14 @@ function paired_binding(
 		'installed_package_identity' => 'plugin' === $targetType
 			? 'repository/repository.php'
 			: 'repository',
+		'maximum_artifact_bytes' => 52_428_800,
+		'network_id' => 1,
 		'provider_code' => 'github',
 		'canonical_repository_locator' => 'owner/repository',
 		'stable_repository_identity' => '123456789',
 		'canonical_update_uri' => 'https://github.com/owner/repository',
 		'release_channel' => $channel,
+		'theme_template' => '',
 		'update_policy' => 'manual',
 		'php_runtime_version' => '8.2',
 		'wordpress_runtime_version' => '6.8',
