@@ -107,6 +107,19 @@ final class FakeAdapterLifecycleTest extends TestCase {
 		}
 	}
 
+	public function testThemeStagingRejectsAChildTemplateAddedAfterArchiveValidation(): void
+	{
+		$uri = 'https://updates.example.test/owner/fake-release';
+		$archive = $this->archive( 'theme', $uri, '2.0.0' );
+		$descriptor = $this->descriptor( 'theme', $archive, $uri, 'stable', '2.0.0', 'v2.0.0', false );
+		$updater = $this->updater( $this->configuration( 'theme', $uri ), $this->binding( 'theme', $uri, 'stable' ), new FakeOptionDatabase( 100 ), $descriptor, $archive, $this->policy( 'theme', $uri ) );
+		self::assertInstanceOf( NativePluginUpdater::class, $updater );
+		$staged = $this->tree( 'theme', $uri, 'template-added', '2.0.0' );
+		file_put_contents( $staged . '/style.css', "\nTemplate: parent-theme", FILE_APPEND );
+		$matches = new \ReflectionMethod( NativePluginUpdater::class, 'matchesStagedMetadata' );
+		self::assertFalse( $matches->invoke( $updater, $staged, '2.0.0' ) );
+	}
+
 	private function assertCompletedLifecycle(
 		string $targetType,
 		string $channel,
@@ -296,7 +309,7 @@ final class FakeAdapterLifecycleTest extends TestCase {
 	/** @return array<string,string> */
 	private function policy( string $targetType, string $uri ): array {
 		$header = 'plugin' === $targetType ? 'fake-release.php' : 'style.css';
-		return array( 'archive_root' => 'fake-release', 'configuration_update_uri' => $uri, 'header_file' => $header, 'installed_package_identity' => 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release', 'maximum_artifact_bytes' => 52428800, 'metadata_name' => 'Fake Release', 'offer_update_uri' => $uri, 'php_runtime_version' => '8.2', 'provider_code' => 'fake', 'repository_identity' => 'fake:repository', 'repository_locator' => 'owner/fake-release', 'staged_package_update_uri' => $uri, 'target_type' => $targetType, 'wordpress_runtime_version' => '6.8' );
+		return array( 'archive_root' => 'fake-release', 'configuration_update_uri' => $uri, 'header_file' => $header, 'installed_package_identity' => 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release', 'maximum_artifact_bytes' => 52428800, 'metadata_name' => 'Fake Release', 'offer_update_uri' => $uri, 'php_runtime_version' => '8.2', 'provider_code' => 'fake', 'repository_identity' => 'fake:repository', 'repository_locator' => 'owner/fake-release', 'staged_package_update_uri' => $uri, 'target_type' => $targetType, 'theme_template' => '', 'wordpress_runtime_version' => '6.8' );
 	}
 
 	/** @return array<string,mixed> */
@@ -305,7 +318,7 @@ final class FakeAdapterLifecycleTest extends TestCase {
 	}
 
 	private function binding( string $targetType, string $uri, string $channel ): BindingRecord {
-		return BindingRecord::create( array( 'canonical_repository_locator' => 'owner/fake-release', 'canonical_update_uri' => $uri, 'installed_package_identity' => 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release', 'maximum_artifact_bytes' => 52428800, 'network_id' => 1, 'php_runtime_version' => '8.2', 'provider_code' => 'fake', 'release_channel' => $channel, 'stable_repository_identity' => 'fake:repository', 'target_type' => $targetType, 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8' ) );
+		return BindingRecord::create( array( 'canonical_repository_locator' => 'owner/fake-release', 'canonical_update_uri' => $uri, 'installed_package_identity' => 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release', 'maximum_artifact_bytes' => 52428800, 'network_id' => 1, 'php_runtime_version' => '8.2', 'provider_code' => 'fake', 'release_channel' => $channel, 'stable_repository_identity' => 'fake:repository', 'target_type' => $targetType, 'theme_template' => '', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8' ) );
 	}
 
 	private function descriptor( string $targetType, string $archive, string $uri, string $channel, string $version, string $tag, bool $prerelease ): IdentityDescriptor {

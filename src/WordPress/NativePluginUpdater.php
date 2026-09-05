@@ -56,7 +56,14 @@ final class NativePluginUpdater {
 		?PackageIdentityValidator $validator = null,
 		?SelectedRuntimeState $selectedRuntimeState = null
 	): ?self {
-		if ( ! self::validConfiguration( $configuration, $binding ) || $configuration['policy'] !== $binding->toArray()['update_policy'] ) return null;
+		$bindingFacts = $binding->toArray();
+		if (
+			! self::validConfiguration( $configuration, $binding )
+			|| $configuration['policy'] !== $bindingFacts['update_policy']
+			|| ! array_key_exists( 'theme_template', $archivePolicy )
+			|| ! is_string( $archivePolicy['theme_template'] )
+			|| ! hash_equals( $bindingFacts['theme_template'], $archivePolicy['theme_template'] )
+		) return null;
 		$uri = CanonicalUpdateUri::canonicalize( $configuration['update_uri'] );
 		if ( ! is_string( $uri ) ) return null;
 		return new self(
@@ -562,6 +569,7 @@ final class NativePluginUpdater {
 			: null;
 
 		return hash_equals( $this->headers['Name'], $headers['Name'] )
+			&& hash_equals( $this->binding->toArray()['theme_template'], $headers['Template'] )
 			&& is_string( $expectedVersion )
 			&& 0 === ReleaseVersion::compare( $headers['Version'], $expectedVersion )
 			&& $this->matchesRuntimeUri( $headers['UpdateURI'] );

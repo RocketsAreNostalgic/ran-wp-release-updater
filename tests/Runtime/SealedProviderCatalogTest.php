@@ -255,6 +255,7 @@ PHP;
 			'release_channel' => $d['channel'],
 			'stable_repository_identity' => $d['repository_identity'],
 			'target_type' => $d['target_type'],
+			'theme_template' => '',
 			'update_policy' => $d['update_policy'],
 			'wordpress_runtime_version' => $GLOBALS['wp_version'],
 		) );
@@ -287,6 +288,7 @@ PHP;
 			'repository_locator' => $d['repository_locator'],
 			'staged_package_update_uri' => $uri,
 			'target_type' => 'plugin',
+			'theme_template' => '',
 			'wordpress_runtime_version' => $GLOBALS['wp_version'],
 		);
 		$adapter = new class( $d['credential_resolver'] ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter {
@@ -327,7 +329,7 @@ PHP;
 		$files = array( 'bootstrap.php', 'runtime.php' );
 		foreach ( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/src', \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
 			if ( $file->isFile() && 'php' === $file->getExtension() ) {
-				$files[] = substr( $file->getPathname(), strlen( $root ) + 1 );
+				$files[] = str_replace( '\\', '/', substr( $file->getPathname(), strlen( $root ) + 1 ) );
 			}
 		}
 		sort( $files, SORT_STRING );

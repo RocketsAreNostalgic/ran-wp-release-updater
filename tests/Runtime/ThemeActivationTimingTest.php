@@ -104,7 +104,7 @@ PHP );
 		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $copy . '/src', \FilesystemIterator::SKIP_DOTS ) );
 		foreach ( $iterator as $candidate ) {
 			if ( $candidate->isFile() && 'php' === $candidate->getExtension() ) {
-				$files[] = substr( $candidate->getPathname(), strlen( $copy ) + 1 );
+				$files[] = str_replace( '\\', '/', substr( $candidate->getPathname(), strlen( $copy ) + 1 ) );
 			}
 		}
 		sort( $files, SORT_STRING );

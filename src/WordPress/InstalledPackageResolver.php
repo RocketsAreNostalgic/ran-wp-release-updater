@@ -110,10 +110,11 @@ final class InstalledPackageResolver
 	private function validPath(string $path): bool
 	{
 		$path = str_replace('\\', '/', $path);
-		if ('' === $path || strlen($path) > 4096 || !str_starts_with($path, '/') || 1 === preg_match('/[\x00-\x1f\x7f]/', $path)) {
+		$drive = 1 === preg_match('/\A[A-Za-z]:\//', $path);
+		if ('' === $path || strlen($path) > 4096 || (!$drive && !str_starts_with($path, '/')) || 1 === preg_match('/[\x00-\x1f\x7f]/', $path)) {
 			return false;
 		}
-		foreach (explode('/', substr($path, 1)) as $part) {
+		foreach (explode('/', substr($path, $drive ? 3 : 1)) as $part) {
 			if ('' === $part || '.' === $part || '..' === $part) {
 				return false;
 			}
@@ -168,20 +169,25 @@ final class InstalledPackageResolver
 	/** @param array<string,array{logical:string,real:string}> $roots */
 	private function addRoot(array &$roots, string $logical, string $actual): void
 	{
-		if (!str_starts_with($logical, '/') || !str_starts_with($actual, '/')) {
-			return;
-		}
-		$actual = str_replace('\\', '/', $actual);
+		$logical = rtrim(str_replace('\\', '/', $logical), '/');
+		$actual = rtrim(str_replace('\\', '/', $actual), '/');
+		if (!$this->validPath($logical) || !$this->validPath($actual)) return;
 		$real = @realpath($actual);
 		if (!is_string($real) || !is_dir($real)) {
 			return;
 		}
-		$logical = rtrim(str_replace('\\', '/', $logical), '/');
+		$real = str_replace('\\', '/', $real);
 		$roots[$logical . "\0" . $real] = array('logical' => $logical, 'real' => $real);
 	}
 
 	private function inside(string $path, string $root): bool
 	{
+		$path = str_replace('\\', '/', $path);
+		$root = str_replace('\\', '/', $root);
+		if ('Windows' === PHP_OS_FAMILY) {
+			$path = strtolower($path);
+			$root = strtolower($root);
+		}
 		return str_starts_with($path, $root . '/');
 	}
 

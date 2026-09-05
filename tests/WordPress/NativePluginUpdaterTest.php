@@ -376,6 +376,14 @@ namespace Tests\WordPress {
 			$configuration['target_type'] = 'theme';
 			self::assertNull( NativePluginUpdater::fromConfiguration( $configuration, $binding, $adapter, $database, $this->policy() ) );
 		}
+		public function testArchivePolicyMustCarryTheExactBindingTemplate(): void {
+			list( , $adapter, $database, , $binding ) = $this->subject();
+			$policy = $this->policy();
+			$policy['theme_template'] = 'parent-theme';
+			self::assertNull( NativePluginUpdater::fromConfiguration( $this->config( 'manual' ), $binding, $adapter, $database, $policy ) );
+			unset( $policy['theme_template'] );
+			self::assertNull( NativePluginUpdater::fromConfiguration( $this->config( 'manual' ), $binding, $adapter, $database, $policy ) );
+		}
 		public function testNonFalsePreDownloadResultCannotBypassReleaseValidation(): void {
 			list( $updater, $adapter, $database ) = $this->subject();
 			$path = tempnam( $this->temporaryDirectory, 'ran-unverified-download-' ); self::assertIsString( $path ); $this->paths[] = $path; chmod( $path, 0600 ); file_put_contents( $path, 'untrusted archive' );
@@ -451,11 +459,11 @@ namespace Tests\WordPress {
 		/** @return array<string,string> */
 		private function policy(): array {
 			return array( 'archive_root' => 'package', 'configuration_update_uri' => $this->uri(), 'header_file' => 'package.php',
-				'installed_package_identity' => 'package/package.php', 'maximum_artifact_bytes' => 52428800, 'metadata_name' => 'Package', 'offer_update_uri' => $this->uri(), 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package', 'staged_package_update_uri' => $this->uri(), 'target_type' => 'plugin', 'wordpress_runtime_version' => '6.8' );
+				'installed_package_identity' => 'package/package.php', 'maximum_artifact_bytes' => 52428800, 'metadata_name' => 'Package', 'offer_update_uri' => $this->uri(), 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package', 'staged_package_update_uri' => $this->uri(), 'target_type' => 'plugin', 'theme_template' => '', 'wordpress_runtime_version' => '6.8' );
 		}
 		private function binding( string $mode, string $channel = 'stable' ): BindingRecord {
 			return BindingRecord::create( array( 'canonical_repository_locator' => 'owner/package', 'canonical_update_uri' => $this->uri(),
-				'installed_package_identity' => 'package/package.php', 'maximum_artifact_bytes' => 52428800, 'network_id' => 1, 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'release_channel' => $channel, 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'update_policy' => $mode, 'wordpress_runtime_version' => '6.8' ) );
+				'installed_package_identity' => 'package/package.php', 'maximum_artifact_bytes' => 52428800, 'network_id' => 1, 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'release_channel' => $channel, 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'theme_template' => '', 'update_policy' => $mode, 'wordpress_runtime_version' => '6.8' ) );
 		}
 		private function descriptor( string $archivePath, string $channel = 'stable', bool $prerelease = false ): IdentityDescriptor {
 			return IdentityDescriptor::create( array( 'artifact_filename' => 'package.zip', 'artifact_identity' => 'asset:2',

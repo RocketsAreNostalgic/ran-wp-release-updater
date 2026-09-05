@@ -70,6 +70,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter
 				'release_channel' => $declaration['channel'],
 				'stable_repository_identity' => $repositoryId,
 				'target_type' => $declaration['target_type'],
+				'theme_template' => $headers['Template'],
 				'update_policy' => $declaration['update_policy'],
 				'wordpress_runtime_version' => is_string( $GLOBALS['wp_version'] ?? null ) ? $GLOBALS['wp_version'] : '6.5.0',
 			)
@@ -99,6 +100,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter
 			'repository_locator' => $locator,
 			'staged_package_update_uri' => $uri,
 			'target_type' => $declaration['target_type'],
+			'theme_template' => $headers['Template'],
 			'wordpress_runtime_version' => $binding->toArray()['wordpress_runtime_version'],
 		);
 		return array(

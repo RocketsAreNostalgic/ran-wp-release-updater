@@ -328,6 +328,9 @@ $managedThemeUpdater->register();
 
 The release ZIP must contain `<stylesheet>/style.css` with matching `Theme
 Name`, `Version`, `Update URI`, `Requires PHP`, and `Requires at least` headers.
+For a child theme, its `Template` header must also exactly match the installed
+child theme. A standalone theme must remain standalone: adding or removing a
+`Template` header in a release is rejected.
 
 ## WordPress Multisite
 

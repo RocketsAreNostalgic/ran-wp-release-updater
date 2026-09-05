@@ -18,7 +18,7 @@ final class PackageIdentityValidator {
 	private const MAX_HEADER_BYTES = 8192;
 	private const MAX_COMPRESSION_RATIO = 100;
 	private const PROSPECTIVE_POLICY_KEYS = array( 'artifact_sha256', 'artifact_size', 'canonical_update_uri', 'maximum_artifact_bytes', 'php_runtime_version', 'target_type', 'version', 'wordpress_runtime_version' );
-	private const POLICY_KEYS = array( 'archive_root', 'configuration_update_uri', 'header_file', 'installed_package_identity', 'maximum_artifact_bytes', 'metadata_name', 'offer_update_uri', 'php_runtime_version', 'provider_code', 'repository_identity', 'repository_locator', 'staged_package_update_uri', 'target_type', 'wordpress_runtime_version' );
+	private const POLICY_KEYS = array( 'archive_root', 'configuration_update_uri', 'header_file', 'installed_package_identity', 'maximum_artifact_bytes', 'metadata_name', 'offer_update_uri', 'php_runtime_version', 'provider_code', 'repository_identity', 'repository_locator', 'staged_package_update_uri', 'target_type', 'theme_template', 'wordpress_runtime_version' );
 	private ?\Closure $afterOpen = null;
 	private WeakMap $receiptProofs;
 
@@ -206,6 +206,7 @@ final class PackageIdentityValidator {
 			$name = $headers['Name'] ?? null;
 			$uri = $headers['UpdateURI'] ?? null;
 			$version = $headers['Version'] ?? null;
+			$template = $headers['Template'] ?? null;
 			$requiresPhp = true === ( $parsed['present']['RequiresPHP'] ?? false )
 				? $headers['RequiresPHP']
 				: false;
@@ -213,6 +214,7 @@ final class PackageIdentityValidator {
 				? $headers['RequiresWP']
 				: false;
 			if ( null === $name || ! hash_equals( $policy['metadata_name'], $name ) ) return ValidatedPackage::blocked( 'archive_metadata_identity_mismatch' );
+			if ( null === $template || ! hash_equals( $policy['theme_template'], $template ) ) return ValidatedPackage::blocked( 'archive_metadata_identity_mismatch' );
 			if ( null === $uri || null === CanonicalUpdateUri::canonicalizeBoundaries( array( 'archive_preflight' => $uri, 'configuration' => $policy['configuration_update_uri'], 'offer' => $policy['offer_update_uri'], 'staged_package' => $policy['staged_package_update_uri'] ) ) ) return ValidatedPackage::blocked( 'archive_update_uri_mismatch' );
 			if ( null === $version || 0 !== ReleaseVersion::compare( $version, $descriptorFacts['version'] ) ) return ValidatedPackage::blocked( 'archive_version_mismatch' );
 			if ( null === $requiresPhp || ( is_string( $requiresPhp ) && ! self::meetsRequirement( $policy['php_runtime_version'], $requiresPhp ) ) ) return ValidatedPackage::blocked( 'archive_php_requirement_incompatible' );
@@ -242,6 +244,7 @@ final class PackageIdentityValidator {
 		if ( count( $policy ) !== count( self::POLICY_KEYS ) ) return false;
 		foreach ( self::POLICY_KEYS as $key ) if ( ! array_key_exists( $key, $policy ) || ( 'maximum_artifact_bytes' === $key ? ! is_int( $policy[ $key ] ) : ! is_string( $policy[ $key ] ) ) ) return false;
 		if ( $policy['maximum_artifact_bytes'] < 1 || $descriptor->toArray()['artifact_size'] > $policy['maximum_artifact_bytes'] ) return false;
+		if ( ( 'plugin' === $policy['target_type'] && '' !== $policy['theme_template'] ) || ( 'theme' === $policy['target_type'] && '' !== $policy['theme_template'] && 1 !== preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $policy['theme_template'] ) ) ) return false;
 		$facts = $descriptor->toArray();
 		foreach ( array( 'installed_package_identity', 'provider_code', 'repository_identity', 'repository_locator', 'target_type' ) as $key ) if ( ! hash_equals( $facts[ $key ], $policy[ $key ] ) ) return false;
 		if ( ( 'plugin' === $policy['target_type'] && $policy['installed_package_identity'] !== $policy['archive_root'] . '/' . $policy['header_file'] ) || ( 'theme' === $policy['target_type'] && ( $policy['installed_package_identity'] !== $policy['archive_root'] || 'style.css' !== $policy['header_file'] ) ) ) return false;

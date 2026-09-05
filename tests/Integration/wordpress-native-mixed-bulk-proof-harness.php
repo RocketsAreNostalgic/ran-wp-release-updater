@@ -317,6 +317,7 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 			'release_channel'              => 'stable',
 			'stable_repository_identity'   => $repositoryIdentity,
 			'target_type'                  => $type,
+			'theme_template'               => '',
 			'update_policy'                => 'manual',
 			'wordpress_runtime_version'    => '6.8',
 		)
@@ -357,6 +358,7 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 			'repository_locator'         => $locator,
 			'staged_package_update_uri'  => $uri,
 			'target_type'                => $type,
+			'theme_template'             => '',
 			'wordpress_runtime_version'  => '6.8',
 		)
 	);

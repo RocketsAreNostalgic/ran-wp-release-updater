@@ -202,7 +202,7 @@ PHP, array('installed' => $this->plugin("Plugin Name: Example\nVersion: 1.0.0\nU
 		$this->copyDirectory($source . '/src', $copy . '/src');
 		$files = array('bootstrap.php', 'runtime.php');
 		$iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($copy . '/src', \FilesystemIterator::SKIP_DOTS));
-		foreach ($iterator as $file) if ($file->isFile() && 'php' === $file->getExtension()) $files[] = substr($file->getPathname(), strlen($copy) + 1);
+		foreach ($iterator as $file) if ($file->isFile() && 'php' === $file->getExtension()) $files[] = str_replace('\\', '/', substr($file->getPathname(), strlen($copy) + 1));
 		sort($files, SORT_STRING);
 		$payload = '';
 		foreach ($files as $file) $payload .= $file . "\0" . hash_file('sha256', $copy . '/' . $file) . "\n";

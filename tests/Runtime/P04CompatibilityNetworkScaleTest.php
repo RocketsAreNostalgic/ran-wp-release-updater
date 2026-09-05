@@ -230,7 +230,7 @@ PHP, array( 'bootstrap' => dirname( __DIR__, 2 ) . '/bootstrap.php', 'targets' =
 		$files = array( 'bootstrap.php', 'runtime.php' );
 		foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root . '/src', FilesystemIterator::SKIP_DOTS ) ) as $file ) {
 			if ( $file->isFile() && 'php' === $file->getExtension() ) {
-				$files[] = substr( $file->getPathname(), strlen( $root ) + 1 );
+				$files[] = str_replace( '\\', '/', substr( $file->getPathname(), strlen( $root ) + 1 ) );
 			}
 		}
 		sort( $files, SORT_STRING );

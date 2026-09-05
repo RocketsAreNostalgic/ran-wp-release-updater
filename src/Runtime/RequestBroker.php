@@ -679,12 +679,14 @@ final class RequestBroker
 		}
 		$file = $value['installed_file'];
 		$normalized = is_string( $file ) ? str_replace( '\\', '/', $file ) : '';
+		$isAbsolute = str_starts_with( $normalized, '/' ) || 1 === preg_match( '/\A[A-Za-z]:\//D', $normalized );
 		if (
 			! is_string( $file )
 			|| '' === $file
 			|| 4096 < strlen( $file )
-			|| ! str_starts_with( $file, '/' )
+			|| ! $isAbsolute
 			|| 1 === preg_match( '/[\x00-\x1f\x7f]/', $file )
+			|| str_contains( $normalized, '//' )
 			|| 1 === preg_match( '#/(?:\.?\.?)(?:/|$)#', $normalized )
 		) {
 			return 'installed_file_invalid';
@@ -802,7 +804,7 @@ final class RequestBroker
 				continue;
 			}
 			$path = $entry->getPathname();
-			$relative = substr( $path, strlen( $root ) + 1 );
+			$relative = str_replace( '\\', '/', substr( $path, strlen( $root ) + 1 ) );
 			$this->regularFile( $root, $relative );
 			$files[] = $relative;
 		}
@@ -824,7 +826,7 @@ final class RequestBroker
 		if ( '' === $relative || str_contains( $relative, "\0" ) || str_starts_with( $relative, '/' ) || preg_match( '#(?:\\A|/)\.\.(?:/|\\z)#', $relative ) ) {
 			throw new RuntimeException( 'Invalid runtime source.' );
 		}
-		$expected = $root . DIRECTORY_SEPARATOR . $relative;
+		$expected = $root . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $relative );
 		$actual = realpath( $expected );
 		if ( is_link( $expected ) || ! is_file( $expected ) || false === $actual || $actual !== $expected ) {
 			throw new RuntimeException( 'Invalid runtime source.' );

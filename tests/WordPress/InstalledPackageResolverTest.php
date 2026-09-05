@@ -100,6 +100,18 @@ final class InstalledPackageResolverTest extends TestCase
 		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parseHeader( $splitColon, 'plugin' )['code'] );
 	}
 
+	public function testPathLexiconAcceptsPosixAndDriveQualifiedPathsOnly(): void
+	{
+		$method = new \ReflectionMethod( InstalledPackageResolver::class, 'validPath' );
+		$resolver = $this->resolver();
+		foreach ( array( '/srv/wordpress/wp-content/plugins/example/main.php', 'C:/WordPress/wp-content/plugins/example/main.php', 'D:\\WordPress\\wp-content\\themes\\example\\style.css' ) as $path ) {
+			self::assertTrue( $method->invoke( $resolver, $path ), $path );
+		}
+		foreach ( array( 'C:WordPress/wp-content/plugins/example/main.php', '/srv/wordpress/../outside/main.php', 'C:/WordPress/../outside/main.php', '/srv/wordpress//plugins/example/main.php', '\\\\server\\share\\plugins\\example\\main.php', "C:/WordPress/wp-content/plugins/example/\x00main.php", "C:/WordPress/wp-content/plugins/example/\x1fmain.php" ) as $path ) {
+			self::assertFalse( $method->invoke( $resolver, $path ), $path );
+		}
+	}
+
 	public function testThemeIdentityChildParentNestedAndSymlinkBoundaries(): void
 	{
 		$child = $this->file('themes/child/style.css', $this->themeHeader('Template: parent'));

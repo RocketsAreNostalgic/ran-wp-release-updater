@@ -21,6 +21,33 @@ final class RequestBrokerTest extends TestCase
 		$this->remove( $this->parent );
 	}
 
+	public function testDeclarationPathsAcceptOnlyPosixOrDriveQualifiedAbsoluteForms(): void
+	{
+		$broker = new \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker();
+		$method = new \ReflectionMethod( $broker, 'declarationCode' );
+		$declaration = array(
+			'target_type' => 'plugin',
+			'installed_file' => '/plugins/example/example.php',
+			'provider_code' => 'github',
+			'repository_locator' => 'acme/example',
+			'repository_identity' => '123456789',
+			'channel' => 'stable',
+			'update_policy' => 'manual',
+			'credential_resolver' => null,
+			'maximum_artifact_bytes' => 52_428_800,
+		);
+
+		foreach ( array( '/plugins/example/example.php', 'C:/plugins/example/example.php', 'D:\\plugins\\example\\example.php' ) as $path ) {
+			$declaration['installed_file'] = $path;
+			self::assertNull( $method->invoke( $broker, $declaration ), $path );
+		}
+
+		foreach ( array( 'relative/example.php', 'C:relative/example.php', '//server/share/example.php', 'C://plugins/example.php', 'C:/plugins/../example.php', '/plugins//example.php' ) as $path ) {
+			$declaration['installed_file'] = $path;
+			self::assertSame( 'installed_file_invalid', $method->invoke( $broker, $declaration ), $path );
+		}
+	}
+
 	public function testDifferentPhysicalCopiesUseOneBrokerAndLoadOnlyTheHighestCompatibleRuntime(): void
 	{
 		$old = $this->copy( 'old', '0.1.0-beta.1', 'a' );
@@ -315,7 +342,7 @@ PHP );
 		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/src', \FilesystemIterator::SKIP_DOTS ) );
 		foreach ( $iterator as $file ) {
 			if ( $file->isFile() && 'php' === $file->getExtension() ) {
-				$files[] = substr( $file->getPathname(), strlen( $root ) + 1 );
+				$files[] = str_replace( '\\', '/', substr( $file->getPathname(), strlen( $root ) + 1 ) );
 			}
 		}
 		sort( $files, SORT_STRING );

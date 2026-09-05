@@ -29,6 +29,22 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertTrue( $validator->validate( $this->descriptor( $theme, 'theme', 'example-theme' ), $this->policy( 'theme', 'example-theme', 'style.css', 'Example Theme' ), $theme )->isValid() );
 	}
 
+	public function testThemeTemplateMustExactlyPreserveChildOrStandaloneIdentity(): void {
+		$child = $this->archive( array( 'child/style.css' => $this->header( 'Theme Name', 'Child Theme', "Template: parent\n" ) ) );
+		$validator = new PackageIdentityValidator();
+		$descriptor = $this->descriptor( $child, 'theme', 'child' );
+		$policy = $this->policy( 'theme', 'child', 'style.css', 'Child Theme', 'parent' );
+		self::assertTrue( $validator->validate( $descriptor, $policy, $child )->isValid() );
+		foreach ( array( '', 'other-parent' ) as $template ) {
+			$candidate = $this->archive( array( 'child/style.css' => $this->header( 'Theme Name', 'Child Theme', '' === $template ? '' : "Template: {$template}\n" ) ) );
+			self::assertSame( 'archive_metadata_identity_mismatch', $validator->validate( $this->descriptor( $candidate, 'theme', 'child' ), $policy, $candidate )->code() );
+		}
+		$standalone = $this->archive( array( 'standalone/style.css' => $this->header( 'Theme Name', 'Standalone' ) ) );
+		$standalonePolicy = $this->policy( 'theme', 'standalone', 'style.css', 'Standalone' );
+		self::assertTrue( $validator->validate( $this->descriptor( $standalone, 'theme', 'standalone' ), $standalonePolicy, $standalone )->isValid() );
+		self::assertSame( 'archive_metadata_identity_mismatch', $validator->validate( $this->descriptor( $standalone, 'theme', 'standalone' ), array_replace( $standalonePolicy, array( 'theme_template' => 'parent' ) ), $standalone )->code() );
+	}
+
 	public function testProspectiveAndInstalledPoliciesRejectAnArtifactOverTheirTargetLimit(): void {
 		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$size = filesize( $archive ); self::assertIsInt( $size );
@@ -375,7 +391,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		$zip->close(); return $path;
 	}
 
-	private function header( string $kind, string $name ): string { return "<?php\n/*\n{$kind}: {$name}\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires PHP: 8.2\nRequires at least: 6.8\n*/"; }
+	private function header( string $kind, string $name, string $extra = '' ): string { return "<?php\n/*\n{$kind}: {$name}\n{$extra}Version: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires PHP: 8.2\nRequires at least: 6.8\n*/"; }
 
 	private function descriptor( string $path, string $type, string $identity ): IdentityDescriptor {
 		return IdentityDescriptor::create( array( 'artifact_filename' => 'package.zip', 'artifact_identity' => 'asset:1', 'artifact_sha256' => hash_file( 'sha256', $path ), 'artifact_size' => filesize( $path ), 'assurance_facts' => array( 'exact_artifact_identity' => true, 'exact_commit_identity' => true, 'exact_reacquisition_supported' => true, 'exact_release_identity' => true, 'provenance_verified' => true, 'publication_immutable' => true, 'repository_identity_stable' => true, 'trusted_digest_source' => true ), 'canonical_update_uri' => 'https://updates.example.test/owner/package', 'channel' => 'stable', 'commit_identity' => 'commit:1', 'installed_package_identity' => $identity, 'prerelease' => false, 'provider_code' => 'neutral', 'release_identity' => 'release:1', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package', 'tag' => 'v1.0.0', 'target_type' => $type, 'version' => '1.0.0' ) );
@@ -404,5 +420,5 @@ final class PackageIdentityValidatorTest extends TestCase {
 	}
 
 	/** @return array<string,string> */
-	private function policy( string $type, string $root, string $header, string $name ): array { return array( 'archive_root' => $root, 'configuration_update_uri' => 'https://updates.example.test/owner/package', 'header_file' => $header, 'installed_package_identity' => 'theme' === $type ? $root : $root . '/' . $header, 'maximum_artifact_bytes' => 52_428_800, 'metadata_name' => $name, 'offer_update_uri' => 'https://updates.example.test/owner/package', 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package', 'staged_package_update_uri' => 'https://updates.example.test/owner/package', 'target_type' => $type, 'wordpress_runtime_version' => '6.8' ); }
+	private function policy( string $type, string $root, string $header, string $name, string $template = '' ): array { return array( 'archive_root' => $root, 'configuration_update_uri' => 'https://updates.example.test/owner/package', 'header_file' => $header, 'installed_package_identity' => 'theme' === $type ? $root : $root . '/' . $header, 'maximum_artifact_bytes' => 52_428_800, 'metadata_name' => $name, 'offer_update_uri' => 'https://updates.example.test/owner/package', 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package', 'staged_package_update_uri' => 'https://updates.example.test/owner/package', 'target_type' => $type, 'theme_template' => $template, 'wordpress_runtime_version' => '6.8' ); }
 }

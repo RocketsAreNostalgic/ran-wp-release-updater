@@ -31,6 +31,28 @@ final class RuntimeCopyIdentityTest extends TestCase
 		self::assertSame( $this->identity( dirname( __DIR__, 2 ) ), $copy['package_revision'] );
 	}
 
+	public function testPosixIdentityPayloadIsUnchangedBySeparatorNormalization(): void
+	{
+		if ( 'Windows' === PHP_OS_FAMILY ) {
+			self::markTestSkipped( 'Windows paths require separator normalization.' );
+		}
+		$root = dirname( __DIR__, 2 );
+		$native = array( 'bootstrap.php', 'runtime.php' );
+		$normalized = $native;
+		$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root . '/src', FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $iterator as $file ) {
+			if ( $file->isFile() && 'php' === $file->getExtension() ) {
+				$relative = substr( $file->getPathname(), strlen( $root ) + 1 );
+				$native[] = $relative;
+				$normalized[] = str_replace( '\\', '/', $relative );
+			}
+		}
+		sort( $native, SORT_STRING );
+		sort( $normalized, SORT_STRING );
+		self::assertSame( $native, $normalized );
+		self::assertSame( $this->identityFromFiles( $root, $native ), $this->identityFromFiles( $root, $normalized ) );
+	}
+
 	public function testEqualVersionPackageShapedCopiesWithDivergentContentFailClosed(): void
 	{
 		$left  = $this->packageCopy( 'left' );
@@ -143,10 +165,21 @@ PHP,
 		$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root . '/src', FilesystemIterator::SKIP_DOTS ) );
 		foreach ( $iterator as $file ) {
 			if ( $file->isFile() && 'php' === $file->getExtension() ) {
-				$files[] = substr( $file->getPathname(), strlen( $root ) + 1 );
+				$files[] = str_replace( '\\', '/', substr( $file->getPathname(), strlen( $root ) + 1 ) );
 			}
 		}
 		sort( $files, SORT_STRING );
+		$payload = '';
+		foreach ( $files as $file ) {
+			$payload .= $file . "\0" . hash_file( 'sha256', $root . '/' . $file ) . "\n";
+		}
+
+		return hash( 'sha256', $payload );
+	}
+
+	/** @param list<string> $files */
+	private function identityFromFiles( string $root, array $files ): string
+	{
 		$payload = '';
 		foreach ( $files as $file ) {
 			$payload .= $file . "\0" . hash_file( 'sha256', $root . '/' . $file ) . "\n";

@@ -104,7 +104,7 @@ $binding = \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::create(array(
 	'canonical_repository_locator' => 'acme/example', 'canonical_update_uri' => 'https://github.com/acme/example',
 	'installed_package_identity' => $identity, 'maximum_artifact_bytes' => 52428800, 'network_id' => 1, 'php_runtime_version' => PHP_VERSION,
 	'provider_code' => 'github', 'release_channel' => 'stable', 'stable_repository_identity' => '123456789',
-	'target_type' => $data['type'], 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8.0',
+	'target_type' => $data['type'], 'theme_template' => '', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8.0',
 ));
 $configuration = array(
 	'headers' => $headers,
@@ -118,7 +118,7 @@ $policy = array(
 	'header_file' => $headerFile, 'installed_package_identity' => $identity, 'maximum_artifact_bytes' => 52428800, 'metadata_name' => 'Example',
 	'offer_update_uri' => 'https://github.com/acme/example', 'php_runtime_version' => PHP_VERSION,
 	'provider_code' => 'github', 'repository_identity' => '123456789', 'repository_locator' => 'acme/example',
-	'staged_package_update_uri' => 'https://github.com/acme/example', 'target_type' => $data['type'],
+	'staged_package_update_uri' => 'https://github.com/acme/example', 'target_type' => $data['type'], 'theme_template' => '',
 	'wordpress_runtime_version' => '6.8.0',
 );
 $explicitDatabase = clone $GLOBALS['wpdb'];
@@ -256,7 +256,7 @@ PHP;
 		$this->copyDirectory($source . '/src', $copy . '/src');
 		$files = array('bootstrap.php', 'runtime.php');
 		foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($copy . '/src', \FilesystemIterator::SKIP_DOTS)) as $file) {
-			if ($file->isFile() && 'php' === $file->getExtension()) $files[] = substr($file->getPathname(), strlen($copy) + 1);
+			if ($file->isFile() && 'php' === $file->getExtension()) $files[] = str_replace('\\', '/', substr($file->getPathname(), strlen($copy) + 1));
 		}
 		sort($files, SORT_STRING);
 		$payload = '';

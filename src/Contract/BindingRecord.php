@@ -19,6 +19,7 @@ final readonly class BindingRecord
         'release_channel',
         'stable_repository_identity',
         'target_type',
+        'theme_template',
         'update_policy',
         'wordpress_runtime_version',
     );
@@ -33,6 +34,7 @@ final readonly class BindingRecord
         'release_channel',
         'stable_repository_identity',
         'target_type',
+        'theme_template',
         'update_policy',
         'wordpress_runtime_version',
         'binding_hash',
@@ -125,6 +127,7 @@ final readonly class BindingRecord
             && is_string( $value['canonical_update_uri'] )
             && CanonicalUpdateUri::canonicalize( $value['canonical_update_uri'] ) === $value['canonical_update_uri']
             && in_array( $value['release_channel'], array( 'stable', 'prerelease' ), true )
+            && self::validThemeTemplate( $value['target_type'], $value['theme_template'] )
             && in_array( $value['update_policy'], array( 'disabled', 'forced-off', 'manual', 'automatic' ), true )
             && IdentityDescriptor::isBoundedOpaqueIdentity( $value['php_runtime_version'], 64 )
             && IdentityDescriptor::isBoundedOpaqueIdentity( $value['wordpress_runtime_version'], 64 );
@@ -161,5 +164,16 @@ final readonly class BindingRecord
     private static function positiveInteger(mixed $value): bool
     {
         return is_int( $value ) && 0 < $value;
+    }
+    private static function validThemeTemplate(string $targetType, mixed $value): bool
+    {
+        return is_string( $value )
+            && (
+                ( 'plugin' === $targetType && '' === $value )
+                || (
+                    'theme' === $targetType
+                    && ( '' === $value || 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $value ) )
+                )
+            );
     }
 }

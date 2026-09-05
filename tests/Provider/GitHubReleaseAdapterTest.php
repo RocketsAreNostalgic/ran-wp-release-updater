@@ -176,7 +176,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$updater = GitHubReleaseAdapter::registerFromConfiguration(
 			$configuration, $binding,
 			new GitHubCredentialResolver(static function () use (&$calls): string { ++$calls; return 'private-token'; }),
-			new class {}, array('archive_root' => 'repository')
+			new class {}, array('archive_root' => 'repository', 'theme_template' => '')
 		);
 
 		self::assertNotNull($updater);
@@ -231,6 +231,28 @@ final class GitHubReleaseAdapterTest extends TestCase
 		} finally {
 			self::assertCount(1, $GLOBALS['ran_github_requests']);
 		}
+	}
+
+	public function testNullCredentialResultUsesAnonymousRequest(): void
+	{
+		$calls = 0;
+		$adapter = new GitHubReleaseAdapter(
+			$this->binding(),
+			new GitHubCredentialResolver(
+				static function () use (&$calls): ?string {
+					++$calls;
+					return null;
+				}
+			)
+		);
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array($this->release(1, 'v1.0.0'))),
+		);
+
+		$adapter->listReleases();
+
+		self::assertSame(1, $calls);
+		self::assertArrayNotHasKey('Authorization', $GLOBALS['ran_github_requests'][0][1]['headers']);
 	}
 
 	public function testInvalidCallerInputDoesNotResolveCredentialsOrCallGitHub(): void
@@ -523,6 +545,22 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$adapter = new GitHubReleaseAdapter(
 			$this->binding(),
 			new GitHubCredentialResolver(static fn (): string => 'bad token')
+		);
+
+		$this->expectException(GitHubReleaseReadUnavailable::class);
+		$this->expectExceptionMessage('credential is invalid');
+		try {
+			$adapter->listReleases();
+		} finally {
+			self::assertSame(array(), $GLOBALS['ran_github_requests']);
+		}
+	}
+
+	public function testNonStringCredentialResultSignalsUnavailableReadBeforeHttp(): void
+	{
+		$adapter = new GitHubReleaseAdapter(
+			$this->binding(),
+			new GitHubCredentialResolver(static fn (): int => 42)
 		);
 
 		$this->expectException(GitHubReleaseReadUnavailable::class);
@@ -1497,6 +1535,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 				'release_channel' => $channel,
 				'stable_repository_identity' => $repositoryIdentity,
 				'target_type' => $targetType,
+				'theme_template' => '',
 				'update_policy' => 'automatic',
 				'wordpress_runtime_version' => '6.8.0',
 			)
