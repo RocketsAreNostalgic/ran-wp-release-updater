@@ -63,7 +63,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		try { AcquisitionReceipt::issue( $state, $descriptor, $validator, $expired, 21 ); self::fail( 'Expired lease minted receipt.' ); } catch ( InvalidArgumentException ) { self::addToAssertionCount( 1 ); }
 	}
 
-	public function testCompletionRechecksAConcurrentRebindAfterConsumingTheReceipt(): void {
+	public function testCompletionRechecksAConcurrentCompetingOwnerAfterConsumingTheReceipt(): void {
 		list( $validator, $descriptor, $prototype, $package ) = $this->ready();
 		$database = new FakeOptionDatabase( 10 );
 		$claimed = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $prototype->binding(), str_repeat( 'a', 64 ), 10 );
@@ -72,13 +72,13 @@ final class AcquisitionReceiptTest extends TestCase {
 		$claim = $this->claim( $state );
 		$receipt = AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, 10 );
 		$next = BindingRecord::create( array_merge( $this->bindingFacts(), array( 'update_policy' => 'automatic' ) ) );
-		$rebound = null;
-		$database->mutateOnTimeRead( 1, static function ( FakeOptionDatabase $database ) use ( $state, $claim, $next, &$rebound ): void {
-			$rebound = ReleaseOperationCoordinator::persistPersistentBindingState( $database, $state, $claim, $next );
+		$name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'network_id' => 1, 'target_type' => 'plugin', 'installed_package_identity' => 'x/x.php' ) );
+		$successor = BindingState::create( $next, str_repeat( 'b', 64 ), $state->leaseDeadline(), $state->bindingGeneration() + 1, $state->fenceEpoch() + 1 );
+		$database->mutateOnTimeRead( 1, static function ( FakeOptionDatabase $database ) use ( $name, $successor ): void {
+			$database->forceOptionValue( $name, json_encode( $successor->toArray(), JSON_THROW_ON_ERROR ) );
 		} );
 
 		$completed = ReleaseOperationCoordinator::completePersistentInstall( $database, $state, $claim, $receipt, $descriptor );
-		self::assertSame( 'rebound', $rebound['result'] );
 		self::assertSame( 'binding_fence_lost', $completed['result'] );
 		try {
 			AcquisitionReceipt::acceptFresh( $receipt, $state, $descriptor, 10 );

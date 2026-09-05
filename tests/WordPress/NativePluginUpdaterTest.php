@@ -189,7 +189,7 @@ namespace Tests\WordPress {
 			self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'c', 64 ), 1 )['result'] );
 			$updater->refresh();
 		}
-		public function testAuthoritativeRebindAfterUnzipRejectsStaleReceipt(): void {
+		public function testCompetingOwnerAfterUnzipRejectsStaleReceipt(): void {
 			list( $updater, , $database, , $binding ) = $this->subject();
 			$offer = $this->offer( $updater );
 			$ownedArchive = $updater->filterPreDownload( false, $offer['package'], null, $this->extra() );
@@ -200,7 +200,9 @@ namespace Tests\WordPress {
 			unset( $bindingFacts['binding_hash'] );
 			$bindingFacts['update_policy'] = 'automatic';
 			$reboundBinding = BindingRecord::create( $bindingFacts );
-			self::assertSame( 'rebound', ReleaseOperationCoordinator::persistPersistentBindingState( $database, $state, $this->claim( $state ), $reboundBinding )['result'] );
+			$name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'network_id' => 1, 'target_type' => 'plugin', 'installed_package_identity' => 'package/package.php' ) );
+			$successor = BindingState::create( $reboundBinding, str_repeat( 'b', 64 ), $state->leaseDeadline(), $state->bindingGeneration() + 1, $state->fenceEpoch() + 1 );
+			$database->forceOptionValue( $name, json_encode( $successor->toArray(), JSON_THROW_ON_ERROR ) );
 			self::assertInstanceOf( \WP_Error::class, $updater->filterSourceSelection( $this->staged(), '/tmp', null, $this->extra() ) );
 		}
 		public function testCompletionAndRollbackReleaseClaims(): void {

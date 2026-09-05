@@ -72,23 +72,6 @@ final class ReleaseOperationCoordinator {
 		return array( 'current' => $next, 'result' => 'claimed' );
 	}
 	/** @return array{current:BindingState|null,result:string} */
-	public static function persistPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim, BindingRecord $next ): array {
-		if ( ! self::database( $wpdb ) || ! self::sameTarget( $expected->binding(), $next ) ) return self::lost();
-		$now = self::time( $wpdb ); $name = self::name( $expected->binding() ); $raw = self::read( $wpdb, $name ); $current = null === $raw ? null : self::state( $raw );
-		if ( null === $now || null === $current || ! self::same( $current, $expected )
-			|| ! self::claim( $current, $claim ) || $now > $current->leaseDeadline() ) return self::lost( $current );
-		if ( hash_equals( $current->binding()->bindingHash(), $next->bindingHash() ) ) return array( 'current' => $current, 'result' => 'retained' );
-		if ( self::atLimit( $current ) ) return self::lost( $current );
-		try {
-			$updated = BindingState::create( $next, $current->ownerToken(), $current->leaseDeadline(), $current->bindingGeneration() + 1, $current->fenceEpoch() + 1 );
-		} catch ( InvalidArgumentException ) {
-			return self::lost( $current );
-		}
-		$json = self::json( $updated->toArray() );
-		if ( null === $json || ! self::cas( $wpdb, $name, $raw, $json, $current->leaseDeadline() ) || ! self::sameRaw( $wpdb, $name, $json ) ) return self::lost( $current );
-		return array( 'current' => $updated, 'result' => 'rebound' );
-	}
-	/** @return array{current:BindingState|null,result:string} */
 	public static function renewPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim, int $seconds ): array {
 		return self::transitionPersistentBindingState( $wpdb, $expected, $claim, $seconds, 'renewed' );
 	}

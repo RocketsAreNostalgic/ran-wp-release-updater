@@ -71,7 +71,7 @@ final class RequestBroker
 	private bool $activationAttempted = false;
 	private string $state = 'collecting';
 	private int $nextSubmissionId = 1;
-	/** @var array<int,array{declaration:array<string,mixed>,key?:string,handle?:object,last_diagnostics?:array<string,mixed>,last_status?:array<string,mixed>,terminal_code?:string}> */
+	/** @var array<int,array{declaration:array<string,mixed>,key?:string,handle?:object,last_status?:array<string,mixed>,terminal_code?:string}> */
 	private array $submissions = array();
 	private ?object $handoff = null;
 	private ?string $selectedRoot = null;
@@ -291,7 +291,6 @@ final class RequestBroker
 				$this->disable( 'runtime_handoff_invalid' );
 				return $this->inactiveDiagnostics( $this->submissions[ $submissionId ] );
 			}
-			$this->submissions[ $submissionId ]['last_diagnostics'] = $diagnostics;
 			return $diagnostics;
 		} catch ( Throwable ) {
 			$this->disable( 'runtime_handoff_invalid' );
@@ -436,7 +435,6 @@ final class RequestBroker
 		$this->submissions[ $id ]['handle'] = $result['target_handle'];
 		$this->submissions[ $id ]['key'] = $result['target_key'];
 		$this->submissions[ $id ]['last_status'] = $status;
-		$this->submissions[ $id ]['last_diagnostics'] = $diagnostics;
 		if ( 'target_duplicate' !== $result['code'] ) {
 			$this->targetHandles[ $result['target_key'] ] = $result['target_handle'];
 		}

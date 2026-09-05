@@ -27,7 +27,6 @@ final class NativePluginUpdater {
 	private bool $leaseHeld = false;
 	private bool $pending = false;
 	private bool $extractionAdmitted = false;
-	private ?string $stagedSource = null;
 	/** @var array<string,array{sha256:string,size:int}>|null */ private ?array $stagedManifest = null;
 	private ?string $pendingArchive = null;
 	private ?string $ownedArchiveDirectory = null;
@@ -360,7 +359,6 @@ final class NativePluginUpdater {
 		}
 
 		$this->state = $verified['current'];
-		$this->stagedSource = $source;
 		$this->stagedManifest = $manifest;
 		return $source;
 	}
@@ -635,7 +633,7 @@ final class NativePluginUpdater {
 	/** @return array{directory:string,path:string}|null */ private function validatedCopy( string $path, IdentityDescriptor $descriptor ): ?array { try { $proof = $this->validator->validate( $descriptor, $this->archivePolicy, $path ); } catch ( \Throwable ) { return null; } return $proof->isValid() ? $this->copyOwnedArchive( $path ) : null; }
 	/** @return array<string,mixed> */ private function claim( BindingState $state ): array { return array( 'binding_generation' => $state->bindingGeneration(), 'binding_hash' => $state->binding()->bindingHash(), 'lease_deadline' => $state->leaseDeadline(), 'owner_token' => $state->ownerToken() ); }
 	/** @return array{current:BindingState,now:int}|null */ private function verifyCurrent(): ?array { if ( ! $this->state instanceof BindingState ) return null; $verified = ReleaseOperationCoordinator::verifyPersistentBindingState( $this->wpdb, $this->state, $this->claim ); return 'verified' === $verified['result'] && $verified['current'] instanceof BindingState && is_int( $verified['now'] ?? null ) ? array( 'current' => $verified['current'], 'now' => $verified['now'] ) : null; }
-	private function clearPending( bool $release = true ): void { $this->removeOwnedArchive( $this->pendingArchive, $this->ownedArchiveDirectory ); $this->pending = false; $this->extractionAdmitted = false; $this->stagedSource = null; $this->stagedManifest = null; $this->pendingArchive = null; $this->ownedArchiveDirectory = null; $this->pendingArchiveIdentity = null; $this->pendingReceipt = null; $this->installResultCaptured = false; $this->installResult = null; $this->completionObserved = false; $this->multiRun = false; if ( $release && $this->leaseHeld && $this->state instanceof BindingState ) ReleaseOperationCoordinator::releasePersistentBindingState( $this->wpdb, $this->state, $this->claim ); if ( $release ) { $this->state = null; $this->claim = null; $this->leaseHeld = false; } }
+	private function clearPending( bool $release = true ): void { $this->removeOwnedArchive( $this->pendingArchive, $this->ownedArchiveDirectory ); $this->pending = false; $this->extractionAdmitted = false; $this->stagedManifest = null; $this->pendingArchive = null; $this->ownedArchiveDirectory = null; $this->pendingArchiveIdentity = null; $this->pendingReceipt = null; $this->installResultCaptured = false; $this->installResult = null; $this->completionObserved = false; $this->multiRun = false; if ( $release && $this->leaseHeld && $this->state instanceof BindingState ) ReleaseOperationCoordinator::releasePersistentBindingState( $this->wpdb, $this->state, $this->claim ); if ( $release ) { $this->state = null; $this->claim = null; $this->leaseHeld = false; } }
 	private function diagnose( string $code, mixed $return ): mixed { if ( count( $this->diagnostics ) === self::MAX_DIAGNOSTICS ) array_shift( $this->diagnostics ); $this->diagnostics[] = $code; $this->status['failure_code'] = 'update_completed' === $code ? null : $code; return $return; }
 	/** @return array{candidate_header_version:null,candidate_tag:null,candidate_validation_code:null,candidate_version:null,failure_code:null,installed_version:null,last_check:null,offered_version:null,relationship:null} */ private static function emptyStatus(): array { return array( 'candidate_header_version' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ); }
 	private function failure( string $code ): mixed { $this->diagnose( $code, null ); return class_exists( '\\WP_Error' ) ? new \WP_Error( 'ran_wp_release_updater_' . $code, 'The update operation was not admitted.' ) : false; }
