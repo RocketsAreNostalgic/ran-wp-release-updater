@@ -892,7 +892,7 @@ final class RequestBroker
 		}
 		$prerelease = isset( $match[4] ) ? explode( '.', $match[4] ) : array();
 		foreach ( $prerelease as $identifier ) {
-			if ( ctype_digit( $identifier ) && ! preg_match( '/\A(?:0|[1-9]\d*)\z/D', $identifier ) ) throw new RuntimeException( 'Invalid runtime version.' );
+			if ( preg_match( '/\A[0-9]+\z/D', $identifier ) && ! preg_match( '/\A(?:0|[1-9]\d*)\z/D', $identifier ) ) throw new RuntimeException( 'Invalid runtime version.' );
 		}
 		return array( 'core' => array( $match[1], $match[2], $match[3] ), 'prerelease' => $prerelease );
 	}
@@ -917,8 +917,10 @@ final class RequestBroker
 			$a = $left['prerelease'][ $index ];
 			$b = $right['prerelease'][ $index ];
 			if ( $a === $b ) continue;
-			if ( ctype_digit( $a ) && ctype_digit( $b ) ) return strlen( $a ) <=> strlen( $b ) ?: strcmp( $a, $b );
-			if ( ctype_digit( $a ) !== ctype_digit( $b ) ) return ctype_digit( $a ) ? -1 : 1;
+			$aNumeric = 1 === preg_match( '/\A[0-9]+\z/D', $a );
+			$bNumeric = 1 === preg_match( '/\A[0-9]+\z/D', $b );
+			if ( $aNumeric && $bNumeric ) return strlen( $a ) <=> strlen( $b ) ?: strcmp( $a, $b );
+			if ( $aNumeric !== $bNumeric ) return $aNumeric ? -1 : 1;
 			return strcmp( $a, $b );
 		}
 		return 0;

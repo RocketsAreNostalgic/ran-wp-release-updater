@@ -183,7 +183,7 @@ final class ReleaseOperationCoordinator {
 	}
 	private static function time( object $wpdb ): ?int { $value = $wpdb->get_var( 'SELECT UNIX_TIMESTAMP()' );
 		if ( is_int( $value ) && $value >= 0 && $value <= BindingState::MAX_SAFE_INTEGER ) return $value;
-		return is_string( $value ) && ctype_digit( $value ) && (int) $value <= BindingState::MAX_SAFE_INTEGER ? (int) $value : null;
+		return is_string( $value ) && 1 === preg_match( '/\A[0-9]+\z/D', $value ) && (int) $value <= BindingState::MAX_SAFE_INTEGER ? (int) $value : null;
 	}
 	private static function read( object $wpdb, string $name ): ?string {
 		$table = self::optionsTable( $wpdb ); if ( null === $table ) return null;

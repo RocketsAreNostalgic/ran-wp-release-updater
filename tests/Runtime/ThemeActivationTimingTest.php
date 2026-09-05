@@ -83,9 +83,10 @@ PHP );
 		$data = array(
 			'active' => $this->root . '/active-theme/style.css',
 			'bootstrap' => $this->packageCopy() . '/bootstrap.php',
+			'hooks' => dirname( __DIR__ ) . '/Support/WordPressHookFixture.php',
 			'inactive' => $this->root . '/inactive-theme/style.css',
 		);
-		$prefix = '<?php define("WP_PLUGIN_DIR", ' . var_export( $this->root, true ) . '); require ' . var_export( dirname( __DIR__, 5 ) . '/wp-includes/plugin.php', true ) . '; $GLOBALS["wpdb"]=new stdClass(); $GLOBALS["wp_theme_directories"]=array(' . var_export( $this->root, true ) . '); $GLOBALS["wp_version"]="6.8.0"; $data=' . var_export( $data, true ) . ';';
+		$prefix = '<?php define("WP_PLUGIN_DIR", ' . var_export( $this->root, true ) . '); require ' . var_export( $data['hooks'], true ) . '; $GLOBALS["wpdb"]=new stdClass(); $GLOBALS["wp_theme_directories"]=array(' . var_export( $this->root, true ) . '); $GLOBALS["wp_version"]="6.8.0"; $data=' . var_export( $data, true ) . ';';
 		file_put_contents( $file, $prefix . $body );
 		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root ) . ' ' . escapeshellarg( $file ), $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
