@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Runtime;
 
 use FilesystemIterator;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -128,6 +129,56 @@ PHP,
 		self::assertSame( array( 'protocol_conflict_inactive' ), array_column( $result['diagnostics']['diagnostics'], 'code' ) );
 	}
 
+	#[DataProvider( 'malformedRuntimeCopyProvider' )]
+	public function testMalformedRuntimeCopyIsRejectedBeforeBrokerPublicationOrHooks( string $manifest ): void
+	{
+		$copy = $this->packageCopy( 'malformed-runtime-copy' );
+		file_put_contents( $copy . '/runtime-copy.json', $manifest );
+
+		$this->assertProvenanceRejected( $copy );
+	}
+
+	/** @return array<string,array{string}> */
+	public static function malformedRuntimeCopyProvider(): array
+	{
+		return array(
+			'invalid JSON' => array( '{' ),
+			'list' => array( '[]' ),
+			'missing fields' => array( '{"package_revision":"' . str_repeat( 'a', 64 ) . '"}' ),
+			'wrong field types' => array( '{"package_revision":"' . str_repeat( 'a', 64 ) . '","package_version":"0.1.0-beta.1","php_floor":"8.2.0","runtime_file":"runtime.php","runtime_protocol":"2","wordpress_floor":"6.5.0"}' ),
+		);
+	}
+
+	public function testSymlinkedProvenanceShapesAreRejectedBeforeBrokerPublicationOrHooks(): void
+	{
+		$cases = array(
+			'manifest' => static function( string $copy, string $outside ): void {
+				copy( $copy . '/runtime-copy.json', $outside . '/runtime-copy.json' );
+				unlink( $copy . '/runtime-copy.json' );
+				symlink( $outside . '/runtime-copy.json', $copy . '/runtime-copy.json' );
+			},
+			'source directory' => static function( string $copy, string $outside ): void {
+				rename( $copy . '/src', $outside . '/src' );
+				symlink( $outside . '/src', $copy . '/src' );
+			},
+			'source file' => static function( string $copy, string $outside ): void {
+				rename( $copy . '/src/Runtime/RequestBroker.php', $outside . '/RequestBroker.php' );
+				symlink( $outside . '/RequestBroker.php', $copy . '/src/Runtime/RequestBroker.php' );
+			},
+		);
+
+		foreach ( $cases as $name => $shape ) {
+			$copy = $this->packageCopy( 'symlink-' . str_replace( ' ', '-', $name ) );
+			$outside = $this->parent . '/outside-' . str_replace( ' ', '-', $name );
+			mkdir( $outside, 0700, true );
+			$shape( $copy, $outside );
+			if ( ! is_link( $copy . ( 'manifest' === $name ? '/runtime-copy.json' : ( 'source directory' === $name ? '/src' : '/src/Runtime/RequestBroker.php' ) ) ) ) {
+				self::markTestSkipped( 'Symlinks are unavailable on this platform.' );
+			}
+			$this->assertProvenanceRejected( $copy );
+		}
+	}
+
 	public function testSelectedRuntimeRejectsAnInterfaceLoadedFromAnotherRootBeforeRequire(): void
 	{
 		$selected = $this->packageCopy( 'selected' );
@@ -152,6 +203,17 @@ PHP,
 		$this->writeRuntimeCopy( $root, $version );
 
 		return $root;
+	}
+
+	private function assertProvenanceRejected( string $copy ): void
+	{
+		$result = $this->probe( 'function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["provenance_hooks"][]=$hook;} $GLOBALS["provenance_hooks"]=array(); $registrar=require $data["copy"] . "/bootstrap.php"; echo json_encode(array("diagnostics"=>$registrar->diagnostics(),"hooks"=>$GLOBALS["provenance_hooks"],"published"=>array_key_exists("ran_wp_release_updater_v1_broker",$GLOBALS),"provenance"=>array_key_exists("ran_wp_release_updater_v1_broker_provenance",$GLOBALS)));', array( 'copy' => $copy ) );
+
+		self::assertFalse( $result['published'] );
+		self::assertFalse( $result['provenance'] );
+		self::assertSame( array(), $result['hooks'] );
+		self::assertSame( 'conflict', $result['diagnostics']['state'] );
+		self::assertSame( array( 'protocol_conflict_inactive' ), array_column( $result['diagnostics']['diagnostics'], 'code' ) );
 	}
 
 	private function writeRuntimeCopy( string $root, ?string $version = null ): void

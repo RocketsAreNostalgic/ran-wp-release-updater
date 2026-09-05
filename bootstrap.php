@@ -19,11 +19,16 @@ $ran_wp_release_updater_broker_origin = static function( object|string $broker )
 		return null;
 	}
 	$root = realpath( dirname( $source, 3 ) );
-	if ( ! is_string( $root ) || realpath( $root . '/src/Runtime/RequestBroker.php' ) !== $source || ! is_file( $root . '/runtime-copy.json' ) || is_link( $root . '/runtime-copy.json' ) ) {
+	if ( ! is_string( $root ) ) {
+		return null;
+	}
+	$brokerSource = $root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RequestBroker.php';
+	$copyFile = $root . DIRECTORY_SEPARATOR . 'runtime-copy.json';
+	if ( realpath( $brokerSource ) !== $source || ! is_file( $copyFile ) || is_link( $copyFile ) ) {
 		return null;
 	}
 	try {
-		$copy = json_decode( (string) file_get_contents( $root . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		$copy = json_decode( (string) file_get_contents( $copyFile ), true, 512, JSON_THROW_ON_ERROR );
 		$keys = array( 'package_revision', 'package_version', 'php_floor', 'runtime_file', 'runtime_protocol', 'wordpress_floor' );
 		if (
 			! is_array( $copy )
@@ -50,7 +55,7 @@ $ran_wp_release_updater_broker_origin = static function( object|string $broker )
 				return null;
 			}
 		}
-		$sourceDirectory = $root . '/src';
+		$sourceDirectory = $root . DIRECTORY_SEPARATOR . 'src';
 		if ( is_link( $sourceDirectory ) || ! is_dir( $sourceDirectory ) || realpath( $sourceDirectory ) !== $sourceDirectory ) {
 			return null;
 		}

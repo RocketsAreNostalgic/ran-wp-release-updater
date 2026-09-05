@@ -55,6 +55,73 @@ final class WindowsPortabilityProofTest extends TestCase
 		self::assertSame( 19, $result['hooks'] );
 	}
 
+	public function testCopiedPackageBootstrapVerifiesProvenanceOnNativePaths(): void
+	{
+		$copy = $this->packageCopy();
+		$plugin = $this->workspace . '/plugins/example/main.php';
+		$theme = $this->workspace . '/themes/example/style.css';
+		file_put_contents( $plugin, "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example-plugin\n*/\n" );
+		file_put_contents( $theme, "/*\nTheme Name: Example Theme\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example-theme\n*/\n" );
+
+		$result = $this->probe( array(
+			'package' => $copy,
+			'plugin' => $plugin,
+			'plugins' => $this->workspace . '/plugins',
+			'theme' => $theme,
+			'themes' => $this->workspace . '/themes',
+		) );
+
+		self::assertTrue( $result['activation']['loaded'], json_encode( $result['activation'], JSON_THROW_ON_ERROR ) );
+		self::assertSame( 'target_active', $result['plugin']['code'] );
+		self::assertSame( 'target_active', $result['theme']['code'] );
+	}
+
+	private function packageCopy(): string
+	{
+		$root = $this->workspace . '/package';
+		mkdir( $root, 0700, true );
+		$source = dirname( __DIR__, 2 );
+		foreach ( array( 'bootstrap.php', 'runtime.php' ) as $file ) {
+			copy( $source . DIRECTORY_SEPARATOR . $file, $root . DIRECTORY_SEPARATOR . $file );
+		}
+		$this->copyDirectory( $source . DIRECTORY_SEPARATOR . 'src', $root . DIRECTORY_SEPARATOR . 'src' );
+		$checkedIn = json_decode( (string) file_get_contents( $source . DIRECTORY_SEPARATOR . 'runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		file_put_contents( $root . DIRECTORY_SEPARATOR . 'runtime-copy.json', json_encode( array( 'package_revision' => $this->identity( $root ), 'package_version' => $checkedIn['package_version'], 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 2, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
+
+		return $root;
+	}
+
+	private function identity( string $root ): string
+	{
+		$files = array( 'bootstrap.php', 'runtime.php' );
+		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . DIRECTORY_SEPARATOR . 'src', \FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $iterator as $file ) {
+			if ( $file->isFile() && 'php' === $file->getExtension() ) {
+				$files[] = str_replace( '\\', '/', substr( $file->getPathname(), strlen( $root ) + 1 ) );
+			}
+		}
+		sort( $files, SORT_STRING );
+		$payload = '';
+		foreach ( $files as $file ) {
+			$payload .= $file . "\0" . hash_file( 'sha256', $root . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $file ) ) . "\n";
+		}
+
+		return hash( 'sha256', $payload );
+	}
+
+	private function copyDirectory( string $source, string $destination ): void
+	{
+		mkdir( $destination, 0700, true );
+		foreach ( scandir( $source ) ?: array() as $name ) {
+			if ( '.' === $name || '..' === $name ) {
+				continue;
+			}
+			$from = $source . DIRECTORY_SEPARATOR . $name;
+			$to = $destination . DIRECTORY_SEPARATOR . $name;
+			is_dir( $from ) ? $this->copyDirectory( $from, $to ) : copy( $from, $to );
+		}
+	}
+
 	/** @param array<string,string> $data @return array{activation:array<string,mixed>,hooks:int,package:string,plugin:array<string,mixed>,theme:array<string,mixed>} */
 	private function probe( array $data ): array
 	{

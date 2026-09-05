@@ -68,7 +68,7 @@ $ran_wp_release_updater_broker_origin = static function( mixed $broker, mixed $p
 		return false;
 	}
 	$root = realpath( dirname( $source, 3 ) );
-	return is_string( $root ) && $root === ( $provenance['root'] ?? null ) && realpath( $root . '/src/Runtime/RequestBroker.php' ) === $source;
+	return is_string( $root ) && $root === ( $provenance['root'] ?? null ) && realpath( $root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RequestBroker.php' ) === $source;
 };
 
 /* The sealed catalog is deliberately local to this selected runtime. */
