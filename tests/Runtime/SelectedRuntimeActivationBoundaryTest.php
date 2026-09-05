@@ -222,6 +222,33 @@ PHP );
 		self::assertFalse( $result['hooks'] );
 	}
 
+	public function testLookalikeBrokerWithTheCompleteAbiIsRejectedFailClosed(): void
+	{
+		$result = $this->probe( <<<'PHP'
+$existing = new class {
+	public function protocolVersion(): int { return 2; }
+	public function registerCandidate(string $copyFile): bool { return true; }
+	public function activate(array $environment): array { return array(); }
+	public function registerTarget(array $declaration): array { return array(); }
+	public function targetStatus(int $id): array { return array(); }
+	public function targetDiagnostics(int $id): array { return array(); }
+	public function refreshTarget(int $id): bool { return true; }
+	public function diagnostics(): array { return array('state' => 'active'); }
+};
+$GLOBALS['ran_wp_release_updater_v1_broker'] = $existing;
+$registrar = require $data['bootstrap'];
+$handoff = require dirname($data['bootstrap']) . '/runtime.php';
+try { $handoff->boot(array(), array()); $runtime_failed = false; } catch (Throwable) { $runtime_failed = true; }
+echo json_encode(array('unchanged' => $existing === $GLOBALS['ran_wp_release_updater_v1_broker'], 'state' => $registrar->diagnostics()['state'], 'diagnostics' => $registrar->diagnostics()['diagnostics'], 'hooks' => isset($GLOBALS['wp_filter']['after_setup_theme']), 'runtime_failed' => $runtime_failed));
+PHP );
+
+		self::assertTrue( $result['unchanged'] );
+		self::assertSame( 'conflict', $result['state'] );
+		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['diagnostics'] );
+		self::assertFalse( $result['hooks'] );
+		self::assertTrue( $result['runtime_failed'] );
+	}
+
 	public function testForeignProtocolFirstStaysUntouchedAndScheduledReplacementTerminalizesTheQueuedHandle(): void
 	{
 		$foreign = $this->probe( <<<'PHP'

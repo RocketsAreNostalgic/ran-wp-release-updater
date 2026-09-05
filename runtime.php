@@ -92,7 +92,7 @@ return new class(
 	private function live(): bool
 	{
 		if (
-			! is_object( $this->broker )
+			! $this->broker instanceof \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 			|| ! is_callable( array( $this->broker, 'protocolVersion' ) )
 			|| ! is_callable( array( $this->broker, 'diagnostics' ) )

@@ -41,7 +41,7 @@ if ( null === $ran_wp_release_updater_broker ) {
 }
 
 
-$ran_wp_release_updater_broker_compatible = is_object( $ran_wp_release_updater_broker )
+$ran_wp_release_updater_broker_compatible = $ran_wp_release_updater_broker instanceof RequestBroker
 	&& is_callable( array( $ran_wp_release_updater_broker, 'protocolVersion' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'registerCandidate' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'activate' ) )
