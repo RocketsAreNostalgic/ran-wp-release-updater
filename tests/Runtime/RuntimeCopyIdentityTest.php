@@ -117,6 +117,26 @@ PHP,
 		self::assertSame( 19, $result['hooks'] );
 	}
 
+	public function testLaterGenuineCopyReusesVerifiedBrokerProvenanceWithoutRehashingItsEstablishedRoot(): void
+	{
+		$first = $this->packageCopy( 'first', '0.1.0-beta.1' );
+		$second = $this->packageCopy( 'second', '0.1.0-beta.2' );
+		$installed = $this->parent . '/installed';
+		mkdir( $installed . '/plugin', 0700, true );
+		file_put_contents( $installed . '/plugin/main.php', "<?php\n/*\nPlugin Name: Provenance Probe\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/provenance-probe\n*/\n" );
+
+		$result = $this->probe(
+			'define("WP_PLUGIN_DIR", $data["installed"]); function add_filter(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["provenance_probe_hooks"][]=$hook;} function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["provenance_probe_hooks"][]=$hook;} $GLOBALS["provenance_probe_hooks"]=array(); $GLOBALS["wpdb"]=new stdClass(); $GLOBALS["wp_version"]="6.8.0"; $first=require $data["first"] . "/bootstrap.php"; file_put_contents($data["first"] . "/src/Provider/GitHub/GitHubReleaseAdapter.php", "<?php\\n// The established root no longer matches its full manifest.\\n"); $second=require $data["second"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $activation=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>2,"wordpress_version"=>"6.8.0")); $target=$second->plugin("github",$data["installed"] . "/plugin/main.php","acme/provenance-probe","123456789"); $target->register(); $selected=(new ReflectionProperty($broker,"selectedRoot"))->getValue($broker); echo json_encode(array("activation"=>$activation,"candidates"=>$broker->diagnostics()["candidate_count"],"selected"=>$selected,"target"=>$target->status(),"hooks"=>count($GLOBALS["provenance_probe_hooks"])));',
+			array( 'first' => $first, 'second' => $second, 'installed' => $installed )
+		);
+
+		self::assertTrue( $result['activation']['loaded'] );
+		self::assertSame( 2, $result['candidates'] );
+		self::assertSame( $second, $result['selected'] );
+		self::assertSame( 'target_active', $result['target']['code'] );
+		self::assertSame( 10, $result['hooks'] );
+	}
+
 	public function testCopiedSourceChangeWithoutManifestUpdateIsRejectedBeforeSelection(): void
 	{
 		$copy = $this->packageCopy( 'changed-without-manifest' );

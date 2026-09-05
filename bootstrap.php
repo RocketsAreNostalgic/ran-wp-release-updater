@@ -89,12 +89,49 @@ $ran_wp_release_updater_broker_origin = static function( object|string $broker )
 	}
 	return array( 'broker' => is_object( $broker ) ? $broker : null, 'root' => $root, 'source' => $source );
 };
-$ran_wp_release_updater_broker_class_origin = $ran_wp_release_updater_broker_origin( RequestBroker::class );
+$ran_wp_release_updater_cached_broker_origin = static function( mixed $broker, mixed $provenance ): ?array {
+	if (
+		! is_object( $broker )
+		|| ! is_array( $provenance )
+		|| ( $provenance['broker'] ?? null ) !== $broker
+		|| ! is_string( $provenance['root'] ?? null )
+		|| ! is_string( $provenance['source'] ?? null )
+	) {
+		return null;
+	}
+	try {
+		$source = ( new ReflectionClass( $broker ) )->getFileName();
+		$source = is_string( $source ) ? realpath( $source ) : false;
+	} catch ( Throwable ) {
+		return null;
+	}
+	if ( ! is_string( $source ) || 'RequestBroker.php' !== basename( $source ) || $source !== $provenance['source'] ) {
+		return null;
+	}
+	$root = realpath( dirname( $source, 3 ) );
+	if (
+		! is_string( $root )
+		|| $root !== $provenance['root']
+		|| realpath( $root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RequestBroker.php' ) !== $source
+	) {
+		return null;
+	}
+
+	return $provenance;
+};
+$ran_wp_release_updater_existing_broker = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
+$ran_wp_release_updater_cached_broker_provenance = $ran_wp_release_updater_cached_broker_origin(
+	$ran_wp_release_updater_existing_broker,
+	$GLOBALS['ran_wp_release_updater_v1_broker_provenance'] ?? null,
+);
+$ran_wp_release_updater_broker_class_origin = is_array( $ran_wp_release_updater_cached_broker_provenance )
+	? $ran_wp_release_updater_cached_broker_provenance
+	: ( null === $ran_wp_release_updater_existing_broker ? $ran_wp_release_updater_broker_origin( RequestBroker::class ) : null );
 $ran_wp_release_updater_can_create_broker = is_array( $ran_wp_release_updater_broker_class_origin ) && $ran_wp_release_updater_broker_class_origin['root'] === realpath( __DIR__ );
 if ( ! class_exists( SelectedRuntimeState::class, false ) ) {
 	require_once __DIR__ . '/src/Runtime/SelectedRuntimeState.php';
 }
-$ran_wp_release_updater_broker = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
+$ran_wp_release_updater_broker = $ran_wp_release_updater_existing_broker;
 $ran_wp_release_updater_created_broker = false;
 $ran_wp_release_updater_can_schedule = false;
 $ran_wp_release_updater_boundary_missed = false;
@@ -124,7 +161,11 @@ if ( null === $ran_wp_release_updater_broker && $ran_wp_release_updater_can_crea
 	$ran_wp_release_updater_created_broker = true;
 }
 
-$ran_wp_release_updater_broker_provenance = $ran_wp_release_updater_created_broker ? $ran_wp_release_updater_broker_class_origin : ( is_object( $ran_wp_release_updater_broker ) ? $ran_wp_release_updater_broker_origin( $ran_wp_release_updater_broker ) : null );
+$ran_wp_release_updater_broker_provenance = $ran_wp_release_updater_created_broker
+	? $ran_wp_release_updater_broker_class_origin
+	: ( is_array( $ran_wp_release_updater_cached_broker_provenance )
+		? $ran_wp_release_updater_cached_broker_provenance
+		: ( is_object( $ran_wp_release_updater_broker ) ? $ran_wp_release_updater_broker_origin( $ran_wp_release_updater_broker ) : null ) );
 $ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_broker_provenance )
 	&& $ran_wp_release_updater_broker instanceof RequestBroker
 	&& is_callable( array( $ran_wp_release_updater_broker, 'protocolVersion' ) )
