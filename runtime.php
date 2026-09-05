@@ -54,6 +54,23 @@ unset(
 	$ran_wp_release_updater_runtime_relative
 );
 
+$ran_wp_release_updater_broker_origin = static function( mixed $broker, mixed $provenance ): bool {
+	if ( ! is_object( $broker ) || ! is_array( $provenance ) || ( $provenance['broker'] ?? null ) !== $broker || ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $broker ) {
+		return false;
+	}
+	try {
+		$source = ( new ReflectionClass( $broker ) )->getFileName();
+		$source = is_string( $source ) ? realpath( $source ) : false;
+	} catch ( Throwable ) {
+		return false;
+	}
+	if ( ! is_string( $source ) || $source !== ( $provenance['source'] ?? null ) || 'RequestBroker.php' !== basename( $source ) ) {
+		return false;
+	}
+	$root = realpath( dirname( $source, 3 ) );
+	return is_string( $root ) && $root === ( $provenance['root'] ?? null ) && realpath( $root . '/src/Runtime/RequestBroker.php' ) === $source;
+};
+
 /* The sealed catalog is deliberately local to this selected runtime. */
 $ran_wp_release_updater_provider_catalog = array(
 	'github' => static function(
@@ -77,21 +94,25 @@ $ran_wp_release_updater_provider_catalog = array(
 
 return new class(
 	$GLOBALS['ran_wp_release_updater_v1_broker'] ?? null,
+	$GLOBALS['ran_wp_release_updater_v1_broker_provenance'] ?? null,
 	$ran_wp_release_updater_selected_state ?? null,
 	$ran_wp_release_updater_provider_catalog,
+	$ran_wp_release_updater_broker_origin,
 ) {
 	/** @var array<string,array{declaration:array<string,mixed>,handle:object}> */
 	private array $targets = array();
 	private ?int $networkId;
 
 	/** @param array<string,Closure> $providerCatalog */
-	public function __construct( private mixed $broker, private mixed $selectedRuntimeState, private array $providerCatalog )
+	public function __construct( private mixed $broker, private mixed $brokerProvenance, private mixed $selectedRuntimeState, private array $providerCatalog, private Closure $brokerOrigin )
 	{
 		$this->networkId = $this->networkId();
 	}
 	private function live(): bool
 	{
 		if (
+			! ( $this->brokerOrigin )( $this->broker, $this->brokerProvenance )
+			||
 			! $this->broker instanceof \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 			|| ! is_callable( array( $this->broker, 'protocolVersion' ) )
@@ -173,13 +194,15 @@ return new class(
 		if ( ! $native instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater ) {
 			return $this->failure( $id, is_string( $composition['code'] ?? null ) ? $composition['code'] : 'target_composition_failed' );
 		}
-		$handle = new class( $native, $this->broker, $this->selectedRuntimeState ) {
-			public function __construct( private object $native, private mixed $broker, private mixed $selectedRuntimeState )
+		$handle = new class( $native, $this->broker, $this->brokerProvenance, $this->selectedRuntimeState, $this->brokerOrigin ) {
+			public function __construct( private object $native, private mixed $broker, private mixed $brokerProvenance, private mixed $selectedRuntimeState, private Closure $brokerOrigin )
 			{
 			}
 			private function live(): bool
 			{
 				if (
+					! ( $this->brokerOrigin )( $this->broker, $this->brokerProvenance )
+					||
 					! is_object( $this->broker )
 					|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 					|| ! is_callable( array( $this->broker, 'protocolVersion' ) )

@@ -225,28 +225,42 @@ PHP );
 	public function testLookalikeBrokerWithTheCompleteAbiIsRejectedFailClosed(): void
 	{
 		$result = $this->probe( <<<'PHP'
-$existing = new class {
-	public function protocolVersion(): int { return 2; }
-	public function registerCandidate(string $copyFile): bool { return true; }
-	public function activate(array $environment): array { return array(); }
-	public function registerTarget(array $declaration): array { return array(); }
-	public function targetStatus(int $id): array { return array(); }
-	public function targetDiagnostics(int $id): array { return array(); }
-	public function refreshTarget(int $id): bool { return true; }
-	public function diagnostics(): array { return array('state' => 'active'); }
-};
+$foreignRoot = dirname(__FILE__) . '/foreign-package';
+mkdir($foreignRoot . '/src/Runtime', 0700, true);
+file_put_contents($foreignRoot . '/src/Runtime/RequestBroker.php', <<<'FOREIGN'
+<?php
+namespace RAN\WPReleaseUpdater\V1\Runtime;
+final class RequestBroker {
+	private function called(string $method): void { $GLOBALS['p02_foreign_calls'][$method] = ($GLOBALS['p02_foreign_calls'][$method] ?? 0) + 1; }
+	public function protocolVersion(): int { $this->called(__FUNCTION__); return 2; }
+	public function registerCandidate(string $copyFile): bool { $this->called(__FUNCTION__); return true; }
+	public function activate(array $environment): array { $this->called(__FUNCTION__); return array(); }
+	public function registerTarget(array $declaration): array { $this->called(__FUNCTION__); return array(); }
+	public function targetStatus(int $id): array { $this->called(__FUNCTION__); return array(); }
+	public function targetDiagnostics(int $id): array { $this->called(__FUNCTION__); return array(); }
+	public function refreshTarget(int $id): bool { $this->called(__FUNCTION__); return true; }
+	public function diagnostics(): array { $this->called(__FUNCTION__); return array('state' => 'active'); }
+}
+FOREIGN
+);
+require $foreignRoot . '/src/Runtime/RequestBroker.php';
+$existing = new RAN\WPReleaseUpdater\V1\Runtime\RequestBroker();
 $GLOBALS['ran_wp_release_updater_v1_broker'] = $existing;
 $registrar = require $data['bootstrap'];
+$handle = $registrar->plugin('github', '/missing.php', 'acme/example', '123');
+$registered = $handle->register();
 $handoff = require dirname($data['bootstrap']) . '/runtime.php';
 try { $handoff->boot(array(), array()); $runtime_failed = false; } catch (Throwable) { $runtime_failed = true; }
-echo json_encode(array('unchanged' => $existing === $GLOBALS['ran_wp_release_updater_v1_broker'], 'state' => $registrar->diagnostics()['state'], 'diagnostics' => $registrar->diagnostics()['diagnostics'], 'hooks' => isset($GLOBALS['wp_filter']['after_setup_theme']), 'runtime_failed' => $runtime_failed));
+echo json_encode(array('unchanged' => $existing === $GLOBALS['ran_wp_release_updater_v1_broker'], 'registered' => $registered, 'state' => $registrar->diagnostics()['state'], 'diagnostics' => $registrar->diagnostics()['diagnostics'], 'hooks' => isset($GLOBALS['wp_filter']['after_setup_theme']), 'runtime_failed' => $runtime_failed, 'foreign_calls' => $GLOBALS['p02_foreign_calls'] ?? array()));
 PHP );
 
 		self::assertTrue( $result['unchanged'] );
+		self::assertFalse( $result['registered'] );
 		self::assertSame( 'conflict', $result['state'] );
 		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['diagnostics'] );
 		self::assertFalse( $result['hooks'] );
 		self::assertTrue( $result['runtime_failed'] );
+		self::assertSame( array(), $result['foreign_calls'] );
 	}
 
 	public function testPreloadedForeignBrokerClassCannotCreateTheSharedBroker(): void

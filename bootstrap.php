@@ -8,16 +8,84 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 if ( ! class_exists( RequestBroker::class, false ) ) {
 	require_once __DIR__ . '/src/Runtime/RequestBroker.php';
 }
-$ran_wp_release_updater_broker_source = realpath( __DIR__ . '/src/Runtime/RequestBroker.php' );
-$ran_wp_release_updater_broker_class_source = false;
-try {
-	$ran_wp_release_updater_broker_class_source = ( new ReflectionClass( RequestBroker::class ) )->getFileName();
-	$ran_wp_release_updater_broker_class_source = is_string( $ran_wp_release_updater_broker_class_source ) ? realpath( $ran_wp_release_updater_broker_class_source ) : false;
-} catch ( Throwable ) {
-	$ran_wp_release_updater_broker_class_source = false;
-}
-$ran_wp_release_updater_can_create_broker = is_string( $ran_wp_release_updater_broker_source )
-	&& $ran_wp_release_updater_broker_source === $ran_wp_release_updater_broker_class_source;
+$ran_wp_release_updater_broker_origin = static function( object|string $broker ): ?array {
+	try {
+		$source = ( new ReflectionClass( $broker ) )->getFileName();
+		$source = is_string( $source ) ? realpath( $source ) : false;
+	} catch ( Throwable ) {
+		return null;
+	}
+	if ( ! is_string( $source ) || 'RequestBroker.php' !== basename( $source ) ) {
+		return null;
+	}
+	$root = realpath( dirname( $source, 3 ) );
+	if ( ! is_string( $root ) || realpath( $root . '/src/Runtime/RequestBroker.php' ) !== $source || ! is_file( $root . '/runtime-copy.json' ) || is_link( $root . '/runtime-copy.json' ) ) {
+		return null;
+	}
+	try {
+		$copy = json_decode( (string) file_get_contents( $root . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		$keys = array( 'package_revision', 'package_version', 'php_floor', 'runtime_file', 'runtime_protocol', 'wordpress_floor' );
+		if (
+			! is_array( $copy )
+			|| array_is_list( $copy )
+			|| $keys !== array_keys( $copy )
+			|| ! is_string( $copy['package_revision'] )
+			|| 1 !== preg_match( '/\A[a-f0-9]{64}\z/D', $copy['package_revision'] )
+			|| ! is_string( $copy['package_version'] )
+			|| ! is_string( $copy['php_floor'] )
+			|| 'runtime.php' !== $copy['runtime_file']
+			|| 2 !== $copy['runtime_protocol']
+			|| ! is_string( $copy['wordpress_floor'] )
+		) {
+			return null;
+		}
+		$files = array( 'bootstrap.php', 'runtime.php' );
+		$regular = static function( string $relative ) use ( $root ): ?string {
+			$expected = $root . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $relative );
+			$actual = realpath( $expected );
+			return ! is_link( $expected ) && is_file( $expected ) && is_string( $actual ) && $actual === $expected ? $actual : null;
+		};
+		foreach ( $files as $file ) {
+			if ( ! is_string( $regular( $file ) ) ) {
+				return null;
+			}
+		}
+		$sourceDirectory = $root . '/src';
+		if ( is_link( $sourceDirectory ) || ! is_dir( $sourceDirectory ) || realpath( $sourceDirectory ) !== $sourceDirectory ) {
+			return null;
+		}
+		$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $sourceDirectory, FilesystemIterator::SKIP_DOTS ) );
+		foreach ( $iterator as $file ) {
+			if ( $file->isLink() ) {
+				return null;
+			}
+			if ( $file->isFile() && 'php' === $file->getExtension() ) {
+				$relative = str_replace( '\\', '/', substr( $file->getPathname(), strlen( $root ) + 1 ) );
+				if ( ! is_string( $regular( $relative ) ) ) {
+					return null;
+				}
+				$files[] = $relative;
+			}
+		}
+		sort( $files, SORT_STRING );
+		$payload = '';
+		foreach ( $files as $file ) {
+			$hash = hash_file( 'sha256', $regular( $file ) ?: '' );
+			if ( ! is_string( $hash ) ) {
+				return null;
+			}
+			$payload .= $file . "\0" . $hash . "\n";
+		}
+		if ( ! hash_equals( hash( 'sha256', $payload ), $copy['package_revision'] ) ) {
+			return null;
+		}
+	} catch ( Throwable ) {
+		return null;
+	}
+	return array( 'broker' => is_object( $broker ) ? $broker : null, 'root' => $root, 'source' => $source );
+};
+$ran_wp_release_updater_broker_class_origin = $ran_wp_release_updater_broker_origin( RequestBroker::class );
+$ran_wp_release_updater_can_create_broker = is_array( $ran_wp_release_updater_broker_class_origin ) && $ran_wp_release_updater_broker_class_origin['root'] === realpath( __DIR__ );
 if ( ! class_exists( SelectedRuntimeState::class, false ) ) {
 	require_once __DIR__ . '/src/Runtime/SelectedRuntimeState.php';
 }
@@ -46,12 +114,14 @@ if ( null === $ran_wp_release_updater_broker && $ran_wp_release_updater_can_crea
 	$ran_wp_release_updater_selected_state = new SelectedRuntimeState();
 	$ran_wp_release_updater_broker = new RequestBroker( $ran_wp_release_updater_boundary_missed, $ran_wp_release_updater_selected_state );
 	$ran_wp_release_updater_selected_state->bind( $ran_wp_release_updater_broker );
+	$ran_wp_release_updater_broker_class_origin['broker'] = $ran_wp_release_updater_broker;
 	$GLOBALS['ran_wp_release_updater_v1_broker'] = $ran_wp_release_updater_broker;
 	$ran_wp_release_updater_created_broker = true;
 }
 
-
-$ran_wp_release_updater_broker_compatible = $ran_wp_release_updater_broker instanceof RequestBroker
+$ran_wp_release_updater_broker_provenance = $ran_wp_release_updater_created_broker ? $ran_wp_release_updater_broker_class_origin : ( is_object( $ran_wp_release_updater_broker ) ? $ran_wp_release_updater_broker_origin( $ran_wp_release_updater_broker ) : null );
+$ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_broker_provenance )
+	&& $ran_wp_release_updater_broker instanceof RequestBroker
 	&& is_callable( array( $ran_wp_release_updater_broker, 'protocolVersion' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'registerCandidate' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'activate' ) )
@@ -66,6 +136,12 @@ if ( $ran_wp_release_updater_broker_compatible ) {
 	} catch ( Throwable ) {
 		$ran_wp_release_updater_broker_compatible = false;
 	}
+}
+
+if ( $ran_wp_release_updater_broker_compatible ) {
+	$GLOBALS['ran_wp_release_updater_v1_broker_provenance'] = $ran_wp_release_updater_broker_provenance;
+} else {
+	unset( $GLOBALS['ran_wp_release_updater_v1_broker_provenance'] );
 }
 
 if ( ! $ran_wp_release_updater_broker_compatible ) {
