@@ -10,10 +10,10 @@ Before proposing a change, validate the Composer package metadata:
 composer check
 ```
 
-Run the applicable PHPUnit suites for the changed boundary. When the frozen
-legacy source is available in the adjacent worktree, also run the paired
-GitHub semantic gate with `composer check:phase3`. Report any unavailable or
-skipped gate instead of treating `composer check` as a complete test run.
+Run the applicable PHPUnit suites for the changed boundary. Maintainers may
+also run environment-specific integration and parity gates when their fixtures
+are available. Report any unavailable or skipped gate instead of treating
+`composer check` as a complete test run.
 
 Changes to provider protocols, archive custody, WordPress lifecycle hooks,
 release automation, package identity, or compatibility boundaries need focused

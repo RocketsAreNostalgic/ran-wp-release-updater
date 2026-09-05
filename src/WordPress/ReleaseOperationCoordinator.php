@@ -121,7 +121,12 @@ final class ReleaseOperationCoordinator {
 		return array( 'current' => $released['current'], 'now' => $last['now'], 'receipt' => $accepted, 'result' => 'completed' );
 	}
 	private static function name( BindingRecord $binding ): string {
-		return self::PREFIX . BindingRecord::targetFenceKey( array( 'installed_package_identity' => $binding->toArray()['installed_package_identity'] ) );
+		$facts = $binding->toArray();
+		return self::PREFIX . BindingRecord::targetFenceKey( array(
+			'network_id' => $facts['network_id'],
+			'target_type' => $facts['target_type'],
+			'installed_package_identity' => $facts['installed_package_identity'],
+		) );
 	}
 	/** @return array{current:BindingState|null,result:string} */
 	private static function insertClaim( object $wpdb, string $name, BindingRecord $binding, string $owner, int $deadline ): array {
@@ -158,7 +163,11 @@ final class ReleaseOperationCoordinator {
 		return hash_equals( self::json( $left->toArray() ) ?? '', self::json( $right->toArray() ) ?? '' );
 	}
 	private static function sameTarget( BindingRecord $left, BindingRecord $right ): bool {
-		return hash_equals( $left->toArray()['installed_package_identity'], $right->toArray()['installed_package_identity'] );
+		$leftFacts = $left->toArray();
+		$rightFacts = $right->toArray();
+		return $leftFacts['network_id'] === $rightFacts['network_id']
+			&& hash_equals( $leftFacts['target_type'], $rightFacts['target_type'] )
+			&& hash_equals( $leftFacts['installed_package_identity'], $rightFacts['installed_package_identity'] );
 	}
 	private static function atLimit( BindingState $state ): bool { return BindingState::MAX_SAFE_INTEGER === $state->bindingGeneration()
 			|| BindingState::MAX_SAFE_INTEGER === $state->fenceEpoch();

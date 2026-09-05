@@ -58,7 +58,7 @@ final class KernelPerformanceTest extends TestCase {
 
 	/** @return array<string,mixed> */
 	private function bindingFacts(): array {
-		return array( 'canonical_repository_locator' => 'owner/package', 'canonical_update_uri' => 'https://updates.example.test/owner/package', 'installed_package_identity' => 'package/package.php', 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'release_channel' => 'stable', 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8' );
+		return array( 'canonical_repository_locator' => 'owner/package', 'canonical_update_uri' => 'https://updates.example.test/owner/package', 'installed_package_identity' => 'package/package.php', 'maximum_artifact_bytes' => 52428800, 'network_id' => 1, 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'release_channel' => 'stable', 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8' );
 	}
 
 	/** @return array<string,mixed> */

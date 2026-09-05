@@ -211,6 +211,8 @@ function paired_binding(
 		'installed_package_identity' => 'plugin' === $targetType
 			? 'repository/repository.php'
 			: 'repository',
+		'maximum_artifact_bytes' => 52_428_800,
+		'network_id' => 1,
 		'provider_code' => 'github',
 		'canonical_repository_locator' => 'owner/repository',
 		'stable_repository_identity' => '123456789',

@@ -15,7 +15,7 @@ final class RuntimeCopyIdentityTest extends TestCase
 
 	protected function setUp(): void
 	{
-		$this->parent = sys_get_temp_dir() . '/neutral-runtime-copy-' . bin2hex( random_bytes( 8 ) );
+		$this->parent = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/neutral-runtime-copy-' . bin2hex( random_bytes( 8 ) );
 		mkdir( $this->parent, 0700, true );
 	}
 
@@ -38,10 +38,60 @@ final class RuntimeCopyIdentityTest extends TestCase
 		file_put_contents( $right . '/src/Runtime/RequestBroker.php', (string) file_get_contents( $right . '/src/Runtime/RequestBroker.php' ) . "\n// Divergent physical package copy.\n" );
 		$this->writeRuntimeCopy( $right );
 
-		$result = $this->probe( 'require $data["left"] . "/bootstrap.php"; require $data["right"] . "/bootstrap.php"; $result=$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(array("php_version"=>"8.2.0","runtime_protocol"=>1,"wordpress_version"=>"6.8.0")); echo json_encode($result);', array( 'left' => $left, 'right' => $right ) );
+		$result = $this->probe( 'require $data["left"] . "/bootstrap.php"; require $data["right"] . "/bootstrap.php"; $result=$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(array("php_version"=>"8.2.0","runtime_protocol"=>2,"wordpress_version"=>"6.8.0")); echo json_encode($result);', array( 'left' => $left, 'right' => $right ) );
 
 		self::assertFalse( $result['loaded'] );
 		self::assertSame( array( 'runtime_selection_inactive' ), array_column( $result['diagnostics'], 'code' ) );
+	}
+
+	public function testSelectedRuntimeSymbolsAlwaysComeFromTheHighestWinnerRoot(): void
+	{
+		$copies = array(
+			$this->packageCopy( 'beta-one', '0.1.0-beta.1' ),
+			$this->packageCopy( 'beta-two', '0.1.0-beta.2' ),
+			$this->packageCopy( 'beta-three', '0.1.0-beta.3' ),
+		);
+		$orders = array(
+			$copies,
+			array_reverse( $copies ),
+			array( $copies[1], $copies[0], $copies[2] ),
+		);
+
+		foreach ( $orders as $order ) {
+			$result = $this->probe(
+				<<<'PHP'
+foreach ($data['copies'] as $copy) require $copy . '/bootstrap.php'; $broker=$GLOBALS['ran_wp_release_updater_v1_broker']; $activation=$broker->activate(array('php_version'=>'8.2.0','runtime_protocol'=>2,'wordpress_version'=>'6.8.0')); preg_match_all("/'([^']+)' => '(src\\/[^']+\\.php)'/", file_get_contents($data['winner'] . '/runtime.php'), $matches, PREG_SET_ORDER); $symbols=array(); foreach ($matches as $match) { $symbol=str_replace('\\\\','\\',$match[1]); $reflection=new ReflectionClass($symbol); $symbols[$symbol]=array('expected'=>$data['winner'] . '/' . $match[2],'actual'=>$reflection->getFileName()); } $selected=(new ReflectionProperty($broker,'selectedRoot'))->getValue($broker); echo json_encode(array('activation'=>$activation,'selected'=>$selected,'symbols'=>$symbols));
+PHP,
+				array( 'copies' => $order, 'winner' => $copies[2] )
+			);
+
+			self::assertTrue( $result['activation']['loaded'] );
+			self::assertSame( $copies[2], $result['selected'] );
+			self::assertNotEmpty( $result['symbols'] );
+			foreach ( $result['symbols'] as $symbol => $source ) {
+				self::assertSame( $source['expected'], $source['actual'], $symbol );
+			}
+		}
+	}
+
+	public function testSelectedRuntimeAcceptsPluginAndThemeDeclarationsAfterBootWithoutReopeningCopyIntake(): void
+	{
+		$old = $this->packageCopy( 'old', '0.1.0-beta.1' );
+		$new = $this->packageCopy( 'new', '0.1.0-beta.2' );
+		$installed = $this->parent . '/installed';
+		mkdir( $installed, 0700, true );
+
+		$result = $this->probe(
+			'define("WP_PLUGIN_DIR", $data["installed"]); function add_filter(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["p02_hooks"][]=array("hook"=>$hook,"callback"=>$callback);} function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["p02_hooks"][]=array("hook"=>$hook,"callback"=>$callback);} $GLOBALS["p02_hooks"]=array(); $GLOBALS["wpdb"]=new stdClass(); $GLOBALS["wp_version"]="6.8.0"; $GLOBALS["wp_theme_directories"]=array($data["installed"]); mkdir($data["installed"] . "/plugin",0700,true); mkdir($data["installed"] . "/theme",0700,true); file_put_contents($data["installed"] . "/plugin/main.php","<?php\\n/*\\nPlugin Name: Selected Plugin\\nVersion: 1.0.0\\nUpdate URI: https://github.com/acme/selected-plugin\\n*/\\n"); file_put_contents($data["installed"] . "/theme/style.css","/*\\nTheme Name: Selected Theme\\nVersion: 1.0.0\\nUpdate URI: https://github.com/acme/selected-theme\\n*/\\n"); $old=require $data["old"] . "/bootstrap.php"; $new=require $data["new"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $activation=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>2,"wordpress_version"=>"6.8.0")); $before=$broker->diagnostics()["candidate_count"]; $plugin=$old->plugin("github",$data["installed"] . "/plugin/main.php","acme/selected-plugin","123456789"); $theme=$new->theme("github",$data["installed"] . "/theme/style.css","acme/selected-theme","987654321"); $plugin->register(); $theme->register(); echo json_encode(array("activation"=>$activation,"before"=>$before,"after"=>$broker->diagnostics()["candidate_count"],"plugin"=>$plugin->status(),"theme"=>$theme->status(),"hooks"=>count($GLOBALS["p02_hooks"])));',
+			array( 'old' => $old, 'new' => $new, 'installed' => $installed )
+		);
+
+		self::assertTrue( $result['activation']['loaded'] );
+		self::assertSame( 2, $result['before'] );
+		self::assertSame( $result['before'], $result['after'] );
+		self::assertSame( 'target_active', $result['plugin']['code'] );
+		self::assertSame( 'target_active', $result['theme']['code'] );
+		self::assertSame( 19, $result['hooks'] );
 	}
 
 	public function testCopiedSourceChangeWithoutManifestUpdateIsRejectedBeforeSelection(): void
@@ -68,7 +118,7 @@ final class RuntimeCopyIdentityTest extends TestCase
 		self::assertSame( 'A lifecycle symbol was loaded outside the selected runtime root.', $result['message'] );
 	}
 
-	private function packageCopy( string $name ): string
+	private function packageCopy( string $name, ?string $version = null ): string
 	{
 		$root = $this->parent . '/' . $name;
 		mkdir( $root, 0700, true );
@@ -76,15 +126,15 @@ final class RuntimeCopyIdentityTest extends TestCase
 			copy( dirname( __DIR__, 2 ) . '/' . $file, $root . '/' . $file );
 		}
 		$this->copyDirectory( dirname( __DIR__, 2 ) . '/src', $root . '/src' );
-		$this->writeRuntimeCopy( $root );
+		$this->writeRuntimeCopy( $root, $version );
 
 		return $root;
 	}
 
-	private function writeRuntimeCopy( string $root ): void
+	private function writeRuntimeCopy( string $root, ?string $version = null ): void
 	{
 		$checkedIn = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
-		file_put_contents( $root . '/runtime-copy.json', json_encode( array( 'package_revision' => $this->identity( $root ), 'package_version' => $checkedIn['package_version'], 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 1, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
+		file_put_contents( $root . '/runtime-copy.json', json_encode( array( 'package_revision' => $this->identity( $root ), 'package_version' => $version ?? $checkedIn['package_version'], 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 2, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
 	}
 
 	private function identity( string $root ): string
@@ -125,7 +175,7 @@ final class RuntimeCopyIdentityTest extends TestCase
 	{
 		$file = $this->parent . '/probe-' . bin2hex( random_bytes( 4 ) ) . '.php';
 		file_put_contents( $file, '<?php $data = ' . var_export( $data, true ) . '; ' . $body );
-		exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $file ), $output, $status );
+		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp' ) . ' ' . escapeshellarg( $file ), $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );

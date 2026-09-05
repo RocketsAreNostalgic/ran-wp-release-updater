@@ -163,8 +163,8 @@ final class GitHubReleaseAdapterTest extends TestCase
 		require $root . '/bootstrap.php';
 		$broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
 		self::assertSame(
-			array('loaded' => true, 'diagnostics' => array()),
-			$broker->activate(array('php_version' => '8.2.0', 'runtime_protocol' => 1, 'wordpress_version' => '6.8.0'))
+			array('loaded' => true, 'state' => 'active', 'code' => 'runtime_active', 'diagnostics' => array()),
+			$broker->activate(array('php_version' => '8.2.0', 'runtime_protocol' => 2, 'wordpress_version' => '6.8.0'))
 		);
 
 		$calls = 0;
@@ -699,7 +699,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$identity = PHP_INT_MAX;
 		$release = $this->release($identity, 'v1.2.3', false, true);
 		$release['assets'][0]['id'] = $identity;
-		$release['assets'][0]['size'] = IdentityDescriptor::MAX_ARTIFACT_BYTES;
+		$release['assets'][0]['size'] = 52_428_800;
 		$GLOBALS['ran_github_responses'] = array(
 			$this->response(200, array('id' => $identity)),
 			$this->response(200, $release),
@@ -713,7 +713,20 @@ final class GitHubReleaseAdapterTest extends TestCase
 		self::assertSame((string) $identity, $facts['repository_identity']);
 		self::assertSame((string) $identity, $facts['release_identity']);
 		self::assertSame((string) $identity, $facts['artifact_identity']);
-		self::assertSame(IdentityDescriptor::MAX_ARTIFACT_BYTES, $facts['artifact_size']);
+		self::assertSame(52_428_800, $facts['artifact_size']);
+	}
+
+	public function testCustomBindingAcceptsItsExactLargerAssetMetadata(): void
+	{
+		$limit = 52_428_800 + 1;
+		$release = $this->release(7, 'v1.2.3');
+		$release['assets'][0]['size'] = $limit;
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array('id' => 99)),
+			$this->response(200, $release),
+			$this->response(200, array('sha' => str_repeat('a', 40))),
+		);
+		self::assertSame( $limit, ( new GitHubReleaseAdapter( $this->binding( maximumArtifactBytes: $limit ) ) )->inspect( '7' )->toArray()['artifact_size'] );
 	}
 
 	/** @dataProvider invalidInspectionProvider */
@@ -874,7 +887,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			'ZIP artifact is invalid',
 			static function (array &$repository, array &$release): void {
 				unset($repository);
-				$release['assets'][0]['size'] = IdentityDescriptor::MAX_ARTIFACT_BYTES + 1;
+				$release['assets'][0]['size'] = 52_428_800 + 1;
 			},
 		);
 		yield 'changed commit' => array(
@@ -928,7 +941,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		);
 		self::assertTrue($GLOBALS['ran_github_requests'][5][1]['stream']);
 		self::assertSame(
-			IdentityDescriptor::MAX_ARTIFACT_BYTES + 1,
+			52_428_800 + 1,
 			$GLOBALS['ran_github_requests'][5][1]['limit_response_size']
 		);
 		self::assertSame('zip-data', $artifact->inspect('file_get_contents'));
@@ -1397,7 +1410,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$GLOBALS['ran_github_responses'] = $this->inspectionResponses(7, 'v1.2.3');
 		$descriptor = $adapter->inspect('7');
 		$oversized = $this->response(200, null);
-		$oversized['file_size'] = IdentityDescriptor::MAX_ARTIFACT_BYTES + 1;
+		$oversized['file_size'] = 52_428_800 + 1;
 		$GLOBALS['ran_github_responses'] = array(
 			$this->response(200, array('id' => 99)),
 			$oversized,
@@ -1410,6 +1423,36 @@ final class GitHubReleaseAdapterTest extends TestCase
 		} finally {
 			$this->assertAllTemporaryPathsAbsent();
 		}
+	}
+
+	public function testCustomLimitBoundsTheDownloadAndRejectsAnOverCustomActualSize(): void
+	{
+		$limit = 83886080;
+		$adapter = new GitHubReleaseAdapter( $this->binding( maximumArtifactBytes: $limit ) );
+		$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+		$descriptor = $adapter->inspect( '7' );
+		$oversized = $this->response( 200, null ); $oversized['file_size'] = $limit + 1;
+		$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $oversized );
+		try {
+			$adapter->acquire( $descriptor ); self::fail( 'An over-custom downloaded size was accepted.' );
+		} catch ( RuntimeException $exception ) {
+			self::assertSame( 'The downloaded GitHub artifact is invalid.', $exception->getMessage() );
+			self::assertSame( $limit + 1, $GLOBALS['ran_github_requests'][4][1]['limit_response_size'] );
+		} finally { $this->assertAllTemporaryPathsAbsent(); }
+	}
+
+	public function testMaximumIntegerLimitDoesNotOverflowTheDownloadResponseLimit(): void
+	{
+		$service = $this->service( $this->binding( maximumArtifactBytes: PHP_INT_MAX ) );
+		$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
+		$service->listReleases();
+		self::assertSame( 262145, $GLOBALS['ran_github_requests'][0][1]['limit_response_size'] );
+		// The artifact request is the only request sized from the target limit; invoke its private boundary through acquisition setup below.
+		$adapter = new GitHubReleaseAdapter( $this->binding( maximumArtifactBytes: PHP_INT_MAX ) );
+		$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' ); $descriptor = $adapter->inspect( '7' );
+		$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 500, null ) );
+		try { $adapter->acquire( $descriptor ); } catch ( RuntimeException ) { }
+		self::assertSame( PHP_INT_MAX, $GLOBALS['ran_github_requests'][5][1]['limit_response_size'] );
 	}
 
 	public function testTemporaryArtifactRejectsReplacementAndNeverDeletesUnownedBytes(): void
@@ -1437,7 +1480,8 @@ final class GitHubReleaseAdapterTest extends TestCase
 	private function binding(
 		string $channel = 'stable',
 		string $targetType = 'plugin',
-		string $repositoryIdentity = '99'
+		string $repositoryIdentity = '99',
+		int $maximumArtifactBytes = 52428800
 	): BindingRecord {
 		return BindingRecord::create(
 			array(
@@ -1446,6 +1490,8 @@ final class GitHubReleaseAdapterTest extends TestCase
 				'installed_package_identity' => 'plugin' === $targetType
 					? 'repository/repository.php'
 					: 'repository',
+				'maximum_artifact_bytes' => $maximumArtifactBytes,
+				'network_id' => 1,
 				'php_runtime_version' => '8.2.0',
 				'provider_code' => 'github',
 				'release_channel' => $channel,
@@ -1471,6 +1517,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		return array(
 			'canonical_repository_locator' => $facts['canonical_repository_locator'],
 			'canonical_update_uri' => $facts['canonical_update_uri'],
+			'maximum_artifact_bytes' => $facts['maximum_artifact_bytes'],
 			'php_runtime_version' => $facts['php_runtime_version'],
 			'release_channel' => $facts['release_channel'],
 			'stable_repository_identity' => $facts['stable_repository_identity'],

@@ -55,9 +55,20 @@ final class ReleaseOperationCoordinatorTest extends TestCase
 		self::assertSame( array(), array_values( array_filter( $database->preparedSql(), static fn ( string $sql ): bool => str_contains( $sql, 'wp_2_options' ) ) ) );
 		self::assertNotSame( array(), array_values( array_filter( $database->preparedSql(), static fn ( string $sql ): bool => str_contains( $sql, 'wp_options' ) ) ) );
 	}
+	public function testNetworkAndTypeDifferencesCannotRebindAnExistingFence(): void
+	{
+		$database = new FakeOptionDatabase( 100 );
+		$binding = $this->binding();
+		$claimed = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		$claim = $this->claim( $claimed['current'] );
+		foreach ( array( array( 'network_id' => 2 ), array( 'target_type' => 'theme' ) ) as $difference ) {
+			$next = BindingRecord::create( array_merge( $this->facts(), $difference ) );
+			self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::persistPersistentBindingState( $database, $claimed['current'], $claim, $next )['result'] );
+		}
+	}
 	public function testExactValueCasAndLiveLeaseRejectRacesAndTakeover(): void
 	{
-		$database = new FakeOptionDatabase( 100 ); $binding = $this->binding(); $first = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 ); $name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'installed_package_identity' => 'x/x.php' ) ); $database->mutateOnNextWrite( $name, static function ( FakeOptionDatabase $database ) use ( $name ): void { $database->forceOptionValue( $name, '{}' ); } ); $next = BindingRecord::create( array_merge( $this->facts(), array( 'update_policy' => 'automatic' ) ) );
+		$database = new FakeOptionDatabase( 100 ); $binding = $this->binding(); $first = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 ); $name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'network_id' => 1, 'target_type' => 'plugin', 'installed_package_identity' => 'x/x.php' ) ); $database->mutateOnNextWrite( $name, static function ( FakeOptionDatabase $database ) use ( $name ): void { $database->forceOptionValue( $name, '{}' ); } ); $next = BindingRecord::create( array_merge( $this->facts(), array( 'update_policy' => 'automatic' ) ) );
 		self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::persistPersistentBindingState( $database, $first['current'], $this->claim( $first['current'] ), $next )['result'] ); self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'b', 64 ), 20 )['result'] );
 	}
 	public function testClaimRejectsEquivalentValuesWithAnUnexpectedKeyOrder(): void
@@ -86,9 +97,9 @@ final class ReleaseOperationCoordinatorTest extends TestCase
 	public function testReleaseRejectsExpiredAndRacingOwners(): void
 	{
 		$database = new FakeOptionDatabase( 100 ); $binding = $this->binding(); $first = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 ); $claim = $this->claim( $first['current'] ); $database->setTime( 121 ); self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::releasePersistentBindingState( $database, $first['current'], $claim )['result'] );
-		$database = new FakeOptionDatabase( 100 ); $first = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 ); $name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'installed_package_identity' => 'x/x.php' ) ); $database->mutateOnNextWrite( $name, static function ( FakeOptionDatabase $database ) use ( $name ): void { $database->forceOptionValue( $name, '{}' ); } ); self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::releasePersistentBindingState( $database, $first['current'], $this->claim( $first['current'] ) )['result'] );
+		$database = new FakeOptionDatabase( 100 ); $first = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 ); $name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'network_id' => 1, 'target_type' => 'plugin', 'installed_package_identity' => 'x/x.php' ) ); $database->mutateOnNextWrite( $name, static function ( FakeOptionDatabase $database ) use ( $name ): void { $database->forceOptionValue( $name, '{}' ); } ); self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::releasePersistentBindingState( $database, $first['current'], $this->claim( $first['current'] ) )['result'] );
 	}
 	/** @return array<string,mixed> */ private function claim( BindingState $state ): array { return array( 'binding_generation' => $state->bindingGeneration(), 'binding_hash' => $state->binding()->bindingHash(), 'lease_deadline' => $state->leaseDeadline(), 'owner_token' => $state->ownerToken() ); }
 	private function binding(): BindingRecord { return BindingRecord::create( $this->facts() ); }
-	/** @return array<string,mixed> */ private function facts(): array { return array( 'canonical_repository_locator' => 'owner/repo', 'canonical_update_uri' => 'https://example.com/owner/repo', 'installed_package_identity' => 'x/x.php', 'php_runtime_version' => '8.2', 'provider_code' => 'github', 'release_channel' => 'stable', 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8' ); }
+	/** @return array<string,mixed> */ private function facts(): array { return array( 'canonical_repository_locator' => 'owner/repo', 'canonical_update_uri' => 'https://example.com/owner/repo', 'installed_package_identity' => 'x/x.php', 'maximum_artifact_bytes' => 52428800, 'network_id' => 1, 'php_runtime_version' => '8.2', 'provider_code' => 'github', 'release_channel' => 'stable', 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8' ); }
 }
