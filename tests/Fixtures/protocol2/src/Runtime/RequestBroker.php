@@ -85,7 +85,7 @@ final class RequestBroker
 
 	public function protocolVersion(): int
 	{
-		return 3;
+		return 2;
 	}
 
 	/** Register a physical runtime-copy.json without loading its runtime. */
@@ -166,7 +166,7 @@ final class RequestBroker
 		if (
 			! is_object( $handoff )
 			|| ! $this->ownedBy( $handoff, $selected['source_root'] )
-			|| ! $this->exactPublicMethods( $handoff, array( 'boot', 'registerTarget', 'releaseSource' ) )
+			|| ! $this->exactPublicMethods( $handoff, array( 'boot', 'registerTarget' ) )
 		) {
 			return $this->disable( 'runtime_handoff_invalid' );
 		}
@@ -263,42 +263,6 @@ final class RequestBroker
 		return array( 'accepted' => true, 'submission_id' => $id, 'code' => 'target_queued' );
 	}
 
-	/** @param array<string,mixed> $declaration @return array{accepted:bool,code:string,source_handle:object|null} */
-	public function releaseSource( array $declaration ): array
-	{
-		$this->protocolLive();
-		if ( in_array( $this->state, array( 'inactive', 'conflict' ), true ) ) {
-			return $this->releaseFailure( 'runtime_unavailable' );
-		}
-		if ( null !== $this->releaseDeclarationCode( $declaration ) ) {
-			return $this->releaseFailure( 'invalid_configuration' );
-		}
-		if ( 'active' !== $this->state || ! is_object( $this->handoff ) ) {
-			return $this->releaseFailure( 'runtime_not_ready' );
-		}
-		try {
-			$result = $this->handoff->releaseSource( $declaration );
-		} catch ( Throwable ) {
-			$this->disable( 'runtime_handoff_invalid' );
-			return $this->releaseFailure( 'runtime_unavailable' );
-		}
-		if ( ! is_array( $result ) || ! $this->exactKeys( $result, array( 'accepted', 'code', 'source_handle' ) ) || ! is_bool( $result['accepted'] ) || ! is_string( $result['code'] ) ) {
-			$this->disable( 'runtime_handoff_invalid' );
-			return $this->releaseFailure( 'runtime_unavailable' );
-		}
-		$validHandle = is_object( $result['source_handle'] ) && is_string( $this->selectedRoot )
-			&& $this->ownedBy( $result['source_handle'], $this->selectedRoot )
-			&& $this->exactPublicMethods( $result['source_handle'], array( 'acquire', 'inspect', 'list' ) );
-		if ( true === $result['accepted'] && 'release_source_ready' === $result['code'] && $validHandle ) {
-			return $result;
-		}
-		if ( false === $result['accepted'] && null === $result['source_handle'] && in_array( $result['code'], array( 'provider_unavailable', 'filesystem_unsupported', 'invalid_configuration', 'runtime_not_ready', 'runtime_unavailable' ), true ) ) {
-			return $result;
-		}
-		$this->disable( 'runtime_handoff_invalid' );
-		return $this->releaseFailure( 'runtime_unavailable' );
-	}
-
 	/** @return array<string,mixed> */
 	public function targetStatus( int $submissionId ): array
 	{
@@ -360,7 +324,7 @@ final class RequestBroker
 	{
 		$this->protocolLive();
 		return array(
-			'protocol_version' => 3, 'state' => $this->state,
+			'protocol_version' => 2, 'state' => $this->state,
 			'activation_attempted' => $this->activationAttempted,
 			'candidate_count' => count( $this->candidates ),
 			'submission_count' => count( $this->submissions ),
@@ -389,7 +353,7 @@ final class RequestBroker
 	{
 		if (
 			! $this->exactKeys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
-			|| 3 !== $environment['runtime_protocol']
+			|| 2 !== $environment['runtime_protocol']
 			|| ! is_string( $environment['php_version'] )
 			|| ! is_string( $environment['wordpress_version'] )
 		) {
@@ -750,23 +714,6 @@ final class RequestBroker
 		return null === $value['credential_resolver'] || is_callable( $value['credential_resolver'] ) ? null : 'credential_resolver_invalid';
 	}
 
-	/** @param array<string,mixed> $value */
-	private function releaseDeclarationCode( array $value ): ?string
-	{
-		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes' );
-		if ( ! $this->exactKeys( $value, $keys ) || ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true ) ) return 'invalid_configuration';
-		if ( ! is_string( $value['provider_code'] ) || 1 !== preg_match( '/\\A[a-z][a-z0-9_-]{0,31}\\z/D', $value['provider_code'] ) ) return 'invalid_configuration';
-		if ( ! $this->opaque( $value['repository_locator'], 255 ) || ! $this->opaque( $value['repository_identity'], 191 ) ) return 'invalid_configuration';
-		if ( ! in_array( $value['channel'], array( 'stable', 'prerelease' ), true ) || ! is_int( $value['maximum_artifact_bytes'] ) || 0 >= $value['maximum_artifact_bytes'] ) return 'invalid_configuration';
-		return null === $value['credential_resolver'] || is_callable( $value['credential_resolver'] ) ? null : 'invalid_configuration';
-	}
-
-	/** @return array{accepted:false,code:string,source_handle:null} */
-	private function releaseFailure( string $code ): array
-	{
-		return array( 'accepted' => false, 'code' => $code, 'source_handle' => null );
-	}
-
 	private function opaque( mixed $value, int $limit ): bool
 	{
 		return is_string( $value )
@@ -816,7 +763,7 @@ final class RequestBroker
 			|| ! is_string( $facts['package_version'] )
 			|| ! is_string( $facts['php_floor'] )
 			|| 'runtime.php' !== $facts['runtime_file']
-			|| 3 !== $facts['runtime_protocol']
+			|| 2 !== $facts['runtime_protocol']
 			|| ! is_string( $facts['wordpress_floor'] )
 		) {
 			throw new RuntimeException( 'Invalid runtime copy.' );
@@ -897,7 +844,7 @@ final class RequestBroker
 		if (
 			array() === $this->candidates
 			|| ! $this->exactKeys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
-			|| 3 !== $environment['runtime_protocol']
+			|| 2 !== $environment['runtime_protocol']
 			|| ! is_string( $environment['php_version'] )
 			|| ! is_string( $environment['wordpress_version'] )
 		) {

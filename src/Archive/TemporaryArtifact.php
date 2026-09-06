@@ -9,51 +9,124 @@ use RuntimeException;
 /** A verified temporary archive whose cleanup remains with this object. */
 final class TemporaryArtifact
 {
-	private ?bool $discardResult = null;
+	private bool $constructed = false;
+
+	private bool $discardAttempted = false;
+
+	private bool $discarded = false;
+
+	private bool $busy = false;
+
+	private readonly ?\Closure $livenessGuard;
 
 	/** @param array<string, int> $identity */
 	public function __construct(
 		private string $path,
 		private string $sha256,
-		private array $identity
+		private array $identity,
+		?callable $livenessGuard = null
 	) {
+		$this->livenessGuard = null === $livenessGuard ? null : \Closure::fromCallable($livenessGuard);
 		if (
 			1 !== preg_match('/\A[a-f0-9]{64}\z/D', $sha256)
 			|| ! $this->isUnchanged()
 		) {
 			throw new \InvalidArgumentException('The temporary archive is invalid.');
 		}
+		$this->constructed = true;
 	}
 
 	public function __destruct()
 	{
-		$this->discard();
+		if ($this->constructed && ! $this->busy) {
+			$this->discard();
+		}
+	}
+
+	/** Temporary artifacts cannot be cloned. */
+	private function __clone() {}
+
+	/** @throws \LogicException Always: temporary artifacts cannot be serialized. */
+	public function __serialize(): array
+	{
+		throw new \LogicException('Temporary artifacts cannot be serialized.');
+	}
+
+	/** @param array<string, mixed> $data @throws \LogicException Always: temporary artifacts cannot be unserialized. */
+	public function __unserialize(array $data): void
+	{
+		throw new \LogicException('Temporary artifacts cannot be unserialized.');
 	}
 
 	/** Inspect the exact bytes without transferring cleanup ownership. */
 	public function inspect(callable $inspector): mixed
 	{
-		if (null !== $this->discardResult || ! $this->isUnchanged()) {
-			throw new RuntimeException('The temporary archive is unavailable.');
+		if ($this->busy) {
+			throw self::busyException();
+		}
+		$this->assertAvailable();
+		$this->assertRuntimeLive();
+
+		$this->busy = true;
+		try {
+			$result = $inspector($this->path);
+		} finally {
+			$this->busy = false;
 		}
 
-		return $inspector($this->path);
+		$this->assertAvailable();
+		$this->assertRuntimeLive();
+
+		return $result;
 	}
 
 	/** Delete only the exact unchanged file while this object owns it. */
 	public function discard(): bool
 	{
-		if (null !== $this->discardResult) {
-			return $this->discardResult;
+		if ($this->busy) {
+			throw self::busyException();
 		}
+		if ($this->discarded) {
+			return true;
+		}
+
+		$this->discardAttempted = true;
 		if (! $this->isUnchanged()) {
 			return false;
 		}
 
 		@unlink($this->path);
 		clearstatcache(true, $this->path);
-		$this->discardResult = ! file_exists($this->path) && ! is_link($this->path);
-		return $this->discardResult;
+		$this->discarded = ! file_exists($this->path) && ! is_link($this->path);
+		return $this->discarded;
+	}
+
+	private function assertAvailable(): void
+	{
+		if ($this->discardAttempted || ! $this->isUnchanged()) {
+			throw new RuntimeException('The temporary archive is unavailable.', 1001);
+		}
+	}
+
+	private function assertRuntimeLive(): void
+	{
+		if (null === $this->livenessGuard) {
+			return;
+		}
+
+		try {
+			$revocation = ($this->livenessGuard)();
+		} catch (\Throwable) {
+			$revocation = true;
+		}
+		if (null !== $revocation) {
+			throw new RuntimeException('The selected runtime is unavailable.', 1002);
+		}
+	}
+
+	private static function busyException(): RuntimeException
+	{
+		return new RuntimeException('The temporary archive is busy.', 1003);
 	}
 
 	private function isUnchanged(): bool

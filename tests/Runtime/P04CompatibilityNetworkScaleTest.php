@@ -35,7 +35,7 @@ $second = $registrars[1]->plugin('github', $data['plugin'], 'acme/compatible', '
 $first->register();
 $second->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 2, 'wordpress_version' => '7.0.4'));
+$activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '7.0.4'));
 $selected = (new ReflectionProperty($broker, 'selectedRoot'))->getValue($broker);
 echo json_encode(array(
 	'activation' => $activation, 'selected' => $selected,
@@ -67,7 +67,7 @@ $GLOBALS['p04_blog'] = 23;
 $subsite = $registrar->plugin('github', $data['plugin'], 'acme/network', '123456789');
 $subsite->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 2, 'wordpress_version' => '7.0.4'));
+$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '7.0.4'));
 $mainStatus = $main->status();
 $subsiteStatus = $subsite->status();
 echo json_encode(array(
@@ -114,7 +114,7 @@ foreach ($data['targets'] as $target) {
 }
 foreach ($handles as $handle) { $handle->register(); }
 $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(array(
-	'php_version' => PHP_VERSION, 'runtime_protocol' => 2, 'wordpress_version' => '7.0.4',
+	'php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '7.0.4',
 ));
 $statuses = array_map(static fn(object $handle): array => $handle->status(), $handles);
 echo json_encode(array(
@@ -201,7 +201,7 @@ PHP, array( 'bootstrap' => dirname( __DIR__, 2 ) . '/bootstrap.php', 'targets' =
 		}
 		file_put_contents( $copy . '/runtime-copy.json', json_encode( array(
 			'package_revision' => $this->identity( $copy ), 'package_version' => '0.1.0-beta.99',
-			'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 2,
+			'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 3,
 			'wordpress_floor' => '6.5.0',
 		), JSON_THROW_ON_ERROR ) );
 		return $copy;

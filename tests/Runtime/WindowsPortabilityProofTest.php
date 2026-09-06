@@ -86,7 +86,7 @@ final class WindowsPortabilityProofTest extends TestCase
 		}
 		$this->copyDirectory( $source . DIRECTORY_SEPARATOR . 'src', $root . DIRECTORY_SEPARATOR . 'src' );
 		$checkedIn = json_decode( (string) file_get_contents( $source . DIRECTORY_SEPARATOR . 'runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
-		file_put_contents( $root . DIRECTORY_SEPARATOR . 'runtime-copy.json', json_encode( array( 'package_revision' => $this->identity( $root ), 'package_version' => $checkedIn['package_version'], 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 2, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
+		file_put_contents( $root . DIRECTORY_SEPARATOR . 'runtime-copy.json', json_encode( array( 'package_revision' => $this->identity( $root ), 'package_version' => $checkedIn['package_version'], 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 3, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
 
 		return $root;
 	}
@@ -137,7 +137,7 @@ $GLOBALS['wp_theme_directories'] = array($data['themes']);
 $GLOBALS['wp_version'] = '6.8.0';
 $registrar = require $data['package'] . '/bootstrap.php';
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 2, 'wordpress_version' => '6.8.0'));
+$activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0'));
 $plugin = $registrar->plugin('github', $data['plugin'], 'acme/example-plugin', '123456789');
 $theme = $registrar->theme('github', $data['theme'], 'acme/example-theme', '987654321');
 $plugin->register();

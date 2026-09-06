@@ -22,7 +22,9 @@ final class SealedProviderCatalogTest extends TestCase
 	{
 		$runtime = (string) file_get_contents( dirname( __DIR__, 2 ) . '/runtime.php' );
 
-		self::assertStringContainsString( "'github' => static function", $runtime );
+		self::assertStringContainsString( "'github' => array(", $runtime );
+		self::assertStringContainsString( "'native' => static function", $runtime );
+		self::assertStringContainsString( "'release' => static function", $runtime );
 		self::assertStringContainsString( 'private array $providerCatalog', $runtime );
 		self::assertStringNotContainsString( "'synthetic'", $runtime );
 		$seams = array(
@@ -86,6 +88,24 @@ final class SealedProviderCatalogTest extends TestCase
 		}
 	}
 
+	public function testSelectedSyntheticCatalogDispatchesAnIsolatedReleaseSourceForOpaqueIdentifiersInEitherLoadOrder(): void
+	{
+		$shipped = $this->package( 'release-shipped', '0.1.0-beta.98', false );
+		$synthetic = $this->package( 'release-synthetic', '0.1.0-beta.99', true );
+		foreach ( array( array( $shipped, $synthetic ), array( $synthetic, $shipped ) ) as $copies ) {
+			$result = $this->probe( <<<'PHP'
+$registrars = array(); foreach ($data['copies'] as $copy) $registrars[] = require $copy . '/bootstrap.php';
+$broker = $GLOBALS['ran_wp_release_updater_v1_broker']; $broker->activate(array('php_version'=>PHP_VERSION,'runtime_protocol'=>3,'wordpress_version'=>'6.8.0'));
+$source = $registrars[0]->releases('synthetic', 'plugin', 'acme/source', 'opaque_repository_id');
+$list = $source->list();
+echo json_encode(array('list'=>$list,'synthetic_calls'=>$GLOBALS['p0_2_synthetic_release_calls'] ?? 0,'github_calls'=>$GLOBALS['p0_2_github_release_calls'] ?? 0));
+PHP, array( 'copies' => $copies ) );
+			self::assertSame( 'releases_listed', $result['list']['code'] );
+			self::assertSame( 1, $result['synthetic_calls'] );
+			self::assertSame( 0, $result['github_calls'] );
+		}
+	}
+
 	private function syntheticProbe(): string
 	{
 		return <<<'PHP'
@@ -119,7 +139,7 @@ $github->register();
 $conflict->register();
 $synthetic->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$activation = $broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 2, 'wordpress_version' => '6.8.0' ) );
+$activation = $broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0' ) );
 $before = $broker->diagnostics();
 foreach ( $GLOBALS['p0_2_hooks'] as $hook ) {
 	if ( 'update_plugins_synthetic.invalid' === $hook['hook'] ) {
@@ -163,7 +183,7 @@ $before = $registrar->plugin(
 );
 $before->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 2, 'wordpress_version' => '6.8.0' ) );
+$broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0' ) );
 if ( $data['cutoff'] ) {
 	foreach ( $GLOBALS['p0_2_hooks'] as $hook ) {
 		if ( 'upgrader_package_options' === $hook['hook'] ) {
@@ -229,7 +249,7 @@ PHP;
 			'package_version' => $version,
 			'php_floor' => '8.2.0',
 			'runtime_file' => 'runtime.php',
-			'runtime_protocol' => 2,
+			'runtime_protocol' => 3,
 			'wordpress_floor' => '6.5.0',
 		);
 		file_put_contents( $root . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );
@@ -239,7 +259,8 @@ PHP;
 	private function syntheticCatalogEntry(): string
 	{
 		return <<<'PHP'
-	'synthetic' => static function( array $d, array $resolved, array $headers, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
+	'synthetic' => array(
+	'native' => static function( array $d, array $resolved, array $headers, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
 		$uri = \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( 'https://synthetic.invalid/' . $d['repository_locator'] );
 		if ( $uri !== \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $headers['UpdateURI'] ) ) {
 			return array( 'native' => null, 'code' => 'installed_update_uri_mismatch' );
@@ -321,6 +342,16 @@ PHP;
 		}
 		return array( 'native' => $native, 'code' => 'target_composition_failed' );
 	},
+		'release' => static function( array $declaration, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
+			if ('synthetic' !== ($declaration['provider_code'] ?? null) || 'opaque_repository_id' !== ($declaration['repository_identity'] ?? null)) throw new \InvalidArgumentException('Synthetic declaration mismatch.');
+			$service = new class {
+				public function list(array $conditional=array()): array { unset($conditional); ++$GLOBALS['p0_2_synthetic_release_calls']; return array('candidates'=>array(),'conditional'=>array('etag'=>null,'last_modified'=>null),'not_modified'=>false,'rate_limit'=>array('limited'=>false,'remaining'=>null,'reset_at'=>null,'retry_after'=>0),'search_exhausted'=>false); }
+				public function inspect(string $releaseId,string $tag): array { ++$GLOBALS['p0_2_synthetic_release_calls']; return array('release'=>$releaseId,'tag'=>$tag); }
+				public function acquire(string $releaseId,string $tag,string $fingerprint): array { unset($releaseId,$tag,$fingerprint); throw new \RuntimeException('Synthetic acquisition must not run.'); }
+			};
+			return new \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource($service, $state);
+		},
+	),
 PHP;
 	}
 
@@ -355,8 +386,11 @@ function add_action( string $hook, mixed $callback, int $priority, int $argument
 	$GLOBALS['p0_2_hooks'][] = array( 'hook' => $hook, 'callback' => $callback );
 }
 $GLOBALS['p0_2_hooks'] = array();
+$GLOBALS['p0_2_synthetic_release_calls'] = 0;
+$GLOBALS['p0_2_github_release_calls'] = 0;
 $GLOBALS['wpdb'] = new \Tests\Support\FakeOptionDatabase( 100 );
 $GLOBALS['wp_version'] = '6.8.0';
+define( 'FS_METHOD', 'direct' );
 function get_filesystem_method(): string { return 'direct'; }
 $data = __DATA__;
 PHP;

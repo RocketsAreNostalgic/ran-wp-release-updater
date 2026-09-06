@@ -25,16 +25,16 @@ final readonly class ProspectiveReleaseInspection
 	private const FACT_KEYS = array(
 		'artifact_filename', 'artifact_identity', 'artifact_sha256', 'artifact_size',
 		'assurance_facts', 'canonical_update_uri', 'channel', 'commit_identity',
-		'main_file', 'package_root', 'php_runtime_version', 'release_identity',
+		'main_file', 'maximum_artifact_bytes', 'package_root', 'php_runtime_version', 'provider_code', 'release_identity',
 		'repository_identity', 'repository_locator', 'tag', 'target_type', 'version',
 		'wordpress_runtime_version',
 	);
 	private const KEYS = array(
 		'artifact_filename', 'artifact_identity', 'artifact_sha256', 'artifact_size',
 		'assurance_facts', 'canonical_update_uri', 'channel', 'commit_identity',
-		'fingerprint', 'main_file', 'package_root', 'php_runtime_version',
+		'main_file', 'maximum_artifact_bytes', 'package_root', 'php_runtime_version', 'provider_code',
 		'release_identity', 'repository_identity', 'repository_locator', 'tag',
-		'target_type', 'version', 'wordpress_runtime_version',
+		'target_type', 'version', 'wordpress_runtime_version', 'fingerprint',
 	);
 
 	/** @param array<string, mixed> $facts */
@@ -108,8 +108,11 @@ final readonly class ProspectiveReleaseInspection
 			&& IdentityDescriptor::isBoundedOpaqueIdentity($value['artifact_identity'])
 			&& is_string($value['artifact_filename'])
 			&& 1 === preg_match('/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di', $value['artifact_filename'])
-			&& is_int($value['artifact_size'])
-			&& $value['artifact_size'] >= 1
+		&& is_int($value['artifact_size'])
+		&& $value['artifact_size'] >= 1
+		&& is_int($value['maximum_artifact_bytes'])
+		&& $value['maximum_artifact_bytes'] >= $value['artifact_size']
+		&& 1 === preg_match('/\A[a-z][a-z0-9_-]{0,31}\z/D', $value['provider_code'])
 			&& is_string($value['artifact_sha256'])
 			&& 1 === preg_match('/\A[a-f0-9]{64}\z/D', $value['artifact_sha256'])
 			&& is_string($value['canonical_update_uri'])
@@ -160,7 +163,7 @@ final readonly class ProspectiveReleaseInspection
 	/** @param array<string, mixed> $facts */
 	private static function fingerprintFacts(array $facts): string
 	{
-		return 'v1:' . hash('sha256', json_encode($facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+		return 'v2:' . hash('sha256', json_encode($facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 	}
 
 	/** @param array<string, mixed> $value @param list<string> $keys @return array<string, mixed> */
