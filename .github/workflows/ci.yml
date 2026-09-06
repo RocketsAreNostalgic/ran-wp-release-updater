@@ -31,7 +31,12 @@ jobs:
           command -v mysqld
           php -m | grep -Fx mysqli
           mysql_root="$GITHUB_WORKSPACE/.workspaces/mysql-cas"
-          mysqld_binary="$(command -v mysqld)"
+          system_mysqld="$(command -v mysqld)"
+          mysql_tools="$GITHUB_WORKSPACE/.workspaces/mysql-cas-tools"
+          mkdir -p "$mysql_tools"
+          mysqld_binary="$mysql_tools/mysqld"
+          cp "$system_mysqld" "$mysqld_binary"
+          cmp "$system_mysqld" "$mysqld_binary"
           mkdir -p "$mysql_root"
           chmod 700 "$mysql_root"
           export RAN_UPDATER_MYSQL_ROOT="$mysql_root"
