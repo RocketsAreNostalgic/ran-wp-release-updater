@@ -20,22 +20,23 @@ if ( '--worker' === ( $argv[1] ?? null ) ) {
 	exit( 0 );
 }
 
-$root = createIsolatedRoot();
-$data = $root . '/data';
-$port = reserveLoopbackPort();
-$pid = $root . '/mysqld.pid';
-$mysqld = resolveMysqld();
-if ( ! mkdir( $data, 0700, true ) ) throw new RuntimeException( 'Could not create isolated MySQL directory.' );
+$root = null;
 $server = null;
+$originalCwd = getcwd();
 try {
-	run( array( $mysqld, '--no-defaults', '--initialize-insecure', '--datadir=' . $data, '--socket=mysql.sock', '--tmpdir=' . $root, '--skip-mysqlx' ), $root );
+	$root = createIsolatedRoot();
+	$data = $root . '/data';
+	$pid = $root . '/mysqld.pid';
+	$mysqld = resolveMysqld();
+	if ( ! mkdir( $data, 0700, true ) ) throw new RuntimeException( 'Could not create isolated MySQL directory.' );
+	if ( false === chdir( $data ) ) throw new RuntimeException( 'Could not enter isolated MySQL data directory.' );
+	run( array( $mysqld, '--no-defaults', '--initialize-insecure', '--datadir=' . $data, '--socket=mysql.sock', '--tmpdir=' . $root, '--skip-mysqlx' ), $data );
 	$server = proc_open(
 		array(
 			$mysqld,
 			'--no-defaults',
 			'--datadir=' . $data,
-			'--bind-address=127.0.0.1',
-			'--port=' . $port,
+			'--skip-networking',
 			'--pid-file=' . $pid,
 			'--socket=mysql.sock',
 			'--tmpdir=' . $root,
@@ -44,15 +45,15 @@ try {
 		),
 		array( 0 => array( 'pipe', 'r' ), 1 => array( 'file', $root . '/mysqld.out', 'a' ), 2 => array( 'file', $root . '/mysqld.err', 'a' ) ),
 		$pipes,
-		$root
+		$data
 	);
 	if ( ! is_resource( $server ) ) throw new RuntimeException( 'Could not start isolated MySQL.' );
-	$mysqli = attestServer( $server, $port, $data );
+	$mysqli = attestServer( $server, $data );
 	$mysqli->query( 'CREATE DATABASE proof' );
 	$mysqli->select_db( 'proof' );
 	$mysqli->query( 'CREATE TABLE options (option_name varchar(191) NOT NULL PRIMARY KEY, option_value longtext NOT NULL, autoload varchar(20) NOT NULL) ENGINE=InnoDB' );
 	$binding = BindingRecord::create( bindingFacts() );
-	$cold = workers( $port, 'cold' );
+	$cold = workers( 'cold', $data );
 	assertOneClaim( $cold, 'cold claim' );
 	$winner = claimed( $cold );
 	$winnerState = BindingState::rehydrate( $winner['state'] );
@@ -61,28 +62,29 @@ try {
 	$rows = $mysqli->query( "SELECT option_name, autoload FROM options ORDER BY option_name" )->fetch_all( MYSQLI_ASSOC );
 	if ( 1 !== count( $rows ) || 'no' !== $rows[0]['autoload'] ) throw new RuntimeException( 'Option was not one non-autoload row.' );
 	$mysqli->query( "UPDATE options SET option_value = JSON_SET(option_value, '$.lease_deadline', 1) WHERE option_name = '" . $mysqli->real_escape_string( $target ) . "'" );
-	$takeover = workers( $port, 'takeover' );
+	$takeover = workers( 'takeover', $data );
 	assertOneClaim( $takeover, 'expired takeover' );
 	$new = claimed( $takeover );
 	if ( $winner['owner'] === $new['owner'] || $new['epoch'] <= $winner['epoch'] ) throw new RuntimeException( 'Takeover did not install a new owner and target fence epoch.' );
-	$database = new MysqliOptionDatabase( connectProof( $port ), 'options' );
+	$database = new MysqliOptionDatabase( connectProof(), 'options' );
 	$stale = ReleaseOperationCoordinator::verifyPersistentBindingState( $database, $winnerState, claim( $winner['state'] ) );
 	$completion = ReleaseOperationCoordinator::completePersistentInstall( $database, $winnerState, claim( $winner['state'] ), $receipt, $descriptor );
 	if ( 'binding_fence_lost' !== $stale['result'] || 'binding_fence_lost' !== $completion['result'] ) throw new RuntimeException( 'Stale writer or completion was not fenced.' );
 	assertFinalRows( $database, $binding, $new );
-	echo json_encode( array( 'mysqld_binary' => $mysqld, 'cold_claims' => $cold, 'expired_takeover' => $takeover, 'non_autoload_rows' => $rows, 'stale_writer' => $stale['result'], 'stale_completion' => $completion['result'] ), JSON_THROW_ON_ERROR ) . PHP_EOL;
+	echo json_encode( array( 'mysqld_binary' => $mysqld, 'transport' => 'unix_socket_skip_networking', 'cold_claims' => $cold, 'expired_takeover' => $takeover, 'non_autoload_rows' => $rows, 'stale_writer' => $stale['result'], 'stale_completion' => $completion['result'] ), JSON_THROW_ON_ERROR ) . PHP_EOL;
 } finally {
 	if ( is_resource( $server ) ) stopServer( $server );
-	removeTree( $root );
+	if ( is_string( $originalCwd ) ) chdir( $originalCwd );
+	if ( is_string( $root ) ) removeTree( $root );
 }
 
 /** @param list<string> $argv */
 function worker( array $argv ): void {
-	$startAt = (int) $argv[5];
+	$startAt = (int) $argv[4];
 	while ( hrtime( true ) < $startAt ) usleep( 1000 );
-	$database = new MysqliOptionDatabase( connectProof( (int) $argv[2] ), 'options' );
+	$database = new MysqliOptionDatabase( connectProof(), 'options' );
 	$binding = BindingRecord::create( bindingFacts() );
-	$owner = $argv[3];
+	$owner = $argv[2];
 	$result = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, $owner, 30 );
 	$epoch = 0; $target = $database->get_var( $database->prepare( "SELECT option_value FROM {$database->options} WHERE option_name = %s LIMIT 1", targetName( $binding ) ) );
 	if ( is_string( $target ) ) $epoch = json_decode( $target, true, 16, JSON_THROW_ON_ERROR )['fence_epoch'];
@@ -90,7 +92,7 @@ function worker( array $argv ): void {
 }
 
 /** @return list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> */
-function workers( int $port, string $scenario ): array {
+function workers( string $scenario, string $data ): array {
 	$processes = array();
 	$startAt = hrtime( true ) + 500000000;
 	$owners = 'takeover' === $scenario
@@ -98,9 +100,10 @@ function workers( int $port, string $scenario ): array {
 		: array( str_repeat( 'a', 64 ), str_repeat( 'b', 64 ) );
 	foreach ( $owners as $owner ) {
 		$processes[] = proc_open(
-			array( PHP_BINARY, __FILE__, '--worker', (string) $port, $owner, $scenario, (string) $startAt ),
+			array( PHP_BINARY, __FILE__, '--worker', $owner, $scenario, (string) $startAt ),
 			array( 0 => array( 'pipe', 'r' ), 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ),
-			$pipes
+			$pipes,
+			$data
 		);
 		$processes[array_key_last( $processes )] = array( 'process' => $processes[array_key_last( $processes )], 'pipes' => $pipes );
 	}
@@ -124,28 +127,17 @@ function createIsolatedRoot(): string {
 	return $root;
 }
 
-function reserveLoopbackPort(): int {
-	$listener = stream_socket_server( 'tcp://127.0.0.1:0', $errorNumber, $errorMessage );
-	if ( false === $listener ) throw new RuntimeException( 'Could not reserve an isolated loopback port: ' . $errorMessage . ' (' . $errorNumber . ')' );
-	$address = stream_socket_get_name( $listener, false );
-	fclose( $listener );
-	$separator = is_string( $address ) ? strrpos( $address, ':' ) : false;
-	$port = false === $separator ? 0 : (int) substr( $address, $separator + 1 );
-	if ( $port < 1 ) throw new RuntimeException( 'Could not determine an isolated loopback port.' );
-	return $port;
-}
-
-function attestServer( $server, int $port, string $data ): mysqli {
+function attestServer( $server, string $data ): mysqli {
 	$status = proc_get_status( $server );
 	if ( ! is_array( $status ) || ! $status['running'] ) throw new RuntimeException( 'Isolated MySQL stopped before attestation.' );
-	$mysqli = connect( $port );
+	$mysqli = connect();
 	try {
-		$result = $mysqli->query( 'SELECT @@datadir AS datadir' );
+		$result = $mysqli->query( 'SELECT @@datadir AS datadir, @@skip_networking AS skip_networking' );
 		$row = $result->fetch_assoc();
 		$expected = realpath( $data );
 		$actual = is_array( $row ) && isset( $row['datadir'] ) ? realpath( (string) $row['datadir'] ) : false;
-		if ( false === $expected || false === $actual || rtrim( $expected, '/\\' ) !== rtrim( $actual, '/\\' ) ) {
-			throw new RuntimeException( 'Loopback MySQL datadir did not match the isolated fixture.' );
+		if ( false === $expected || false === $actual || rtrim( $expected, '/\\' ) !== rtrim( $actual, '/\\' ) || ! is_array( $row ) || 1 !== (int) ( $row['skip_networking'] ?? 0 ) ) {
+			throw new RuntimeException( 'Unix-socket MySQL attestation did not match the isolated fixture or disable networking.' );
 		}
 		return $mysqli;
 	} catch ( Throwable $error ) {
@@ -154,22 +146,22 @@ function attestServer( $server, int $port, string $data ): mysqli {
 	}
 }
 
-function connect( int $port ): mysqli {
+function connect(): mysqli {
 	for ( $attempt = 0; $attempt < 100; ++$attempt ) {
 		$mysqli = mysqli_init();
 		$connected = false;
 		try {
-			$connected = $mysqli instanceof mysqli && mysqli_real_connect( $mysqli, '127.0.0.1', 'root', '', null, $port );
+			$connected = $mysqli instanceof mysqli && mysqli_real_connect( $mysqli, 'localhost', 'root', '', null, null, 'mysql.sock' );
 		} catch ( mysqli_sql_exception ) {}
 		if ( $connected ) return $mysqli;
 		if ( $mysqli instanceof mysqli ) $mysqli->close();
 		usleep( 50000 );
 	}
-	throw new RuntimeException( 'Timed out connecting to isolated MySQL.' );
+	throw new RuntimeException( 'Timed out connecting to isolated Unix-socket MySQL.' );
 }
 
-function connectProof( int $port ): mysqli {
-	$mysqli = connect( $port );
+function connectProof(): mysqli {
+	$mysqli = connect();
 	if ( ! $mysqli->select_db( 'proof' ) ) {
 		$mysqli->close();
 		throw new RuntimeException( 'Could not select isolated proof database.' );

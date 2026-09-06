@@ -50,6 +50,23 @@ final class InstalledPackageResolverTest extends TestCase
 		self::assertSame('installed_file_root_ambiguous', $ambiguous->resolve($this->declaration('plugin', $actual . '/main.php'))['code']); // P08.
 	}
 
+	public function testExplicitPluginMappingBeatsGenericPluginDirectoryForLogicalAndRealFiles(): void
+	{
+		$actual = $this->root . '/plugins/shared/foo';
+		mkdir($actual, 0700, true);
+		file_put_contents($actual . '/main.php', $this->pluginHeader());
+		$logical = $this->root . '/plugins/foo';
+		symlink($actual, $logical);
+		$mapped = new InstalledPackageResolver($this->root . '/plugins', array($logical => $actual), array());
+		self::assertSame('foo/main.php', $mapped->resolve($this->declaration('plugin', $logical . '/main.php'))['installed_package_identity']);
+		self::assertSame('foo/main.php', $mapped->resolve($this->declaration('plugin', $actual . '/main.php'))['installed_package_identity']);
+
+		$other = $this->root . '/plugins/other';
+		symlink($actual, $other);
+		$ambiguous = new InstalledPackageResolver($this->root . '/plugins', array($logical => $actual, $other => $actual), array());
+		self::assertSame('installed_file_root_ambiguous', $ambiguous->resolve($this->declaration('plugin', $actual . '/main.php'))['code']);
+	}
+
 	public function testSymlinkedRegisteredRootsAndUnregisteredInternalLinks(): void
 	{
 		$actualPlugins = $this->root . '/actual-plugins';

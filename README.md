@@ -274,7 +274,9 @@ example-plugin/
 ```
 
 The top-level directory and main filename must match `archive_root` and
-`header_file`. The main file inside the ZIP must contain:
+`header_file`. The main file inside the ZIP must contain `Plugin Name`,
+`Version`, and `Update URI`; the following illustrates those headers with the
+optional runtime requirements:
 
 ```text
 Plugin Name: Example Plugin
@@ -285,8 +287,8 @@ Requires at least: 6.5
 ```
 
 The plugin name must match the registered `metadata_name`. `Version` must match
-the release tag. The two runtime requirements must be valid and satisfied by
-the site receiving the update.
+the release tag. When present, the two runtime requirements must be valid and
+satisfied by the site receiving the update.
 
 Archives fail validation if they contain unsafe, duplicate, ambiguous, special,
 or multi-root paths; more than 10,000 entries; more than 127,826,407 expanded
@@ -334,10 +336,12 @@ $managedThemeUpdater->register();
 ```
 
 The release ZIP must contain `<stylesheet>/style.css` with matching `Theme
-Name`, `Version`, `Update URI`, `Requires PHP`, and `Requires at least` headers.
-For a child theme, its `Template` header must also exactly match the installed
-child theme. A standalone theme must remain standalone: adding or removing a
-`Template` header in a release is rejected.
+Name`, `Version`, and `Update URI` headers. `Requires PHP` and `Requires at
+least` are optional; when present, each must be valid and satisfied by the site
+receiving the update. For a child theme, its `Template` header must also exactly
+match the installed child theme's parent-template value. A standalone theme must
+remain standalone: adding or removing a `Template` header in a release is
+rejected.
 
 ## WordPress Multisite
 

@@ -138,7 +138,7 @@ final class InstalledPackageResolver
 					continue;
 				}
 				if ($this->inside(rtrim(str_replace('\\', '/', $logical), '/'), rtrim(str_replace('\\', '/', $this->pluginDirectory), '/'))) {
-					$this->addRoot($roots, $logical, $actual);
+					$this->addRoot($roots, $logical, $actual, true);
 				}
 			}
 		} else {
@@ -159,20 +159,25 @@ final class InstalledPackageResolver
 				$logicalFile = $root['logical'] . substr($file, strlen($root['real']));
 			}
 			if (is_string($logicalFile)) {
-				$matches[$logicalFile] = array('logical' => $root['logical'], 'real' => $root['real'], 'file' => $logicalFile);
+				$matches[$logicalFile] = array('logical' => $root['logical'], 'real' => $root['real'], 'file' => $logicalFile, 'explicit' => $root['explicit']);
 			}
 		}
 		if (0 === count($matches)) {
 			return null;
 		}
+		$explicitMatches = array_filter($matches, static fn (array $match): bool => $match['explicit']);
+		if (0 !== count($explicitMatches)) {
+			$matches = $explicitMatches;
+		}
 		if (1 !== count($matches)) {
 			return false;
 		}
-		return array_values($matches)[0];
+		$match = array_values($matches)[0];
+		return array('logical' => $match['logical'], 'real' => $match['real'], 'file' => $match['file']);
 	}
 
-	/** @param array<string,array{logical:string,real:string}> $roots */
-	private function addRoot(array &$roots, string $logical, string $actual): void
+	/** @param array<string,array{logical:string,real:string,explicit:bool}> $roots */
+	private function addRoot(array &$roots, string $logical, string $actual, bool $explicit = false): void
 	{
 		$logical = rtrim(str_replace('\\', '/', $logical), '/');
 		$actual = rtrim(str_replace('\\', '/', $actual), '/');
@@ -182,7 +187,7 @@ final class InstalledPackageResolver
 			return;
 		}
 		$real = str_replace('\\', '/', $real);
-		$roots[$logical . "\0" . $real] = array('logical' => $logical, 'real' => $real);
+		$roots[$logical . "\0" . $real] = array('logical' => $logical, 'real' => $real, 'explicit' => $explicit);
 	}
 
 	private function inside(string $path, string $root): bool
