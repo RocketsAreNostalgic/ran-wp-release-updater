@@ -15,6 +15,12 @@ also run environment-specific integration and parity gates when their fixtures
 are available. Report any unavailable or skipped gate instead of treating
 `composer check` as a complete test run.
 
+The installed WordPress integration suite is separate from `composer check`.
+It verifies installed-distribution operation and that main-site and subsite
+discovery share one operation fence. It has no Booster checkout or live
+site/provider dependency; unavailable prerequisites and failed scenarios are
+failures, never silent skips. See [the integration setup](docs/wordpress-integration.md).
+
 Changes to provider protocols, archive custody, WordPress lifecycle hooks,
 release automation, package identity, or compatibility boundaries need focused
 tests and an independent review. Do not commit credentials, signed URLs, raw
