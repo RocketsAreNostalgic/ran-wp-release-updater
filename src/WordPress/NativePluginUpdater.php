@@ -12,6 +12,7 @@ use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
+use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 
 /** The single native WordPress lifecycle owner for a sealed neutral release. */
@@ -614,24 +615,72 @@ final class NativePluginUpdater {
 		$this->clearDiscoverySnapshot();
 		$discoveryClaim = $this->claim;
 		$discoveryEpoch = $this->discoveryEpoch;
-		try { $listed = $this->adapter->listReleases(); $candidates = $listed['candidates'] ?? null; } catch ( \Throwable ) { $this->status['candidate_validation_code'] = 'release_list_failed'; return null; }
+		try {
+			$listed = $this->adapter->listReleases();
+			$candidates = $listed['candidates'] ?? null;
+		} catch ( \Throwable ) {
+			$this->status['candidate_validation_code'] = 'release_list_failed';
+			return null;
+		}
+		$rateLimit = $listed['rate_limit'] ?? null;
+		if ( is_array( $rateLimit ) && true === ( $rateLimit['limited'] ?? null ) ) {
+			$this->status['candidate_validation_code'] = 'release_list_failed';
+			return null;
+		}
 		if ( ! is_array( $candidates ) || count( $candidates ) > 8 ) { $this->status['candidate_validation_code'] = 'candidate_list_invalid'; return null; }
 		foreach ( $candidates as $candidate ) {
-			if ( ! is_array( $candidate ) || ! is_string( $candidate['release_identity'] ?? null ) || ! is_string( $candidate['tag'] ?? null ) || ! is_string( $candidate['version'] ?? null ) ) { $this->status['candidate_validation_code'] = 'candidate_invalid'; continue; }
+			if ( ! is_array( $candidate ) || ! is_string( $candidate['release_identity'] ?? null ) || ! is_string( $candidate['tag'] ?? null ) || ! is_string( $candidate['version'] ?? null ) ) { $this->status['candidate_validation_code'] = 'candidate_invalid'; return null; }
 			$this->status['candidate_tag'] = $candidate['tag']; $this->status['candidate_version'] = $candidate['version']; $this->status['relationship'] = ReleaseVersion::relationship( $candidate['version'], $installed );
 			if ( ReleaseVersion::RELATIONSHIP_NEWER !== $this->status['relationship'] ) { $this->status['candidate_validation_code'] = 'candidate_not_newer'; continue; }
-			try { $descriptor = $this->adapter->inspect( $candidate['release_identity'], $candidate['tag'] ); BindingRecord::assertDescriptorBinding( $descriptor, $this->binding ); } catch ( \Throwable ) { $this->status['candidate_validation_code'] = 'candidate_inspection_failed'; continue; }
+			try {
+				$descriptor = $this->adapter->inspect( $candidate['release_identity'], $candidate['tag'] );
+				BindingRecord::assertDescriptorBinding( $descriptor, $this->binding );
+			} catch ( ReleaseFailure $failure ) {
+				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
+				if ( self::canRejectCandidate( $failure ) ) continue;
+				return null;
+			} catch ( \Throwable ) {
+				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
+				return null;
+			}
 			$facts = $descriptor->toArray();
-			if ( ! hash_equals( $candidate['release_identity'], $facts['release_identity'] ) || ! hash_equals( $candidate['tag'], $facts['tag'] ) || 0 !== ReleaseVersion::compare( $candidate['version'], $facts['version'] ) ) { $this->status['candidate_validation_code'] = 'candidate_descriptor_mismatch'; continue; }
-			try { $artifact = $this->adapter->acquire( $descriptor ); $valid = $artifact->inspect( fn( string $path ) => $this->validator->validate( $descriptor, $this->archivePolicy, $path ) ); } catch ( \Throwable ) { $this->status['candidate_validation_code'] = 'candidate_validation_failed'; continue; }
+			if ( ! hash_equals( $candidate['release_identity'], $facts['release_identity'] ) || ! hash_equals( $candidate['tag'], $facts['tag'] ) || 0 !== ReleaseVersion::compare( $candidate['version'], $facts['version'] ) ) { $this->status['candidate_validation_code'] = 'candidate_descriptor_mismatch'; return null; }
+			$artifact = null;
+			try {
+				$artifact = $this->adapter->acquire( $descriptor );
+				$valid = $artifact->inspect( fn( string $path ) => $this->validator->validate( $descriptor, $this->archivePolicy, $path ) );
+			} catch ( ReleaseFailure $failure ) {
+				$this->status['candidate_validation_code'] = 'candidate_validation_failed';
+				if ( $artifact instanceof \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact && ! $artifact->discard() ) return null;
+				if ( self::canRejectCandidate( $failure ) ) continue;
+				return null;
+			} catch ( \Throwable ) {
+				$this->status['candidate_validation_code'] = 'candidate_validation_failed';
+				if ( $artifact instanceof \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact ) $artifact->discard();
+				return null;
+			}
 			$this->status['candidate_validation_code'] = $valid->code();
-			if ( ! $valid->isValid() ) continue;
+			if ( ! $valid->isValid() ) {
+				if ( ! $artifact->discard() ) {
+					$this->status['candidate_validation_code'] = 'candidate_validation_failed';
+					return null;
+				}
+				continue;
+			}
+			if ( ! $artifact->discard() ) {
+				$this->status['candidate_validation_code'] = 'candidate_validation_failed';
+				return null;
+			}
 			$this->status['candidate_header_version'] = $facts['version'];
 			$this->descriptor = $descriptor;
 			if ( $this->nativeDiscoveryReuse && is_array( $discoveryClaim ) && null !== $this->verifyCurrent() && $this->live() && $this->discoveryEpoch === $discoveryEpoch && $this->claim === $discoveryClaim ) $this->discoverySnapshot = array( 'claim' => $discoveryClaim, 'descriptor' => $descriptor, 'installed' => $normalizedInstalled );
 			return $descriptor;
 		}
 		return null;
+	}
+	private static function canRejectCandidate( ReleaseFailure $failure ): bool {
+		return in_array( $failure->releaseCode, array( 'release_unavailable', 'package_incompatible' ), true )
+			&& in_array( $failure->cleanupStatus, array( 'not_applicable', 'complete' ), true );
 	}
 	private function reusableDiscovery( string $installed ): ?IdentityDescriptor {
 		if ( ! $this->nativeDiscoveryReuse || ! is_array( $this->discoverySnapshot ) || ! is_array( $this->claim ) || $this->discoverySnapshot['installed'] !== $installed || $this->discoverySnapshot['claim'] !== $this->claim ) return null;

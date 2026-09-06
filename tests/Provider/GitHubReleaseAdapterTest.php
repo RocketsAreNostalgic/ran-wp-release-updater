@@ -252,6 +252,9 @@ final class GitHubReleaseAdapterTest extends TestCase
 		self::assertIsObject($broker);
 		self::assertSame('runtime_active', $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'))['code']);
 		$source = $registrar->releases('github', 'plugin', 'owner/repository', '99');
+		$invalidConditional = $source->list(array('etag' => 'invalid'));
+		self::assertSame('invalid_configuration', $invalidConditional['code']);
+		self::assertSame(array(), $GLOBALS['ran_github_requests']);
 		$GLOBALS['ran_github_responses'] = array($this->response(200, array()));
 		$result = $source->list();
 		self::assertSame(array('ok' => true, 'code' => 'releases_listed', 'value' => $result['value'], 'retry_after' => null, 'cleanup_status' => 'not_applicable'), $result);
@@ -361,6 +364,17 @@ final class GitHubReleaseAdapterTest extends TestCase
 			self::assertSame('release_unavailable', $failure->releaseCode);
 			self::assertSame('not_applicable', $failure->cleanupStatus);
 		}
+	}
+
+	public function testPublicServiceRejectsMalformedConditionalBeforeHttp(): void
+	{
+		try {
+			$this->publicService()->list(array('etag' => 'invalid'));
+			self::fail('Malformed conditional state must fail before provider work.');
+		} catch (ReleaseFailure $failure) {
+			self::assertSame('invalid_configuration', $failure->releaseCode);
+		}
+		self::assertSame(array(), $GLOBALS['ran_github_requests']);
 	}
 
 	public function testPublicServiceCleansRateLimitedAndInvalidStreamFailures(): void
@@ -483,7 +497,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$service->inspect('7', 'v1.2.3');
 			self::fail('A chmod allocation failure must be structured.');
 		} catch (ReleaseFailure $failure) {
-			self::assertSame('package_incompatible', $failure->releaseCode);
+			self::assertSame('operation_failed', $failure->releaseCode);
 			self::assertSame('complete', $failure->cleanupStatus);
 		}
 		$this->assertAllTemporaryPathsAbsent();
@@ -496,7 +510,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$service->inspect('7', 'v1.2.3');
 			self::fail('An unreleased chmod allocation failure must be structured.');
 		} catch (ReleaseFailure $failure) {
-			self::assertSame('package_incompatible', $failure->releaseCode);
+			self::assertSame('operation_failed', $failure->releaseCode);
 			self::assertSame('failed', $failure->cleanupStatus);
 		}
 		$unreleasedPath = $GLOBALS['ran_github_temp_paths'][count($GLOBALS['ran_github_temp_paths']) - 1];
@@ -513,7 +527,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$service->acquire('7', 'v1.2.3', $inspection['fingerprint']);
 			self::fail('An identity allocation failure must be structured.');
 		} catch (ReleaseFailure $failure) {
-			self::assertSame('package_incompatible', $failure->releaseCode);
+			self::assertSame('operation_failed', $failure->releaseCode);
 			self::assertSame('complete', $failure->cleanupStatus);
 		}
 		$this->assertAllTemporaryPathsAbsent();
@@ -525,7 +539,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$service->inspect('7', 'v1.2.3');
 			self::fail('An unproven temporary file must be structured.');
 		} catch (ReleaseFailure $failure) {
-			self::assertSame('package_incompatible', $failure->releaseCode);
+			self::assertSame('operation_failed', $failure->releaseCode);
 			self::assertSame('failed', $failure->cleanupStatus);
 		}
 		self::assertFileExists($GLOBALS['ran_github_temp_paths'][count($GLOBALS['ran_github_temp_paths']) - 1]);
@@ -600,7 +614,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$this->binding(),
 			new GitHubCredentialResolver(static fn (): string => 'bad token')
 		);
-		$this->expectException(GitHubReleaseReadUnavailable::class);
+		$this->expectException(ReleaseFailure::class);
 		try {
 			$invalid->listReleases();
 		} finally {
@@ -790,17 +804,42 @@ final class GitHubReleaseAdapterTest extends TestCase
 		try {
 			(new GitHubReleaseAdapter($this->binding()))->listReleases();
 			self::fail('A malformed release-list member must reject the complete response.');
-		} catch (RuntimeException $exception) {
-			self::assertSame('The GitHub response is invalid.', $exception->getMessage());
+		} catch (ReleaseFailure $exception) {
+			self::assertSame('operation_failed', $exception->releaseCode);
 			self::assertCount(1, $GLOBALS['ran_github_requests']);
 		}
 
 		$oversized = $this->response(200, null);
 		$oversized['body'] = str_repeat('x', 262145);
 		$GLOBALS['ran_github_responses'] = array($oversized);
-		$this->expectException(RuntimeException::class);
-		$this->expectExceptionMessage('response body is invalid');
-		(new GitHubReleaseAdapter($this->binding()))->listReleases();
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->listReleases();
+			self::fail('An oversized response must stop the operation.');
+		} catch (ReleaseFailure $exception) {
+			self::assertSame('operation_failed', $exception->releaseCode);
+		}
+	}
+
+	public function testResponseContainersDistinguishOperationAndCandidateFailures(): void
+	{
+		$GLOBALS['ran_github_responses'] = array($this->response(200, (object) array()));
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->listReleases();
+			self::fail('A JSON object is not a release listing.');
+		} catch (ReleaseFailure $failure) {
+			self::assertSame('operation_failed', $failure->releaseCode);
+		}
+
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array('id' => 99)),
+			$this->response(200, (object) array()),
+		);
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
+			self::fail('An empty release object is not a usable candidate.');
+		} catch (ReleaseFailure $failure) {
+			self::assertSame('package_incompatible', $failure->releaseCode);
+		}
 	}
 
 	public function testListingUsesTwoBoundedPagesAndReturnsAtMostEightCandidates(): void
@@ -880,18 +919,19 @@ final class GitHubReleaseAdapterTest extends TestCase
 				array('retry-after' => '999999')
 			),
 		);
-		$limited = $adapter->listReleases();
-		self::assertTrue($limited['rate_limit']['limited']);
-		self::assertSame(86400, $limited['rate_limit']['retry_after']);
-		self::assertSame(array(), $limited['candidates']);
+		try {
+			$adapter->listReleases();
+			self::fail('An over-bound rate-limit delay must stop the operation.');
+		} catch (ReleaseFailure $failure) {
+			self::assertSame('operation_failed', $failure->releaseCode);
+		}
 	}
 
 	/** @dataProvider readUnavailableStatusProvider */
 	public function testAuthenticatedAuthorizationFailuresAreNotRateLimits(int $status): void
 	{
 		$GLOBALS['ran_github_responses'] = array($this->response($status, null));
-		$this->expectException(GitHubReleaseReadUnavailable::class);
-		$this->expectExceptionMessage('unexpected response');
+		$this->expectException(ReleaseFailure::class);
 		(new GitHubReleaseAdapter($this->binding()))->listReleases();
 	}
 
@@ -906,11 +946,11 @@ final class GitHubReleaseAdapterTest extends TestCase
 	public function testTransportAndCredentialFailuresSignalUnavailableRead(): void
 	{
 		$GLOBALS['ran_github_responses'] = array(new \WP_Error('transport', 'not connected'));
-		$this->expectException(GitHubReleaseReadUnavailable::class);
+		$this->expectException(ReleaseFailure::class);
 		try {
 			(new GitHubReleaseAdapter($this->binding()))->listReleases();
-		} catch (GitHubReleaseReadUnavailable $exception) {
-			self::assertSame('The GitHub request failed.', $exception->getMessage());
+		} catch (ReleaseFailure $exception) {
+			self::assertSame('operation_failed', $exception->releaseCode);
 			throw $exception;
 		}
 	}
@@ -922,8 +962,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			new GitHubCredentialResolver(static fn (): string => 'bad token')
 		);
 
-		$this->expectException(GitHubReleaseReadUnavailable::class);
-		$this->expectExceptionMessage('credential is invalid');
+		$this->expectException(ReleaseFailure::class);
 		try {
 			$adapter->listReleases();
 		} finally {
@@ -938,8 +977,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			new GitHubCredentialResolver(static fn (): int => 42)
 		);
 
-		$this->expectException(GitHubReleaseReadUnavailable::class);
-		$this->expectExceptionMessage('credential is invalid');
+		$this->expectException(ReleaseFailure::class);
 		try {
 			$adapter->listReleases();
 		} finally {
@@ -956,8 +994,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			)
 		);
 
-		$this->expectException(GitHubReleaseReadUnavailable::class);
-		$this->expectExceptionMessage('credential is unavailable');
+		$this->expectException(ReleaseFailure::class);
 		try {
 			$adapter->listReleases();
 		} finally {
@@ -968,14 +1005,10 @@ final class GitHubReleaseAdapterTest extends TestCase
 	public function testServerErrorsRemainGenericRuntimeFailures(): void
 	{
 		$GLOBALS['ran_github_responses'] = array($this->response(500, null));
-		$this->expectException(RuntimeException::class);
-		$this->expectExceptionMessage('unexpected response');
+		$this->expectException(ReleaseFailure::class);
 		try {
 			(new GitHubReleaseAdapter($this->binding()))->listReleases();
-		} catch (GitHubReleaseReadUnavailable $exception) {
-			self::fail('Server failures must not request credential fallback.');
-			throw $exception;
-		}
+		} catch (ReleaseFailure $exception) { self::assertSame('operation_failed', $exception->releaseCode); throw $exception; }
 	}
 
 	public function testInspectionBindsExactNumericRepositoryReleaseCommitAndAsset(): void
@@ -1004,6 +1037,99 @@ final class GitHubReleaseAdapterTest extends TestCase
 		);
 	}
 
+	#[\PHPUnit\Framework\Attributes\DataProvider('installedInspectionFailureProvider')]
+	public function testInstalledInspectionMapsEndpointFailuresToNeutralFailures(
+		string $scenario,
+		string $expectedCode,
+		int $expectedRequests
+	): void {
+		$GLOBALS['ran_github_responses'] = match ($scenario) {
+			'repository_access_denied' => array($this->response(401, null)),
+			'concrete_release_unavailable' => array(
+				$this->response(200, array('id' => 99)),
+				$this->response(404, null),
+			),
+			'concrete_commit_server_failure' => array(
+				$this->response(200, array('id' => 99)),
+				$this->response(200, $this->release(7, 'v1.2.3')),
+				$this->response(500, null),
+			),
+		};
+
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
+			self::fail('Installed inspection failures must be neutral typed failures.');
+		} catch (ReleaseFailure $failure) {
+			self::assertSame($expectedCode, $failure->releaseCode);
+			self::assertSame('not_applicable', $failure->cleanupStatus);
+		}
+
+		self::assertCount($expectedRequests, $GLOBALS['ran_github_requests']);
+	}
+
+	/** @return iterable<string,array{0:string,1:string,2:int}> */
+	public static function installedInspectionFailureProvider(): iterable
+	{
+		yield 'repository access denied' => array(
+			'repository_access_denied',
+			'repository_access_unavailable',
+			1,
+		);
+		yield 'concrete release unavailable' => array(
+			'concrete_release_unavailable',
+			'release_unavailable',
+			2,
+		);
+		yield 'concrete commit server failure' => array(
+			'concrete_commit_server_failure',
+			'operation_failed',
+			3,
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('invalidZipMetadataProvider')]
+	public function testInstalledInspectionRejectsInvalidZipMetadataBeforeCommitLookup(string $scenario): void
+	{
+		$release = $this->release(7, 'v1.2.3');
+		switch ($scenario) {
+			case 'missing_zip': $release['assets'] = array(); break;
+			case 'multiple_zip': $release['assets'][] = $release['assets'][0]; break;
+			case 'invalid_id': $release['assets'][0]['id'] = 0; break;
+			case 'invalid_size': $release['assets'][0]['size'] = 0; break;
+			case 'missing_digest': unset($release['assets'][0]['digest']); break;
+			case 'over_limit': $release['assets'][0]['size'] = 52_428_801; break;
+			case 'not_uploaded': $release['assets'][0]['state'] = 'new'; break;
+		}
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response(200, array('id' => 99)),
+			$this->response(200, $release),
+		);
+
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
+			self::fail('Invalid ZIP metadata must reject the candidate before commit lookup.');
+		} catch (ReleaseFailure $failure) {
+			self::assertSame('package_incompatible', $failure->releaseCode);
+			self::assertSame('not_applicable', $failure->cleanupStatus);
+		}
+
+		self::assertSame(
+			array(
+				'https://api.github.com/repos/owner/repository',
+				'https://api.github.com/repos/owner/repository/releases/7',
+			),
+			array_column($GLOBALS['ran_github_requests'], 0)
+		);
+	}
+
+	/** @return iterable<string,array{0:string}> */
+	public static function invalidZipMetadataProvider(): iterable
+	{
+		foreach (array('missing_zip', 'multiple_zip', 'invalid_id', 'invalid_size', 'missing_digest', 'over_limit', 'not_uploaded') as $scenario) {
+			yield $scenario => array($scenario);
+		}
+	}
+
 	public function testInspectionTreatsMissingConcreteReleaseAsGenericCandidateFailure(): void
 	{
 		$GLOBALS['ran_github_responses'] = array(
@@ -1014,9 +1140,8 @@ final class GitHubReleaseAdapterTest extends TestCase
 		try {
 			(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
 			self::fail('A missing concrete release must fail without credential fallback.');
-		} catch (RuntimeException $exception) {
-			self::assertNotInstanceOf(GitHubReleaseReadUnavailable::class, $exception);
-			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
+		} catch (ReleaseFailure $exception) {
+			self::assertSame('release_unavailable', $exception->releaseCode);
 		}
 
 		self::assertSame(
@@ -1039,9 +1164,8 @@ final class GitHubReleaseAdapterTest extends TestCase
 		try {
 			(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
 			self::fail('A missing concrete commit must fail without credential fallback.');
-		} catch (RuntimeException $exception) {
-			self::assertNotInstanceOf(GitHubReleaseReadUnavailable::class, $exception);
-			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
+		} catch (ReleaseFailure $exception) {
+			self::assertSame('release_unavailable', $exception->releaseCode);
 		}
 
 		self::assertSame(
@@ -1060,8 +1184,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$this->response(200, array('id' => 100)),
 		);
 
-		$this->expectException(RuntimeException::class);
-		$this->expectExceptionMessage('repository identity changed');
+		$this->expectException(ReleaseFailure::class);
 		try {
 			(new GitHubReleaseAdapter($this->binding()))->inspect('7');
 		} finally {
@@ -1157,9 +1280,15 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$this->response(200, $commit),
 		);
 
-		$this->expectException(RuntimeException::class);
-		$this->expectExceptionMessage($failure);
-		(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
+		try {
+			(new GitHubReleaseAdapter($this->binding()))->inspect('7', 'v1.2.3');
+			self::fail('Invalid provider metadata must not produce a usable descriptor.');
+		} catch (ReleaseFailure $exception) {
+			self::assertSame(
+				str_contains($failure, 'repository identity') || str_contains($failure, 'commit identity') ? 'operation_failed' : 'package_incompatible',
+				$exception->releaseCode
+			);
+		}
 	}
 
 	/** @return iterable<string,array{0:string,1:callable}> */
@@ -1480,8 +1609,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$archive
 		);
 
-		$this->expectException(RuntimeException::class);
-		$this->expectExceptionMessage('release package is invalid');
+		$this->expectException(ReleaseFailure::class);
 		try {
 			$service->inspectProspective('7', 'v1.2.3');
 		} finally {
@@ -1621,8 +1749,8 @@ final class GitHubReleaseAdapterTest extends TestCase
 		try {
 			$service->acquireProspective($inspection, $inspection->fingerprintValue());
 			self::fail('A hostile changed archive must reject reacquisition.');
-		} catch (RuntimeException $exception) {
-			self::assertStringContainsString('release package is invalid', $exception->getMessage());
+		} catch (ReleaseFailure $exception) {
+			self::assertSame('package_incompatible', $exception->releaseCode);
 		}
 		$this->assertAllTemporaryPathsAbsent();
 	}
@@ -1780,8 +1908,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$this->response(429, null, array('retry-after' => '30')),
 		);
 
-		$this->expectException(GitHubReleaseReadUnavailable::class);
-		$this->expectExceptionMessage('rate limited the artifact request');
+		$this->expectException(ReleaseFailure::class);
 		try {
 			$adapter->acquire($descriptor);
 		} finally {
@@ -1802,9 +1929,8 @@ final class GitHubReleaseAdapterTest extends TestCase
 		try {
 			$adapter->acquire($descriptor);
 			self::fail('A missing release asset must fail.');
-		} catch (RuntimeException $exception) {
-			self::assertNotInstanceOf(GitHubReleaseReadUnavailable::class, $exception);
-			self::assertSame('GitHub returned an unexpected response.', $exception->getMessage());
+		} catch (ReleaseFailure $exception) {
+			self::assertSame('release_unavailable', $exception->releaseCode);
 			$this->assertAllTemporaryPathsAbsent();
 		}
 
@@ -1829,8 +1955,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 			$oversized,
 		);
 
-		$this->expectException(RuntimeException::class);
-		$this->expectExceptionMessage('downloaded GitHub artifact is invalid');
+		$this->expectException(ReleaseFailure::class);
 		try {
 			$adapter->acquire($descriptor);
 		} finally {
@@ -1848,8 +1973,8 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $oversized );
 		try {
 			$adapter->acquire( $descriptor ); self::fail( 'An over-custom downloaded size was accepted.' );
-		} catch ( RuntimeException $exception ) {
-			self::assertSame( 'The downloaded GitHub artifact is invalid.', $exception->getMessage() );
+		} catch ( ReleaseFailure $exception ) {
+			self::assertSame( 'package_incompatible', $exception->releaseCode );
 			self::assertSame( $limit + 1, $GLOBALS['ran_github_requests'][4][1]['limit_response_size'] );
 		} finally { $this->assertAllTemporaryPathsAbsent(); }
 	}

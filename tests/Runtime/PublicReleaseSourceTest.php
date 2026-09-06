@@ -134,13 +134,13 @@ $restored = $source->list();
 echo json_encode(array('first' => $first, 'cleared' => $cleared, 'replaced' => $replaced, 'restored' => $restored, 'before' => $before, 'cleared_work' => $clearedWork, 'replaced_work' => $replacedWork, 'after' => array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls'])));
 PHP, array( 'filesystem_method' => null ) );
 
-		self::assertSame( 'repository_access_unavailable', $result['first']['code'] );
+		self::assertSame( 'operation_failed', $result['first']['code'] );
 		foreach ( array_merge( $result['cleared'], $result['replaced'] ) as $operation ) {
 			self::assertSame( 'filesystem_unsupported', $operation['code'] );
 		}
 		self::assertSame( $result['before'], $result['cleared_work'] );
 		self::assertSame( $result['before'], $result['replaced_work'] );
-		self::assertSame( 'repository_access_unavailable', $result['restored']['code'] );
+		self::assertSame( 'operation_failed', $result['restored']['code'] );
 	}
 
 	#[Test]

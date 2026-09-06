@@ -163,11 +163,13 @@ If no copy is compatible, or equal package versions contain different runtime
 bytes, the updater remains inactive and reports the conflict through
 `diagnostics()`.
 
-### Private repositories
+### Credentials and GitHub quota
 
-Pass a callable as the `credentials` argument (the penultimate positional
-argument when also setting `maximumArtifactBytes`). Registration does not
-invoke it; each top-level GitHub service operation resolves it when it begins:
+Plugins and themes may both pass an optional callable as the `credentials`
+argument (the penultimate positional argument when also setting
+`maximumArtifactBytes`). It can supply access to private repositories or a
+separate GitHub quota for public repositories. Registration does not invoke it;
+each top-level GitHub service operation resolves it when it begins:
 
 ```php
 $releaseUpdater = $registrar->plugin(
@@ -188,6 +190,13 @@ request-local and is not stored in target state, diagnostics, logs, URLs, or
 committed artifacts. The GitHub client sends credentials to `api.github.com`,
 disables automatic redirects, validates release-asset redirects, and removes
 authorization when a request leaves the API host.
+
+Returning `null` selects anonymous access. Invalid callback material reports
+`credential_unavailable`. A well-formed token denied by GitHub reports
+`repository_access_unavailable`; neither result retries anonymously. GitHub
+permits anonymous requests for public data, but with a lower quota than
+authenticated requests. See GitHub's
+[REST API rate-limit documentation](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
 
 ## Configuration reference
 

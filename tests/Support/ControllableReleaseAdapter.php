@@ -11,6 +11,12 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 	public int $acquireCalls = 0;
 	/** @var list<string> */
 	public array $acquiredPaths = array();
+	/** @var array<string,mixed>|null */
+	public ?array $listResponse = null;
+	/** @var array<string,IdentityDescriptor|\Throwable> */
+	public array $inspectOutcomes = array();
+	/** @var array<string,TemporaryArtifact|\Throwable> */
+	public array $acquireOutcomes = array();
 	public IdentityDescriptor $inspectDescriptor;
 	public function __construct(
 		private IdentityDescriptor $descriptor,
@@ -22,6 +28,9 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 	/** @return array{candidates:list<array{release_identity:string,tag:string,version:string}>} */
 	public function listReleases( array $conditional = array() ): array {
 		++$this->listCalls;
+		if ( is_array( $this->listResponse ) ) {
+			return $this->listResponse;
+		}
 		$facts = $this->descriptor->toArray();
 		return array(
 			'candidates' => array(
@@ -35,10 +44,25 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 	}
 	public function inspect( string $releaseIdentity, ?string $expectedTag = null ): IdentityDescriptor {
 		++$this->inspectCalls;
+		if ( array_key_exists( $releaseIdentity, $this->inspectOutcomes ) ) {
+			$outcome = $this->inspectOutcomes[ $releaseIdentity ];
+			if ( $outcome instanceof \Throwable ) {
+				throw $outcome;
+			}
+			return $outcome;
+		}
 		return $this->inspectDescriptor;
 	}
 	public function acquire( IdentityDescriptor $descriptor ): TemporaryArtifact {
 		++$this->acquireCalls;
+		$releaseIdentity = $descriptor->releaseIdentity();
+		if ( array_key_exists( $releaseIdentity, $this->acquireOutcomes ) ) {
+			$outcome = $this->acquireOutcomes[ $releaseIdentity ];
+			if ( $outcome instanceof \Throwable ) {
+				throw $outcome;
+			}
+			return $outcome;
+		}
 		$artifactPath = tempnam( $this->temporaryDirectory, 'ran-native-adapter-' );
 		if ( ! is_string( $artifactPath ) || ! copy( $this->archive, $artifactPath ) || ! chmod( $artifactPath, 0600 ) ) {
 			throw new \RuntimeException( 'Could not create fake artifact.' );
