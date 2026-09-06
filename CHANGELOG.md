@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.1.0-beta.3](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.2...v0.1.0-beta.3) (2026-09-06)
+
+
+### Features
+
+* add request-local release management API ([6842a8b](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/6842a8b02efe9fe5a1caa8f732d4bcfe339ee6bb))
+* add request-local release management API ([ae18d4a](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/ae18d4a7ec733ed5a81569332fb84bc0a3160782))
+* introduce selected provider-neutral updater runtime ([3f4069e](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/3f4069e4222df523203d59ef7c442db2f43edd6a))
+* introduce selected provider-neutral updater runtime ([a5ad947](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/a5ad94718ed431ad4273a9f27583028474f5a811))
+
+
+### Bug Fixes
+
+* close public runtime contract gaps ([4e96dca](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/4e96dca58a9ac7196a9ac1dfc03bf8a5873fcba4))
+* make runtime probes portable ([2a299eb](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/2a299eb3eb40ab9c5bf48d5d8a319258507cde7a))
+* preserve broker provenance on Windows ([51357a4](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/51357a4eb003a93aca463a6a9bd20ed743b6a499))
+* preserve release cleanup and filesystem readiness ([6401635](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/6401635c8368055809b6e813e8061a045045b952))
+* preserve runtime bytes across platforms ([d2e1810](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/d2e1810afa6964887dad9808acbd03f14456d4b3))
+* preserve runtime recovery and WordPress portability ([614b83a](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/614b83aed3e38bf7df54cc5e5612074e83db49ad))
+* require authentic runtime broker ([0037f37](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/0037f377746b06972931b33c42a7bff2ce05b27b))
+* resolve plugin mappings and isolate MySQL proof transport ([2f68609](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/2f6860961ca202dc04727e461a8f9129cc7fe3f0))
+* verify broker package provenance ([c000cbc](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/c000cbc17bd45af0d48b8924e636e1a9351b545c))
+* verify first broker origin ([932c1df](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/932c1df6f6f3d716478b870ac1b3fd29c59e3dab))
+
+
+### Performance
+
+* reuse verified broker provenance ([0d550c2](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/0d550c2d0706a8202ef297f3343d004a03cc0b33))
+* reuse verified native discovery within a request ([d854874](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/d854874a2e0d1b1485ae6db8df9f4b4ab0585807))
+
 ## [0.1.0-beta.2](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.1...v0.1.0-beta.2) (2026-09-02)
 
 
