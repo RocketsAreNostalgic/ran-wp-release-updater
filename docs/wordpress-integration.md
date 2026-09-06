@@ -46,6 +46,11 @@ platform socket-path limit, set the optional socket root to a separately
 authorized, short durable directory; it must still be owned by the operator.
 The suite creates a unique marker-owned child for each run, starts a local
 socket-only MySQL server, and removes only those marker-owned children.
+`WP_CLI_CACHE_DIR` in the example is only for downloading the pristine
+WordPress source. The suite deliberately replaces it with a new cache under
+its marker-owned run directory and removes that directory after the run; set
+`RAN_UPDATER_INTEGRATION_ROOT` to choose the durable location that contains
+those isolated runs.
 
 The suite has no Booster checkout or live site/provider dependency. Missing
 inputs, unavailable tools, a failed scenario, or residual owned files make the

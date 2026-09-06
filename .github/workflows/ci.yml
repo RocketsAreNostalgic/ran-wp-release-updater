@@ -98,7 +98,7 @@ jobs:
           printf 'sys_temp_dir = "%s"\n' "$php_tmp" > "$php_ini/99-ran-updater-integration.ini"
           php_scan_dir="$(php --ini | sed -n 's/^Scan for additional .ini files in: //p')"
           export PHP_INI_SCAN_DIR="$php_ini:$php_scan_dir"
-          export WP_CLI_CACHE_DIR="$wp_cache"
+          export WP_CLI_CACHE_DIR="$wp_cache" # Download-only; the suite creates and removes its own per-run cache.
           export TMPDIR="$php_tmp" TMP="$php_tmp" TEMP="$php_tmp"
 
           cp "$system_mysqld" "$mysqld_binary"
