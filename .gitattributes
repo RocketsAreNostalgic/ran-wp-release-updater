@@ -1,3 +1,5 @@
+*.php text eol=lf
+
 /docs export-ignore
 /fixtures export-ignore
 /tests export-ignore

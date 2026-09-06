@@ -110,7 +110,6 @@ final readonly class ProspectiveReleaseInspection
 			&& 1 === preg_match('/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di', $value['artifact_filename'])
 			&& is_int($value['artifact_size'])
 			&& $value['artifact_size'] >= 1
-			&& $value['artifact_size'] <= IdentityDescriptor::MAX_ARTIFACT_BYTES
 			&& is_string($value['artifact_sha256'])
 			&& 1 === preg_match('/\A[a-f0-9]{64}\z/D', $value['artifact_sha256'])
 			&& is_string($value['canonical_update_uri'])

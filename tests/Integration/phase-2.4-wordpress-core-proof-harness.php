@@ -5,13 +5,6 @@ $markerFile = getenv( 'RAN_WP_RELEASE_UPDATER_MARKER_FILE' );
 $markerRoot = $markerFile ? realpath( dirname( $markerFile ) ) : false;
 $expectedSourceRoot = is_string( $markerRoot ) ? $markerRoot . '/site/wp-content/plugins/ran-wp-release-updater' : '';
 if ( ! is_string( $sourceRoot ) || $expectedSourceRoot !== realpath( $sourceRoot ) || ! is_file( $expectedSourceRoot . '/bootstrap.php' ) || ! is_file( $expectedSourceRoot . '/runtime.php' ) ) throw new RuntimeException( 'Harness source must be the copied disposable updater source.' );
-require_once $expectedSourceRoot . '/bootstrap.php';
-$activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 1, 'wordpress_version' => $GLOBALS['wp_version'] ) );
-if ( true !== ( $activation['loaded'] ?? null ) ) throw new RuntimeException( 'Harness could not activate the selected updater runtime.' );
-
-use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
-use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubCredentialResolver;
-use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter;
 
 if ( ! function_exists( 'is_plugin_active' ) ) {
 	require_once ABSPATH . 'wp-admin/includes/plugin.php';
@@ -27,12 +20,8 @@ if ( ! class_exists( 'Plugin_Upgrader' ) ) {
 if ( ! class_exists( 'WP_Automatic_Updater' ) ) require_once ABSPATH . 'wp-admin/includes/class-wp-automatic-updater.php';
 
 final class Phase24AutomaticUpdater extends WP_Automatic_Updater {
-	public function resultFor( string $type, string $identity ): mixed {
-		foreach ( $this->update_results[ $type ] ?? array() as $entry ) {
-			$itemIdentity = 'plugin' === $type ? ( $entry->item->plugin ?? null ) : ( $entry->item->theme ?? null );
-			if ( $identity === $itemIdentity ) return $entry->result;
-		}
-		return null;
+	public function updateOne( string $type, object $item ): mixed {
+		return $this->update( $type, $item );
 	}
 }
 
@@ -40,6 +29,19 @@ add_filter( 'filesystem_method', static fn () => 'direct' );
 remove_action( 'upgrader_process_complete', 'wp_version_check' );
 remove_action( 'upgrader_process_complete', 'wp_update_plugins' );
 remove_action( 'upgrader_process_complete', 'wp_update_themes' );
+
+$phase24VcsCheckout = array( 'calls' => 0, 'contexts' => array() );
+add_filter(
+	'automatic_updates_is_vcs_checkout',
+	static function ( bool $checkout, string $context ) use ( &$phase24VcsCheckout ): bool {
+		unset( $checkout );
+		++$phase24VcsCheckout['calls'];
+		$phase24VcsCheckout['contexts'][] = $context;
+		return false;
+	},
+	PHP_INT_MAX,
+	2
+);
 
 $mailAttempts = 0;
 add_filter(
@@ -57,20 +59,23 @@ $sourceRoot  = getenv( 'RAN_WP_RELEASE_UPDATER_SOURCE_ROOT' );
 $outputPath  = getenv( 'RAN_WP_RELEASE_UPDATER_OUTPUT' );
 $pluginId    = getenv( 'RAN_WP_RELEASE_UPDATER_PLUGIN_ID' );
 $themeId     = getenv( 'RAN_WP_RELEASE_UPDATER_THEME_ID' );
+$managerThemeId = getenv( 'RAN_WP_RELEASE_UPDATER_MANAGER_THEME_ID' );
 $pluginUri   = getenv( 'RAN_WP_RELEASE_UPDATER_PLUGIN_URI' );
 $themeUri    = getenv( 'RAN_WP_RELEASE_UPDATER_THEME_URI' );
 $archive     = getenv( 'RAN_WP_RELEASE_UPDATER_ARCHIVE' );
 $marker      = getenv( 'RAN_WP_RELEASE_UPDATER_PHASE24' );
 $markerFile  = getenv( 'RAN_WP_RELEASE_UPDATER_MARKER_FILE' );
 $mode        = getenv( 'RAN_WP_RELEASE_UPDATER_MODE' );
+$failureStage = getenv( 'RAN_WP_RELEASE_UPDATER_FAILURE_STAGE' );
 $targetType  = getenv( 'RAN_WP_RELEASE_UPDATER_TARGET_TYPE' );
 
 $markerRoot = $markerFile ? realpath( dirname( $markerFile ) ) : false;
-if ( 'RAN_WP_RELEASE_UPDATER_PHASE24' !== $marker || ! $markerFile || ! is_file( $markerFile ) || is_link( $markerFile ) || $marker . "\n" !== file_get_contents( $markerFile ) || false === $markerRoot || '/private/tmp' !== realpath( dirname( $markerRoot ) ) || ! in_array( $mode, array( 'success', 'failure' ), true ) || ! in_array( $targetType, array( 'plugin', 'theme' ), true ) || ! is_string( $archive ) || ! is_file( $archive ) ) {
+$workspaceRoot = $markerRoot ? realpath( dirname( $markerRoot ) ) : false;
+if ( 'RAN_WP_RELEASE_UPDATER_PHASE24' !== $marker || ! $markerFile || ! is_file( $markerFile ) || is_link( $markerFile ) || $marker . "\n" !== file_get_contents( $markerFile ) || false === $markerRoot || false === $workspaceRoot || ! str_ends_with( str_replace( '\\', '/', $workspaceRoot ), '/.workspaces/p0.4' ) || ! in_array( $mode, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $failureStage, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $targetType, array( 'plugin', 'theme' ), true ) || ! is_string( $archive ) || ! is_file( $archive ) ) {
 	throw new RuntimeException( 'Guarded phase-2.4 harness missing required marker/env settings.' );
 }
 
-$httpRequests = array( 'allowed' => 0, 'blocked' => 0, 'blocked_urls' => array(), 'guard' => 0, 'asset_writes' => 0, 'core_denied' => 0, 'credentialed' => 0, 'credential_leaks' => 0, 'loopback' => 0 );
+$httpRequests = array( 'allowed' => 0, 'blocked' => 0, 'blocked_urls' => array(), 'guard' => 0, 'asset_writes' => 0, 'core_denied' => 0, 'credentialed' => 0, 'credential_leaks' => 0, 'injected_download' => 0, 'loopback' => 0 );
 add_filter(
 	'pre_http_request',
 	static function ( mixed $preempt, array $args, string $url ) use ( &$httpRequests, $targetType, $archive ): mixed {
@@ -104,10 +109,12 @@ $target = build_target( $targetType, $identity, $uri, $archive, 'success' === $m
 $evidence = array(
 	'marker'     => $marker,
 	'sourceRoot' => $sourceRoot,
-	'core_upgrade' => 'success' === $mode ? run_core_upgrade_scenario( $target ) : run_core_upgrade_failure_scenario( $target ),
+	'core_upgrade' => 'success' === $mode ? run_core_upgrade_scenario( $target ) : ( in_array( $failureStage, array( 'download', 'validation' ), true ) ? run_preoffer_failure_scenario( $target, $failureStage ) : run_core_upgrade_failure_scenario( $target, $failureStage ) ),
+	'automatic_vcs_checkout_override' => $phase24VcsCheckout,
 	'activation_readback' => array(
-		'plugin_active' => is_plugin_active( $pluginId ), 'theme_active' => wp_get_theme()->get_stylesheet() === $themeId,
+		'plugin_active' => is_plugin_active( $pluginId ), 'theme_active' => wp_get_theme()->get_stylesheet() === $themeId, 'manager_theme_active' => wp_get_theme()->get_stylesheet() === $managerThemeId,
 	),
+	'registration' => $target['registration'],
 	'sanity' => $target['sanity'],
 	'database_readback' => array(
 		$identity => readback_options( $target ),
@@ -120,6 +127,7 @@ add_action( 'shutdown', static function () use ( &$evidence, $outputPath, $targe
 		'version' => file_version( $targetType, $identity ),
 		'bytes' => fixture_bytes( $targetType, $identity ),
 		'digest' => fixture_digest( $targetType, $identity ),
+		'manifest' => fixture_manifest( $targetType, $identity ),
 		'backup_absent' => ! is_dir( backup_dir( $targetType, $slug ) ),
 		'maintenance_absent' => ! is_file( ABSPATH . '.maintenance' ),
 		'database' => readback_options( $target ),
@@ -136,60 +144,18 @@ add_action( 'shutdown', static function () use ( &$evidence, $outputPath, $targe
 
 /** @return array<string,mixed> */
 function build_target( string $type, string $identity, string $uri, string $archive, string $installedVersion, string $releaseVersion ): array {
-	$binding = BindingRecord::create(
-		array(
-			'canonical_repository_locator'   => 'phase24-owner/phase24-' . $type,
-			'canonical_update_uri'          => $uri,
-			'installed_package_identity'    => $identity,
-			'php_runtime_version'           => '8.2',
-			'provider_code'                 => 'github',
-			'release_channel'               => 'stable',
-			'stable_repository_identity'    => '101',
-			'target_type'                   => $type,
-			'update_policy'                 => getenv( 'RAN_WP_RELEASE_UPDATER_POLICY' ) ?: 'manual',
-			'wordpress_runtime_version'      => '6.8',
-		)
-	);
-	$archivePolicy = array(
-		'archive_root'              => ( 'theme' === $type ? 'phase24-theme' : 'phase24-plugin' ),
-		'configuration_update_uri'   => $uri,
-		'header_file'               => ( 'theme' === $type ? 'style.css' : 'phase24-plugin.php' ),
-		'installed_package_identity' => $identity,
-		'metadata_name'             => 'Phase24 ' . ucfirst( $type ),
-		'offer_update_uri'           => $uri,
-		'php_runtime_version'       => '8.2',
-		'provider_code'             => 'github',
-		'repository_identity'       => '101',
-		'repository_locator'        => 'phase24-owner/phase24-' . $type,
-		'staged_package_update_uri' => $uri,
-		'target_type'               => $type,
-		'wordpress_runtime_version'  => '6.8',
-	);
-	$configuration = array(
-		'headers' => array(
-			'Author'      => 'Phase24',
-			'Description' => 'Phase24 disposable fixture',
-			'Name'        => 'Phase24 ' . ucfirst( $type ),
-			'PluginURI'   => $uri,
-			'RequiresPHP' => '8.2',
-			'RequiresWP'  => '6.8',
-			'UpdateURI'   => $uri,
-			'Version'     => $installedVersion,
-		),
-		'installed_package_identity' => $identity,
-		'policy'                    => $binding->toArray()['update_policy'],
-		'target_type'               => $type,
-		'update_uri'                => $uri,
-	);
-	$updater = GitHubReleaseAdapter::registerFromConfiguration(
-		$configuration,
-		$binding,
-		new GitHubCredentialResolver( static fn (): string => 'phase24-token' ),
-		$GLOBALS['wpdb'],
-		$archivePolicy
-	);
-	if ( ! is_object( $updater ) ) {
-		throw new RuntimeException( 'Could not construct updater for ' . $type );
+	$policy = getenv( 'RAN_WP_RELEASE_UPDATER_POLICY' ) ?: 'manual';
+	$failureStage = getenv( 'RAN_WP_RELEASE_UPDATER_FAILURE_STAGE' );
+	$handles = $GLOBALS['phase24_handles'] ?? null;
+	$target = is_array( $handles ) ? ( $handles[ $type ] ?? null ) : null;
+	$manager = is_array( $handles ) ? ( $handles['manager'] ?? null ) : null;
+	if ( ! is_object( $target ) || ! is_object( $manager ) || ! method_exists( $target, 'status' ) || ! method_exists( $manager, 'status' ) ) {
+		throw new RuntimeException( 'Fixture-owned concise registrations are unavailable.' );
+	}
+	$targetStatus = $target->status();
+	$managerStatus = $manager->status();
+	if ( 'active' !== ( $targetStatus['state'] ?? null ) || 'active' !== ( $managerStatus['state'] ?? null ) ) {
+		throw new RuntimeException( 'Fixture-owned concise registrations were not active after normal WordPress hooks.' );
 	}
 
 	$packageObservation = (object) array( 'calls' => 0, 'package' => null );
@@ -209,7 +175,12 @@ function build_target( string $type, string $identity, string $uri, string $arch
 	);
 
 	$offer = apply_filters( 'update_' . ( 'plugin' === $type ? 'plugins_' : 'themes_' ) . parse_url( $uri, PHP_URL_HOST ), false, array( 'Version' => $installedVersion, 'UpdateURI' => $uri ), $identity, array() );
-	if ( ! is_array( $offer ) || ! is_string( $offer['package'] ?? null ) || ! str_starts_with( $offer['package'], 'ran-wp-release-updater:v1:' ) ) {
+	$neutralOffer = is_array( $offer ) && is_string( $offer['package'] ?? null ) && str_starts_with( $offer['package'], 'ran-wp-release-updater:v1:' );
+	if ( in_array( $failureStage, array( 'download', 'validation' ), true ) && ! $neutralOffer ) {
+		$status = $target->status();
+		return array( 'type' => $type, 'identity' => $identity, 'uri' => $uri, 'offer' => false, 'packageObservation' => $packageObservation, 'policy' => $policy, 'failure_code' => $status['native']['failure_code'] ?? null, 'validation_code' => $status['native']['candidate_validation_code'] ?? null, 'registration' => array( 'target' => $targetStatus, 'manager' => $managerStatus ), 'targetName' => 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::targetFenceKey( array( 'network_id' => 1, 'target_type' => $type, 'installed_package_identity' => $identity ) ), 'sanity' => array( 'offer_hook_fired' => false ) );
+	}
+	if ( ! $neutralOffer ) {
 		throw new RuntimeException( 'Core offer did not carry a neutral release token.' );
 	}
 
@@ -219,12 +190,20 @@ function build_target( string $type, string $identity, string $uri, string $arch
 		'uri' => $uri,
 		'offer' => $offer,
 		'packageObservation' => $packageObservation,
-		'policy' => $binding->toArray()['update_policy'],
-		'targetName' => 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'installed_package_identity' => $identity ) ),
+		'policy' => $policy,
+		'registration' => array( 'target' => $targetStatus, 'manager' => $managerStatus ),
+		'targetName' => 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::targetFenceKey( array( 'network_id' => 1, 'target_type' => $type, 'installed_package_identity' => $identity ) ),
 		'sanity' => array(
 			'offer_hook_fired' => is_array( $offer ),
 		),
 	);
+}
+
+function run_preoffer_failure_scenario( array $target, string $stage ): array {
+	$before = file_version( $target['type'], $target['identity'] );
+	$manifest = fixture_manifest( $target['type'], $target['identity'] );
+	$code = 'validation' === $stage ? ( $target['validation_code'] ?? null ) : ( $target['failure_code'] ?? null );
+	return array( 'failure_stage' => $stage, 'failed' => is_string( $code ), 'result_code' => $code, 'version_before' => $before, 'version_after' => file_version( $target['type'], $target['identity'] ), 'manifest_before' => $manifest, 'injected_post_copy' => array(), 'rollback_backup_path_exists' => false, 'maintenance_file_exists' => is_file( ABSPATH . '.maintenance' ), 'offer_token_used' => false, 'package_handoff_calls' => 0, 'cron_context' => wp_doing_cron(), 'automatic_result_observed' => false, 'automatic_plugin_was_active' => 'plugin' === $target['type'] && is_plugin_active( $target['identity'] ), 'manual_plugin_was_deactivated' => null );
 }
 
 /** @return array<string,mixed> */
@@ -239,6 +218,7 @@ function run_core_upgrade_scenario( array $target ) : array {
 	}
 
 	$before = file_version( $type, $identity );
+	$manifestBefore = fixture_manifest( $type, $identity );
 	$execution = execute_core_upgrade( $target );
 	$result = $execution['result'];
 
@@ -247,6 +227,7 @@ function run_core_upgrade_scenario( array $target ) : array {
 		'result_code' => is_wp_error( $result ) ? $result->get_error_code() : null,
 		'version_before' => $before,
 		'version_after'  => file_version( $type, $identity ),
+		'manifest_before' => $manifestBefore,
 		'bytes_after' => fixture_bytes( $type, $identity ),
 		'backup_cleaned' => ! is_dir( $backup ),
 		'maintenance_file_absent' => ! is_file( ABSPATH . '.maintenance' ),
@@ -259,7 +240,7 @@ function run_core_upgrade_scenario( array $target ) : array {
 	);
 }
 
-function run_core_upgrade_failure_scenario( array $target ): array {
+function run_core_upgrade_failure_scenario( array $target, string $failureStage ): array {
 	$type = $target['type'];
 	$identity = $target['identity'];
 	$offer = $target['offer'];
@@ -278,15 +259,16 @@ function run_core_upgrade_failure_scenario( array $target ): array {
 		$injected['backup_present'] = is_dir( backup_dir( $type, 'theme' === $type ? $identity : dirname( $identity ) ) );
 		return new WP_Error( 'phase24_injected_post_copy_failure', 'Injected after Core moved the valid archive into the destination.' );
 	};
-	add_filter( 'upgrader_post_install', $injectFailure, PHP_INT_MAX, 3 );
+	if ( 'install' === $failureStage ) add_filter( 'upgrader_post_install', $injectFailure, PHP_INT_MAX, 3 );
 	$execution = execute_core_upgrade( $target );
 	$result = $execution['result'];
-	remove_filter( 'upgrader_post_install', $injectFailure, PHP_INT_MAX );
+	if ( 'install' === $failureStage ) remove_filter( 'upgrader_post_install', $injectFailure, PHP_INT_MAX );
 	$backup = backup_dir( $type, $slug );
 	$installResult = $result;
 	if ( ! is_wp_error( $installResult ) ) $installResult = new WP_Error( 'failure_not_reported', 'Failure scenario did not expose the injected Core error.' );
 
 	return array(
+		'failure_stage' => $failureStage,
 		'failed' => is_wp_error( $installResult ),
 		'result_code' => is_wp_error( $installResult ) ? $installResult->get_error_code() : null,
 		'version_before' => $before,
@@ -315,11 +297,9 @@ function execute_core_upgrade( array $target ): array {
 	$manualPluginWasDeactivated = null;
 	$automaticResultObserved = false;
 	if ( 'automatic' === $target['policy'] ) {
-		prime_automatic_background_state( $type );
 		$updater = new Phase24AutomaticUpdater();
-		$updater->run();
-		$result = $updater->resultFor( $type, $identity );
-		$automaticResultObserved = null !== $result;
+		$result = $updater->updateOne( $type, $item );
+		$automaticResultObserved = true;
 	} elseif ( 'plugin' === $type ) {
 		$result = ( new Plugin_Upgrader( new Automatic_Upgrader_Skin() ) )->upgrade( $identity, array( 'clear_update_cache' => false ) );
 		$manualPluginWasDeactivated = ! is_plugin_active( $identity );
@@ -358,19 +338,6 @@ function prime_core_offer( array $target ): object {
 	$transient->response[ $identity ] = $offer;
 	set_site_transient( 'update_themes', $transient, 60 );
 	return (object) $offer;
-}
-
-function prime_automatic_background_state( string $targetType ): void {
-	if ( 'plugin' === $targetType ) {
-		$themes = (object) array( 'last_checked' => time(), 'response' => array(), 'checked' => array() );
-		foreach ( wp_get_themes() as $slug => $theme ) $themes->checked[ $slug ] = $theme->get( 'Version' );
-		set_site_transient( 'update_themes', $themes, 60 );
-	} else {
-		$plugins = (object) array( 'last_checked' => time(), 'response' => array(), 'checked' => array() );
-		foreach ( get_plugins() as $file => $plugin ) $plugins->checked[ $file ] = $plugin['Version'];
-		set_site_transient( 'update_plugins', $plugins, 60 );
-	}
-	set_site_transient( 'update_core', (object) array( 'last_checked' => time(), 'updates' => array(), 'version_checked' => wp_get_wp_version() ), 60 );
 }
 
 /** @param array<string,mixed> $args @param array<string,mixed> $counts @return array<string,mixed>|WP_Error|null */
@@ -423,6 +390,10 @@ function fixture_http_response( string $url, array $args, string $type, string $
 		return github_response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) );
 	}
 	if ( $asset === $url && true === ( $args['stream'] ?? false ) && is_string( $args['filename'] ?? null ) && '' !== $args['filename'] ) {
+		if ( 'download' === getenv( 'RAN_WP_RELEASE_UPDATER_FAILURE_STAGE' ) ) {
+			++$counts['injected_download'];
+			return new WP_Error( 'phase24_injected_download_failure', 'Injected fixture download failure.' );
+		}
 		if ( false === copy( $archive, $args['filename'] ) ) {
 			return null;
 		}
@@ -481,6 +452,12 @@ function fixture_bytes( string $type, string $identity ): ?int {
 }
 
 function fixture_digest( string $type, string $identity ): ?string {
+	$manifest = fixture_manifest( $type, $identity );
+	return is_array( $manifest ) ? hash( 'sha256', json_encode( $manifest, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) ) : null;
+}
+
+/** @return array<string,array{size:int,sha256:string}>|null */
+function fixture_manifest( string $type, string $identity ): ?array {
 	$root = 'plugin' === $type ? dirname( WP_PLUGIN_DIR . '/' . $identity ) : get_theme_root( $identity ) . '/' . $identity;
 	if ( ! is_dir( $root ) || is_link( $root ) ) return null;
 	$files = array();
@@ -488,10 +465,12 @@ function fixture_digest( string $type, string $identity ): ?string {
 	foreach ( $iterator as $entry ) {
 		if ( $entry->isLink() || ! $entry->isFile() ) return null;
 		$relative = substr( $entry->getPathname(), strlen( $root ) + 1 );
-		$files[ $relative ] = hash_file( 'sha256', $entry->getPathname() );
+		$sha256 = hash_file( 'sha256', $entry->getPathname() );
+		if ( false === $sha256 ) return null;
+		$files[ $relative ] = array( 'size' => $entry->getSize(), 'sha256' => $sha256 );
 	}
 	ksort( $files, SORT_STRING );
-	return hash( 'sha256', json_encode( $files, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
+	return $files;
 }
 
 function backup_dir( string $type, string $slug ): string {

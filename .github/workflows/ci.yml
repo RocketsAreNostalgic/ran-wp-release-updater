@@ -17,10 +17,46 @@ jobs:
         with:
           php-version: '8.2'
           coverage: none
-          extensions: zip
+          extensions: zip, mysqli
           tools: composer:v2
       - run: composer install --no-interaction --prefer-dist
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '24'
       - run: composer check
+      - name: Prove isolated MySQL CAS lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v mysqld
+          php -m | grep -Fx mysqli
+          mysql_root="$GITHUB_WORKSPACE/.workspaces/mysql-cas"
+          system_mysqld="$(command -v mysqld)"
+          mysql_tools="$GITHUB_WORKSPACE/.workspaces/mysql-cas-tools"
+          mkdir -p "$mysql_tools"
+          mysqld_binary="$mysql_tools/mysqld"
+          cp "$system_mysqld" "$mysqld_binary"
+          cmp "$system_mysqld" "$mysqld_binary"
+          mkdir -p "$mysql_root"
+          chmod 700 "$mysql_root"
+          export RAN_UPDATER_MYSQL_ROOT="$mysql_root"
+          export RAN_UPDATER_MYSQLD_BIN="$mysqld_binary"
+          php tests/Integration/real-mysql-cas-setup-failure-proof.php
+          php tests/Integration/real-mysql-cas-proof.php
+          if find "$mysql_root" -mindepth 1 -print -quit | grep -q .; then
+            echo 'Isolated MySQL CAS proof left fixture files behind.' >&2
+            exit 1
+          fi
+
+  windows-portability:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - run: php vendor/bin/phpunit --configuration phpunit.xml tests/Runtime/WindowsPortabilityProofTest.php

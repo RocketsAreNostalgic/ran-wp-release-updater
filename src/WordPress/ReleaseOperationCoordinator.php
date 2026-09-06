@@ -72,23 +72,6 @@ final class ReleaseOperationCoordinator {
 		return array( 'current' => $next, 'result' => 'claimed' );
 	}
 	/** @return array{current:BindingState|null,result:string} */
-	public static function persistPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim, BindingRecord $next ): array {
-		if ( ! self::database( $wpdb ) || ! self::sameTarget( $expected->binding(), $next ) ) return self::lost();
-		$now = self::time( $wpdb ); $name = self::name( $expected->binding() ); $raw = self::read( $wpdb, $name ); $current = null === $raw ? null : self::state( $raw );
-		if ( null === $now || null === $current || ! self::same( $current, $expected )
-			|| ! self::claim( $current, $claim ) || $now > $current->leaseDeadline() ) return self::lost( $current );
-		if ( hash_equals( $current->binding()->bindingHash(), $next->bindingHash() ) ) return array( 'current' => $current, 'result' => 'retained' );
-		if ( self::atLimit( $current ) ) return self::lost( $current );
-		try {
-			$updated = BindingState::create( $next, $current->ownerToken(), $current->leaseDeadline(), $current->bindingGeneration() + 1, $current->fenceEpoch() + 1 );
-		} catch ( InvalidArgumentException ) {
-			return self::lost( $current );
-		}
-		$json = self::json( $updated->toArray() );
-		if ( null === $json || ! self::cas( $wpdb, $name, $raw, $json, $current->leaseDeadline() ) || ! self::sameRaw( $wpdb, $name, $json ) ) return self::lost( $current );
-		return array( 'current' => $updated, 'result' => 'rebound' );
-	}
-	/** @return array{current:BindingState|null,result:string} */
 	public static function renewPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim, int $seconds ): array {
 		return self::transitionPersistentBindingState( $wpdb, $expected, $claim, $seconds, 'renewed' );
 	}
@@ -121,7 +104,12 @@ final class ReleaseOperationCoordinator {
 		return array( 'current' => $released['current'], 'now' => $last['now'], 'receipt' => $accepted, 'result' => 'completed' );
 	}
 	private static function name( BindingRecord $binding ): string {
-		return self::PREFIX . BindingRecord::targetFenceKey( array( 'installed_package_identity' => $binding->toArray()['installed_package_identity'] ) );
+		$facts = $binding->toArray();
+		return self::PREFIX . BindingRecord::targetFenceKey( array(
+			'network_id' => $facts['network_id'],
+			'target_type' => $facts['target_type'],
+			'installed_package_identity' => $facts['installed_package_identity'],
+		) );
 	}
 	/** @return array{current:BindingState|null,result:string} */
 	private static function insertClaim( object $wpdb, string $name, BindingRecord $binding, string $owner, int $deadline ): array {
@@ -158,7 +146,11 @@ final class ReleaseOperationCoordinator {
 		return hash_equals( self::json( $left->toArray() ) ?? '', self::json( $right->toArray() ) ?? '' );
 	}
 	private static function sameTarget( BindingRecord $left, BindingRecord $right ): bool {
-		return hash_equals( $left->toArray()['installed_package_identity'], $right->toArray()['installed_package_identity'] );
+		$leftFacts = $left->toArray();
+		$rightFacts = $right->toArray();
+		return $leftFacts['network_id'] === $rightFacts['network_id']
+			&& hash_equals( $leftFacts['target_type'], $rightFacts['target_type'] )
+			&& hash_equals( $leftFacts['installed_package_identity'], $rightFacts['installed_package_identity'] );
 	}
 	private static function atLimit( BindingState $state ): bool { return BindingState::MAX_SAFE_INTEGER === $state->bindingGeneration()
 			|| BindingState::MAX_SAFE_INTEGER === $state->fenceEpoch();
@@ -174,7 +166,7 @@ final class ReleaseOperationCoordinator {
 	}
 	private static function time( object $wpdb ): ?int { $value = $wpdb->get_var( 'SELECT UNIX_TIMESTAMP()' );
 		if ( is_int( $value ) && $value >= 0 && $value <= BindingState::MAX_SAFE_INTEGER ) return $value;
-		return is_string( $value ) && ctype_digit( $value ) && (int) $value <= BindingState::MAX_SAFE_INTEGER ? (int) $value : null;
+		return is_string( $value ) && 1 === preg_match( '/\A[0-9]+\z/D', $value ) && (int) $value <= BindingState::MAX_SAFE_INTEGER ? (int) $value : null;
 	}
 	private static function read( object $wpdb, string $name ): ?string {
 		$table = self::optionsTable( $wpdb ); if ( null === $table ) return null;

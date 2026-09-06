@@ -310,11 +310,14 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 			'canonical_repository_locator' => $locator,
 			'canonical_update_uri'         => $uri,
 			'installed_package_identity'   => $identity,
+			'maximum_artifact_bytes'       => 52_428_800,
+			'network_id'                   => 1,
 			'php_runtime_version'          => '8.2',
 			'provider_code'                => 'fixture',
 			'release_channel'              => 'stable',
 			'stable_repository_identity'   => $repositoryIdentity,
 			'target_type'                  => $type,
+			'theme_template'               => '',
 			'update_policy'                => 'manual',
 			'wordpress_runtime_version'    => '6.8',
 		)
@@ -346,6 +349,7 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 			'configuration_update_uri'   => $uri,
 			'header_file'                => 'plugin' === $type ? $slug . '.php' : 'style.css',
 			'installed_package_identity' => $identity,
+			'maximum_artifact_bytes'     => 52_428_800,
 			'metadata_name'              => $name,
 			'offer_update_uri'           => $uri,
 			'php_runtime_version'        => '8.2',
@@ -354,6 +358,7 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 			'repository_locator'         => $locator,
 			'staged_package_update_uri'  => $uri,
 			'target_type'                => $type,
+			'theme_template'             => '',
 			'wordpress_runtime_version'  => '6.8',
 		)
 	);

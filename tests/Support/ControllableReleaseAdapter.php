@@ -14,7 +14,8 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 	public IdentityDescriptor $inspectDescriptor;
 	public function __construct(
 		private IdentityDescriptor $descriptor,
-		private string $archive
+		private string $archive,
+		private string $temporaryDirectory
 	) {
 		$this->inspectDescriptor = $descriptor;
 	}
@@ -38,7 +39,7 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 	}
 	public function acquire( IdentityDescriptor $descriptor ): TemporaryArtifact {
 		++$this->acquireCalls;
-		$artifactPath = tempnam( sys_get_temp_dir(), 'ran-native-adapter-' );
+		$artifactPath = tempnam( $this->temporaryDirectory, 'ran-native-adapter-' );
 		if ( ! is_string( $artifactPath ) || ! copy( $this->archive, $artifactPath ) || ! chmod( $artifactPath, 0600 ) ) {
 			throw new \RuntimeException( 'Could not create fake artifact.' );
 		}

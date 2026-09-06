@@ -8,8 +8,6 @@ use InvalidArgumentException;
 
 final readonly class IdentityDescriptor
 {
-    public const MAX_ARTIFACT_BYTES = 52428800;
-
     private const ASSURANCE_FACT_KEYS = array( 'exact_artifact_identity', 'exact_commit_identity', 'exact_reacquisition_supported', 'exact_release_identity', 'provenance_verified',
         'publication_immutable', 'repository_identity_stable', 'trusted_digest_source' );
     private const FACT_KEYS = array( 'artifact_filename', 'artifact_identity', 'artifact_sha256', 'artifact_size', 'assurance_facts', 'canonical_update_uri', 'channel',
@@ -120,7 +118,7 @@ final readonly class IdentityDescriptor
             && self::validAssuranceFacts($value['assurance_facts']) && ( 'stable' === $value['channel'] || 'prerelease' === $value['channel'] )
             && ( 'stable' !== $value['channel'] || ! $value['prerelease'] ) && is_string($value['version']) && null !== ReleaseVersion::normalize($value['version'])
             && is_string($value['artifact_filename']) && 1 === preg_match('/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di', $value['artifact_filename'])
-            && is_int($value['artifact_size']) && $value['artifact_size'] >= 1 && $value['artifact_size'] <= self::MAX_ARTIFACT_BYTES && self::isSha256($value['artifact_sha256']);
+            && is_int($value['artifact_size']) && $value['artifact_size'] >= 1 && self::isSha256($value['artifact_sha256']);
     }
 
     private static function validAssuranceFacts(mixed $value): bool

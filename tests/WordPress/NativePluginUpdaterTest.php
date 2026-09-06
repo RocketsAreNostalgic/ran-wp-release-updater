@@ -26,8 +26,11 @@ namespace Tests\WordPress {
 	require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 	require_once dirname( __DIR__ ) . '/Support/ControllableReleaseAdapter.php';
 	use PHPUnit\Framework\TestCase;
+	use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 	use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 	use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
+	use RAN\WPReleaseUpdater\V1\Runtime\RequestBroker;
+	use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 	use RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater;
 	use RAN\WPReleaseUpdater\V1\WordPress\ReleaseOperationCoordinator;
@@ -36,7 +39,10 @@ namespace Tests\WordPress {
 	final class NativePluginUpdaterTest extends TestCase {
 		/** @var list<string> */
 		private array $paths = array();
+		private string $temporaryDirectory;
 		protected function setUp(): void {
+			$this->temporaryDirectory = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/native-plugin-updater-' . bin2hex( random_bytes( 6 ) );
+			mkdir( $this->temporaryDirectory, 0700, true );
 			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
 			$GLOBALS['ran_wp_release_updater_test_filter_callbacks'] = array();
 		}
@@ -52,6 +58,7 @@ namespace Tests\WordPress {
 					@rmdir( $path );
 				}
 			}
+			@rmdir( $this->temporaryDirectory );
 		}
 		public function testStateConstructionAndRegisterArePassive(): void {
 			list( $updater, $adapter, $database ) = $this->subject();
@@ -73,9 +80,92 @@ namespace Tests\WordPress {
 			self::assertTrue( $automaticOffer['autoupdate'] );
 			self::assertTrue( $automaticUpdater->filterAutoUpdate( false, (object) array( 'plugin' => 'package/package.php', 'package' => $automaticOffer['package'] ) ) );
 		}
+		public function testEligibleNativeDiscoveryReusesOnlyItsValidatedRequestSnapshot(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true );
+			$this->offer( $updater );
+			$this->offer( $updater );
+			$information = $updater->filterPluginInformation( false, 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', 'plugin' . "\0" . 'package/package.php' ), 0, 24 ) ) );
+			self::assertIsObject( $information );
+			self::assertSame( '2.0.0', $information->version );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'archive_identity_verified', $updater->status()['candidate_validation_code'] );
+
+			self::assertIsArray( $updater->filterUpdate( false, array( 'Version' => '1.1.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertTrue( $updater->refresh() );
+			$this->offer( $updater );
+			self::assertSame( array( 3, 3, 3 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
+		public function testReentrantMatchingInstallAttemptPreventsDiscoveryFromPublishingASnapshot(): void {
+			$validator = new PackageIdentityValidator();
+			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true, $validator );
+			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen->setValue( $validator, static function ( string $path ) use ( $updater ): void {
+				unset( $path );
+				$updater->filterPreDownload( new \WP_Error( 'interrupted', 'Interrupted.' ), '', null, array( 'plugin' => 'package/package.php' ) );
+			} );
+			$this->offer( $updater );
+			$this->offer( $updater );
+			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
+		public function testReentrantRefreshPreventsDiscoveryFromPublishingASnapshot(): void {
+			$validator = new PackageIdentityValidator();
+			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true, $validator );
+			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen->setValue( $validator, static function ( string $path ) use ( $updater ): void { unset( $path ); $updater->refresh(); } );
+			$this->offer( $updater );
+			$this->offer( $updater );
+			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
+		public function testClaimTakeoverAndExpiryReclaimNeverReuseASnapshot(): void {
+			list( $updater, $adapter, $database, , $binding ) = $this->subject( 'manual', null, 'stable', false, null, true );
+			$this->offer( $updater );
+			$name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'network_id' => 1, 'target_type' => 'plugin', 'installed_package_identity' => 'package/package.php' ) );
+			$state = BindingState::rehydrate( json_decode( $database->rows()[ $name ]['option_value'], true, 32, JSON_THROW_ON_ERROR ) );
+			$successor = BindingState::create( $binding, str_repeat( 'b', 64 ), 101, $state->bindingGeneration() + 1, $state->fenceEpoch() + 1 );
+			$database->forceOptionValue( $name, json_encode( $successor->toArray(), JSON_THROW_ON_ERROR ) );
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			$database->setTime( 102 );
+			$this->offer( $updater );
+			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
+		public function testFailedDiscoveryAndRuntimeDisplacementNeverReuseASnapshot(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject( 'manual', null, 'stable', false, null, true );
+			$facts = $descriptor->toArray(); unset( $facts['fingerprint'] ); $facts['tag'] = 'v2.0.1';
+			$adapter->inspectDescriptor = IdentityDescriptor::create( $facts );
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			$adapter->inspectDescriptor = $descriptor;
+			$this->offer( $updater );
+			self::assertSame( array( 2, 2, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
+		public function testRuntimeDisplacementAndRestoreNeverReuseASnapshot(): void {
+			$state = new SelectedRuntimeState();
+			$broker = new RequestBroker( false, $state );
+			$state->bind( $broker );
+			$GLOBALS['ran_wp_release_updater_v1_broker'] = $broker;
+			(new \ReflectionProperty( $broker, 'state' ))->setValue( $broker, 'active' );
+			try {
+				list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, $state, true );
+				$this->offer( $updater );
+				$GLOBALS['ran_wp_release_updater_v1_broker'] = new \stdClass();
+				self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+				$GLOBALS['ran_wp_release_updater_v1_broker'] = $broker;
+				$this->offer( $updater );
+				self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			} finally {
+				unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
+			}
+		}
+		public function testMatchingCompletionInvalidatesDiscoverySnapshot(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true );
+			$this->offer( $updater );
+			$updater->observeCompletion( null, array( 'action' => 'update', 'type' => 'plugin', 'plugins' => array( 'package/package.php' ) ) );
+			$this->offer( $updater );
+			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+		}
 		public function testStatusProjectsOnlyTheObservedOfferAndFailureAndRefreshClearsIt(): void {
 			list( $updater, $adapter, $database ) = $this->subject();
-			self::assertSame( array( 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'candidate_header_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
+			self::assertSame( array( 'candidate_header_version' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) ); self::assertSame( array(), $database->preparedSql() );
 			$this->offer( $updater );
 			$status = $updater->status();
@@ -83,7 +173,7 @@ namespace Tests\WordPress {
 			$updater->filterUpdate( false, array( 'Version' => 'bad', 'UpdateURI' => $this->uri() ), 'package/package.php', array() );
 			self::assertSame( 'runtime_package_identity_invalid', $updater->status()['failure_code'] );
 			$updater->refresh();
-			self::assertSame( array( 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'candidate_header_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
+			self::assertSame( array( 'candidate_header_version' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
 		}
 		public function testPrereleaseChannelOfferIsManualAndAutomaticIsDenied(): void {
 			list( $updater ) = $this->subject( 'manual', null, 'prerelease', true );
@@ -183,7 +273,7 @@ namespace Tests\WordPress {
 			self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'c', 64 ), 1 )['result'] );
 			$updater->refresh();
 		}
-		public function testAuthoritativeRebindAfterUnzipRejectsStaleReceipt(): void {
+		public function testCompetingOwnerAfterUnzipRejectsStaleReceipt(): void {
 			list( $updater, , $database, , $binding ) = $this->subject();
 			$offer = $this->offer( $updater );
 			$ownedArchive = $updater->filterPreDownload( false, $offer['package'], null, $this->extra() );
@@ -194,7 +284,9 @@ namespace Tests\WordPress {
 			unset( $bindingFacts['binding_hash'] );
 			$bindingFacts['update_policy'] = 'automatic';
 			$reboundBinding = BindingRecord::create( $bindingFacts );
-			self::assertSame( 'rebound', ReleaseOperationCoordinator::persistPersistentBindingState( $database, $state, $this->claim( $state ), $reboundBinding )['result'] );
+			$name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'network_id' => 1, 'target_type' => 'plugin', 'installed_package_identity' => 'package/package.php' ) );
+			$successor = BindingState::create( $reboundBinding, str_repeat( 'b', 64 ), $state->leaseDeadline(), $state->bindingGeneration() + 1, $state->fenceEpoch() + 1 );
+			$database->forceOptionValue( $name, json_encode( $successor->toArray(), JSON_THROW_ON_ERROR ) );
 			self::assertInstanceOf( \WP_Error::class, $updater->filterSourceSelection( $this->staged(), '/tmp', null, $this->extra() ) );
 		}
 		public function testCompletionAndRollbackReleaseClaims(): void {
@@ -214,6 +306,130 @@ namespace Tests\WordPress {
 			self::assertInstanceOf( \WP_Error::class, $updater->filterPreDownload( false, 'secret', null, $this->extra() ) );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
 			self::assertNotContains( 'secret', $updater->diagnostics() );
+		}
+		public function testProtocolLivenessMakesEveryPublicCallbackPassiveBeforeAdapterOrDatabaseWork(): void {
+			$state = new SelectedRuntimeState();
+			$broker = new RequestBroker( false, $state );
+			$state->bind( $broker );
+			$GLOBALS['ran_wp_release_updater_v1_broker'] = $broker;
+			$property = new \ReflectionProperty( $broker, 'state' );
+			$property->setValue( $broker, 'active' );
+			list( $updater, $adapter, $database ) = $this->subject( 'manual', null, 'stable', false, $state );
+			$updater->register();
+			self::assertCount( 10, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+
+			foreach ( array( 'stale_global', 'wrong_protocol', 'legacy_broker' ) as $failure ) {
+				if ( 'stale_global' === $failure ) {
+					$GLOBALS['ran_wp_release_updater_v1_broker'] = new \stdClass();
+				} elseif ( 'wrong_protocol' === $failure ) {
+					$GLOBALS['ran_wp_release_updater_v1_broker'] = new class { public function protocolVersion(): int { return 1; } };
+				} else {
+					$GLOBALS['ran_wp_release_updater_v1_broker'] = $broker;
+					$GLOBALS['ran_wp_github_release_updater_v1_broker'] = new \stdClass();
+				}
+				self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ), $failure );
+				self::assertSame( 'keep', $updater->filterPluginInformation( 'keep', 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', "plugin\0package/package.php" ), 0, 24 ) ) ), $failure );
+				self::assertTrue( $updater->filterAutoUpdate( true, (object) array( 'plugin' => 'package/package.php', 'package' => 'ignored' ) ), $failure );
+				self::assertSame( array( 'hook_extra' => $this->extra() ), $updater->capturePackageOptions( array( 'hook_extra' => $this->extra() ) ), $failure );
+				self::assertSame( 'download', $updater->filterPreDownload( 'download', 'sentinel', null, $this->extra() ), $failure );
+				self::assertSame( 'unzip', $updater->filterPreUnzipFile( 'unzip', 'sentinel', 'destination', array(), 0.0 ), $failure );
+				self::assertSame( 'source', $updater->filterSourceSelection( 'source', 'remote', null, $this->extra() ), $failure );
+				self::assertSame( 'install', $updater->filterPreInstall( 'install', $this->extra() ), $failure );
+				self::assertSame( 'result', $updater->captureInstallPackageResult( 'result', $this->extra() ), $failure );
+				$updater->observeCompletion( null, array( 'action' => 'update', 'type' => 'plugin', 'plugins' => array( 'package/package.php' ) ) );
+				$updater->finalizePendingInstall();
+				self::assertSame( array( 0, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ), $failure );
+				self::assertSame( array(), $database->rows(), $failure );
+				self::assertSame( array(), $database->preparedSql(), $failure );
+				unset( $GLOBALS['ran_wp_github_release_updater_v1_broker'] );
+			}
+		}
+		public function testLivenessLossAfterArchiveAdmissionAbortsAndReleasesThePersistentLease(): void {
+			$state = new SelectedRuntimeState();
+			$broker = new RequestBroker( false, $state );
+			$state->bind( $broker );
+			$GLOBALS['ran_wp_release_updater_v1_broker'] = $broker;
+			$property = new \ReflectionProperty( $broker, 'state' );
+			$property->setValue( $broker, 'active' );
+			try {
+				list( $updater, , $database, , $binding ) = $this->subject( 'manual', null, 'stable', false, $state );
+				$offer = $this->offer( $updater );
+				$ownedArchive = $updater->filterPreDownload( false, $offer['package'], null, $this->extra() );
+				self::assertIsString( $ownedArchive );
+
+				$GLOBALS['ran_wp_release_updater_v1_broker'] = new \stdClass();
+				self::assertInstanceOf( \WP_Error::class, $updater->filterPreUnzipFile( null, $ownedArchive, '/tmp', array(), 0.0 ) );
+				self::assertFileDoesNotExist( $ownedArchive );
+				self::assertSame( 'claimed', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'f', 64 ), 1 )['result'] );
+			} finally {
+				unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
+			}
+		}
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'pendingLivenessLossCallbacks' )]
+		public function testLivenessLossAbortsEveryMatchingPendingLifecycleCallback( string $callback ): void {
+			$state = new SelectedRuntimeState();
+			$broker = new RequestBroker( false, $state );
+			$state->bind( $broker );
+			$GLOBALS['ran_wp_release_updater_v1_broker'] = $broker;
+			$property = new \ReflectionProperty( $broker, 'state' );
+			$property->setValue( $broker, 'active' );
+			try {
+				list( $updater, , $database, , $binding ) = $this->subject( 'manual', null, 'stable', false, $state );
+				$offer = $this->offer( $updater );
+				$ownedArchive = $updater->filterPreDownload( false, $offer['package'], null, $this->extra() );
+				self::assertIsString( $ownedArchive );
+				self::assertNull( $updater->filterPreUnzipFile( null, $ownedArchive, '/tmp', array(), 0.0 ) );
+
+				$GLOBALS['ran_wp_release_updater_v1_broker'] = new \stdClass();
+				$result = match ( $callback ) {
+					'source-selection' => $updater->filterSourceSelection( 'source', '/tmp', null, $this->extra() ),
+					'pre-install' => $updater->filterPreInstall( true, $this->extra() ),
+					'install-result' => $updater->captureInstallPackageResult( array(), $this->extra() ),
+				};
+				self::assertInstanceOf( \WP_Error::class, $result );
+				self::assertFileDoesNotExist( $ownedArchive );
+				self::assertSame( 'claimed', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
+			} finally {
+				unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
+			}
+		}
+		/** @return array<string,array{string}> */
+		public static function pendingLivenessLossCallbacks(): array {
+			return array(
+				'source selection' => array( 'source-selection' ),
+				'pre install' => array( 'pre-install' ),
+				'install result' => array( 'install-result' ),
+			);
+		}
+		public function testLivenessLossFinalizationAndRefreshClearPendingArchivesAndLeases(): void {
+			foreach ( array( 'finalize', 'refresh' ) as $path ) {
+				$state = new SelectedRuntimeState();
+				$broker = new RequestBroker( false, $state );
+				$state->bind( $broker );
+				$GLOBALS['ran_wp_release_updater_v1_broker'] = $broker;
+				$property = new \ReflectionProperty( $broker, 'state' );
+				$property->setValue( $broker, 'active' );
+				try {
+					list( $updater, , $database, , $binding ) = $this->subject( 'manual', null, 'stable', false, $state );
+					$offer = $this->offer( $updater );
+					$ownedArchive = $updater->filterPreDownload( false, $offer['package'], null, $this->extra() );
+					self::assertIsString( $ownedArchive );
+					$status = $updater->status();
+
+					$GLOBALS['ran_wp_release_updater_v1_broker'] = new \stdClass();
+					if ( 'finalize' === $path ) {
+						$updater->finalizePendingInstall();
+						self::assertContains( 'runtime_liveness_lost', $updater->diagnostics() );
+					} else {
+						self::assertFalse( $updater->refresh() );
+						self::assertSame( $status, $updater->status() );
+					}
+					self::assertFileDoesNotExist( $ownedArchive );
+					self::assertSame( 'claimed', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'e', 64 ), 1 )['result'] );
+				} finally {
+					unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
+				}
+			}
 		}
 		public function testRefreshClearsDiagnosticsAndDestroysPendingOwnedArchive(): void {
 			list( $updater ) = $this->subject();
@@ -246,9 +462,17 @@ namespace Tests\WordPress {
 			$configuration['target_type'] = 'theme';
 			self::assertNull( NativePluginUpdater::fromConfiguration( $configuration, $binding, $adapter, $database, $this->policy() ) );
 		}
+		public function testArchivePolicyMustCarryTheExactBindingTemplate(): void {
+			list( , $adapter, $database, , $binding ) = $this->subject();
+			$policy = $this->policy();
+			$policy['theme_template'] = 'parent-theme';
+			self::assertNull( NativePluginUpdater::fromConfiguration( $this->config( 'manual' ), $binding, $adapter, $database, $policy ) );
+			unset( $policy['theme_template'] );
+			self::assertNull( NativePluginUpdater::fromConfiguration( $this->config( 'manual' ), $binding, $adapter, $database, $policy ) );
+		}
 		public function testNonFalsePreDownloadResultCannotBypassReleaseValidation(): void {
 			list( $updater, $adapter, $database ) = $this->subject();
-			$path = tempnam( sys_get_temp_dir(), 'ran-unverified-download-' ); self::assertIsString( $path ); $this->paths[] = $path; chmod( $path, 0600 ); file_put_contents( $path, 'untrusted archive' );
+			$path = tempnam( $this->temporaryDirectory, 'ran-unverified-download-' ); self::assertIsString( $path ); $this->paths[] = $path; chmod( $path, 0600 ); file_put_contents( $path, 'untrusted archive' );
 			$calls = 0;
 			$GLOBALS['ran_wp_release_updater_test_filter_callbacks']['ran_wp_release_updater_v1_core_artifact_handoff'] = static function () use ( &$calls ): mixed { ++$calls; return null; };
 			$result = $updater->filterPreDownload( $path, $path, null, $this->extra() );
@@ -260,13 +484,13 @@ namespace Tests\WordPress {
 			self::assertContains( 'unverified_pre_download_result', $updater->diagnostics() );
 		}
 		/** @return array{NativePluginUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
-		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false ): array {
+		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selectedRuntimeState = null, bool $nativeDiscoveryReuse = false, ?PackageIdentityValidator $validator = null ): array {
 			$archivePath = $this->archive();
 			$descriptor = $this->descriptor( $archivePath, $channel, $prerelease );
 			$binding = $this->binding( $mode, $channel );
-			$adapter = new ControllableReleaseAdapter( $descriptor, $archivePath );
+			$adapter = new ControllableReleaseAdapter( $descriptor, $archivePath, $this->temporaryDirectory );
 			$database ??= new FakeOptionDatabase( 100 );
-			$updater = NativePluginUpdater::fromConfiguration( $this->config( $mode ), $binding, $adapter, $database, $this->policy() );
+			$updater = NativePluginUpdater::fromConfiguration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selectedRuntimeState, $nativeDiscoveryReuse );
 			self::assertInstanceOf( NativePluginUpdater::class, $updater );
 			return array( $updater, $adapter, $database, $descriptor, $binding );
 		}
@@ -296,7 +520,7 @@ namespace Tests\WordPress {
 			return array( 'plugin' => 'package/package.php' );
 		}
 		private function archive(): string {
-			$archivePath = tempnam( sys_get_temp_dir(), 'ran-native-' );
+			$archivePath = tempnam( $this->temporaryDirectory, 'ran-native-' );
 			self::assertIsString( $archivePath );
 			$this->paths[] = $archivePath;
 			$archive = new \ZipArchive();
@@ -306,7 +530,7 @@ namespace Tests\WordPress {
 			return $archivePath;
 		}
 		private function staged(): string {
-			$parentPath = sys_get_temp_dir() . '/ran-native-stage-' . bin2hex( random_bytes( 5 ) );
+			$parentPath = $this->temporaryDirectory . '/ran-native-stage-' . bin2hex( random_bytes( 5 ) );
 			$stagedPath = $parentPath . '/package';
 			mkdir( $stagedPath, 0700, true );
 			$this->paths[] = $parentPath;
@@ -321,11 +545,11 @@ namespace Tests\WordPress {
 		/** @return array<string,string> */
 		private function policy(): array {
 			return array( 'archive_root' => 'package', 'configuration_update_uri' => $this->uri(), 'header_file' => 'package.php',
-				'installed_package_identity' => 'package/package.php', 'metadata_name' => 'Package', 'offer_update_uri' => $this->uri(), 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package', 'staged_package_update_uri' => $this->uri(), 'target_type' => 'plugin', 'wordpress_runtime_version' => '6.8' );
+				'installed_package_identity' => 'package/package.php', 'maximum_artifact_bytes' => 52428800, 'metadata_name' => 'Package', 'offer_update_uri' => $this->uri(), 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package', 'staged_package_update_uri' => $this->uri(), 'target_type' => 'plugin', 'theme_template' => '', 'wordpress_runtime_version' => '6.8' );
 		}
 		private function binding( string $mode, string $channel = 'stable' ): BindingRecord {
 			return BindingRecord::create( array( 'canonical_repository_locator' => 'owner/package', 'canonical_update_uri' => $this->uri(),
-				'installed_package_identity' => 'package/package.php', 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'release_channel' => $channel, 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'update_policy' => $mode, 'wordpress_runtime_version' => '6.8' ) );
+				'installed_package_identity' => 'package/package.php', 'maximum_artifact_bytes' => 52428800, 'network_id' => 1, 'php_runtime_version' => '8.2', 'provider_code' => 'neutral', 'release_channel' => $channel, 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'theme_template' => '', 'update_policy' => $mode, 'wordpress_runtime_version' => '6.8' ) );
 		}
 		private function descriptor( string $archivePath, string $channel = 'stable', bool $prerelease = false ): IdentityDescriptor {
 			return IdentityDescriptor::create( array( 'artifact_filename' => 'package.zip', 'artifact_identity' => 'asset:2',

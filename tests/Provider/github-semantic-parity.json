@@ -118,11 +118,11 @@
       "id": "coordination-rebind",
       "area": "coordination",
       "legacy_evidence": ["tests/WordPress/ReleaseOperationCoordinatorTest.php::testExpiredOwnerCannotPublishOrReleaseAfterTakeover", "tests/WordPress/ReleaseOperationCoordinatorTest.php::testProcessesWithDifferentConfigurationStillShareDatabaseOwnership"],
-      "neutral_evidence": ["Tests\\WordPress\\ReleaseOperationCoordinatorTest::testLiveRebindSurvivesRestartAndFencesTheStaleWriter", "Tests\\WordPress\\ReleaseOperationCoordinatorTest::testEveryProviderRepositoryUriAndPolicySwitchFencesStaleState"],
+      "neutral_evidence": ["Tests\\WordPress\\ReleaseOperationCoordinatorTest::testExpiredClaimCanReplaceBindingAndFencesTheStaleWriter", "Tests\\WordPress\\ReleaseOperationCoordinatorTest::testEveryProviderRepositoryUriAndPolicySwitchFencesStaleState"],
       "legacy_outcome": "database-time leases fence stale discovery and install owners",
-      "neutral_outcome": "one self-contained target row fences stale owners and full binding switches",
+      "neutral_outcome": "one self-contained target row fences stale owners; successor claims can change bindings only after release or expiry",
       "disposition": "strengthened",
-      "difference": "The Pareto-approved one-row state replaces the legacy multi-slot coordinator without provider cache state."
+      "difference": "The Pareto-approved one-row state replaces the legacy multi-slot coordinator without provider cache state; it has no live rebind seam."
     },
     {
       "id": "diagnostics-passivity",

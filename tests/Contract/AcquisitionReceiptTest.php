@@ -63,7 +63,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		try { AcquisitionReceipt::issue( $state, $descriptor, $validator, $expired, 21 ); self::fail( 'Expired lease minted receipt.' ); } catch ( InvalidArgumentException ) { self::addToAssertionCount( 1 ); }
 	}
 
-	public function testCompletionRechecksAConcurrentRebindAfterConsumingTheReceipt(): void {
+	public function testCompletionRechecksAConcurrentCompetingOwnerAfterConsumingTheReceipt(): void {
 		list( $validator, $descriptor, $prototype, $package ) = $this->ready();
 		$database = new FakeOptionDatabase( 10 );
 		$claimed = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $prototype->binding(), str_repeat( 'a', 64 ), 10 );
@@ -72,13 +72,13 @@ final class AcquisitionReceiptTest extends TestCase {
 		$claim = $this->claim( $state );
 		$receipt = AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, 10 );
 		$next = BindingRecord::create( array_merge( $this->bindingFacts(), array( 'update_policy' => 'automatic' ) ) );
-		$rebound = null;
-		$database->mutateOnTimeRead( 1, static function ( FakeOptionDatabase $database ) use ( $state, $claim, $next, &$rebound ): void {
-			$rebound = ReleaseOperationCoordinator::persistPersistentBindingState( $database, $state, $claim, $next );
+		$name = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey( array( 'network_id' => 1, 'target_type' => 'plugin', 'installed_package_identity' => 'x/x.php' ) );
+		$successor = BindingState::create( $next, str_repeat( 'b', 64 ), $state->leaseDeadline(), $state->bindingGeneration() + 1, $state->fenceEpoch() + 1 );
+		$database->mutateOnTimeRead( 1, static function ( FakeOptionDatabase $database ) use ( $name, $successor ): void {
+			$database->forceOptionValue( $name, json_encode( $successor->toArray(), JSON_THROW_ON_ERROR ) );
 		} );
 
 		$completed = ReleaseOperationCoordinator::completePersistentInstall( $database, $state, $claim, $receipt, $descriptor );
-		self::assertSame( 'rebound', $rebound['result'] );
 		self::assertSame( 'binding_fence_lost', $completed['result'] );
 		try {
 			AcquisitionReceipt::acceptFresh( $receipt, $state, $descriptor, 10 );
@@ -93,11 +93,11 @@ final class AcquisitionReceiptTest extends TestCase {
 	private function archive(): string { $path = tempnam( sys_get_temp_dir(), 'ran-receipt-' ); self::assertIsString( $path ); $this->archives[] = $path; $zip = new \ZipArchive(); self::assertTrue( $zip->open( $path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) ); self::assertTrue( $zip->addFromString( 'x/x.php', "<?php\n/*\nPlugin Name: X\nVersion: 1.0.0\nUpdate URI: https://example.com/owner/repo\n*/" ) ); $zip->close(); return $path; }
 	private function descriptor( string $path ): IdentityDescriptor { $facts = $this->descriptorFacts(); $facts['artifact_sha256'] = hash_file( 'sha256', $path ); $facts['artifact_size'] = filesize( $path ); return IdentityDescriptor::create( $facts ); }
 	/** @return array<string,string> */
-	private function policy(): array { return array( 'archive_root' => 'x', 'configuration_update_uri' => 'https://example.com/owner/repo', 'header_file' => 'x.php', 'installed_package_identity' => 'x/x.php', 'metadata_name' => 'X', 'offer_update_uri' => 'https://example.com/owner/repo', 'php_runtime_version' => '8.2', 'provider_code' => 'github', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/repo', 'staged_package_update_uri' => 'https://example.com/owner/repo', 'target_type' => 'plugin', 'wordpress_runtime_version' => '6.8' ); }
+	private function policy(): array { return array( 'archive_root' => 'x', 'configuration_update_uri' => 'https://example.com/owner/repo', 'header_file' => 'x.php', 'installed_package_identity' => 'x/x.php', 'maximum_artifact_bytes' => 52_428_800, 'metadata_name' => 'X', 'offer_update_uri' => 'https://example.com/owner/repo', 'php_runtime_version' => '8.2', 'provider_code' => 'github', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/repo', 'staged_package_update_uri' => 'https://example.com/owner/repo', 'target_type' => 'plugin', 'theme_template' => '', 'wordpress_runtime_version' => '6.8' ); }
 	/** @return array<string,mixed> */
 	private function claim( BindingState $state ): array { return array( 'binding_generation' => $state->bindingGeneration(), 'binding_hash' => $state->binding()->bindingHash(), 'lease_deadline' => $state->leaseDeadline(), 'owner_token' => $state->ownerToken() ); }
 	/** @return array<string,mixed> */
-	private function bindingFacts(): array { return array( 'canonical_repository_locator' => 'owner/repo', 'canonical_update_uri' => 'https://example.com/owner/repo', 'installed_package_identity' => 'x/x.php', 'php_runtime_version' => '8.2', 'provider_code' => 'github', 'release_channel' => 'stable', 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8' ); }
+	private function bindingFacts(): array { return array( 'canonical_repository_locator' => 'owner/repo', 'canonical_update_uri' => 'https://example.com/owner/repo', 'installed_package_identity' => 'x/x.php', 'maximum_artifact_bytes' => 52_428_800, 'network_id' => 1, 'php_runtime_version' => '8.2', 'provider_code' => 'github', 'release_channel' => 'stable', 'stable_repository_identity' => 'repo:1', 'target_type' => 'plugin', 'theme_template' => '', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8' ); }
 	/** @return array<string,mixed> */
 	private function descriptorFacts(): array { return array( 'artifact_filename' => 'x.zip', 'artifact_identity' => 'asset:1', 'artifact_sha256' => str_repeat( 'a', 64 ), 'artifact_size' => 1, 'assurance_facts' => array( 'exact_artifact_identity' => true, 'exact_commit_identity' => true, 'exact_reacquisition_supported' => true, 'exact_release_identity' => true, 'provenance_verified' => true, 'publication_immutable' => false, 'repository_identity_stable' => true, 'trusted_digest_source' => true ), 'canonical_update_uri' => 'https://example.com/owner/repo', 'channel' => 'stable', 'commit_identity' => 'commit:1', 'installed_package_identity' => 'x/x.php', 'prerelease' => false, 'provider_code' => 'github', 'release_identity' => '42', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/repo', 'tag' => 'v1', 'target_type' => 'plugin', 'version' => '1.0.0' ); }
 }
