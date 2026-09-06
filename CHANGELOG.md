@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.0-beta.4](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.3...v0.1.0-beta.4) (2026-09-06)
+
+
+### Bug Fixes
+
+* restore exact native offer release identity ([4964a12](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/4964a12971e2c8cfc188badbba27822bc70d9896))
+* restore exact native offer release identity ([be8bf2b](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/be8bf2b77e0789e20bfe212feaa008c16b66a381))
+* stop native discovery after provider failures ([b325c6e](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/b325c6ea9cc9541a1e6ca706f8c312e2ef1fcf02))
+* stop native discovery after provider failures ([5081315](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/50813151c57f5b7d4185b8fd5b84b4a0c22293f0))
+
 ## [0.1.0-beta.3](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.2...v0.1.0-beta.3) (2026-09-06)
 
 
