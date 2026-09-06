@@ -60,3 +60,62 @@ jobs:
           tools: composer:v2
       - run: composer install --no-interaction --prefer-dist
       - run: php vendor/bin/phpunit --configuration phpunit.xml tests/Runtime/WindowsPortabilityProofTest.php
+
+  wordpress-installed-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        wordpress: ['6.5', '7.1']
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2, wp-cli:2.12.0
+      - name: Run installed WordPress integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v composer
+          wp_cli="$(command -v wp)"
+          system_mysqld="$(command -v mysqld)"
+          php -m | grep -Fx mysqli
+
+          integration_root="$GITHUB_WORKSPACE/.workspaces/wordpress-integration"
+          socket_root="$GITHUB_WORKSPACE/.workspaces/sock"
+          php_tmp="$integration_root/php-tmp"
+          wp_cache="$integration_root/wp-cli-cache"
+          wp_root="$GITHUB_WORKSPACE/.workspaces/wordpress-${{ matrix.wordpress }}"
+          mysql_tools="$GITHUB_WORKSPACE/.workspaces/wordpress-integration-tools"
+          mysqld_binary="$mysql_tools/mysqld"
+          php_ini="$integration_root/php-ini"
+          mkdir -p "$integration_root" "$socket_root" "$php_tmp" "$wp_cache" "$mysql_tools" "$php_ini"
+          chmod 700 "$integration_root" "$socket_root" "$php_tmp" "$wp_cache" "$mysql_tools" "$php_ini"
+          printf 'sys_temp_dir = "%s"\n' "$php_tmp" > "$php_ini/99-ran-updater-integration.ini"
+          php_scan_dir="$(php --ini | sed -n 's/^Scan for additional .ini files in: //p')"
+          export PHP_INI_SCAN_DIR="$php_ini:$php_scan_dir"
+          export WP_CLI_CACHE_DIR="$wp_cache" # Download-only; the suite creates and removes its own per-run cache.
+          export TMPDIR="$php_tmp" TMP="$php_tmp" TEMP="$php_tmp"
+
+          cp "$system_mysqld" "$mysqld_binary"
+          cmp "$system_mysqld" "$mysqld_binary"
+          php -d "sys_temp_dir=$php_tmp" "$wp_cli" core download --version=${{ matrix.wordpress }} --skip-content --path="$wp_root"
+          composer install --no-interaction --prefer-dist
+          export RAN_UPDATER_WP_ROOT="$wp_root"
+          export RAN_UPDATER_WP_CLI="$wp_cli"
+          export RAN_UPDATER_MYSQLD_BIN="$mysqld_binary"
+          export RAN_UPDATER_INTEGRATION_ROOT="$integration_root"
+          export RAN_UPDATER_SOCKET_ROOT="$socket_root"
+          composer test:wordpress-integration
+      - name: Upload redacted integration result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wordpress-installed-integration-${{ matrix.wordpress }}
+          path: ${{ github.workspace }}/.workspaces/wordpress-integration/ran-wp-release-updater-result-*.json
+          if-no-files-found: ignore
+          retention-days: 7
