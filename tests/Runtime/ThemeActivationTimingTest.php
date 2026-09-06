@@ -112,7 +112,7 @@ PHP );
 		foreach ( $files as $runtimeFile ) {
 			$payload .= $runtimeFile . "\0" . hash_file( 'sha256', $copy . '/' . $runtimeFile ) . "\n";
 		}
-		file_put_contents( $copy . '/runtime-copy.json', json_encode( array( 'package_revision' => hash( 'sha256', $payload ), 'package_version' => '0.1.0-beta.2', 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 3, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
+		file_put_contents( $copy . '/runtime-copy.json', json_encode( array( 'package_revision' => hash( 'sha256', $payload ), 'package_version' => '0.1.0-beta.2', 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 4, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
 		return $copy;
 	}
 

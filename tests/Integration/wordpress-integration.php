@@ -331,8 +331,8 @@ function verifyRuntime(string $source): array
 	$runtime = readJson($source . '/runtime-copy.json');
 	$payload = '';
 	foreach (runtimeFiles($source) as $file) $payload .= $file . "\0" . hash_file('sha256', $source . '/' . $file) . "\n";
-	requireFact(3 === ($runtime['runtime_protocol'] ?? null)
-		&& hash('sha256', $payload) === ($runtime['package_revision'] ?? null), 'Runtime manifest does not match the Protocol 3 source bytes.');
+	requireFact(4 === ($runtime['runtime_protocol'] ?? null)
+		&& hash('sha256', $payload) === ($runtime['package_revision'] ?? null), 'Runtime manifest does not match the Protocol 4 source bytes.');
 	return $runtime;
 }
 

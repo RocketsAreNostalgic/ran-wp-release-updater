@@ -160,20 +160,36 @@ namespace Tests\WordPress {
 			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true );
 			$this->offer( $updater );
 			$updater->observeCompletion( null, array( 'action' => 'update', 'type' => 'plugin', 'plugins' => array( 'package/package.php' ) ) );
+			self::assertNull( $updater->status()['offered_release_identity'] );
 			$this->offer( $updater );
 			self::assertSame( array( 2, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
 		}
 		public function testStatusProjectsOnlyTheObservedOfferAndFailureAndRefreshClearsIt(): void {
 			list( $updater, $adapter, $database ) = $this->subject();
-			self::assertSame( array( 'candidate_header_version' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
+			self::assertSame( array( 'candidate_header_version' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_release_identity' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) ); self::assertSame( array(), $database->preparedSql() );
 			$this->offer( $updater );
 			$status = $updater->status();
-			self::assertSame( 'v2.0.0', $status['candidate_tag'] ); self::assertSame( '2.0.0', $status['candidate_version'] ); self::assertSame( 'archive_identity_verified', $status['candidate_validation_code'] ); self::assertSame( '2.0.0', $status['candidate_header_version'] ); self::assertSame( '1.0.0', $status['installed_version'] ); self::assertIsInt( $status['last_check'] ); self::assertSame( '2.0.0', $status['offered_version'] ); self::assertSame( 'newer', $status['relationship'] ); self::assertNull( $status['failure_code'] );
+			self::assertSame( 'v2.0.0', $status['candidate_tag'] ); self::assertSame( '2.0.0', $status['candidate_version'] ); self::assertSame( 'archive_identity_verified', $status['candidate_validation_code'] ); self::assertSame( '2.0.0', $status['candidate_header_version'] ); self::assertSame( '1.0.0', $status['installed_version'] ); self::assertIsInt( $status['last_check'] ); self::assertSame( 'release:2', $status['offered_release_identity'] ); self::assertSame( '2.0.0', $status['offered_version'] ); self::assertSame( 'newer', $status['relationship'] ); self::assertNull( $status['failure_code'] );
 			$updater->filterUpdate( false, array( 'Version' => 'bad', 'UpdateURI' => $this->uri() ), 'package/package.php', array() );
 			self::assertSame( 'runtime_package_identity_invalid', $updater->status()['failure_code'] );
+			self::assertNull( $updater->status()['offered_release_identity'] );
 			$updater->refresh();
-			self::assertSame( array( 'candidate_header_version' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
+			self::assertSame( array( 'candidate_header_version' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_release_identity' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
+		}
+		public function testOfferStatusBindsTheExactVerifiedReleaseIdentityRatherThanTheVersion(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject();
+			$this->offer( $updater );
+			self::assertSame( 'release:2', $updater->status()['offered_release_identity'] );
+			$facts = $descriptor->toArray();
+			unset( $facts['fingerprint'] );
+			$facts['release_identity'] = 'release:3';
+			$replacement = IdentityDescriptor::create( $facts );
+			$adapter->inspectDescriptor = $replacement;
+			(new \ReflectionProperty( $adapter, 'descriptor' ))->setValue( $adapter, $replacement );
+			$this->offer( $updater );
+			self::assertSame( '2.0.0', $updater->status()['offered_version'] );
+			self::assertSame( 'release:3', $updater->status()['offered_release_identity'] );
 		}
 		public function testPrereleaseChannelOfferIsManualAndAutomaticIsDenied(): void {
 			list( $updater ) = $this->subject( 'manual', null, 'prerelease', true );

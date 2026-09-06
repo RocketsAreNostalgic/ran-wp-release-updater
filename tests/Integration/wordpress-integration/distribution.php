@@ -59,13 +59,18 @@ $proof = array(
 		&& archiveManifest($themeZip, 'ran-neutral-theme') === directoryManifest(get_theme_root() . '/ran-neutral-theme')
 		&& is_plugin_active('ran-neutral-plugin/ran-neutral-plugin.php') && 'ran-neutral-theme' === get_stylesheet()
 		&& 2 === ($diagnostics['candidate_count'] ?? null) && 2 === ($diagnostics['logical_target_count'] ?? null)
-		&& 3 === ($diagnostics['protocol_version'] ?? null)
+		&& 4 === ($diagnostics['protocol_version'] ?? null)
 		&& array('plugin' => 0, 'theme' => 0) === $credentialsAtBoot && 0 === $httpAtBoot
 		&& 1 === count($pluginCallbacks) && 1 === count($themeCallbacks)
 		&& originsAreInstalled(array_merge($pluginCallbacks, $themeCallbacks), $runtimeRoot)
 		&& array('plugin' => 1, 'theme' => 1) === $credentialsAfter && 2 === ($httpAfter - $httpAtBoot)
 		&& 'target_active' === ($plugin->status()['code'] ?? null) && 'target_active' === ($theme->status()['code'] ?? null)
-		&& true === ($plugin->status()['hooks_registered'] ?? null) && true === ($theme->status()['hooks_registered'] ?? null),
+		&& true === ($plugin->status()['hooks_registered'] ?? null) && true === ($theme->status()['hooks_registered'] ?? null)
+		&& is_array($plugin->status()['native'] ?? null) && is_array($theme->status()['native'] ?? null)
+		&& array_key_exists('offered_release_identity', $plugin->status()['native'])
+		&& array_key_exists('offered_release_identity', $theme->status()['native'])
+		&& null === ($plugin->status()['native']['offered_release_identity'] ?? null)
+		&& null === ($theme->status()['native']['offered_release_identity'] ?? null),
 );
 file_put_contents($output, json_encode($proof, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n");
 

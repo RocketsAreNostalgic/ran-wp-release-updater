@@ -27,7 +27,7 @@ PHP );
 		self::assertSame( array(), $result['code'] );
 	}
 
-	public function testSeparateCleanProtocolThreeRequestSelectsOnlyItsOwnBroker(): void
+	public function testSeparateCleanProtocolFourRequestSelectsOnlyItsOwnBroker(): void
 	{
 		$result = $this->probe( <<<'PHP'
 $registrar = require $data['bootstrap'];
@@ -36,7 +36,7 @@ $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
 echo json_encode(array('protocol' => $broker->protocolVersion(), 'state' => $registrar->diagnostics()['state'], 'candidates' => $broker->diagnostics()['candidate_count'], 'legacy' => isset($GLOBALS['ran_wp_github_release_updater_v1_broker'])));
 PHP );
 
-		self::assertSame( 3, $result['protocol'] );
+		self::assertSame( 4, $result['protocol'] );
 		self::assertSame( 'active', $result['state'] );
 		self::assertSame( 1, $result['candidates'] );
 		self::assertFalse( $result['legacy'] );
@@ -298,7 +298,7 @@ echo json_encode(array('unchanged' => $existing === $GLOBALS['ran_wp_release_upd
 PHP );
 
 		self::assertTrue( $result['unchanged'] );
-		self::assertSame( 3, $result['protocol'] );
+		self::assertSame( 4, $result['protocol'] );
 		self::assertSame( 'conflict', $result['state'] );
 		self::assertSame( 'protocol_conflict_inactive', $result['code'] );
 		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['diagnostics'] );
@@ -433,7 +433,7 @@ PHP );
 		foreach ( $files as $file ) {
 			$payload .= $file . "\0" . hash_file( 'sha256', $root . '/' . $file ) . "\n";
 		}
-		file_put_contents( $root . '/runtime-copy.json', json_encode( array( 'package_revision' => hash( 'sha256', $payload ), 'package_version' => $version, 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 3, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
+		file_put_contents( $root . '/runtime-copy.json', json_encode( array( 'package_revision' => hash( 'sha256', $payload ), 'package_version' => $version, 'php_floor' => '8.2.0', 'runtime_file' => 'runtime.php', 'runtime_protocol' => 4, 'wordpress_floor' => '6.5.0' ), JSON_THROW_ON_ERROR ) );
 		return $root;
 	}
 

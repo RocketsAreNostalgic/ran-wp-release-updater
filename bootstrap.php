@@ -46,7 +46,7 @@ $ran_wp_release_updater_package_origin = static function( string $root, ?string 
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['package_version'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['php_floor'] )
 			|| 'runtime.php' !== $copy['runtime_file']
-			|| 3 !== $copy['runtime_protocol']
+			|| 4 !== $copy['runtime_protocol']
 			|| ! is_string( $copy['wordpress_floor'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['wordpress_floor'] )
 		) {
@@ -221,7 +221,7 @@ $ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_br
 	&& is_callable( array( $ran_wp_release_updater_broker, 'diagnostics' ) );
 if ( $ran_wp_release_updater_broker_compatible ) {
 	try {
-		$ran_wp_release_updater_broker_compatible = 3 === $ran_wp_release_updater_broker->protocolVersion();
+		$ran_wp_release_updater_broker_compatible = 4 === $ran_wp_release_updater_broker->protocolVersion();
 	} catch ( Throwable ) {
 		$ran_wp_release_updater_broker_compatible = false;
 	}
@@ -240,7 +240,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 
 		public function protocolVersion(): int
 		{
-			return 3;
+			return 4;
 		}
 
 		public function registerCandidate( string $copyFile ): bool
@@ -265,7 +265,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		public function diagnostics(): array
 		{
 			return array(
-				'protocol_version' => 3,
+				'protocol_version' => 4,
 				'state' => 'conflict',
 				'activation_attempted' => false,
 				'candidate_count' => 0,

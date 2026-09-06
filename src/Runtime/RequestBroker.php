@@ -85,7 +85,7 @@ final class RequestBroker
 
 	public function protocolVersion(): int
 	{
-		return 3;
+		return 4;
 	}
 
 	/** Register a physical runtime-copy.json without loading its runtime. */
@@ -360,7 +360,7 @@ final class RequestBroker
 	{
 		$this->protocolLive();
 		return array(
-			'protocol_version' => 3, 'state' => $this->state,
+			'protocol_version' => 4, 'state' => $this->state,
 			'activation_attempted' => $this->activationAttempted,
 			'candidate_count' => count( $this->candidates ),
 			'submission_count' => count( $this->submissions ),
@@ -389,7 +389,7 @@ final class RequestBroker
 	{
 		if (
 			! $this->exactKeys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
-			|| 3 !== $environment['runtime_protocol']
+			|| 4 !== $environment['runtime_protocol']
 			|| ! is_string( $environment['php_version'] )
 			|| ! is_string( $environment['wordpress_version'] )
 		) {
@@ -481,6 +481,10 @@ final class RequestBroker
 	{
 		if ( isset( $item['terminal_code'] ) || null !== $this->terminalCode ) {
 			$last = $this->lastNativeStatus( $item );
+			if ( is_array( $last['native'] ?? null ) ) {
+				$last['native']['offered_release_identity'] = null;
+				$last['native']['offered_version'] = null;
+			}
 			return $this->status(
 				'inactive',
 				true,
@@ -628,6 +632,7 @@ final class RequestBroker
 			'failure_code',
 			'installed_version',
 			'last_check',
+			'offered_release_identity',
 			'offered_version',
 			'relationship',
 		);
@@ -642,10 +647,14 @@ final class RequestBroker
 				return false;
 			}
 		}
+		if ( null !== $native['offered_release_identity'] && ! $this->opaque( $native['offered_release_identity'], 191 ) ) {
+			return false;
+		}
 		return ( null === $native['candidate_validation_code'] || in_array( $native['candidate_validation_code'], self::CANDIDATE_VALIDATION_CODES, true ) )
 			&& ( null === $native['failure_code'] || in_array( $native['failure_code'], self::FAILURE_CODES, true ) )
 			&& ( null === $native['last_check'] || ( is_int( $native['last_check'] ) && 0 < $native['last_check'] ) )
-			&& ( null === $native['relationship'] || in_array( $native['relationship'], self::RELATIONSHIPS, true ) );
+			&& ( null === $native['relationship'] || in_array( $native['relationship'], self::RELATIONSHIPS, true ) )
+			&& ( null === $native['offered_release_identity'] ) === ( null === $native['offered_version'] );
 	}
 
 	/** @param array<string,mixed> $diagnostics */
@@ -816,7 +825,7 @@ final class RequestBroker
 			|| ! is_string( $facts['package_version'] )
 			|| ! is_string( $facts['php_floor'] )
 			|| 'runtime.php' !== $facts['runtime_file']
-			|| 3 !== $facts['runtime_protocol']
+			|| 4 !== $facts['runtime_protocol']
 			|| ! is_string( $facts['wordpress_floor'] )
 		) {
 			throw new RuntimeException( 'Invalid runtime copy.' );
@@ -897,7 +906,7 @@ final class RequestBroker
 		if (
 			array() === $this->candidates
 			|| ! $this->exactKeys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
-			|| 3 !== $environment['runtime_protocol']
+			|| 4 !== $environment['runtime_protocol']
 			|| ! is_string( $environment['php_version'] )
 			|| ! is_string( $environment['wordpress_version'] )
 		) {
