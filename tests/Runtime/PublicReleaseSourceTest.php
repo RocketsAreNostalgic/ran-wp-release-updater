@@ -113,6 +113,37 @@ PHP, array( 'filesystem_method' => 'ftpext' ) );
 	}
 
 	#[Test]
+	public function cachedSourceRechecksAnUndefinedFilesystemMethodBeforeEveryOperation(): void
+	{
+		$result = $this->probe( <<<'PHP'
+$GLOBALS['wp_filesystem'] = new WP_Filesystem_Direct();
+$credentials = 0;
+$registrar = require $data['bootstrap'];
+$GLOBALS['ran_wp_release_updater_v1_broker']->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0'));
+$source = $registrar->releases('github', 'plugin', 'acme/example', '123456789', 'stable', static function () use (&$credentials): string { ++$credentials; return 'secret'; });
+$first = $source->list();
+$before = array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']);
+$GLOBALS['wp_filesystem'] = null;
+$cleared = array($source->list(), $source->inspect('1', 'v1.0.0'), $source->acquire('1', 'v1.0.0', 'v2:' . str_repeat('0', 64)));
+$clearedWork = array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']);
+$GLOBALS['wp_filesystem'] = new stdClass();
+$replaced = array($source->list(), $source->inspect('1', 'v1.0.0'), $source->acquire('1', 'v1.0.0', 'v2:' . str_repeat('0', 64)));
+$replacedWork = array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']);
+$GLOBALS['wp_filesystem'] = new WP_Filesystem_Direct();
+$restored = $source->list();
+echo json_encode(array('first' => $first, 'cleared' => $cleared, 'replaced' => $replaced, 'restored' => $restored, 'before' => $before, 'cleared_work' => $clearedWork, 'replaced_work' => $replacedWork, 'after' => array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls'])));
+PHP, array( 'filesystem_method' => null ) );
+
+		self::assertSame( 'repository_access_unavailable', $result['first']['code'] );
+		foreach ( array_merge( $result['cleared'], $result['replaced'] ) as $operation ) {
+			self::assertSame( 'filesystem_unsupported', $operation['code'] );
+		}
+		self::assertSame( $result['before'], $result['cleared_work'] );
+		self::assertSame( $result['before'], $result['replaced_work'] );
+		self::assertSame( 'repository_access_unavailable', $result['restored']['code'] );
+	}
+
+	#[Test]
 	public function cachedSourceDoesNotResumeAfterTerminalReplacementEvenIfTheOriginalBrokerReturns(): void
 	{
 		$result = $this->probe( <<<'PHP'
@@ -164,12 +195,16 @@ PHP, array( 'two' => $protocolTwo . '/bootstrap.php', 'three' => dirname( __DIR_
 	private function probe( string $body, array $data = array() ): array
 	{
 		$file = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/release-source-' . bin2hex( random_bytes( 6 ) ) . '.php';
+		$filesystemMethod = array_key_exists( 'filesystem_method', $data ) ? $data['filesystem_method'] : 'direct';
+		$filesystemDefinition = null === $filesystemMethod ? '' : 'define("FS_METHOD",' . var_export( $filesystemMethod, true ) . '); ';
+		$filesystemClass = null === $filesystemMethod ? 'class WP_Filesystem_Direct{} ' : '';
 		$prefix = '<?php '
 			. '$GLOBALS["release_source_hooks"]=array(); '
+			. $filesystemClass
 			. 'function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["release_source_hooks"][]=$hook;} '
 			. 'function add_filter(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["release_source_hooks"][]=$hook;} '
-			. 'function wp_remote_get():mixed{++$GLOBALS["release_source_http_calls"];return false;} '
-			. '$GLOBALS["release_source_filesystem_gate_calls"]=0;$GLOBALS["release_source_http_calls"]=0;$GLOBALS["release_source_p2_boots"]=0;$GLOBALS["release_source_p2_handoffs"]=0;$GLOBALS["wp_version"]="6.8.0";define("FS_METHOD",' . var_export( $data['filesystem_method'] ?? 'direct', true ) . '); '
+			. 'function wp_safe_remote_get():mixed{++$GLOBALS["release_source_http_calls"];return false;} function is_wp_error():bool{return false;} '
+			. '$GLOBALS["release_source_filesystem_gate_calls"]=0;$GLOBALS["release_source_http_calls"]=0;$GLOBALS["release_source_p2_boots"]=0;$GLOBALS["release_source_p2_handoffs"]=0;$GLOBALS["wp_version"]="6.8.0";' . $filesystemDefinition
 			. '$data=' . var_export( array_merge( array( 'bootstrap' => dirname( __DIR__, 2 ) . '/bootstrap.php' ), $data ), true ) . '; ';
 		file_put_contents( $file, $prefix . $body );
 		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp' ) . ' ' . escapeshellarg( $file ), $output, $status );

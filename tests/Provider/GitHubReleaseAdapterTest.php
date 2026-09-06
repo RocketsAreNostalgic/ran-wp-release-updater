@@ -109,6 +109,26 @@ namespace {
 }
 
 namespace RAN\WPReleaseUpdater\V1\Provider\GitHub {
+	function chmod(string $path, int $permissions): bool
+	{
+		if (($GLOBALS['ran_github_chmod_failures'] ?? 0) > 0) {
+			--$GLOBALS['ran_github_chmod_failures'];
+			return false;
+		}
+		return \chmod($path, $permissions);
+	}
+
+	function lstat(string $path): array|false
+	{
+		if (($GLOBALS['ran_github_lstat_failure_at'] ?? 0) > 0) {
+			--$GLOBALS['ran_github_lstat_failure_at'];
+			if (0 === $GLOBALS['ran_github_lstat_failure_at']) {
+				return false;
+			}
+		}
+		return \lstat($path);
+	}
+
 	/** Scoped test seam for the service's synchronous two-attempt cleanup. */
 	function unlink(string $path): bool
 	{
@@ -145,6 +165,8 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$GLOBALS['ran_github_temp_paths'] = array();
 		$GLOBALS['ran_github_validate_urls'] = true;
 		$GLOBALS['ran_github_request_callback'] = null;
+		$GLOBALS['ran_github_chmod_failures'] = 0;
+		$GLOBALS['ran_github_lstat_failure_at'] = 0;
 		$GLOBALS['ran_github_unlink_failures'] = 0;
 	}
 
@@ -447,6 +469,65 @@ final class GitHubReleaseAdapterTest extends TestCase
 			self::assertSame('failed', $failure->cleanupStatus);
 		}
 		self::assertSame(0, $GLOBALS['ran_github_unlink_failures']);
+		self::assertFileExists($GLOBALS['ran_github_temp_paths'][count($GLOBALS['ran_github_temp_paths']) - 1]);
+	}
+
+	public function testPublicServiceReportsTemporaryAllocationCleanupForInspectAndAcquire(): void
+	{
+		$archive = $this->prospectiveArchive("<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/");
+
+		$service = $this->publicService();
+		$GLOBALS['ran_github_chmod_failures'] = 1;
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		try {
+			$service->inspect('7', 'v1.2.3');
+			self::fail('A chmod allocation failure must be structured.');
+		} catch (ReleaseFailure $failure) {
+			self::assertSame('package_incompatible', $failure->releaseCode);
+			self::assertSame('complete', $failure->cleanupStatus);
+		}
+		$this->assertAllTemporaryPathsAbsent();
+
+		$service = $this->publicService();
+		$GLOBALS['ran_github_chmod_failures'] = 1;
+		$GLOBALS['ran_github_unlink_failures'] = 2;
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		try {
+			$service->inspect('7', 'v1.2.3');
+			self::fail('An unreleased chmod allocation failure must be structured.');
+		} catch (ReleaseFailure $failure) {
+			self::assertSame('package_incompatible', $failure->releaseCode);
+			self::assertSame('failed', $failure->cleanupStatus);
+		}
+		$unreleasedPath = $GLOBALS['ran_github_temp_paths'][count($GLOBALS['ran_github_temp_paths']) - 1];
+		self::assertFileExists($unreleasedPath);
+		self::assertTrue(\unlink($unreleasedPath));
+
+		$service = $this->publicService();
+		$GLOBALS['ran_github_unlink_failures'] = 0;
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		$inspection = $service->inspect('7', 'v1.2.3');
+		$GLOBALS['ran_github_lstat_failure_at'] = 2;
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		try {
+			$service->acquire('7', 'v1.2.3', $inspection['fingerprint']);
+			self::fail('An identity allocation failure must be structured.');
+		} catch (ReleaseFailure $failure) {
+			self::assertSame('package_incompatible', $failure->releaseCode);
+			self::assertSame('complete', $failure->cleanupStatus);
+		}
+		$this->assertAllTemporaryPathsAbsent();
+
+		$service = $this->publicService();
+		$GLOBALS['ran_github_lstat_failure_at'] = 1;
+		$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(7, 'v1.2.3', $archive);
+		try {
+			$service->inspect('7', 'v1.2.3');
+			self::fail('An unproven temporary file must be structured.');
+		} catch (ReleaseFailure $failure) {
+			self::assertSame('package_incompatible', $failure->releaseCode);
+			self::assertSame('failed', $failure->cleanupStatus);
+		}
 		self::assertFileExists($GLOBALS['ran_github_temp_paths'][count($GLOBALS['ran_github_temp_paths']) - 1]);
 	}
 

@@ -15,6 +15,12 @@ final class ReleaseSource
 	{
 	}
 
+	private static function directFilesystemAvailable(): bool
+	{
+		return (defined('FS_METHOD') && 'direct' === FS_METHOD)
+			|| (! defined('FS_METHOD') && (($GLOBALS['wp_filesystem'] ?? null) instanceof \WP_Filesystem_Direct));
+	}
+
 	public function list(array $conditional = array()): array
 	{
 		foreach ($conditional as $key => $value) {
@@ -45,6 +51,9 @@ final class ReleaseSource
 	{
 		if (null !== ($failure = $this->readiness())) {
 			return $failure;
+		}
+		if (! self::directFilesystemAvailable()) {
+			return $this->failure(new ReleaseFailure('filesystem_unsupported'));
 		}
 		$artifact = null;
 		$cleanup = 'not_applicable';

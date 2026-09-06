@@ -268,12 +268,6 @@ return new class(
 		if ( ! $state instanceof \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState ) return $this->releaseFailure( 'runtime_unavailable' );
 		$readiness = $state->releaseReadinessCode();
 		if ( null !== $readiness ) return $this->releaseFailure( $readiness );
-		if (
-			( defined( 'FS_METHOD' ) && 'direct' !== FS_METHOD )
-			|| ( ! defined( 'FS_METHOD' ) && ! ( ( $GLOBALS['wp_filesystem'] ?? null ) instanceof \WP_Filesystem_Direct ) )
-		) {
-			return $this->releaseFailure( 'filesystem_unsupported' );
-		}
 		$compose = $this->providerCatalog[ $declaration['provider_code'] ?? '' ]['release'] ?? null;
 		if ( ! $compose instanceof Closure ) return $this->releaseFailure( 'provider_unavailable' );
 		try {

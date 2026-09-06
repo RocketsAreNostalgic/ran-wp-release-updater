@@ -321,9 +321,12 @@ final class GitHubReleaseService
 		?string $token
 	): TemporaryArtifact {
 		$this->repositoryIdentity($token);
-		list($path, $initialIdentity) = $this->temporaryFile($facts['artifact_filename']);
+		$path = null;
+		$initialIdentity = null;
+		$allocationClean = null;
 
 		try {
+			list($path, $initialIdentity) = $this->temporaryFile($facts['artifact_filename'], $allocationClean);
 			$response = $this->request(
 				$this->repositoryApiUrl() . '/releases/assets/' . $artifactIdentity,
 				$token,
@@ -358,7 +361,13 @@ final class GitHubReleaseService
 			$this->assertLive();
 			return new TemporaryArtifact($path, $sha256, $identity, $this->livenessGuard);
 		} catch (\Throwable $exception) {
-			$clean = self::removeOwnedFile($path, $initialIdentity);
+			if (is_string($path) && is_array($initialIdentity)) {
+				$clean = self::removeOwnedFile($path, $initialIdentity);
+			} elseif (is_bool($allocationClean)) {
+				$clean = $allocationClean;
+			} else {
+				throw $exception;
+			}
 			if ($this->isPublicOperation()) {
 				throw $this->postAllocationFailure($exception, $clean);
 			}
@@ -1172,9 +1181,10 @@ final class GitHubReleaseService
 		);
 	}
 
-	/** @return array{0:string,1:array<string,int>} */
-	private function temporaryFile(string $filename): array
+	/** @param-out ?bool $allocationClean @return array{0:string,1:array<string,int>} */
+	private function temporaryFile(string $filename, ?bool &$allocationClean): array
 	{
+		$allocationClean = null;
 		if (! function_exists('wp_tempnam')) {
 			throw new RuntimeException('WordPress temporary-file custody is unavailable.');
 		}
@@ -1185,13 +1195,15 @@ final class GitHubReleaseService
 		$createdIdentity = self::fileIdentity($path);
 		if (null === $createdIdentity || ! @chmod($path, 0600)) {
 			if (is_array($createdIdentity)) {
-				self::removeOwnedFile($path, $createdIdentity);
+				$allocationClean = self::removeOwnedFile($path, $createdIdentity);
+			} else {
+				$allocationClean = ! file_exists($path) && ! is_link($path);
 			}
 			throw new RuntimeException('A private temporary file could not be created.');
 		}
 		$identity = self::fileIdentity($path);
 		if (null === $identity || 1 !== $identity['nlink']) {
-			self::removeOwnedFile($path, $createdIdentity);
+			$allocationClean = self::removeOwnedFile($path, $createdIdentity);
 			throw new RuntimeException('The private temporary file is invalid.');
 		}
 
