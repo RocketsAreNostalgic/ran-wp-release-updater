@@ -4,6 +4,17 @@ A source is request-local. Create it during early plugin or theme loading and
 call it after WordPress has activated the selected runtime. It does not add a
 native target, schedule an update, or install a package.
 
+Provider response details are mapped to the neutral result codes below. A
+repository `401`, ordinary `403`, or repository/list `404` is
+`repository_access_unavailable`; a concrete release, commit, or asset `404` is
+`release_unavailable`. Network failures, `5xx`, malformed HTTP or JSON, and a
+repository-identity mismatch are `operation_failed`. Invalid release or ZIP
+metadata is `package_incompatible`. Discovery may continue to a later candidate
+only after a clean `release_unavailable` or `package_incompatible` result;
+other provider failures stop it. A `rate_limited` result is a bounded,
+caller-owned scheduling hint, and native update state keeps its existing stage
+codes without a persistent cooldown.
+
 Release-source operations require WordPress direct filesystem access already
 selected for the request: `FS_METHOD` must be `direct`, or WordPress must have
 an initialized `WP_Filesystem_Direct` instance when no override is defined.

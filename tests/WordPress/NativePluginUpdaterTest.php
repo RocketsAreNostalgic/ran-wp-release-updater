@@ -30,6 +30,7 @@ namespace Tests\WordPress {
 	use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 	use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 	use RAN\WPReleaseUpdater\V1\Runtime\RequestBroker;
+	use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 	use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 	use RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater;
@@ -177,6 +178,202 @@ namespace Tests\WordPress {
 			$updater->refresh();
 			self::assertSame( array( 'candidate_header_version' => null, 'candidate_tag' => null, 'candidate_validation_code' => null, 'candidate_version' => null, 'failure_code' => null, 'installed_version' => null, 'last_check' => null, 'offered_release_identity' => null, 'offered_version' => null, 'relationship' => null ), $updater->status() );
 		}
+		public function testListingRateLimitFactsStopBeforeAnyCandidateInspection(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject();
+			$adapter->listResponse = array(
+				'candidates' => array( $this->candidate( $descriptor ) ),
+				'rate_limit' => array( 'limited' => true, 'remaining' => 0, 'reset_at' => null, 'retry_after' => 60 ),
+			);
+
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'release_list_failed', $updater->status()['candidate_validation_code'] );
+		}
+		public function testThemeListingRateLimitFactsStopBeforeAnyCandidateInspection(): void {
+			$archive = $this->archive();
+			$facts = $this->descriptor( $archive )->toArray();
+			unset( $facts['fingerprint'] );
+			$facts['installed_package_identity'] = 'package';
+			$facts['target_type'] = 'theme';
+			$descriptor = IdentityDescriptor::create( $facts );
+			$binding = BindingRecord::create( array(
+				'canonical_repository_locator' => 'owner/package', 'canonical_update_uri' => $this->uri(), 'installed_package_identity' => 'package',
+				'maximum_artifact_bytes' => 52428800, 'network_id' => 1, 'php_runtime_version' => '8.2', 'provider_code' => 'neutral',
+				'release_channel' => 'stable', 'stable_repository_identity' => 'repo:1', 'target_type' => 'theme', 'theme_template' => '',
+				'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8',
+			) );
+			$adapter = new ControllableReleaseAdapter( $descriptor, $archive, $this->temporaryDirectory );
+			$adapter->listResponse = array(
+				'candidates' => array( $this->candidate( $descriptor ) ),
+				'rate_limit' => array( 'limited' => true, 'remaining' => 0, 'reset_at' => null, 'retry_after' => 60 ),
+			);
+			$configuration = $this->config( 'manual' );
+			$configuration['target_type'] = 'theme';
+			$configuration['installed_package_identity'] = 'package';
+			$policy = $this->policy();
+			$policy['header_file'] = 'style.css';
+			$policy['installed_package_identity'] = 'package';
+			$policy['target_type'] = 'theme';
+			$updater = NativePluginUpdater::fromConfiguration( $configuration, $binding, $adapter, new FakeOptionDatabase( 100 ), $policy );
+
+			self::assertInstanceOf( NativePluginUpdater::class, $updater );
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package', array() ) );
+			self::assertSame( array( 1, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'release_list_failed', $updater->status()['candidate_validation_code'] );
+		}
+		public function testMalformedCandidateStopsDiscoveryBeforeALaterCandidate(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject();
+			$adapter->listResponse = array( 'candidates' => array(
+				array( 'release_identity' => 'release:invalid', 'tag' => 'v2.0.0' ),
+				$this->candidate( $descriptor ),
+			) );
+
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'candidate_invalid', $updater->status()['candidate_validation_code'] );
+		}
+		public function testDescriptorMismatchStopsDiscoveryBeforeALaterCandidate(): void {
+			list( $updater, $adapter, , $first ) = $this->subject();
+			$second = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
+			$adapter->listResponse = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
+			$adapter->inspectOutcomes[ $first->releaseIdentity() ] = $second;
+			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 1, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'candidate_descriptor_mismatch', $updater->status()['candidate_validation_code'] );
+		}
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'operationStoppingInspectionFailures' )]
+		public function testOperationStoppingInspectionFailuresDoNotReachLaterCandidates( \Throwable $failure ): void {
+			list( $updater, $adapter, , $first ) = $this->subject();
+			$second = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
+			$adapter->listResponse = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
+			$adapter->inspectOutcomes[ $first->releaseIdentity() ] = $failure;
+			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 1, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'candidate_inspection_failed', $updater->status()['candidate_validation_code'] );
+		}
+		/** @return array<string,array{\Throwable}> */
+		public static function operationStoppingInspectionFailures(): array {
+			return array(
+				'rate limited' => array( new ReleaseFailure( 'rate_limited', 60 ) ),
+				'repository access unavailable' => array( new ReleaseFailure( 'repository_access_unavailable' ) ),
+				'operation failed' => array( new ReleaseFailure( 'operation_failed' ) ),
+				'cleanup failed' => array( new ReleaseFailure( 'package_incompatible', null, 'failed' ) ),
+				'unknown exception' => array( new \RuntimeException( 'unexpected' ) ),
+			);
+		}
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'candidateLocalInspectionFailures' )]
+		public function testCandidateLocalInspectionFailuresAllowALaterValidCandidate( ReleaseFailure $failure ): void {
+			list( $updater, $adapter, , $first ) = $this->subject();
+			$second = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
+			$adapter->listResponse = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
+			$adapter->inspectOutcomes[ $first->releaseIdentity() ] = $failure;
+			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+
+			$offer = $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() );
+			self::assertIsArray( $offer );
+			self::assertSame( array( 1, 2, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'release:3', $updater->status()['offered_release_identity'] );
+		}
+		/** @return array<string,array{ReleaseFailure}> */
+		public static function candidateLocalInspectionFailures(): array {
+			return array(
+				'concrete release unavailable' => array( new ReleaseFailure( 'release_unavailable', null, 'complete' ) ),
+				'package incompatible' => array( new ReleaseFailure( 'package_incompatible', null, 'complete' ) ),
+			);
+		}
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'operationStoppingAcquisitionFailures' )]
+		public function testOperationStoppingAcquisitionFailuresDoNotReachLaterCandidates( \Throwable $failure ): void {
+			list( $updater, $adapter, , $first ) = $this->subject();
+			$second = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
+			$adapter->listResponse = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
+			$adapter->inspectOutcomes[ $first->releaseIdentity() ] = $first;
+			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+			$adapter->acquireOutcomes[ $first->releaseIdentity() ] = $failure;
+
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'candidate_validation_failed', $updater->status()['candidate_validation_code'] );
+		}
+		/** @return array<string,array{\Throwable}> */
+		public static function operationStoppingAcquisitionFailures(): array {
+			return array(
+				'rate limited' => array( new ReleaseFailure( 'rate_limited', 60 ) ),
+				'operation failed' => array( new ReleaseFailure( 'operation_failed' ) ),
+				'unknown exception' => array( new \RuntimeException( 'unexpected' ) ),
+			);
+		}
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'candidateLocalAcquisitionFailures' )]
+		public function testCandidateLocalAcquisitionFailuresAllowALaterValidCandidate( ReleaseFailure $failure ): void {
+			list( $updater, $adapter, , $first ) = $this->subject();
+			$second = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
+			$adapter->listResponse = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
+			$adapter->inspectOutcomes[ $first->releaseIdentity() ] = $first;
+			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+			$adapter->acquireOutcomes[ $first->releaseIdentity() ] = $failure;
+
+			self::assertIsArray( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'release:3', $updater->status()['offered_release_identity'] );
+		}
+		/** @return array<string,array{ReleaseFailure}> */
+		public static function candidateLocalAcquisitionFailures(): array {
+			return array(
+				'concrete release unavailable' => array( new ReleaseFailure( 'release_unavailable' ) ),
+				'package incompatible' => array( new ReleaseFailure( 'package_incompatible' ) ),
+			);
+		}
+		public function testFailedArtifactCleanupStopsDiscoveryBeforeALaterCandidate(): void {
+			$validator = new PackageIdentityValidator();
+			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen->setValue( $validator, static function ( string $path ): void { chmod( $path, 0644 ); } );
+			list( $updater, $adapter, , $first ) = $this->subject( 'manual', null, 'stable', false, null, false, $validator );
+			$second = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
+			$adapter->listResponse = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
+			$adapter->inspectOutcomes[ $first->releaseIdentity() ] = $first;
+			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'candidate_validation_failed', $updater->status()['candidate_validation_code'] );
+			self::assertFileExists( $adapter->acquiredPaths[0] );
+		}
+		public function testUnexpectedValidationFailureDiscardsAnUnchangedArtifactAndStopsDiscovery(): void {
+			$validator = new PackageIdentityValidator();
+			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen->setValue( $validator, static function ( string $path ): void { unset( $path ); throw new \RuntimeException( 'unexpected validation failure' ); } );
+			list( $updater, $adapter, , $first ) = $this->subject( 'manual', null, 'stable', false, null, false, $validator );
+			$second = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
+			$adapter->listResponse = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
+			$adapter->inspectOutcomes[ $first->releaseIdentity() ] = $first;
+			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'candidate_validation_failed', $updater->status()['candidate_validation_code'] );
+			self::assertNull( $updater->status()['offered_release_identity'] );
+			self::assertFileDoesNotExist( $adapter->acquiredPaths[0] );
+		}
+		public function testUnexpectedValidationFailurePreservesChangedArtifactAndStopsDiscovery(): void {
+			$validator = new PackageIdentityValidator();
+			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen->setValue( $validator, static function ( string $path ): void { file_put_contents( $path, 'replacement bytes' ); throw new \RuntimeException( 'unexpected validation failure' ); } );
+			list( $updater, $adapter, , $first ) = $this->subject( 'manual', null, 'stable', false, null, false, $validator );
+			$second = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
+			$adapter->listResponse = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
+			$adapter->inspectOutcomes[ $first->releaseIdentity() ] = $first;
+			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'candidate_validation_failed', $updater->status()['candidate_validation_code'] );
+			self::assertNull( $updater->status()['offered_release_identity'] );
+			self::assertFileExists( $adapter->acquiredPaths[0] );
+			self::assertSame( 'replacement bytes', file_get_contents( $adapter->acquiredPaths[0] ) );
+		}
 		public function testOfferStatusBindsTheExactVerifiedReleaseIdentityRatherThanTheVersion(): void {
 			list( $updater, $adapter, , $descriptor ) = $this->subject();
 			$this->offer( $updater );
@@ -244,6 +441,7 @@ namespace Tests\WordPress {
 			list( $updater, $adapter ) = $this->subject();
 			$offer = $this->offer( $updater );
 			self::assertSame( array( 1, 1, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertFileDoesNotExist( $adapter->acquiredPaths[0] );
 			$ownedArchive = $updater->filterPreDownload( false, $offer['package'], null, $this->extra() );
 			self::assertIsString( $ownedArchive );
 			self::assertSame( array( 1, 2, 2 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
@@ -577,6 +775,18 @@ namespace Tests\WordPress {
 				'installed_package_identity' => 'package/package.php', 'prerelease' => $prerelease, 'provider_code' => 'neutral',
 				'release_identity' => 'release:2', 'repository_identity' => 'repo:1', 'repository_locator' => 'owner/package',
 				'tag' => 'v2.0.0', 'target_type' => 'plugin', 'version' => '2.0.0' ) );
+		}
+		/** @return array{release_identity:string,tag:string,version:string} */
+		private function candidate( IdentityDescriptor $descriptor ): array {
+			$facts = $descriptor->toArray();
+			return array( 'release_identity' => $facts['release_identity'], 'tag' => $facts['tag'], 'version' => $facts['version'] );
+		}
+		private function withReleaseIdentity( IdentityDescriptor $descriptor, string $releaseIdentity, string $tag ): IdentityDescriptor {
+			$facts = $descriptor->toArray();
+			unset( $facts['fingerprint'] );
+			$facts['release_identity'] = $releaseIdentity;
+			$facts['tag'] = $tag;
+			return IdentityDescriptor::create( $facts );
 		}
 		private function token( IdentityDescriptor $descriptor, BindingRecord $binding ): string {
 			$value = array( 'binding_hash' => $binding->bindingHash(), 'descriptor' => $descriptor->toArray(), 'schema' => 1 );

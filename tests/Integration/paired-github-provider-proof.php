@@ -507,9 +507,11 @@ try {
 		(new \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter(
 			$newBinding
 		))->listReleases();
-	} catch (RuntimeException $exception) {
+	} catch (\RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure $exception) {
 		$newForbiddenTuple = array(
-			'GitHub returned an unexpected response.' === $exception->getMessage()
+			'repository_access_unavailable' === $exception->releaseCode
+				&& null === $exception->retryAfter
+				&& 'not_applicable' === $exception->cleanupStatus
 				? 'forbidden'
 				: 'other',
 			$GLOBALS['paired_neutral_requests'][0]['status'] ?? null,

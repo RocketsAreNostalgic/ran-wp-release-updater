@@ -35,6 +35,31 @@ GitHub-specific: it constructs a `GitHubReleaseAdapter` and accepts a
 `GitHubCredentialResolver`. Both methods are internal composition details, not
 supported consumer APIs.
 
+The optional credential callback has the same meaning for plugin and theme
+targets. It may provide private-repository access or an authenticated quota for
+public reads. A `null` result selects anonymous access. A supplied token that
+is malformed or unavailable returns `credential_unavailable`. A well-formed
+token denied by GitHub returns `repository_access_unavailable`. Neither result
+silently retries that request anonymously.
+
+## Provider responses
+
+Each provider classifies its own HTTP responses by throwing an internal neutral
+`ReleaseFailure`; a public release source converts that failure into its result
+envelope. Candidate discovery may continue after a clean
+`release_unavailable` or `package_incompatible` failure. It stops for every
+other failure by default.
+
+For GitHub, `429`, or `403` with a valid `Retry-After` or zero remaining quota,
+is rate limited. A reset time applies only when remaining quota is zero. The
+largest applicable positive delay is used; missing usable hints fall back to
+900 seconds, and a delay above 86,400 seconds is `operation_failed`. A
+headerless `403` is an access failure. The delay is a hint for caller-owned
+scheduling; the native lifecycle keeps its existing stage codes and does not
+create a persistent cooldown. GitHub documents the upstream headers and
+rate-limit responses in its
+[REST API rate-limit guidance](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
+
 ## Provider-neutral lifecycle seam
 
 `ReleaseAdapter` defines the provider-neutral discovery, inspection, and
@@ -52,6 +77,9 @@ not ordinary plugin or theme settings.
 A future built-in provider therefore needs its own provider adapter and
 composition function, plus a package-owned catalog entry. It does not need a
 new consumer registration API or another WordPress lifecycle.
+
+Future providers define their own response and rate-limit rules before they
+join the sealed catalog. No additional provider implementation is included.
 
 ## Extension boundary
 

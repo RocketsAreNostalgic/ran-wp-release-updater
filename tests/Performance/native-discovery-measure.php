@@ -79,7 +79,7 @@ namespace {
         return $all;
     }
     function native_measure_release(int $id, bool $changed = false, bool $incompatible = false):array {
-        $v = $incompatible?'2.0.'.$id:'2.0.0';
+        $v = $incompatible?'2.0.'.$id:('no-newer' === $GLOBALS ['native_measure'] ['scenario']?'1.0.0':'2.0.0');
         $repository = $GLOBALS ['native_measure'] ['repository'] ??'repository';
         return array('id' => $id, 'draft' => false, 'prerelease' => false, 'immutable' => true, 'published_at' => '2026-08-22T10:00:00Z', 'tag_name' => 'v'.$v, 'html_url' => 'https://github.com/owner/'.$repository.'/releases/tag/v'.$v, 'target_commitish' => $changed?str_repeat('b', 40):str_repeat('a', 40), 'assets' => array(array('id' => 8, 'name' => $repository.'.zip', 'size' => strlen($GLOBALS ['native_measure'] ['zip']), 'state' => 'uploaded', 'digest' => 'sha256:'.hash('sha256', $GLOBALS ['native_measure'] ['zip']))));
     }
@@ -91,6 +91,27 @@ namespace Tests\Performance {
     const NATIVE_MEASURE_COUNTS = array(1, 5, 10, 20);
     function native_measure_assert(bool $condition, string $message):void {
         if(! $condition) throw new \RuntimeException($message);
+    }
+    /** @return array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,runtime_protocol:int,wordpress_floor:string} */
+    function native_measure_runtime_manifest(string $root):array {
+        $file = $root.'/runtime-copy.json';
+        native_measure_assert(is_file($file) && ! is_link($file), 'Runtime manifest is not a regular file: '.$file);
+        try {
+            $manifest = json_decode((string) file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
+        }
+        catch(\Throwable $error) {
+            throw new \RuntimeException('Runtime manifest is unreadable: '.$file, 0, $error);
+        }
+        $keys = array('package_revision', 'package_version', 'php_floor', 'runtime_file', 'runtime_protocol', 'wordpress_floor');
+        native_measure_assert(is_array($manifest) && ! array_is_list($manifest) && $keys === array_keys($manifest), 'Runtime manifest has an unexpected shape: '.$file);
+        native_measure_assert(is_string($manifest ['package_revision']) && is_string($manifest ['package_version']) && is_string($manifest ['php_floor']) && 'runtime.php' === $manifest ['runtime_file'] && is_int($manifest ['runtime_protocol']) && 0 < $manifest ['runtime_protocol'] && is_string($manifest ['wordpress_floor']), 'Runtime manifest contains invalid values: '.$file);
+        return $manifest;
+    }
+    function native_measure_current_runtime_protocol(string $trustedRoot, array $roots):int {
+        native_measure_assert('' !== $trustedRoot && is_dir($trustedRoot), 'Trusted current runtime root is unavailable.');
+        $trusted = native_measure_runtime_manifest($trustedRoot);
+        foreach($roots as $root) native_measure_assert($trusted === native_measure_runtime_manifest($root), 'Runtime specimen manifest differs from the trusted current manifest: '.$root);
+        return $trusted ['runtime_protocol'];
     }
     function native_measure_zip(string $type, string $root = 'repository', string $uri = 'https://github.com/owner/repository', string $name = 'Fixture'):string {
         $path = tempnam($GLOBALS ['native_measure'] ['temp'], 'zip-');
@@ -117,6 +138,7 @@ namespace Tests\Performance {
     /** One PHP request: N copied bootstraps, M queued registrar targets, then one activation. */
     function native_measure_shared_request(array $roots, int $targets, string $scenario, bool $callbackControl = false, string $targetType = 'plugin', bool $callbackRevoked = false):array {
         native_measure_assert($roots !== array() && count($roots) === count(array_unique($roots)), 'Physical runtime roots are not distinct.');
+        $runtimeProtocol = native_measure_current_runtime_protocol((string) getenv('RAN_NATIVE_MEASURE_TRUSTED_ROOT'), $roots);
         $temp = getenv('RAN_NATIVE_MEASURE_TEMP')?:sys_get_temp_dir();
         $GLOBALS ['native_measure'] = array('temp' => $temp, 'scenario' => $scenario, 'changed' => false, 'after_offer' => false, 'http_calls' => 0, 'body_bytes' => 0, 'streamed_bytes' => 0, 'acquisitions' => 0, 'validation_opens' => 0, 'temporary' => array());
         $installedRoot = $temp.'/shared-installed-'.bin2hex(random_bytes(4));
@@ -163,7 +185,7 @@ namespace Tests\Performance {
         }
         $afterDeclaration = array('time_ns' => hrtime(true), 'memory' => memory_get_usage(true));
         $broker = $GLOBALS ['ran_wp_release_updater_v1_broker'];
-        $activation = $broker-> activate(array('php_version' => '8.2.0', 'runtime_protocol' => 2, 'wordpress_version' => '6.8.0'));
+        $activation = $broker-> activate(array('php_version' => '8.2.0', 'runtime_protocol' => $runtimeProtocol, 'wordpress_version' => '6.8.0'));
         native_measure_assert('active' === $activation ['state'], 'Shared-request activation failed.');
         $afterActivation = array('time_ns' => hrtime(true), 'memory' => memory_get_usage(true));
         $submissions = new \ReflectionProperty($broker, 'submissions');
@@ -186,7 +208,7 @@ namespace Tests\Performance {
             $GLOBALS ['native_measure'] ['zip'] = $item ['fixture'] ['zip'];
             $beforeStep = native_measure_counters();
             $offer = $item ['native']-> filterUpdate(false, array('Version' => '1.0.0', 'UpdateURI' => $item ['fixture'] ['uri']), $item ['identity'], array());
-            if('incompatible' === $scenario) native_measure_assert(false === $offer, 'Incompatible candidate was offered.');
+            if('incompatible' === $scenario || 'no-newer' === $scenario) native_measure_assert(false === $offer, ucfirst($scenario).' candidate was offered.');
             else native_measure_assert(is_array($offer), 'Discovery did not offer an update for '.$item ['identity'].'.');
             $offers [$index] = $offer;
             $steps ['discovery_'.$index] = native_measure_delta($beforeStep);
@@ -194,6 +216,7 @@ namespace Tests\Performance {
                 native_measure_assert(8 === $steps ['discovery_'.$index] ['archive_acquisitions'], 'Incompatible search did not inspect eight candidates.');
                 native_measure_assert(8 === $steps ['discovery_'.$index] ['validation_archive_opens'], 'Incompatible search did not open eight candidate archives.');
             }
+            if('no-newer' === $scenario) native_measure_assert(1 === $steps ['discovery_'.$index] ['http_calls'] && 0 === $steps ['discovery_'.$index] ['archive_acquisitions'], 'No-newer discovery did not remain one page with no archive acquisition.');
         }
         if('repeated' === $scenario) foreach($natives as $index => $item) {
             $GLOBALS ['native_measure'] ['repository'] = $item ['fixture'] ['repository'];
@@ -279,7 +302,7 @@ namespace Tests\Performance {
     }
     function native_measure_child(array $roots, string $scratch, int $targets, string $scenario, bool $callbackControl = false, string $targetType = 'plugin', bool $callbackRevoked = false):array {
         $command = array(PHP_BINARY, '-d', 'sys_temp_dir='.$scratch, __FILE__, '--shared-worker', (string) $targets, $scenario, $callbackControl?'--callback-control':'--literal-null', $targetType, $callbackRevoked?'--callback-revoked':'--callback-stable');
-        $environment = array('RAN_NATIVE_MEASURE_ROOTS' => implode('|', $roots), 'RAN_NATIVE_MEASURE_TEMP' => $scratch);
+        $environment = array('RAN_NATIVE_MEASURE_ROOTS' => implode('|', $roots), 'RAN_NATIVE_MEASURE_TEMP' => $scratch, 'RAN_NATIVE_MEASURE_TRUSTED_ROOT' => dirname(__DIR__, 2));
         foreach(array('PATH', 'TMPDIR', 'PHPRC', 'PHP_INI_SCAN_DIR') as $name) {
             $value = getenv($name);
             if(false !== $value) $environment[$name] = $value;
@@ -307,7 +330,7 @@ namespace Tests\Performance {
         $root = dirname(__DIR__, 2);
         $scratch = $root.'/.workspaces/evidence/u2-native-measure-'.bin2hex(random_bytes(4));
         mkdir($scratch, 0700, true);
-        $scenarios = array('registration', 'cold', 'repeated', 'incompatible', 'refresh', 'install', 'changed');
+        $scenarios = array('registration', 'cold', 'repeated', 'incompatible', 'no-newer', 'refresh', 'install', 'changed');
         $rows = array();
         foreach(NATIVE_MEASURE_COUNTS as $count) foreach(array(array(1, $count), array($count, 1), array($count, $count)) as $topology) foreach($scenarios as $scenario) {
             [$copies, $targets] = $topology;
@@ -321,7 +344,7 @@ namespace Tests\Performance {
             $row ['topology'] = array('physical_copies' => $copies, 'distinct_targets' => $targets);
             $rows [] = $row;
         }
-        native_measure_assert(84 === count($rows), 'Shared-request matrix did not produce 84 rows.');
+        native_measure_assert(96 === count($rows), 'Shared-request matrix did not produce 96 rows.');
         $files = 2;
         $bytes = filesize($root.'/bootstrap.php') + filesize($root.'/runtime.php');
         foreach(new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root.'/src', \FilesystemIterator::SKIP_DOTS)) as $file) if($file-> isFile() && 'php' === $file-> getExtension()) {
