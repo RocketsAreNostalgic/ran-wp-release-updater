@@ -111,7 +111,7 @@ return new class(
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 			|| ! is_callable( array( $this->broker, 'protocolVersion' ) )
 			|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-			|| 3 !== $this->broker->protocolVersion()
+			|| 4 !== $this->broker->protocolVersion()
 			|| isset( $GLOBALS['ran_wp_github_release_updater_v1_broker'] )
 			|| function_exists( 'ran_wp_github_release_updater_v1_has_registered_target' )
 		) {
@@ -201,7 +201,7 @@ return new class(
 					|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 					|| ! is_callable( array( $this->broker, 'protocolVersion' ) )
 					|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-					|| 3 !== $this->broker->protocolVersion()
+					|| 4 !== $this->broker->protocolVersion()
 					|| isset( $GLOBALS['ran_wp_github_release_updater_v1_broker'] )
 					|| function_exists( 'ran_wp_github_release_updater_v1_has_registered_target' )
 				) {

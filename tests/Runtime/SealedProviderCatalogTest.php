@@ -95,7 +95,7 @@ final class SealedProviderCatalogTest extends TestCase
 		foreach ( array( array( $shipped, $synthetic ), array( $synthetic, $shipped ) ) as $copies ) {
 			$result = $this->probe( <<<'PHP'
 $registrars = array(); foreach ($data['copies'] as $copy) $registrars[] = require $copy . '/bootstrap.php';
-$broker = $GLOBALS['ran_wp_release_updater_v1_broker']; $broker->activate(array('php_version'=>PHP_VERSION,'runtime_protocol'=>3,'wordpress_version'=>'6.8.0'));
+$broker = $GLOBALS['ran_wp_release_updater_v1_broker']; $broker->activate(array('php_version'=>PHP_VERSION,'runtime_protocol'=>4,'wordpress_version'=>'6.8.0'));
 $source = $registrars[0]->releases('synthetic', 'plugin', 'acme/source', 'opaque_repository_id');
 $list = $source->list();
 echo json_encode(array('list'=>$list,'synthetic_calls'=>$GLOBALS['p0_2_synthetic_release_calls'] ?? 0,'github_calls'=>$GLOBALS['p0_2_github_release_calls'] ?? 0));
@@ -139,7 +139,7 @@ $github->register();
 $conflict->register();
 $synthetic->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$activation = $broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0' ) );
+$activation = $broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0' ) );
 $before = $broker->diagnostics();
 foreach ( $GLOBALS['p0_2_hooks'] as $hook ) {
 	if ( 'update_plugins_synthetic.invalid' === $hook['hook'] ) {
@@ -183,7 +183,7 @@ $before = $registrar->plugin(
 );
 $before->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0' ) );
+$broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0' ) );
 if ( $data['cutoff'] ) {
 	foreach ( $GLOBALS['p0_2_hooks'] as $hook ) {
 		if ( 'upgrader_package_options' === $hook['hook'] ) {
@@ -249,7 +249,7 @@ PHP;
 			'package_version' => $version,
 			'php_floor' => '8.2.0',
 			'runtime_file' => 'runtime.php',
-			'runtime_protocol' => 3,
+			'runtime_protocol' => 4,
 			'wordpress_floor' => '6.5.0',
 		);
 		file_put_contents( $root . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );

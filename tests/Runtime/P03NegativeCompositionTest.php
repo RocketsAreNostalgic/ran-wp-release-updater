@@ -32,7 +32,7 @@ $handle = 'plugin' === $data['type']
 	: $registrar->theme('github', $data['installed'], 'acme/example', '123456789', 'stable', 'manual', $resolver);
 $registered = $handle->register();
 $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(
-	array('php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0')
+	array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0')
 );
 echo json_encode(array(
 	'activation' => $activation['code'],
@@ -91,7 +91,7 @@ $handle = $registrar->plugin(
 );
 $handle->register();
 $GLOBALS['ran_wp_release_updater_v1_broker']->activate(
-	array('php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0')
+	array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0')
 );
 $answers = array();
 foreach ($GLOBALS['p03_hooks'] as $registered) {
@@ -208,7 +208,7 @@ PHP, array('installed' => $this->plugin("Plugin Name: Example\nVersion: 1.0.0\nU
 		foreach ($files as $file) $payload .= $file . "\0" . hash_file('sha256', $copy . '/' . $file) . "\n";
 		file_put_contents($copy . '/runtime-copy.json', json_encode(array(
 			'package_revision' => hash('sha256', $payload), 'package_version' => '0.1.0-beta.3', 'php_floor' => '8.2.0',
-			'runtime_file' => 'runtime.php', 'runtime_protocol' => 3, 'wordpress_floor' => '6.5.0',
+			'runtime_file' => 'runtime.php', 'runtime_protocol' => 4, 'wordpress_floor' => '6.5.0',
 		), JSON_THROW_ON_ERROR));
 		return $copy;
 	}

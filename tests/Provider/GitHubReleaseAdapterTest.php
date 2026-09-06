@@ -207,7 +207,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
 		self::assertSame(
 			array('loaded' => true, 'state' => 'active', 'code' => 'runtime_active', 'diagnostics' => array()),
-			$broker->activate(array('php_version' => '8.2.0', 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0'))
+			$broker->activate(array('php_version' => '8.2.0', 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'))
 		);
 
 		$calls = 0;
@@ -250,7 +250,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$registrar = require dirname(__DIR__, 2) . '/bootstrap.php';
 		$broker = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
 		self::assertIsObject($broker);
-		self::assertSame('runtime_active', $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0'))['code']);
+		self::assertSame('runtime_active', $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'))['code']);
 		$source = $registrar->releases('github', 'plugin', 'owner/repository', '99');
 		$GLOBALS['ran_github_responses'] = array($this->response(200, array()));
 		$result = $source->list();
@@ -297,7 +297,7 @@ final class GitHubReleaseAdapterTest extends TestCase
 		$registrar = require dirname(__DIR__, 2) . '/bootstrap.php';
 		$broker = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
 		self::assertIsObject($broker);
-		self::assertSame('runtime_active', $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0'))['code']);
+		self::assertSame('runtime_active', $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'))['code']);
 		$header = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
 		$archive = $this->prospectiveArchive($header);
 		$source = $registrar->releases('github', 'plugin', 'owner/repository', '99');

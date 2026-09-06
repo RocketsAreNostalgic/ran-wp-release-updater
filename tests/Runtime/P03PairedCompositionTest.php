@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Runtime;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class P03PairedCompositionTest extends TestCase
@@ -38,11 +39,27 @@ final class P03PairedCompositionTest extends TestCase
 		self::assertSame($result['concise']['adapter'], $result['explicit']['adapter']);
 		self::assertSame('target_active', $result['handle']['code']);
 		self::assertTrue($result['handle']['hooks_registered']);
+		self::assertSame('7', $result['public_status']['native']['offered_release_identity']);
+		self::assertSame('2.0.0', $result['public_status']['native']['offered_version']);
+		self::assertSame('archive_identity_verified', $result['public_status']['native']['candidate_validation_code']);
+		self::assertSame('newer', $result['public_status']['native']['relationship']);
+		self::assertSame($result['provider_calls_before_status'], $result['provider_calls_after_status']);
 		self::assertSame('archive_identity_verified', $result['concise']['status']['candidate_validation_code']);
 		self::assertTrue($result['concise']['receipt']['archive_identity_verified']);
 		self::assertTrue($result['concise']['receipt']['package_identity_verified']);
 		self::assertSame('2.0.0', $result['concise']['offer']['version']);
 		self::assertSame('plugin' === $type ? 10 : 9, $result['concise']['hook_count']);
+	}
+
+	#[DataProvider('targetTypes')]
+	public function testPublicHandleClearsAnOfferedIdentityAfterRuntimeOwnershipIsLost(string $type): void
+	{
+		$result = $this->probe($type, true);
+
+		self::assertSame('7', $result['public_status']['native']['offered_release_identity']);
+		self::assertSame('protocol_conflict_inactive', $result['invalidated_status']['code']);
+		self::assertNull($result['invalidated_status']['native']['offered_release_identity']);
+		self::assertNull($result['invalidated_status']['native']['offered_version']);
 	}
 
 	/** @return array<string,array{string}> */
@@ -52,12 +69,12 @@ final class P03PairedCompositionTest extends TestCase
 	}
 
 	/** @return array<string,mixed> */
-	private function probe(string $type): array
+	private function probe(string $type, bool $invalidate = false): array
 	{
 		$runtime = $this->packageCopy();
 		$installed = $this->installed($type);
 		$probe = $this->root . '/probe-' . bin2hex(random_bytes(6)) . '.php';
-		$data = array('bootstrap' => $runtime . '/bootstrap.php', 'installed' => $installed, 'type' => $type);
+		$data = array('bootstrap' => $runtime . '/bootstrap.php', 'installed' => $installed, 'type' => $type, 'invalidate' => $invalidate);
 		$prefix = <<<'PHP'
 <?php
 define('WP_PLUGIN_DIR', __ROOT__);
@@ -89,7 +106,7 @@ $handle = 'plugin' === $data['type']
 	: $registrar->theme('github', $data['installed'], 'acme/example', '123456789', 'stable', 'manual', $resolver);
 $handle->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 3, 'wordpress_version' => '6.8.0'));
+$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'));
 $handoff = (new ReflectionProperty($broker, 'handoff'))->getValue($broker);
 $targets = (new ReflectionProperty($handoff, 'targets'))->getValue($handoff);
 $conciseHandle = array_values($targets)[0]['handle'];
@@ -164,14 +181,20 @@ $descriptor = \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor::create(array
 	'repository_locator' => 'acme/example', 'tag' => 'v2.0.0', 'target_type' => $data['type'], 'version' => '2.0.0',
 ));
 $adapter = new class($descriptor, $archive) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter {
+	public int $listCalls = 0;
+	public int $inspectCalls = 0;
+	public int $acquireCalls = 0;
 	public function __construct(private \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor $descriptor, private string $archive) {}
 	public function listReleases(array $conditional = array()): array {
+		++$this->listCalls;
 		return array('candidates' => array(array('release_identity' => '7', 'tag' => 'v2.0.0', 'version' => '2.0.0')));
 	}
 	public function inspect(string $releaseIdentity, ?string $expectedTag = null): \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor {
+		++$this->inspectCalls;
 		return $this->descriptor;
 	}
 	public function acquire(\RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor $descriptor): \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact {
+		++$this->acquireCalls;
 		$path = $this->archive . '.' . bin2hex(random_bytes(4));
 		copy($this->archive, $path);
 		chmod($path, 0600);
@@ -199,6 +222,14 @@ $invoke = static function (array $registered, object $native) use ($data, $ident
 $normalise = static fn (array $registered): array => array_values(array_map(static fn (array $entry): string => $entry['hook'], $registered));
 $conciseOffer = $invoke($first, $concise);
 $explicitOffer = $invoke($second, $explicit);
+$providerCallsBeforeStatus = array($adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls);
+$publicStatus = $handle->status();
+$providerCallsAfterStatus = array($adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls);
+if ($data['invalidate']) {
+	$GLOBALS['ran_wp_release_updater_v1_broker'] = new stdClass();
+	echo json_encode(array('public_status' => $publicStatus, 'invalidated_status' => $handle->status()), JSON_THROW_ON_ERROR);
+	return;
+}
 $extra = array($data['type'] => $identity, 'action' => 'update', 'type' => $data['type']);
 $conciseArchive = $concise->filterPreDownload(false, $conciseOffer['package'], null, $extra);
 $explicitArchive = $explicit->filterPreDownload(false, $explicitOffer['package'], null, $extra);
@@ -209,6 +240,9 @@ $receiptFacts = static function (object $native): array {
 };
 echo json_encode(array(
 	'handle' => $handle->status(),
+	'public_status' => $publicStatus,
+	'provider_calls_before_status' => $providerCallsBeforeStatus,
+	'provider_calls_after_status' => $providerCallsAfterStatus,
 	'concise' => array(
 		'adapter' => $conciseAdapter,
 		'archive_policy' => $concisePolicy, 'binding' => $conciseBinding, 'hook_count' => count($first),
@@ -263,7 +297,7 @@ PHP;
 		foreach ($files as $file) $payload .= $file . "\0" . hash_file('sha256', $copy . '/' . $file) . "\n";
 		file_put_contents($copy . '/runtime-copy.json', json_encode(array(
 			'package_revision' => hash('sha256', $payload), 'package_version' => '0.1.0-beta.3', 'php_floor' => '8.2.0',
-			'runtime_file' => 'runtime.php', 'runtime_protocol' => 3, 'wordpress_floor' => '6.5.0',
+			'runtime_file' => 'runtime.php', 'runtime_protocol' => 4, 'wordpress_floor' => '6.5.0',
 		), JSON_THROW_ON_ERROR));
 		return $copy;
 	}

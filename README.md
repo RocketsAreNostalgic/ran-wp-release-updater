@@ -131,6 +131,17 @@ results. Registration itself does not contact GitHub, resolve a credential,
 read an archive, or enter installation. Provider work begins during a normal
 WordPress update check.
 
+The active handle's `status()['native']` includes `offered_release_identity`:
+a bounded opaque string naming the exact verified provider release used for
+`offered_version`, or `null` when there is no current offer. Compare the identity
+and version with a selected release before presenting its native update action.
+Different releases can share a version. Reading status performs no discovery,
+credential resolution or download; installation still freshly verifies the ZIP.
+Refresh and offer invalidation clear both fields.
+
+See [Runtime compatibility](docs/runtime-compatibility.md) when updating bundled
+copies across plugins and themes.
+
 When no credentials callback is configured, a successful discovery result can
 be reused within the same request while the installed version and target
 ownership remain unchanged. `refresh()` clears that result so the next check
