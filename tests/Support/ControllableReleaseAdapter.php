@@ -25,7 +25,7 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 	) {
 		$this->inspectDescriptor = $descriptor;
 	}
-	/** @return array{candidates:list<array{release_identity:string,tag:string,version:string}>} */
+	/** @return array<string,mixed> */
 	public function listReleases( array $conditional = array() ): array {
 		++$this->listCalls;
 		if ( is_array( $this->listResponse ) ) {

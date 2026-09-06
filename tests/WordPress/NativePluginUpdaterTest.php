@@ -341,6 +341,39 @@ namespace Tests\WordPress {
 			self::assertSame( 'candidate_validation_failed', $updater->status()['candidate_validation_code'] );
 			self::assertFileExists( $adapter->acquiredPaths[0] );
 		}
+		public function testUnexpectedValidationFailureDiscardsAnUnchangedArtifactAndStopsDiscovery(): void {
+			$validator = new PackageIdentityValidator();
+			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen->setValue( $validator, static function ( string $path ): void { unset( $path ); throw new \RuntimeException( 'unexpected validation failure' ); } );
+			list( $updater, $adapter, , $first ) = $this->subject( 'manual', null, 'stable', false, null, false, $validator );
+			$second = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
+			$adapter->listResponse = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
+			$adapter->inspectOutcomes[ $first->releaseIdentity() ] = $first;
+			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'candidate_validation_failed', $updater->status()['candidate_validation_code'] );
+			self::assertNull( $updater->status()['offered_release_identity'] );
+			self::assertFileDoesNotExist( $adapter->acquiredPaths[0] );
+		}
+		public function testUnexpectedValidationFailurePreservesChangedArtifactAndStopsDiscovery(): void {
+			$validator = new PackageIdentityValidator();
+			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen->setValue( $validator, static function ( string $path ): void { file_put_contents( $path, 'replacement bytes' ); throw new \RuntimeException( 'unexpected validation failure' ); } );
+			list( $updater, $adapter, , $first ) = $this->subject( 'manual', null, 'stable', false, null, false, $validator );
+			$second = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
+			$adapter->listResponse = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
+			$adapter->inspectOutcomes[ $first->releaseIdentity() ] = $first;
+			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+
+			self::assertFalse( $updater->filterUpdate( false, array( 'Version' => '1.0.0', 'UpdateURI' => $this->uri() ), 'package/package.php', array() ) );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ) );
+			self::assertSame( 'candidate_validation_failed', $updater->status()['candidate_validation_code'] );
+			self::assertNull( $updater->status()['offered_release_identity'] );
+			self::assertFileExists( $adapter->acquiredPaths[0] );
+			self::assertSame( 'replacement bytes', file_get_contents( $adapter->acquiredPaths[0] ) );
+		}
 		public function testOfferStatusBindsTheExactVerifiedReleaseIdentityRatherThanTheVersion(): void {
 			list( $updater, $adapter, , $descriptor ) = $this->subject();
 			$this->offer( $updater );
