@@ -5,14 +5,8 @@
   "license": "GPL-2.0-or-later",
   "repositories": [
     {
-      "type": "path",
-      "url": "../branch-deployment-package/packages/package-safety",
-      "options": {
-        "symlink": false,
-        "versions": {
-          "ran/package-safety": "0.1.0"
-        }
-      }
+      "type": "vcs",
+      "url": "https://github.com/RocketsAreNostalgic/ran-updater-support"
     }
   ],
   "require": {
@@ -20,7 +14,7 @@
     "ext-hash": "*",
     "ext-json": "*",
     "ext-zip": "*",
-    "ran/package-safety": "0.1.0"
+    "ran/updater-support": "dev-main"
   },
   "conflict": {
     "ran/wp-github-release-updater": "*"
@@ -41,7 +35,7 @@
   "scripts": {
     "check": [
       "@validate:strict",
-      "@check:package-safety",
+      "@check:updater-support",
       "@test:unit",
       "@test:release-publisher",
       "@lint:php"
@@ -56,9 +50,9 @@
     "test:wordpress-integration": "@php tests/Integration/wordpress-integration.php",
     "test:wordpress-bulk": "php tests/Integration/wordpress-native-mixed-bulk-proof.php",
     "test:release-publisher": "node --test tests/release-publisher.test.mjs",
-    "sync:package-safety": "php scripts/sync-package-safety.php",
-    "check:package-safety": "php scripts/sync-package-safety.php --check",
-    "validate:strict": "composer validate --strict --no-check-publish"
+    "validate:strict": "composer validate --strict --no-check-publish",
+    "sync:updater-support": "php scripts/sync-updater-support.php",
+    "check:updater-support": "php scripts/sync-updater-support.php --check"
   },
   "config": {
     "platform": {

@@ -10,7 +10,7 @@ use RAN\WPReleaseUpdater\V1\Dependency\ArchiveSafety;
 final class ArchiveSafetyDependencyTest extends TestCase {
 
 	public function testGeneratedScopedDependencyMatchesTheCanonicalFixtureCorpus(): void {
-		$fixture = require dirname( __DIR__, 2 ) . '/vendor/ran/package-safety/tests/fixtures/archive-safety.php';
+		$fixture = require dirname( __DIR__, 2 ) . '/vendor/ran/updater-support/tests/fixtures/archive-safety.php';
 		foreach ( $fixture['paths'] as $name => $case ) {
 			[$input, $expected] = $case;
 			self::assertSame( $expected, ArchiveSafety::normalizePath( $input ), $name );
