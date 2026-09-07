@@ -7,13 +7,14 @@ namespace RAN\WPReleaseUpdater\V1\Archive;
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
+use RAN\WPReleaseUpdater\V1\Dependency\ArchiveSafety;
 use WeakMap;
 
 /** Inspects a locally acquired ZIP; it never extracts or changes the filesystem. */
 final class PackageIdentityValidator {
 
 	public const MAX_EXPANDED_ARCHIVE_BYTES = 127826407;
-	public const MAX_ARCHIVE_PATH_BYTES = 4096;
+	public const MAX_ARCHIVE_PATH_BYTES = ArchiveSafety::MAX_PATH_BYTES;
 	private const MAX_ARCHIVE_ENTRIES = 10000;
 	private const MAX_HEADER_BYTES = 8192;
 	private const MAX_COMPRESSION_RATIO = 100;
@@ -77,12 +78,18 @@ final class PackageIdentityValidator {
 			}
 			$root = null;
 			$seen = array();
+			$entries = array();
 			$expanded = 0;
 			$candidate = null;
 			for ( $index = 0; $index < $zip->numFiles; ++$index ) {
 				$name = $zip->getNameIndex( $index, \ZipArchive::FL_UNCHANGED );
 				$stat = $zip->statIndex( $index, \ZipArchive::FL_UNCHANGED );
-				$path = is_string( $name ) ? self::normalizePath( $name ) : null;
+				$path = is_string( $name ) ? ArchiveSafety::normalizePath( $name ) : null;
+				$origin = 0;
+				$attributes = 0;
+				$typeFailure = null === $path || ! $zip->getExternalAttributesIndex( $index, $origin, $attributes, \ZipArchive::FL_UNCHANGED )
+					? ArchiveSafety::entryTypeFailure( null, null, false )
+					: ArchiveSafety::entryTypeFailure( $origin, $attributes, $path['directory'] );
 				if (
 					null === $path
 					|| ! is_array( $stat )
@@ -90,7 +97,7 @@ final class PackageIdentityValidator {
 					|| ! is_int( $stat['comp_size'] ?? null )
 					|| $stat['size'] < 0
 					|| $stat['comp_size'] < 0
-					|| self::isSpecialEntry( $zip, $index )
+					|| null !== $typeFailure
 					|| $stat['size'] > self::MAX_EXPANDED_ARCHIVE_BYTES - $expanded
 					|| (
 						$stat['size'] > 0
@@ -108,6 +115,7 @@ final class PackageIdentityValidator {
 					return null;
 				}
 				$seen[ $key ] = true;
+				$entries[] = $path;
 				$parts = explode( '/', $path['path'] );
 				$root ??= $parts[0];
 				if ( ! hash_equals( $root, $parts[0] ) || ( 1 === count( $parts ) && ! $path['directory'] ) ) {
@@ -155,7 +163,7 @@ final class PackageIdentityValidator {
 				}
 				$candidate = array( 'package_root' => $root, 'main_file' => $header );
 			}
-			return $this->matchesArchiveIdentity( $archivePath, $facts, $identity ) ? $candidate : null;
+			return null === ArchiveSafety::collisionFailure( $entries ) && $this->matchesArchiveIdentity( $archivePath, $facts, $identity ) ? $candidate : null;
 		} finally {
 			$zip->close();
 		}
@@ -178,17 +186,22 @@ final class PackageIdentityValidator {
 			if ( null !== $this->afterOpen ) ( $this->afterOpen )( $archivePath );
 			if ( ! $this->matchesArchiveIdentity( $archivePath, $descriptorFacts, $identity ) ) return ValidatedPackage::blocked( 'archive_file_identity_mismatch' );
 			if ( $zip->numFiles < 1 || $zip->numFiles > self::MAX_ARCHIVE_ENTRIES ) return ValidatedPackage::blocked( 'archive_entry_limit' );
-			$seen = array(); $expanded = 0; $header = null; $manifest = array(); $manifestBytes = 0;
+			$seen = array(); $entries = array(); $expanded = 0; $header = null; $manifest = array(); $manifestBytes = 0;
 			$expectedPath = $policy['archive_root'] . '/' . $policy['header_file'];
 			for ( $index = 0; $index < $zip->numFiles; ++$index ) {
 				$name = $zip->getNameIndex( $index, \ZipArchive::FL_UNCHANGED );
 				$stat = $zip->statIndex( $index, \ZipArchive::FL_UNCHANGED );
-				$path = is_string( $name ) ? self::normalizePath( $name ) : null;
-				if ( null === $path || ! is_array( $stat ) || ! isset( $stat['size'], $stat['comp_size'] ) || ! is_int( $stat['size'] ) || ! is_int( $stat['comp_size'] ) || $stat['size'] < 0 || $stat['comp_size'] < 0 || self::isSpecialEntry( $zip, $index ) ) return ValidatedPackage::blocked( 'archive_path_unsafe' );
+				$path = is_string( $name ) ? ArchiveSafety::normalizePath( $name ) : null;
+				$origin = 0; $attributes = 0;
+				$typeFailure = null === $path || ! $zip->getExternalAttributesIndex( $index, $origin, $attributes, \ZipArchive::FL_UNCHANGED )
+					? ArchiveSafety::entryTypeFailure( null, null, false )
+					: ArchiveSafety::entryTypeFailure( $origin, $attributes, $path['directory'] );
+				if ( null === $path || ! is_array( $stat ) || ! isset( $stat['size'], $stat['comp_size'] ) || ! is_int( $stat['size'] ) || ! is_int( $stat['comp_size'] ) || $stat['size'] < 0 || $stat['comp_size'] < 0 || null !== $typeFailure ) return ValidatedPackage::blocked( 'archive_path_unsafe' );
 				if ( $stat['size'] > self::MAX_EXPANDED_ARCHIVE_BYTES - $expanded || ( $stat['size'] > 0 && ( 0 === $stat['comp_size'] || $stat['size'] > self::MAX_COMPRESSION_RATIO * $stat['comp_size'] ) ) ) return ValidatedPackage::blocked( 'archive_size_limit' );
 				$expanded += $stat['size']; $key = strtolower( $path['path'] );
 				if ( isset( $seen[ $key ] ) ) return ValidatedPackage::blocked( 'archive_path_duplicate' );
 				$seen[ $key ] = true;
+				$entries[] = $path;
 				$parts = explode( '/', $path['path'] );
 				if ( ! hash_equals( $policy['archive_root'], $parts[0] ) || ( 1 === count( $parts ) && ! $path['directory'] ) ) return ValidatedPackage::blocked( 'archive_root_mismatch' );
 				if ( ! $path['directory'] ) { $relative = substr( $path['path'], strlen( $policy['archive_root'] ) + 1 ); $entry = self::entryIdentity( $zip, $name, $stat['size'] ); if ( '' === $relative || null === $entry ) return ValidatedPackage::blocked( 'archive_entry_unreadable' ); $manifest[ $relative ] = $entry; $manifestBytes += $entry['size']; }
@@ -197,6 +210,9 @@ final class PackageIdentityValidator {
 				$header = self::readHeader( $zip, $name );
 				if ( null === $header ) return ValidatedPackage::blocked( 'archive_header_unreadable' );
 			}
+			$collision = ArchiveSafety::collisionFailure( $entries );
+			if ( 'path_duplicate' === $collision ) return ValidatedPackage::blocked( 'archive_path_duplicate' );
+			if ( null !== $collision ) return ValidatedPackage::blocked( 'archive_path_unsafe' );
 			if ( ! is_string( $header ) ) return ValidatedPackage::blocked( 'archive_header_missing' );
 			$parsed = self::parseHeader( $header, $policy['target_type'] );
 			if ( 'installed_header_verified' !== $parsed['code'] ) {
@@ -269,20 +285,6 @@ final class PackageIdentityValidator {
 		return ( $stat['mode'] & 0170000 ) === 0100000;
 	}
 
-	/** @return array{path:string,directory:bool}|null */
-	private static function normalizePath( string $name ): ?array {
-		if ( '' === $name || strlen( $name ) > self::MAX_ARCHIVE_PATH_BYTES || str_starts_with( $name, '/' ) || str_contains( $name, '\\' ) || str_contains( $name, ':' ) || 1 === preg_match( '/[\x00-\x1f\x7f]/', $name ) || 1 === preg_match( '/[^\x20-\x7e]/', $name ) ) return null;
-		$directory = str_ends_with( $name, '/' ); $path = $directory ? substr( $name, 0, -1 ) : $name;
-		if ( '' === $path || str_ends_with( $path, '/' ) ) return null;
-		foreach ( explode( '/', $path ) as $part ) if ( '' === $part || '.' === $part || '..' === $part || strlen( $part ) > 255 || str_ends_with( $part, '.' ) || str_ends_with( $part, ' ' ) || 1 === preg_match( '/\A(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|\z)/iD', $part ) ) return null;
-		return array( 'path' => $path, 'directory' => $directory );
-	}
-	private static function isSpecialEntry( \ZipArchive $zip, int $index ): bool {
-		$os = 0; $attributes = 0;
-		if ( ! $zip->getExternalAttributesIndex( $index, $os, $attributes, \ZipArchive::FL_UNCHANGED ) || \ZipArchive::OPSYS_UNIX !== $os ) return false;
-		$type = ( $attributes >> 16 ) & 0170000;
-		return 0 !== $type && 0100000 !== $type && 0040000 !== $type;
-	}
 	private static function readHeader( \ZipArchive $zip, string $name ): ?string { $stream = $zip->getStream( $name ); if ( ! is_resource( $stream ) ) return null; $contents = stream_get_contents( $stream, self::MAX_HEADER_BYTES ); fclose( $stream ); return is_string( $contents ) ? $contents : null; }
 	/** @return array{sha256:string,size:int}|null */
 	private static function entryIdentity( \ZipArchive $zip, string $name, int $expectedSize ): ?array { $stream = $zip->getStream( $name ); if ( ! is_resource( $stream ) ) return null; $context = hash_init( 'sha256' ); $size = 0; $valid = true; while ( ! feof( $stream ) ) { $chunk = fread( $stream, 65536 ); if ( ! is_string( $chunk ) || ( '' === $chunk && ! feof( $stream ) ) || strlen( $chunk ) > $expectedSize - $size ) { $valid = false; break; } $size += strlen( $chunk ); hash_update( $context, $chunk ); } fclose( $stream ); return $valid && $size === $expectedSize ? array( 'sha256' => hash_final( $context ), 'size' => $size ) : null; }

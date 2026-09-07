@@ -438,6 +438,8 @@ the fallback English message.
 
 ## Development
 
+This source candidate uses a non-symlinked local Composer path repository for `ran/package-safety` at `../branch-deployment-package/packages/package-safety`. `scripts/sync-package-safety.php` rewrites its one namespace occurrence into the sealed updater-local dependency copy; run `composer check` to reject generated-copy drift. This is candidate-only packaging and does not alter the published Booster lock or release archive.
+
 Install development dependencies and run the package checks with:
 
 ```sh

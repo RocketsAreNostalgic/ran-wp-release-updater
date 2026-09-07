@@ -3,11 +3,24 @@
   "description": "Provider-neutral release update integration for WordPress plugins and themes.",
   "type": "library",
   "license": "GPL-2.0-or-later",
+  "repositories": [
+    {
+      "type": "path",
+      "url": "../branch-deployment-package/packages/package-safety",
+      "options": {
+        "symlink": false,
+        "versions": {
+          "ran/package-safety": "0.1.0"
+        }
+      }
+    }
+  ],
   "require": {
     "php": "^8.2",
     "ext-hash": "*",
     "ext-json": "*",
-    "ext-zip": "*"
+    "ext-zip": "*",
+    "ran/package-safety": "0.1.0"
   },
   "conflict": {
     "ran/wp-github-release-updater": "*"
@@ -28,6 +41,7 @@
   "scripts": {
     "check": [
       "@validate:strict",
+      "@check:package-safety",
       "@test:unit",
       "@test:release-publisher",
       "@lint:php"
@@ -42,6 +56,8 @@
     "test:wordpress-integration": "@php tests/Integration/wordpress-integration.php",
     "test:wordpress-bulk": "php tests/Integration/wordpress-native-mixed-bulk-proof.php",
     "test:release-publisher": "node --test tests/release-publisher.test.mjs",
+    "sync:package-safety": "php scripts/sync-package-safety.php",
+    "check:package-safety": "php scripts/sync-package-safety.php --check",
     "validate:strict": "composer validate --strict --no-check-publish"
   },
   "config": {

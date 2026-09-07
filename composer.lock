@@ -4,8 +4,51 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "cc84b824fce997bfe609a92ebb5b99d9",
-    "packages": [],
+    "content-hash": "82327d1700cfabfb07acd3ec3a79427d",
+    "packages": [
+        {
+            "name": "ran/package-safety",
+            "version": "0.1.0",
+            "dist": {
+                "type": "path",
+                "url": "../branch-deployment-package/packages/package-safety",
+                "reference": "eee863b10afa1492b2224c8d3e00bd6f1b8087c7"
+            },
+            "require": {
+                "php": "^8.2"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "RAN\\PackageSafety\\V1\\": "src/"
+                }
+            },
+            "scripts": {
+                "check": [
+                    "@validate:strict",
+                    "@test:contract",
+                    "@lint:php"
+                ],
+                "validate:strict": [
+                    "composer validate --strict --no-check-publish"
+                ],
+                "test:contract": [
+                    "php tests/contract.php"
+                ],
+                "lint:php": [
+                    "find src tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l"
+                ]
+            },
+            "license": [
+                "GPL-2.0-or-later"
+            ],
+            "description": "Pure archive path and ZIP entry safety rules.",
+            "transport-options": {
+                "symlink": false,
+                "relative": true
+            }
+        }
+    ],
     "packages-dev": [
         {
             "name": "myclabs/deep-copy",

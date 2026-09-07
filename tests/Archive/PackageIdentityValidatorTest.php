@@ -341,6 +341,44 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertSame( 'archive_entry_limit', ( new PackageIdentityValidator() )->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $archive )->code() );
 	}
 
+	public function testDelegatesAncestorAndMetadataSafetyToTheScopedDependency(): void {
+		$header = $this->header( 'Plugin Name', 'Example Plugin' );
+		$validator = new PackageIdentityValidator();
+		$policy = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+		foreach ( array(
+			'file before child' => array(
+				'example-plugin/example-plugin.php' => $header,
+				'example-plugin/payload' => 'file',
+				'example-plugin/payload/child.php' => '<?php return true;',
+			),
+			'child before file' => array(
+				'example-plugin/example-plugin.php' => $header,
+				'example-plugin/payload/child.php' => '<?php return true;',
+				'example-plugin/payload' => 'file',
+			),
+		) as $name => $entries ) {
+			$archive = $this->archive( $entries );
+			self::assertNull( $validator->inspectProspective( $this->prospectivePolicy( $archive, 'plugin' ), $archive ), $name );
+			self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $archive )->code(), $name );
+		}
+
+		$dos = $this->archive(
+			array( 'example-plugin/example-plugin.php' => $header ),
+			array(),
+			array( 'example-plugin/example-plugin.php' => array( \ZipArchive::OPSYS_DOS, 0120000 << 16 ) )
+		);
+		self::assertSame( array( 'package_root' => 'example-plugin', 'main_file' => 'example-plugin.php' ), $validator->inspectProspective( $this->prospectivePolicy( $dos, 'plugin' ), $dos ) );
+		self::assertTrue( $validator->validate( $this->descriptor( $dos, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $dos )->isValid() );
+
+		$mismatch = $this->archive(
+			array( 'example-plugin/example-plugin.php' => $header ),
+			array(),
+			array( 'example-plugin/example-plugin.php' => array( \ZipArchive::OPSYS_UNIX, 0040000 << 16 ) )
+		);
+		self::assertNull( $validator->inspectProspective( $this->prospectivePolicy( $mismatch, 'plugin' ), $mismatch ) );
+		self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $mismatch, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $mismatch )->code() );
+	}
+
 	/** @dataProvider archiveCompatibilityCases */
 	public function testValidatesArchiveVersionAndOptionalRuntimeRequirements( string $header, string $expected ): void {
 		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
@@ -382,12 +420,13 @@ final class PackageIdentityValidatorTest extends TestCase {
 		);
 	}
 
-	/** @param array<string,string> $entries @param list<string> $links */
-	private function archive( array $entries, array $links = array() ): string {
+	/** @param array<string,string> $entries @param list<string> $links @param array<string,array{int,int}> $attributes */
+	private function archive( array $entries, array $links = array(), array $attributes = array() ): string {
 		$path = tempnam( sys_get_temp_dir(), 'ran-archive-' ); self::assertIsString( $path ); $this->archives[] = $path;
 		$zip = new \ZipArchive(); self::assertTrue( $zip->open( $path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) );
 		foreach ( $entries as $name => $contents ) self::assertTrue( $zip->addFromString( $name, $contents ) );
 		foreach ( $links as $name ) self::assertTrue( $zip->setExternalAttributesName( $name, \ZipArchive::OPSYS_UNIX, 0120777 << 16 ) );
+		foreach ( $attributes as $name => [$origin, $attribute] ) self::assertTrue( $zip->setExternalAttributesName( $name, $origin, $attribute ) );
 		$zip->close(); return $path;
 	}
 
