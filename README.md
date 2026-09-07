@@ -438,7 +438,13 @@ the fallback English message.
 
 ## Development
 
-Archive safety comes from the `ran/updater-support` Composer dependency. `scripts/sync-updater-support.php` generates its namespace-scoped copy inside the sealed runtime; `composer check` rejects a copy that differs from the installed dependency. The pre-release adoption lockfile pins the reviewed development source commit; replace the development requirement with an owner-approved beta tag before releasing. The root Composer project must declare the support VCS repository until it is available through its package registry. See the dependency declaration in `composer.json`.
+Archive safety is a development dependency on `ran/updater-support`.
+`scripts/sync-updater-support.php` generates its namespace-scoped copy inside the
+sealed runtime; `composer check` rejects a copy that differs from the installed
+dependency. The distributed runtime loads that generated copy and has no
+production dependency on `ran/updater-support`. The pre-release development
+lockfile pins the reviewed support source commit; replace that development
+requirement with an owner-approved beta tag when maintaining the generator.
 
 Install development dependencies and run the package checks with:
 

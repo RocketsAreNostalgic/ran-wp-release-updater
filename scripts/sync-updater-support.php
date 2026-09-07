@@ -49,7 +49,7 @@ if (! is_dir(dirname($target)) && ! mkdir(dirname($target), 0755, true)) {
 	fwrite(STDERR, "Generated dependency directory could not be created.\n");
 	exit(1);
 }
-if (false === file_put_contents($target, $generated)) {
+if (strlen($generated) !== file_put_contents($target, $generated, LOCK_EX)) {
 	fwrite(STDERR, "Generated updater-support runtime copy could not be written.\n");
 	exit(1);
 }
