@@ -12,6 +12,7 @@ namespace RAN\WPReleaseUpdater\V1\Archive;
  */
 final readonly class ValidatedPackage {
 
+	/** @param array<string, scalar> $snapshot */
 	private function __construct( private string $code, private array $snapshot ) {}
 
 	/** @internal @param array<string, scalar> $snapshot */
