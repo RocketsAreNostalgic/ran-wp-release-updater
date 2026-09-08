@@ -14,12 +14,18 @@ final class ReleaseVersionTest extends TestCase {
 		foreach ( $ordered as $leftIndex => $left ) {
 			self::assertSame( 0, ReleaseVersion::compare( $left, $left ) );
 			foreach ( $ordered as $rightIndex => $right ) {
-				if ( $leftIndex >= $rightIndex ) continue;
+				if ( $leftIndex >= $rightIndex ) {
+					continue;
+				}
 				self::assertSame( -1, ReleaseVersion::compare( $left, $right ) );
 				self::assertSame( 1, ReleaseVersion::compare( $right, $left ) );
 				self::assertSame( ReleaseVersion::RELATIONSHIP_OLDER, ReleaseVersion::relationship( $left, $right ) );
 				self::assertSame( ReleaseVersion::RELATIONSHIP_NEWER, ReleaseVersion::relationship( $right, $left ) );
-				foreach ( $ordered as $thirdIndex => $third ) if ( $rightIndex < $thirdIndex ) self::assertSame( -1, ReleaseVersion::compare( $left, $third ) );
+				foreach ( $ordered as $thirdIndex => $third ) {
+					if ( $rightIndex < $thirdIndex ) {
+						self::assertSame( -1, ReleaseVersion::compare( $left, $third ) );
+					}
+				}
 			}
 		}
 	}
@@ -37,6 +43,11 @@ final class ReleaseVersionTest extends TestCase {
 
 	/** @return array<string, array{string}> */
 	public static function invalidComparisonProvider(): array {
-		return array( 'build metadata' => array( '1.0.0+build.1' ), 'tag marker' => array( 'v1.0.0' ), 'short prerelease' => array( '1.0-beta.1' ), 'leading zero' => array( '01.0.0' ) );
+		return array(
+			'build metadata'   => array( '1.0.0+build.1' ),
+			'tag marker'       => array( 'v1.0.0' ),
+			'short prerelease' => array( '1.0-beta.1' ),
+			'leading zero'     => array( '01.0.0' ),
+		);
 	}
 }

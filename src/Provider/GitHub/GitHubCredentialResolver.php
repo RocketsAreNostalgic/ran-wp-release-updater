@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\Provider\GitHub;
 
 /** Request-local GitHub credential source. It deliberately retains no resolved value. */
-final class GitHubCredentialResolver
-{
+final class GitHubCredentialResolver {
+
 	/** @var null|callable():mixed */
 	private $source;
 
 	/** @param null|callable():mixed $source */
-	public function __construct( mixed $source = null )
-	{
+	public function __construct( mixed $source = null ) {
 		if ( null !== $source && ! is_callable( $source ) ) {
 			throw new \InvalidArgumentException( 'The GitHub credential source is invalid.' );
 		}
@@ -20,8 +19,7 @@ final class GitHubCredentialResolver
 	}
 
 	/** Resolve once, immediately before a top-level request chain. */
-	public function resolve(): ?string
-	{
+	public function resolve(): ?string {
 		if ( null === $this->source ) {
 			return null;
 		}

@@ -6,20 +6,18 @@ namespace Tests\Runtime;
 
 use PHPUnit\Framework\TestCase;
 
-final class SealedProviderCatalogTest extends TestCase
-{
+final class SealedProviderCatalogTest extends TestCase {
+
 	private string $root;
 
-	protected function setUp(): void
-	{
+	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 )
 			. '/.workspaces/p0.2/php-tmp/sealed-catalog-'
 			. bin2hex( random_bytes( 6 ) );
 		mkdir( $this->root, 0700, true );
 	}
 
-	public function testRuntimeShipsOnlyThePrivateGithubCatalogAndNoCatalogExtensionSeam(): void
-	{
+	public function testRuntimeShipsOnlyThePrivateGithubCatalogAndNoCatalogExtensionSeam(): void {
 		$runtime = (string) file_get_contents( dirname( __DIR__, 2 ) . '/runtime.php' );
 
 		self::assertStringContainsString( "'github' => array(", $runtime );
@@ -28,8 +26,13 @@ final class SealedProviderCatalogTest extends TestCase
 		self::assertStringContainsString( 'private array $providerCatalog', $runtime );
 		self::assertStringNotContainsString( "'synthetic'", $runtime );
 		$seams = array(
-			'registerProvider', 'setProvider', 'providerCatalog=', 'apply_filters',
-			'do_action', 'spl_autoload_register', 'getenv(',
+			'registerProvider',
+			'setProvider',
+			'providerCatalog=',
+			'apply_filters',
+			'do_action',
+			'spl_autoload_register',
+			'getenv(',
 			'RAN_WP_RELEASE_UPDATER_PROVIDER',
 		);
 		foreach ( $seams as $seam ) {
@@ -37,19 +40,21 @@ final class SealedProviderCatalogTest extends TestCase
 		}
 	}
 
-	public function testHigherVersionSyntheticCatalogWinsInEitherPhysicalLoadOrderAndOwnsOnlyItsResolver(): void
-	{
-		$shipped = $this->package( 'shipped', '0.1.0-beta.98', false );
-		$synthetic = $this->package( 'synthetic', '0.1.0-beta.99', true );
-		$github = $this->plugin( 'github', 'https://github.com/acme/github' );
+	public function testHigherVersionSyntheticCatalogWinsInEitherPhysicalLoadOrderAndOwnsOnlyItsResolver(): void {
+		$shipped         = $this->package( 'shipped', '0.1.0-beta.98', false );
+		$synthetic       = $this->package( 'synthetic', '0.1.0-beta.99', true );
+		$github          = $this->plugin( 'github', 'https://github.com/acme/github' );
 		$syntheticPlugin = $this->plugin( 'synthetic', 'https://synthetic.invalid/acme/synthetic' );
 
 		foreach ( array( array( $shipped, $synthetic ), array( $synthetic, $shipped ) ) as $copies ) {
-			$result = $this->probe( $this->syntheticProbe(), array(
-				'copies' => $copies,
-				'github' => $github,
-				'synthetic' => $syntheticPlugin,
-			) );
+			$result = $this->probe(
+				$this->syntheticProbe(),
+				array(
+					'copies'    => $copies,
+					'github'    => $github,
+					'synthetic' => $syntheticPlugin,
+				)
+			);
 
 			self::assertSame( 'runtime_active', $result['activation'] );
 			self::assertSame( 'target_active', $result['github']['code'] );
@@ -69,17 +74,19 @@ final class SealedProviderCatalogTest extends TestCase
 		}
 	}
 
-	public function testShippedCatalogRejectsSyntheticBeforeAndAfterSameTypeCutoffAndInFreshProcess(): void
-	{
+	public function testShippedCatalogRejectsSyntheticBeforeAndAfterSameTypeCutoffAndInFreshProcess(): void {
 		$shipped = $this->package( 'shipped-only', '0.1.0-beta.98', false );
-		$plugin = $this->plugin( 'synthetic', 'https://synthetic.invalid/acme/synthetic' );
+		$plugin  = $this->plugin( 'synthetic', 'https://synthetic.invalid/acme/synthetic' );
 
 		foreach ( array( false, true ) as $cutoff ) {
-			$result = $this->probe( $this->shippedProbe(), array(
-				'copy' => $shipped,
-				'plugin' => $plugin,
-				'cutoff' => $cutoff,
-			) );
+			$result = $this->probe(
+				$this->shippedProbe(),
+				array(
+					'copy'   => $shipped,
+					'plugin' => $plugin,
+					'cutoff' => $cutoff,
+				)
+			);
 
 			self::assertSame( 'unsupported_provider', $result['before']['code'] );
 			self::assertSame( 'unsupported_provider', $result['after']['code'] );
@@ -88,26 +95,27 @@ final class SealedProviderCatalogTest extends TestCase
 		}
 	}
 
-	public function testSelectedSyntheticCatalogDispatchesAnIsolatedReleaseSourceForOpaqueIdentifiersInEitherLoadOrder(): void
-	{
-		$shipped = $this->package( 'release-shipped', '0.1.0-beta.98', false );
+	public function testSelectedSyntheticCatalogDispatchesAnIsolatedReleaseSourceForOpaqueIdentifiersInEitherLoadOrder(): void {
+		$shipped   = $this->package( 'release-shipped', '0.1.0-beta.98', false );
 		$synthetic = $this->package( 'release-synthetic', '0.1.0-beta.99', true );
 		foreach ( array( array( $shipped, $synthetic ), array( $synthetic, $shipped ) ) as $copies ) {
-			$result = $this->probe( <<<'PHP'
+			$result = $this->probe(
+				<<<'PHP'
 $registrars = array(); foreach ($data['copies'] as $copy) $registrars[] = require $copy . '/bootstrap.php';
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker']; $broker->activate(array('php_version'=>PHP_VERSION,'runtime_protocol'=>4,'wordpress_version'=>'6.8.0'));
 $source = $registrars[0]->releases('synthetic', 'plugin', 'acme/source', 'opaque_repository_id');
 $list = $source->list();
 echo json_encode(array('list'=>$list,'synthetic_calls'=>$GLOBALS['p0_2_synthetic_release_calls'] ?? 0,'github_calls'=>$GLOBALS['p0_2_github_release_calls'] ?? 0));
-PHP, array( 'copies' => $copies ) );
+PHP,
+				array( 'copies' => $copies )
+			);
 			self::assertSame( 'releases_listed', $result['list']['code'] );
 			self::assertSame( 1, $result['synthetic_calls'] );
 			self::assertSame( 0, $result['github_calls'] );
 		}
 	}
 
-	private function syntheticProbe(): string
-	{
+	private function syntheticProbe(): string {
 		return <<<'PHP'
 $githubCalls = 0;
 $syntheticCalls = 0;
@@ -168,8 +176,7 @@ echo json_encode( array(
 PHP;
 	}
 
-	private function shippedProbe(): string
-	{
+	private function shippedProbe(): string {
 		return <<<'PHP'
 $calls = 0;
 $registrar = require $data['copy'] . '/bootstrap.php';
@@ -206,8 +213,7 @@ echo json_encode( array( 'before' => $before->status(), 'after' => $after->statu
 PHP;
 	}
 
-	private function plugin( string $name, string $uri ): string
-	{
+	private function plugin( string $name, string $uri ): string {
 		$directory = $this->root . '/installed-' . $name;
 		if ( ! is_dir( $directory ) ) {
 			mkdir( $directory, 0700, true );
@@ -217,17 +223,16 @@ PHP;
 		return $file;
 	}
 
-	private function package( string $name, string $version, bool $synthetic ): string
-	{
+	private function package( string $name, string $version, bool $synthetic ): string {
 		$source = dirname( __DIR__, 2 );
-		$root = $this->root . '/' . $name;
+		$root   = $this->root . '/' . $name;
 		mkdir( $root . '/src', 0700, true );
 		copy( $source . '/bootstrap.php', $root . '/bootstrap.php' );
 		foreach ( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $source . '/src', \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
 			if ( ! $file->isFile() || 'php' !== $file->getExtension() ) {
 				continue;
 			}
-			$relative = substr( $file->getPathname(), strlen( $source . '/src/' ) );
+			$relative    = substr( $file->getPathname(), strlen( $source . '/src/' ) );
 			$destination = $root . '/src/' . $relative;
 			if ( ! is_dir( dirname( $destination ) ) ) {
 				mkdir( dirname( $destination ), 0700, true );
@@ -237,27 +242,26 @@ PHP;
 
 		$runtime = (string) file_get_contents( $source . '/runtime.php' );
 		if ( $synthetic ) {
-			$needle = "\n);\n\nreturn new class(";
+			$needle      = "\n);\n\nreturn new class(";
 			$replacement = "\n" . $this->syntheticCatalogEntry() . $needle;
-			$runtime = str_replace( $needle, $replacement, $runtime, $count );
+			$runtime     = str_replace( $needle, $replacement, $runtime, $count );
 			self::assertSame( 1, $count, 'The synthetic fixture must replace exactly one catalog literal.' );
 		}
 
 		file_put_contents( $root . '/runtime.php', $runtime );
 		$manifest = array(
 			'package_revision' => $this->identity( $root ),
-			'package_version' => $version,
-			'php_floor' => '8.2.0',
-			'runtime_file' => 'runtime.php',
+			'package_version'  => $version,
+			'php_floor'        => '8.2.0',
+			'runtime_file'     => 'runtime.php',
 			'runtime_protocol' => 4,
-			'wordpress_floor' => '6.5.0',
+			'wordpress_floor'  => '6.5.0',
 		);
 		file_put_contents( $root . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );
 		return $root;
 	}
 
-	private function syntheticCatalogEntry(): string
-	{
+	private function syntheticCatalogEntry(): string {
 		return <<<'PHP'
 	'synthetic' => array(
 	'native' => static function( array $d, array $resolved, array $headers, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
@@ -355,8 +359,7 @@ PHP;
 PHP;
 	}
 
-	private function identity( string $root ): string
-	{
+	private function identity( string $root ): string {
 		$files = array( 'bootstrap.php', 'runtime.php' );
 		foreach ( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/src', \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
 			if ( $file->isFile() && 'php' === $file->getExtension() ) {
@@ -372,9 +375,8 @@ PHP;
 	}
 
 	/** @param array<string,mixed> $data @return array<string,mixed> */
-	private function probe( string $body, array $data ): array
-	{
-		$file = $this->root . '/probe-' . bin2hex( random_bytes( 4 ) ) . '.php';
+	private function probe( string $body, array $data ): array {
+		$file   = $this->root . '/probe-' . bin2hex( random_bytes( 4 ) ) . '.php';
 		$prefix = <<<'PHP'
 <?php
 define( 'WP_PLUGIN_DIR', __ROOT__ );
@@ -403,7 +405,7 @@ PHP;
 		file_put_contents( $file, $prefix . "\n" . $body );
 
 		$temporary = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp';
-		$command = 'TMPDIR=' . escapeshellarg( $temporary )
+		$command   = 'TMPDIR=' . escapeshellarg( $temporary )
 			. ' TMP=' . escapeshellarg( $temporary )
 			. ' TEMP=' . escapeshellarg( $temporary )
 			. ' PHPRC=/dev/null PHP_INI_SCAN_DIR= '

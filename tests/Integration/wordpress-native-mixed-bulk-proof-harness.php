@@ -46,9 +46,9 @@ final class MixedBulkFixtureAdapter implements ReleaseAdapter {
 		return array(
 			'candidates' => array(
 				array(
-			'release_identity' => $facts['release_identity'],
-			'tag'              => $facts['tag'],
-			'version'          => $facts['version'],
+					'release_identity' => $facts['release_identity'],
+					'tag'              => $facts['tag'],
+					'version'          => $facts['version'],
 				),
 			),
 		);
@@ -71,7 +71,7 @@ final class MixedBulkFixtureAdapter implements ReleaseAdapter {
 			throw new RuntimeException( 'The fixture artifact could not be acquired.' );
 		}
 		$this->acquiredPaths[] = $path;
-		$stat                   = lstat( $path );
+		$stat                  = lstat( $path );
 		if ( ! is_array( $stat ) ) {
 			throw new RuntimeException( 'The fixture artifact identity is unavailable.' );
 		}
@@ -106,8 +106,8 @@ add_filter(
 	PHP_INT_MIN,
 	3
 );
-$ids                    = 'plugin' === $type ? array( 'managed-a/managed-a.php', 'ordinary/ordinary.php', 'managed-b/managed-b.php' ) : array( 'managed-a', 'ordinary', 'managed-b' );
-$archives               = array(
+$ids                      = 'plugin' === $type ? array( 'managed-a/managed-a.php', 'ordinary/ordinary.php', 'managed-b/managed-b.php' ) : array( 'managed-a', 'ordinary', 'managed-b' );
+$archives                 = array(
 	'managed-a' => (string) getenv( 'RAN_WP_RELEASE_UPDATER_MANAGED_A_ARCHIVE' ),
 	'ordinary'  => (string) getenv( 'RAN_WP_RELEASE_UPDATER_ORDINARY_ARCHIVE' ),
 	'managed-b' => (string) getenv( 'RAN_WP_RELEASE_UPDATER_MANAGED_B_ARCHIVE' ),
@@ -116,10 +116,10 @@ $expectedArchiveManifests = array(
 	'managed-a' => archive_file_manifest( $archives['managed-a'], 'managed-a' ),
 	'managed-b' => archive_file_manifest( $archives['managed-b'], 'managed-b' ),
 );
-$beforeOwnedDirectories = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR ) ?: array();
-$managedA               = build_mixed_bulk_target( $type, 'managed-a', 'Managed A', $archives['managed-a'] );
-$managedB               = build_mixed_bulk_target( $type, 'managed-b', 'Managed B', $archives['managed-b'] );
-$observations           = array_fill_keys( $ids, array() );
+$beforeOwnedDirectories   = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR ) ?: array();
+$managedA                 = build_mixed_bulk_target( $type, 'managed-a', 'Managed A', $archives['managed-a'] );
+$managedB                 = build_mixed_bulk_target( $type, 'managed-b', 'Managed B', $archives['managed-b'] );
+$observations             = array_fill_keys( $ids, array() );
 add_filter(
 	'upgrader_pre_download',
 	static function ( mixed $reply, string $package, mixed $upgrader, array $extra ) use ( $type, &$observations ): mixed {
@@ -168,7 +168,7 @@ $rawResults  = $upgrader->bulk_upgrade( $ids, array( 'clear_update_cache' => fal
 $results     = array();
 $resultCodes = array();
 foreach ( $ids as $identity ) {
-	$one                     = is_array( $rawResults ) ? ( $rawResults[ $identity ] ?? false ) : false;
+	$one                      = is_array( $rawResults ) ? ( $rawResults[ $identity ] ?? false ) : false;
 	$results[ $identity ]     = false !== $one && ! is_wp_error( $one );
 	$resultCodes[ $identity ] = is_wp_error( $one ) ? $one->get_error_code() : null;
 }
@@ -183,28 +183,28 @@ add_action(
 		foreach ( $ids as $identity ) {
 			$versions[ $identity ] = target_version( $type, $identity );
 		}
-		$active                 = active_states( $type, $ids );
-		$adapterEvidence       = array();
-		$updaterEvidence       = array();
-		$manifestEvidence      = array();
+		$active           = active_states( $type, $ids );
+		$adapterEvidence  = array();
+		$updaterEvidence  = array();
+		$manifestEvidence = array();
 		foreach ( array(
 			'managed-a' => $managedA,
 			'managed-b' => $managedB,
 		) as $slug => $target ) {
-			$adapter                    = $target['adapter'];
-			$adapterEvidence[ $slug ]   = array(
+			$adapter                   = $target['adapter'];
+			$adapterEvidence[ $slug ]  = array(
 				'calls'                 => array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ),
 				'acquired_paths_absent' => array_reduce( $adapter->acquiredPaths, static fn ( bool $ok, string $path ): bool => $ok && ! file_exists( $path ) && ! is_link( $path ), true ),
 			);
-			$updaterEvidence[ $slug ] = array(
+			$updaterEvidence[ $slug ]  = array(
 				'diagnostics'  => $target['updater']->diagnostics(),
 				'failure_code' => $target['updater']->status()['failure_code'],
 			);
-			$installedManifest            = target_file_manifest( $type, $target['identity'] );
-			$expectedManifest             = $expectedArchiveManifests[ $slug ] ?? array();
-			$manifestEvidence[ $slug ]    = array(
-				'expected'   => $expectedManifest,
-				'installed'  => $installedManifest,
+			$installedManifest         = target_file_manifest( $type, $target['identity'] );
+			$expectedManifest          = $expectedArchiveManifests[ $slug ] ?? array();
+			$manifestEvidence[ $slug ] = array(
+				'expected'    => $expectedManifest,
+				'installed'   => $installedManifest,
 				'exact_match' => $expectedManifest === $installedManifest,
 			);
 		}
@@ -215,8 +215,8 @@ add_action(
 			'managed_b_exact_token'   => 1 === count( $observations[ $ids[2] ] ) && $tokens[1] === ( $observations[ $ids[2] ][0] ?? null ),
 			'managed_tokens_distinct' => $tokens[0] !== $tokens[1],
 		);
-		$values         = $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'ran\\_wp\\_release\\_updater\\_target\\_v1\\_%' ORDER BY option_name" );
-		$leasesReleased = 2 === count( $values );
+		$values              = $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'ran\\_wp\\_release\\_updater\\_target\\_v1\\_%' ORDER BY option_name" );
+		$leasesReleased      = 2 === count( $values );
 		foreach ( $values as $value ) {
 			$decoded        = is_string( $value ) ? json_decode( $value, true ) : null;
 			$leasesReleased = $leasesReleased && is_array( $decoded ) && 1 === ( $decoded['lease_deadline'] ?? null );
@@ -225,13 +225,13 @@ add_action(
 		foreach ( $ids as $identity ) {
 			$bytesAfter[ $identity ] = target_bytes( $type, $identity );
 		}
-		$backupRoot      = WP_CONTENT_DIR . '/upgrade-temp-backup/' . ( 'plugin' === $type ? 'plugins' : 'themes' );
-		$backupsAbsent   = ! is_dir( $backupRoot . '/managed-a' ) && ! is_dir( $backupRoot . '/ordinary' ) && ! is_dir( $backupRoot . '/managed-b' );
-		$success         = 'success' === $mode;
-		$expectedResults = $success ? array( true, true, true ) : array( false, true, true );
-		$failureExact    = ! $success && 'ran_wp_release_updater_unverified_install_result' === $resultCodes[ $ids[0] ] && null === $resultCodes[ $ids[1] ] && null === $resultCodes[ $ids[2] ];
-		$manifestExact   = $success ? ( $manifestEvidence['managed-a']['exact_match'] && $manifestEvidence['managed-b']['exact_match'] ) : $manifestEvidence['managed-b']['exact_match'];
-		$pass            = $ids === array_keys( $results )
+		$backupRoot                   = WP_CONTENT_DIR . '/upgrade-temp-backup/' . ( 'plugin' === $type ? 'plugins' : 'themes' );
+		$backupsAbsent                = ! is_dir( $backupRoot . '/managed-a' ) && ! is_dir( $backupRoot . '/ordinary' ) && ! is_dir( $backupRoot . '/managed-b' );
+		$success                      = 'success' === $mode;
+		$expectedResults              = $success ? array( true, true, true ) : array( false, true, true );
+		$failureExact                 = ! $success && 'ran_wp_release_updater_unverified_install_result' === $resultCodes[ $ids[0] ] && null === $resultCodes[ $ids[1] ] && null === $resultCodes[ $ids[2] ];
+		$manifestExact                = $success ? ( $manifestEvidence['managed-a']['exact_match'] && $manifestEvidence['managed-b']['exact_match'] ) : $manifestEvidence['managed-b']['exact_match'];
+		$pass                         = $ids === array_keys( $results )
 			&& $expectedResults === array_values( $results )
 			&& ! in_array( false, $observationEvidence, true )
 			&& $manifestExact
@@ -262,7 +262,7 @@ add_action(
 					&& 'unverified_install_result' === $updaterEvidence['managed-a']['failure_code']
 					&& in_array( 'update_completed', $updaterEvidence['managed-b']['diagnostics'], true )
 			);
-		$evidence        = compact( 'pass', 'type', 'mode', 'results', 'resultCodes', 'versions', 'activeBefore', 'active', 'injected', 'observationEvidence', 'adapterEvidence', 'updaterEvidence', 'leasesReleased', 'networkCalls', 'newOwnedDirectories', 'bytesAfter' );
+		$evidence                     = compact( 'pass', 'type', 'mode', 'results', 'resultCodes', 'versions', 'activeBefore', 'active', 'injected', 'observationEvidence', 'adapterEvidence', 'updaterEvidence', 'leasesReleased', 'networkCalls', 'newOwnedDirectories', 'bytesAfter' );
 		$evidence['manifestEvidence'] = $manifestEvidence;
 		file_put_contents( $outputPath, json_encode( $evidence, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
 	},
@@ -471,8 +471,8 @@ function target_file_manifest( string $type, string $identity ): array {
 	if ( ! is_dir( $base ) ) {
 		return array();
 	}
-	$manifest = array();
-	$iterator = new \RecursiveIteratorIterator(
+	$manifest  = array();
+	$iterator  = new \RecursiveIteratorIterator(
 		new \RecursiveDirectoryIterator( $base, \FilesystemIterator::SKIP_DOTS )
 	);
 	$basePosix = str_replace( '\\', '/', $base . '/' );

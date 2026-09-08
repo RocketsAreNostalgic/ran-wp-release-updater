@@ -13,9 +13,9 @@ use Throwable;
  * It deliberately retains data, not callbacks: the sole hook registration
  * callable exists only for the one explicit activation attempt.
  */
-final class RequestBroker
-{
-	private const COPY_KEYS = array(
+final class RequestBroker {
+
+	private const COPY_KEYS                  = array(
 		'package_revision',
 		'package_version',
 		'php_floor',
@@ -23,74 +23,114 @@ final class RequestBroker
 		'runtime_protocol',
 		'wordpress_floor',
 	);
-	private const MAX_DIAGNOSTICS = 16;
-	private const SHA256 = '/\A[a-f0-9]{64}\z/D';
-	private const TERMINAL_CODES = array(
-		'declaration_invalid', 'provider_code_invalid', 'repository_locator_invalid',
-		'repository_identity_invalid', 'release_channel_invalid', 'update_policy_invalid',
-		'credential_resolver_invalid', 'maximum_artifact_bytes_invalid', 'installed_file_invalid', 'installed_file_missing',
-		'installed_file_unreadable', 'installed_file_not_regular', 'installed_file_symlink',
-		'installed_file_outside_root', 'installed_file_root_ambiguous', 'installed_file_changed',
-		'plugin_root_level_unsupported', 'theme_header_file_invalid',
-		'theme_nested_identity_unsupported', 'installed_header_missing',
-		'installed_header_ambiguous', 'installed_header_invalid',
-		'installed_update_uri_mismatch', 'installed_requirement_incompatible',
-		'unsupported_provider', 'target_declaration_conflict', 'target_composition_failed',
-		'activation_boundary_missed', 'runtime_environment_invalid',
-		'runtime_selection_inactive', 'runtime_load_failed', 'runtime_handoff_invalid',
+	private const MAX_DIAGNOSTICS            = 16;
+	private const SHA256                     = '/\A[a-f0-9]{64}\z/D';
+	private const TERMINAL_CODES             = array(
+		'declaration_invalid',
+		'provider_code_invalid',
+		'repository_locator_invalid',
+		'repository_identity_invalid',
+		'release_channel_invalid',
+		'update_policy_invalid',
+		'credential_resolver_invalid',
+		'maximum_artifact_bytes_invalid',
+		'installed_file_invalid',
+		'installed_file_missing',
+		'installed_file_unreadable',
+		'installed_file_not_regular',
+		'installed_file_symlink',
+		'installed_file_outside_root',
+		'installed_file_root_ambiguous',
+		'installed_file_changed',
+		'plugin_root_level_unsupported',
+		'theme_header_file_invalid',
+		'theme_nested_identity_unsupported',
+		'installed_header_missing',
+		'installed_header_ambiguous',
+		'installed_header_invalid',
+		'installed_update_uri_mismatch',
+		'installed_requirement_incompatible',
+		'unsupported_provider',
+		'target_declaration_conflict',
+		'target_composition_failed',
+		'activation_boundary_missed',
+		'runtime_environment_invalid',
+		'runtime_selection_inactive',
+		'runtime_load_failed',
+		'runtime_handoff_invalid',
 		'protocol_conflict_inactive',
 	);
 	private const CANDIDATE_VALIDATION_CODES = array(
-		'archive_entry_limit', 'archive_entry_unreadable', 'archive_file_identity_mismatch',
-		'archive_header_duplicate', 'archive_header_missing', 'archive_header_unreadable',
-		'archive_identity_verified', 'archive_metadata_identity_mismatch',
-		'archive_path_duplicate', 'archive_path_unsafe', 'archive_php_requirement_incompatible',
-		'archive_root_mismatch', 'archive_size_limit', 'archive_target_policy_invalid',
-		'archive_unreadable', 'archive_update_uri_mismatch', 'archive_version_mismatch',
-		'archive_wordpress_requirement_incompatible', 'archive_zip_extension_unavailable',
-		'candidate_descriptor_mismatch', 'candidate_inspection_failed', 'candidate_invalid',
-		'candidate_list_invalid', 'candidate_not_newer', 'candidate_validation_failed',
+		'archive_entry_limit',
+		'archive_entry_unreadable',
+		'archive_file_identity_mismatch',
+		'archive_header_duplicate',
+		'archive_header_missing',
+		'archive_header_unreadable',
+		'archive_identity_verified',
+		'archive_metadata_identity_mismatch',
+		'archive_path_duplicate',
+		'archive_path_unsafe',
+		'archive_php_requirement_incompatible',
+		'archive_root_mismatch',
+		'archive_size_limit',
+		'archive_target_policy_invalid',
+		'archive_unreadable',
+		'archive_update_uri_mismatch',
+		'archive_version_mismatch',
+		'archive_wordpress_requirement_incompatible',
+		'archive_zip_extension_unavailable',
+		'candidate_descriptor_mismatch',
+		'candidate_inspection_failed',
+		'candidate_invalid',
+		'candidate_list_invalid',
+		'candidate_not_newer',
+		'candidate_validation_failed',
 		'release_list_failed',
 	);
-	private const FAILURE_CODES = array(
-		'acquisition_failed', 'acquisition_identity_invalid', 'archive_changed_before_extraction',
-		'binding_fence_lost', 'outcome_uncertain', 'remote_release_changed',
+	private const FAILURE_CODES              = array(
+		'acquisition_failed',
+		'acquisition_identity_invalid',
+		'archive_changed_before_extraction',
+		'binding_fence_lost',
+		'outcome_uncertain',
+		'remote_release_changed',
 		'runtime_liveness_lost',
-		'runtime_package_identity_invalid', 'staged_package_identity_invalid',
-		'unverified_install_result', 'unverified_pre_download',
-		'unverified_pre_download_result', 'unverified_pre_install',
+		'runtime_package_identity_invalid',
+		'staged_package_identity_invalid',
+		'unverified_install_result',
+		'unverified_pre_download',
+		'unverified_pre_download_result',
+		'unverified_pre_install',
 	);
-	private const RELATIONSHIPS = array( 'invalid', 'newer', 'older', 'same' );
+	private const RELATIONSHIPS              = array( 'invalid', 'newer', 'older', 'same' );
 
 	/** @var list<array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string}> */
 	private array $candidates = array();
 	/** @var array<string, true> */
 	private array $candidateRoots = array();
 	/** @var list<array{code:string}> */
-	private array $diagnostics = array();
+	private array $diagnostics        = array();
 	private bool $activationAttempted = false;
-	private string $state = 'collecting';
-	private int $nextSubmissionId = 1;
+	private string $state             = 'collecting';
+	private int $nextSubmissionId     = 1;
 	/** @var array<int,array{declaration:array<string,mixed>,key?:string,handle?:object,last_status?:array<string,mixed>,terminal_code?:string}> */
-	private array $submissions = array();
-	private ?object $handoff = null;
+	private array $submissions    = array();
+	private ?object $handoff      = null;
 	private ?string $selectedRoot = null;
 	/** @var array<string, object> */
-	private array $targetHandles = array();
+	private array $targetHandles  = array();
 	private ?string $terminalCode = null;
 
-	public function __construct( private bool $activationBoundaryMissed = false, private ?SelectedRuntimeState $selectedRuntimeState = null )
-	{
+	public function __construct( private bool $activationBoundaryMissed = false, private ?SelectedRuntimeState $selectedRuntimeState = null ) {
 	}
 
-	public function protocolVersion(): int
-	{
+	public function protocolVersion(): int {
 		return 4;
 	}
 
 	/** Register a physical runtime-copy.json without loading its runtime. */
-	public function registerCandidate( string $copyFile ): bool
-	{
+	public function registerCandidate( string $copyFile ): bool {
 		if ( ! $this->protocolLive() ) {
 			return false;
 		}
@@ -116,7 +156,7 @@ final class RequestBroker
 		}
 
 		$this->candidateRoots[ $candidate['source_root'] ] = true;
-		$this->candidates[] = $candidate;
+		$this->candidates[]                                = $candidate;
 		if ( $this->activationBoundaryMissed ) {
 			$this->activationAttempted = true;
 			$this->disable( 'activation_boundary_missed' );
@@ -131,8 +171,7 @@ final class RequestBroker
 	 * @param array<string, mixed> $environment
 	 * @return array{loaded:bool,state:string,code:string,diagnostics:list<array{code:string}>}
 	 */
-	public function activate( array $environment ): array
-	{
+	public function activate( array $environment ): array {
 		if ( ! $this->protocolLive() ) {
 			return $this->result( false, 'protocol_conflict_inactive' );
 		}
@@ -146,7 +185,7 @@ final class RequestBroker
 			return $this->result( false, 'activation_in_progress' );
 		}
 		$this->activationAttempted = true;
-		$this->state = 'activating';
+		$this->state               = 'activating';
 		if ( ! $this->validEnvironment( $environment ) ) {
 			return $this->disable( 'runtime_environment_invalid' );
 		}
@@ -159,7 +198,7 @@ final class RequestBroker
 
 		try {
 			$ran_wp_release_updater_selected_state = $this->selectedRuntimeState;
-			$handoff = require $selected['runtime_file'];
+			$handoff                               = require $selected['runtime_file'];
 		} catch ( Throwable ) {
 			return $this->disable( 'runtime_load_failed' );
 		}
@@ -170,11 +209,14 @@ final class RequestBroker
 		) {
 			return $this->disable( 'runtime_handoff_invalid' );
 		}
-		$this->handoff = $handoff;
+		$this->handoff      = $handoff;
 		$this->selectedRoot = $selected['source_root'];
-		$batch = array();
+		$batch              = array();
 		foreach ( $this->submissions as $id => $submission ) {
-			$batch[] = array( 'submission_id' => $id, 'declaration' => $submission['declaration'] );
+			$batch[] = array(
+				'submission_id' => $id,
+				'declaration'   => $submission['declaration'],
+			);
 		}
 		try {
 			$result = $this->handoff->boot( $environment, $batch );
@@ -209,8 +251,11 @@ final class RequestBroker
 					break;
 				}
 				$submission = $this->submissions[ $id ];
-				$item = $this->handoff->registerTarget(
-					array( 'submission_id' => $id, 'declaration' => $submission['declaration'] )
+				$item       = $this->handoff->registerTarget(
+					array(
+						'submission_id' => $id,
+						'declaration'   => $submission['declaration'],
+					)
 				);
 				if ( ! is_array( $item ) ) {
 					throw new RuntimeException( 'Invalid target result.' );
@@ -226,46 +271,69 @@ final class RequestBroker
 	}
 
 	/** @param array<string,mixed> $declaration @return array{accepted:bool,submission_id:int,code:string} */
-	public function registerTarget( array $declaration ): array
-	{
+	public function registerTarget( array $declaration ): array {
 		if ( ! $this->protocolLive() ) {
-			return array( 'accepted' => false, 'submission_id' => 0, 'code' => 'protocol_conflict_inactive' );
+			return array(
+				'accepted'      => false,
+				'submission_id' => 0,
+				'code'          => 'protocol_conflict_inactive',
+			);
 		}
 		if ( in_array( $this->state, array( 'inactive', 'conflict' ), true ) ) {
-			return array( 'accepted' => false, 'submission_id' => 0, 'code' => $this->terminalCode ?? 'runtime_selection_inactive' );
+			return array(
+				'accepted'      => false,
+				'submission_id' => 0,
+				'code'          => $this->terminalCode ?? 'runtime_selection_inactive',
+			);
 		}
 		$code = $this->declarationCode( $declaration );
 		if ( null !== $code ) {
-			return array( 'accepted' => false, 'submission_id' => 0, 'code' => $code );
+			return array(
+				'accepted'      => false,
+				'submission_id' => 0,
+				'code'          => $code,
+			);
 		}
-		$id = $this->nextSubmissionId++;
+		$id                       = $this->nextSubmissionId++;
 		$this->submissions[ $id ] = array(
 			'declaration' => $declaration,
 		);
 		if ( 'active' === $this->state && is_object( $this->handoff ) ) {
 			try {
-				$result = $this->handoff->registerTarget( array( 'submission_id' => $id, 'declaration' => $declaration ) );
+				$result = $this->handoff->registerTarget(
+					array(
+						'submission_id' => $id,
+						'declaration'   => $declaration,
+					)
+				);
 				if ( ! is_array( $result ) ) {
 					throw new RuntimeException( 'Invalid target result.' );
 				}
 				$this->applyComposition( $id, $result );
 			} catch ( Throwable ) {
 				$this->disable( 'runtime_handoff_invalid' );
-				return array( 'accepted' => false, 'submission_id' => $id, 'code' => 'runtime_handoff_invalid' );
+				return array(
+					'accepted'      => false,
+					'submission_id' => $id,
+					'code'          => 'runtime_handoff_invalid',
+				);
 			}
 			$resultCode = $result['code'];
 			return array(
-				'accepted' => in_array( $resultCode, array( 'target_active', 'target_duplicate', 'declaration_deferred_operation_started' ), true ),
+				'accepted'      => in_array( $resultCode, array( 'target_active', 'target_duplicate', 'declaration_deferred_operation_started' ), true ),
 				'submission_id' => $id,
-				'code' => $resultCode,
+				'code'          => $resultCode,
 			);
 		}
-		return array( 'accepted' => true, 'submission_id' => $id, 'code' => 'target_queued' );
+		return array(
+			'accepted'      => true,
+			'submission_id' => $id,
+			'code'          => 'target_queued',
+		);
 	}
 
 	/** @param array<string,mixed> $declaration @return array{accepted:bool,code:string,source_handle:object|null} */
-	public function releaseSource( array $declaration ): array
-	{
+	public function releaseSource( array $declaration ): array {
 		$this->protocolLive();
 		if ( in_array( $this->state, array( 'inactive', 'conflict' ), true ) ) {
 			return $this->releaseFailure( 'runtime_unavailable' );
@@ -300,8 +368,7 @@ final class RequestBroker
 	}
 
 	/** @return array<string,mixed> */
-	public function targetStatus( int $submissionId ): array
-	{
+	public function targetStatus( int $submissionId ): array {
 		$this->protocolLive();
 		$item = $this->submissions[ $submissionId ] ?? null;
 		if ( ! is_array( $item ) ) {
@@ -310,16 +377,21 @@ final class RequestBroker
 		return $this->projectStatus( $item );
 	}
 	/** @return array<string,mixed> */
-	public function targetDiagnostics( int $submissionId ): array
-	{
+	public function targetDiagnostics( int $submissionId ): array {
 		$this->protocolLive();
 		$item = $this->submissions[ $submissionId ] ?? null;
 		if ( ! is_array( $item ) ) {
-			return array( 'state' => 'inactive', 'diagnostics' => array( array( 'code' => 'declaration_invalid' ) ) );
+			return array(
+				'state'       => 'inactive',
+				'diagnostics' => array( array( 'code' => 'declaration_invalid' ) ),
+			);
 		}
 		$status = $this->projectStatus( $item );
 		if ( ! isset( $item['handle'] ) || ! is_object( $item['handle'] ) || 'inactive' === $status['state'] ) {
-			return array( 'state' => $status['state'], 'diagnostics' => array( array( 'code' => $status['code'] ) ) );
+			return array(
+				'state'       => $status['state'],
+				'diagnostics' => array( array( 'code' => $status['code'] ) ),
+			);
 		}
 		try {
 			$diagnostics = $item['handle']->diagnostics();
@@ -333,8 +405,7 @@ final class RequestBroker
 			return $this->inactiveDiagnostics( $this->submissions[ $submissionId ] );
 		}
 	}
-	public function refreshTarget( int $submissionId ): bool
-	{
+	public function refreshTarget( int $submissionId ): bool {
 		if ( ! $this->protocolLive() ) {
 			return false;
 		}
@@ -356,21 +427,20 @@ final class RequestBroker
 	}
 
 	/** @return array<string,mixed> */
-	public function diagnostics(): array
-	{
+	public function diagnostics(): array {
 		$this->protocolLive();
 		return array(
-			'protocol_version' => 4, 'state' => $this->state,
+			'protocol_version'     => 4,
+			'state'                => $this->state,
 			'activation_attempted' => $this->activationAttempted,
-			'candidate_count' => count( $this->candidates ),
-			'submission_count' => count( $this->submissions ),
+			'candidate_count'      => count( $this->candidates ),
+			'submission_count'     => count( $this->submissions ),
 			'logical_target_count' => count( $this->targetHandles ),
-			'diagnostics' => $this->diagnostics,
+			'diagnostics'          => $this->diagnostics,
 		);
 	}
 
-	private function protocolLive(): bool
-	{
+	private function protocolLive(): bool {
 		if ( in_array( $this->state, array( 'inactive', 'conflict' ), true ) ) {
 			return true;
 		}
@@ -385,8 +455,7 @@ final class RequestBroker
 	}
 
 	/** @param array<string,mixed> $environment */
-	private function validEnvironment( array $environment ): bool
-	{
+	private function validEnvironment( array $environment ): bool {
 		if (
 			! $this->exactKeys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
 			|| 4 !== $environment['runtime_protocol']
@@ -405,14 +474,17 @@ final class RequestBroker
 	}
 
 	/** @return array{loaded:bool,state:string,code:string,diagnostics:list<array{code:string}>} */
-	private function result( bool $loaded, string $code ): array
-	{
-		return array( 'loaded' => $loaded, 'state' => $this->state, 'code' => $code, 'diagnostics' => $this->diagnostics );
+	private function result( bool $loaded, string $code ): array {
+		return array(
+			'loaded'      => $loaded,
+			'state'       => $this->state,
+			'code'        => $code,
+			'diagnostics' => $this->diagnostics,
+		);
 	}
 
 	/** @param array<string,mixed> $result */
-	private function applyComposition( int $expectedId, array $result ): void
-	{
+	private function applyComposition( int $expectedId, array $result ): void {
 		$id = $result['submission_id'] ?? 0;
 		if ( ! $this->exactKeys( $result, array( 'submission_id', 'accepted', 'code', 'target_key', 'target_handle' ) )
 			|| ! is_int( $id )
@@ -422,7 +494,7 @@ final class RequestBroker
 			|| ! is_string( $result['code'] ) ) {
 			throw new RuntimeException( 'Invalid target result.' );
 		}
-		$admitted = in_array( $result['code'], array( 'target_active', 'target_duplicate', 'declaration_deferred_operation_started' ), true );
+		$admitted    = in_array( $result['code'], array( 'target_active', 'target_duplicate', 'declaration_deferred_operation_started' ), true );
 		$validHandle = is_object( $result['target_handle'] )
 			&& is_string( $this->selectedRoot )
 			&& $this->ownedBy( $result['target_handle'], $this->selectedRoot )
@@ -451,14 +523,14 @@ final class RequestBroker
 		} elseif ( isset( $this->targetHandles[ $result['target_key'] ] ) ) {
 			throw new RuntimeException( 'Invalid target result.' );
 		}
-		$status = $result['target_handle']->status();
+		$status      = $result['target_handle']->status();
 		$diagnostics = $result['target_handle']->diagnostics();
 		if ( ! $this->validStatus( $status ) || ! $this->validDiagnostics( $diagnostics, $status['state'] ) ) {
 			throw new RuntimeException( 'Invalid target result.' );
 		}
-		$invalidActive = 'target_active' === $result['code']
+		$invalidActive    = 'target_active' === $result['code']
 			&& ( 'active' !== $status['state'] || 'target_active' !== $status['code'] );
-		$invalidDeferred = 'declaration_deferred_operation_started' === $result['code']
+		$invalidDeferred  = 'declaration_deferred_operation_started' === $result['code']
 			&& ( 'deferred' !== $status['state'] || 'declaration_deferred_operation_started' !== $status['code'] );
 		$invalidDuplicate = 'target_duplicate' === $result['code']
 			&& ! (
@@ -468,8 +540,8 @@ final class RequestBroker
 		if ( $invalidActive || $invalidDeferred || $invalidDuplicate ) {
 			throw new RuntimeException( 'Invalid target result.' );
 		}
-		$this->submissions[ $id ]['handle'] = $result['target_handle'];
-		$this->submissions[ $id ]['key'] = $result['target_key'];
+		$this->submissions[ $id ]['handle']      = $result['target_handle'];
+		$this->submissions[ $id ]['key']         = $result['target_key'];
 		$this->submissions[ $id ]['last_status'] = $status;
 		if ( 'target_duplicate' !== $result['code'] ) {
 			$this->targetHandles[ $result['target_key'] ] = $result['target_handle'];
@@ -477,13 +549,12 @@ final class RequestBroker
 	}
 
 	/** @param array<string,mixed> $item @return array<string,mixed> */
-	private function projectStatus( array $item ): array
-	{
+	private function projectStatus( array $item ): array {
 		if ( isset( $item['terminal_code'] ) || null !== $this->terminalCode ) {
 			$last = $this->lastNativeStatus( $item );
 			if ( is_array( $last['native'] ?? null ) ) {
 				$last['native']['offered_release_identity'] = null;
-				$last['native']['offered_version'] = null;
+				$last['native']['offered_version']          = null;
 			}
 			return $this->status(
 				'inactive',
@@ -510,8 +581,7 @@ final class RequestBroker
 	}
 
 	/** @param array<string,mixed> $item @return array<string,mixed> */
-	private function lastNativeStatus( array $item ): array
-	{
+	private function lastNativeStatus( array $item ): array {
 		if ( isset( $item['last_status'] ) && is_array( $item['last_status'] ) ) {
 			return $item['last_status'];
 		}
@@ -527,21 +597,21 @@ final class RequestBroker
 	}
 
 	/** @param array<string,mixed> $item @return array{state:string,diagnostics:list<array{code:string}>} */
-	private function inactiveDiagnostics( array $item ): array
-	{
+	private function inactiveDiagnostics( array $item ): array {
 		$status = $this->projectStatus( $item );
-		return array( 'state' => $status['state'], 'diagnostics' => array( array( 'code' => $status['code'] ) ) );
+		return array(
+			'state'       => $status['state'],
+			'diagnostics' => array( array( 'code' => $status['code'] ) ),
+		);
 	}
 
-	private function disable( string $code ): array
-	{
+	private function disable( string $code ): array {
 		$this->diagnose( $code );
 		$this->terminalCode = $code;
-		$this->state = 'protocol_conflict_inactive' === $code ? 'conflict' : 'inactive';
+		$this->state        = 'protocol_conflict_inactive' === $code ? 'conflict' : 'inactive';
 		return $this->result( false, $code );
 	}
-	private function ownedBy( object $value, string $root ): bool
-	{
+	private function ownedBy( object $value, string $root ): bool {
 		try {
 			$file = ( new \ReflectionClass( $value ) )->getFileName();
 		} catch ( \ReflectionException ) {
@@ -550,8 +620,7 @@ final class RequestBroker
 		return is_string( $file ) && str_starts_with( $file, $root . DIRECTORY_SEPARATOR );
 	}
 
-	private function exactPublicMethods( object $value, array $expected ): bool
-	{
+	private function exactPublicMethods( object $value, array $expected ): bool {
 		$methods = array();
 		foreach ( ( new \ReflectionClass( $value ) )->getMethods( \ReflectionMethod::IS_PUBLIC ) as $method ) {
 			if ( ! $method->isConstructor() ) {
@@ -563,26 +632,23 @@ final class RequestBroker
 		return $expected === $methods;
 	}
 
-	private function terminal( int $id, string $code ): void
-	{
+	private function terminal( int $id, string $code ): void {
 		$this->submissions[ $id ]['terminal_code'] = $code;
 	}
 
 	/** @return array<string,mixed> */
-	private function status( string $state, bool $accepted, bool $hooks, string $code, mixed $native = null ): array
-	{
+	private function status( string $state, bool $accepted, bool $hooks, string $code, mixed $native = null ): array {
 		return array(
-			'state' => $state,
+			'state'                => $state,
 			'declaration_accepted' => $accepted,
-			'hooks_registered' => $hooks,
-			'code' => $code,
-			'native' => $native,
+			'hooks_registered'     => $hooks,
+			'code'                 => $code,
+			'native'               => $native,
 		);
 	}
 
 	/** @param array<string,mixed> $status */
-	private function validStatus( mixed $status ): bool
-	{
+	private function validStatus( mixed $status ): bool {
 		if (
 			! is_array( $status )
 			|| ! $this->exactKeys( $status, array( 'state', 'declaration_accepted', 'hooks_registered', 'code', 'native' ) )
@@ -622,8 +688,7 @@ final class RequestBroker
 		};
 	}
 
-	private function validNativeStatus( mixed $native ): bool
-	{
+	private function validNativeStatus( mixed $native ): bool {
 		$keys = array(
 			'candidate_header_version',
 			'candidate_tag',
@@ -658,8 +723,7 @@ final class RequestBroker
 	}
 
 	/** @param array<string,mixed> $diagnostics */
-	private function validDiagnostics( mixed $diagnostics, string $state ): bool
-	{
+	private function validDiagnostics( mixed $diagnostics, string $state ): bool {
 		if (
 			! is_array( $diagnostics )
 			|| ! $this->exactKeys( $diagnostics, array( 'state', 'diagnostics' ) )
@@ -682,8 +746,7 @@ final class RequestBroker
 		return true;
 	}
 
-	private function validDiagnosticCode( string $code ): bool
-	{
+	private function validDiagnosticCode( string $code ): bool {
 		$runtimeCodes = array(
 			'activation_in_progress',
 			'late_candidate_rejected',
@@ -701,8 +764,7 @@ final class RequestBroker
 		);
 	}
 	/** @param array<string,mixed> $value */
-	private function declarationCode( array $value ): ?string
-	{
+	private function declarationCode( array $value ): ?string {
 		$keys = array(
 			'target_type',
 			'installed_file',
@@ -720,11 +782,11 @@ final class RequestBroker
 		) {
 			return 'declaration_invalid';
 		}
-		$file = $value['installed_file'];
+		$file       = $value['installed_file'];
 		$normalized = is_string( $file ) ? str_replace( '\\', '/', $file ) : '';
 		$isAbsolute = str_starts_with( $normalized, '/' ) || 1 === preg_match( '/\A[A-Za-z]:\//D', $normalized );
-		$isUnc = str_starts_with( $normalized, '//' );
-		$uncParts = $isUnc ? explode( '/', substr( $normalized, 2 ) ) : array();
+		$isUnc      = str_starts_with( $normalized, '//' );
+		$uncParts   = $isUnc ? explode( '/', substr( $normalized, 2 ) ) : array();
 		if (
 			! is_string( $file )
 			|| '' === $file
@@ -755,29 +817,40 @@ final class RequestBroker
 		if ( ! in_array( $value['update_policy'], array( 'disabled', 'forced-off', 'manual', 'automatic' ), true ) ) {
 			return 'update_policy_invalid';
 		}
-		if ( ! is_int( $value['maximum_artifact_bytes'] ) || 0 >= $value['maximum_artifact_bytes'] ) return 'maximum_artifact_bytes_invalid';
+		if ( ! is_int( $value['maximum_artifact_bytes'] ) || 0 >= $value['maximum_artifact_bytes'] ) {
+			return 'maximum_artifact_bytes_invalid';
+		}
 		return null === $value['credential_resolver'] || is_callable( $value['credential_resolver'] ) ? null : 'credential_resolver_invalid';
 	}
 
 	/** @param array<string,mixed> $value */
-	private function releaseDeclarationCode( array $value ): ?string
-	{
+	private function releaseDeclarationCode( array $value ): ?string {
 		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes' );
-		if ( ! $this->exactKeys( $value, $keys ) || ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true ) ) return 'invalid_configuration';
-		if ( ! is_string( $value['provider_code'] ) || 1 !== preg_match( '/\\A[a-z][a-z0-9_-]{0,31}\\z/D', $value['provider_code'] ) ) return 'invalid_configuration';
-		if ( ! $this->opaque( $value['repository_locator'], 255 ) || ! $this->opaque( $value['repository_identity'], 191 ) ) return 'invalid_configuration';
-		if ( ! in_array( $value['channel'], array( 'stable', 'prerelease' ), true ) || ! is_int( $value['maximum_artifact_bytes'] ) || 0 >= $value['maximum_artifact_bytes'] ) return 'invalid_configuration';
+		if ( ! $this->exactKeys( $value, $keys ) || ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true ) ) {
+			return 'invalid_configuration';
+		}
+		if ( ! is_string( $value['provider_code'] ) || 1 !== preg_match( '/\\A[a-z][a-z0-9_-]{0,31}\\z/D', $value['provider_code'] ) ) {
+			return 'invalid_configuration';
+		}
+		if ( ! $this->opaque( $value['repository_locator'], 255 ) || ! $this->opaque( $value['repository_identity'], 191 ) ) {
+			return 'invalid_configuration';
+		}
+		if ( ! in_array( $value['channel'], array( 'stable', 'prerelease' ), true ) || ! is_int( $value['maximum_artifact_bytes'] ) || 0 >= $value['maximum_artifact_bytes'] ) {
+			return 'invalid_configuration';
+		}
 		return null === $value['credential_resolver'] || is_callable( $value['credential_resolver'] ) ? null : 'invalid_configuration';
 	}
 
 	/** @return array{accepted:false,code:string,source_handle:null} */
-	private function releaseFailure( string $code ): array
-	{
-		return array( 'accepted' => false, 'code' => $code, 'source_handle' => null );
+	private function releaseFailure( string $code ): array {
+		return array(
+			'accepted'      => false,
+			'code'          => $code,
+			'source_handle' => null,
+		);
 	}
 
-	private function opaque( mixed $value, int $limit ): bool
-	{
+	private function opaque( mixed $value, int $limit ): bool {
 		return is_string( $value )
 			&& '' !== $value
 			&& strlen( $value ) <= $limit
@@ -785,16 +858,14 @@ final class RequestBroker
 			&& 1 === preg_match( '/\A[^\p{C}\p{Z}\s]+\z/u', $value );
 	}
 
-	private function diagnose( string $code ): void
-	{
+	private function diagnose( string $code ): void {
 		if ( self::MAX_DIAGNOSTICS === count( $this->diagnostics ) ) {
 			array_shift( $this->diagnostics );
 		}
 		$this->diagnostics[] = array( 'code' => $code );
 	}
 
-	private function diagnoseOnce( string $code ): void
-	{
+	private function diagnoseOnce( string $code ): void {
 		foreach ( $this->diagnostics as $diagnostic ) {
 			if ( $code === $diagnostic['code'] ) {
 				return;
@@ -804,8 +875,7 @@ final class RequestBroker
 	}
 
 	/** @return array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string} */
-	private function candidate( string $copyFile ): array
-	{
+	private function candidate( string $copyFile ): array {
 		$file = 'runtime-copy.json' === basename( $copyFile ) && ! is_link( $copyFile ) && is_file( $copyFile ) ? realpath( $copyFile ) : false;
 		$root = false === $file ? false : realpath( dirname( $file ) );
 		if ( false === $file || false === $root || $file !== $root . DIRECTORY_SEPARATOR . 'runtime-copy.json' ) {
@@ -839,16 +909,15 @@ final class RequestBroker
 		}
 		return array(
 			'package_revision' => $facts['package_revision'],
-			'package_version' => $facts['package_version'],
-			'php_floor' => $facts['php_floor'],
-			'runtime_file' => $runtime,
-			'source_root' => $root,
-			'wordpress_floor' => $facts['wordpress_floor'],
+			'package_version'  => $facts['package_version'],
+			'php_floor'        => $facts['php_floor'],
+			'runtime_file'     => $runtime,
+			'source_root'      => $root,
+			'wordpress_floor'  => $facts['wordpress_floor'],
 		);
 	}
 
-	private function packageRevision( string $root ): string
-	{
+	private function packageRevision( string $root ): string {
 		$files = array( 'bootstrap.php', 'runtime.php' );
 		foreach ( $files as $file ) {
 			$this->regularFile( $root, $file );
@@ -866,7 +935,7 @@ final class RequestBroker
 			if ( ! $entry->isFile() || 'php' !== $entry->getExtension() ) {
 				continue;
 			}
-			$path = $entry->getPathname();
+			$path     = $entry->getPathname();
 			$relative = str_replace( '\\', '/', substr( $path, strlen( $root ) + 1 ) );
 			$this->regularFile( $root, $relative );
 			$files[] = $relative;
@@ -884,13 +953,12 @@ final class RequestBroker
 		return hash( 'sha256', $payload );
 	}
 
-	private function regularFile( string $root, string $relative ): string
-	{
+	private function regularFile( string $root, string $relative ): string {
 		if ( '' === $relative || str_contains( $relative, "\0" ) || str_starts_with( $relative, '/' ) || preg_match( '#(?:\\A|/)\.\.(?:/|\\z)#', $relative ) ) {
 			throw new RuntimeException( 'Invalid runtime source.' );
 		}
 		$expected = $root . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $relative );
-		$actual = realpath( $expected );
+		$actual   = realpath( $expected );
 		if ( is_link( $expected ) || ! is_file( $expected ) || false === $actual || $actual !== $expected ) {
 			throw new RuntimeException( 'Invalid runtime source.' );
 		}
@@ -901,8 +969,7 @@ final class RequestBroker
 	/** @param array<string, mixed> $environment
 	 * @return array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string}
 	 */
-	private function select( array $environment ): array
-	{
+	private function select( array $environment ): array {
 		if (
 			array() === $this->candidates
 			|| ! $this->exactKeys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
@@ -914,11 +981,13 @@ final class RequestBroker
 		}
 		$this->version( $environment['php_version'] );
 		$wordpressVersion = $this->wordpressVersion( $environment['wordpress_version'] );
-		$compatible = array_values( array_filter(
-			$this->candidates,
-			fn ( array $candidate ): bool => $this->compare( $candidate['php_floor'], $environment['php_version'] ) <= 0
-				&& $this->compare( $candidate['wordpress_floor'], $wordpressVersion ) <= 0
-		) );
+		$compatible       = array_values(
+			array_filter(
+				$this->candidates,
+				fn ( array $candidate ): bool => $this->compare( $candidate['php_floor'], $environment['php_version'] ) <= 0
+					&& $this->compare( $candidate['wordpress_floor'], $wordpressVersion ) <= 0
+			)
+		);
 		if ( array() === $compatible ) {
 			throw new RuntimeException( 'No compatible runtime.' );
 		}
@@ -937,8 +1006,7 @@ final class RequestBroker
 		return $compatible[0];
 	}
 
-	private function wordpressVersion( string $value ): string
-	{
+	private function wordpressVersion( string $value ): string {
 		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\z/D', $value ) ) {
 			$value .= '.0';
 		}
@@ -947,8 +1015,7 @@ final class RequestBroker
 	}
 
 	/** @return array{core:list<string>,prerelease:list<string>} */
-	private function version( string $value ): array
-	{
+	private function version( string $value ): array {
 		$pattern = '/\Av?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)'
 			. '(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?'
 			. '(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\z/D';
@@ -957,14 +1024,18 @@ final class RequestBroker
 		}
 		$prerelease = isset( $match[4] ) ? explode( '.', $match[4] ) : array();
 		foreach ( $prerelease as $identifier ) {
-			if ( preg_match( '/\A[0-9]+\z/D', $identifier ) && ! preg_match( '/\A(?:0|[1-9]\d*)\z/D', $identifier ) ) throw new RuntimeException( 'Invalid runtime version.' );
+			if ( preg_match( '/\A[0-9]+\z/D', $identifier ) && ! preg_match( '/\A(?:0|[1-9]\d*)\z/D', $identifier ) ) {
+				throw new RuntimeException( 'Invalid runtime version.' );
+			}
 		}
-		return array( 'core' => array( $match[1], $match[2], $match[3] ), 'prerelease' => $prerelease );
+		return array(
+			'core'       => array( $match[1], $match[2], $match[3] ),
+			'prerelease' => $prerelease,
+		);
 	}
 
-	private function compare( string $left, string $right ): int
-	{
-		$left = $this->version( $left );
+	private function compare( string $left, string $right ): int {
+		$left  = $this->version( $left );
 		$right = $this->version( $right );
 		foreach ( array( 0, 1, 2 ) as $index ) {
 			$comparison = strlen( $left['core'][ $index ] ) <=> strlen( $right['core'][ $index ] )
@@ -977,26 +1048,34 @@ final class RequestBroker
 			return array() === $left['prerelease'] ? ( array() === $right['prerelease'] ? 0 : 1 ) : -1;
 		}
 		for ( $index = 0; $index < max( count( $left['prerelease'] ), count( $right['prerelease'] ) ); ++$index ) {
-			if ( ! isset( $left['prerelease'][ $index ] ) ) return -1;
-			if ( ! isset( $right['prerelease'][ $index ] ) ) return 1;
+			if ( ! isset( $left['prerelease'][ $index ] ) ) {
+				return -1;
+			}
+			if ( ! isset( $right['prerelease'][ $index ] ) ) {
+				return 1;
+			}
 			$a = $left['prerelease'][ $index ];
 			$b = $right['prerelease'][ $index ];
-			if ( $a === $b ) continue;
+			if ( $a === $b ) {
+				continue;
+			}
 			$aNumeric = 1 === preg_match( '/\A[0-9]+\z/D', $a );
 			$bNumeric = 1 === preg_match( '/\A[0-9]+\z/D', $b );
-			if ( $aNumeric && $bNumeric ) return strlen( $a ) <=> strlen( $b ) ?: strcmp( $a, $b );
-			if ( $aNumeric !== $bNumeric ) return $aNumeric ? -1 : 1;
+			if ( $aNumeric && $bNumeric ) {
+				return strlen( $a ) <=> strlen( $b ) ?: strcmp( $a, $b );
+			}
+			if ( $aNumeric !== $bNumeric ) {
+				return $aNumeric ? -1 : 1;
+			}
 			return strcmp( $a, $b );
 		}
 		return 0;
 	}
 
-	private function exactKeys( array $value, array $keys ): bool
-	{
+	private function exactKeys( array $value, array $keys ): bool {
 		return array_keys( $value ) === $keys;
 	}
-	private function read( string $file ): string
-	{
+	private function read( string $file ): string {
 		$content = file_get_contents( $file );
 		if ( false === $content ) {
 			throw new RuntimeException( 'Unreadable runtime copy.' );
