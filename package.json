@@ -3,12 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "audit": "pnpm audit --audit-level=high",
     "format": "prettier --write 'scripts/**/*.mjs' 'tests/**/*.mjs' 'eslint.config.mjs'",
     "format:check": "prettier --check 'scripts/**/*.mjs' 'tests/**/*.mjs' 'eslint.config.mjs'",
     "lint:js": "eslint 'scripts/**/*.mjs' 'tests/**/*.mjs'",
     "lint:js:fix": "eslint 'scripts/**/*.mjs' 'tests/**/*.mjs' --fix",
     "test": "node --test tests/release-publisher.test.mjs",
-    "check": "pnpm format:check && pnpm lint:js && pnpm test"
+    "check": "pnpm audit && pnpm format:check && pnpm lint:js && pnpm test"
   },
   "engines": {
     "node": ">=24.11.0 <25",
