@@ -1,0 +1,56 @@
+name: Apply Quality Format
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/apply-quality-format.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'chore/quality-tooling'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24.11.0'
+      - name: Install JavaScript dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@11.7.0 --activate
+          pnpm install --frozen-lockfile
+      - name: Apply PHP and JavaScript formatters
+        shell: bash
+        run: |
+          set -u
+          vendor/bin/phpcbf --standard=.phpcs.xml --report=summary || phpcbf_status=$?
+          if [ "${phpcbf_status:-0}" -gt 1 ]; then exit "$phpcbf_status"; fi
+          pnpm format
+          pnpm lint:js:fix
+      - name: Commit formatter output
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -u
+          git add '*.php' '*.mjs' scripts src tests bootstrap.php runtime.php 2>/dev/null || true
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Format source with project quality standards'
+          git push origin HEAD:${GITHUB_HEAD_REF}
