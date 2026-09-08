@@ -20,4 +20,5 @@
 /phpstan.neon export-ignore
 /phpunit.xml export-ignore
 /pnpm-lock.yaml export-ignore
+/pnpm-workspace.yaml export-ignore
 /release-please-config.json export-ignore
