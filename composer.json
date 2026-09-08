@@ -45,18 +45,19 @@
     "check": [
       "@validate:strict",
       "@check:updater-support",
+      "@audit:composer",
       "@lint:syntax",
       "@lint:php",
       "@analyze",
       "@test:unit",
-      "@test:no-dev-consumer",
-      "@test:release-publisher"
+      "@test:no-dev-consumer"
     ],
     "check:phase3": [
       "@check",
       "@test:parity"
     ],
     "analyze": "phpstan analyse --configuration=phpstan.neon --no-progress --memory-limit=1G",
+    "audit:composer": "composer audit --locked --no-interaction",
     "format:php": "phpcbf --standard=.phpcs.xml --report=summary",
     "lint:php": "phpcs --standard=.phpcs.xml --report=summary",
     "lint:syntax": "php scripts/lint-php.php",
