@@ -1,0 +1,43 @@
+name: Refresh Composer Lock
+
+on:
+  pull_request:
+    paths:
+      - composer.json
+      - .github/workflows/refresh-composer-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'chore/quality-tooling'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip
+          tools: composer:v2
+      - name: Refresh lock metadata without updating resolved packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer update --lock --no-interaction --prefer-dist --no-progress
+          php -r '$lock=json_decode(file_get_contents("composer.lock"),true,512,JSON_THROW_ON_ERROR); foreach($lock["packages-dev"] as $p){if(($p["name"]??null)==="ran/updater-support"){exit(($p["source"]["reference"]??null)==="98d3677334c62e27e206f3b7cd2f2e715ea30f1c"?0:1);}} exit(1);'
+      - name: Commit refreshed lock metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add composer.lock
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Refresh Composer lock metadata'
+          git push origin HEAD:${GITHUB_HEAD_REF}
