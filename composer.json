@@ -47,7 +47,6 @@
       "@check:updater-support",
       "@audit:composer",
       "@lint:syntax",
-      "@lint:php",
       "@analyze",
       "@test:unit",
       "@test:no-dev-consumer"
@@ -56,6 +55,7 @@
       "@check",
       "@test:parity"
     ],
+    "check:php-style": "@lint:php",
     "analyze": "phpstan analyse --configuration=phpstan.neon --no-progress --memory-limit=1G",
     "audit:composer": "composer audit --locked --no-interaction",
     "format:php": "phpcbf --standard=.phpcs.xml --report=summary",
