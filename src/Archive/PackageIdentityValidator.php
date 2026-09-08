@@ -20,12 +20,15 @@ final class PackageIdentityValidator {
 	private const PROSPECTIVE_POLICY_KEYS = array( 'artifact_sha256', 'artifact_size', 'canonical_update_uri', 'maximum_artifact_bytes', 'php_runtime_version', 'target_type', 'version', 'wordpress_runtime_version' );
 	private const POLICY_KEYS = array( 'archive_root', 'configuration_update_uri', 'header_file', 'installed_package_identity', 'maximum_artifact_bytes', 'metadata_name', 'offer_update_uri', 'php_runtime_version', 'provider_code', 'repository_identity', 'repository_locator', 'staged_package_update_uri', 'target_type', 'theme_template', 'wordpress_runtime_version' );
 	private ?\Closure $afterOpen = null;
+	/** @var WeakMap<ValidatedPackage, array{descriptor_fingerprint:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,sha256:string,size:int,update_uri:string}> */
 	private WeakMap $receiptProofs;
 
 	public function __construct() { $this->receiptProofs = new WeakMap(); }
 	private function __clone(): void {}
+	/** @internal Test-only race seam; invoked reflectively without widening the public API. */
+	private function setAfterOpenForTesting( ?\Closure $afterOpen ): void { $this->afterOpen = $afterOpen; }
 
-	/** @return array{package_root:string,main_file:string}|null */
+	/** @param array<string,mixed> $policy @return array{package_root:string,main_file:string}|null */
 	public function inspectProspective( array $policy, string $archivePath ): ?array {
 		if ( count( $policy ) !== count( self::PROSPECTIVE_POLICY_KEYS ) ) {
 			return null;
@@ -214,7 +217,6 @@ final class PackageIdentityValidator {
 		return $facts['canonical_update_uri'] === CanonicalUpdateUri::canonicalizeBoundaries( array( 'archive_preflight' => $facts['canonical_update_uri'], 'configuration' => $policy['configuration_update_uri'], 'offer' => $policy['offer_update_uri'], 'staged_package' => $policy['staged_package_update_uri'] ) );
 	}
 
-	/** @param array<string, mixed> $facts */
 	/** @param array<string,mixed> $facts @return array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null */
 	private function archiveIdentity( string $path, array $facts ): ?array {
 		clearstatcache( true, $path ); $stat = @lstat( $path );
@@ -223,7 +225,11 @@ final class PackageIdentityValidator {
 		return $this->matchesArchiveIdentity( $path, $facts, $identity ) ? $identity : null;
 	}
 
-	/** @param array<string,mixed> $facts @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity */
+	/**
+	 * @phpstan-impure
+	 * @param array<string,mixed> $facts
+	 * @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity
+	 */
 	private function matchesArchiveIdentity( string $path, array $facts, array $identity ): bool {
 		$digest = @hash_file( 'sha256', $path ); clearstatcache( true, $path ); $stat = @lstat( $path );
 		if ( ! is_string( $digest ) || ! hash_equals( $facts['artifact_sha256'], $digest ) || ! is_array( $stat ) || $stat['size'] !== $facts['artifact_size'] ) return false;
