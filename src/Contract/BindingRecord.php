@@ -132,7 +132,11 @@ final readonly class BindingRecord
             && IdentityDescriptor::isBoundedOpaqueIdentity( $value['php_runtime_version'], 64 )
             && IdentityDescriptor::isBoundedOpaqueIdentity( $value['wordpress_runtime_version'], 64 );
     }
-    /** @param array<string,mixed> $value @param list<string> $keys @return array<string,mixed> */
+    /**
+     * @param array<string,mixed> $value
+     * @param list<string> $keys
+     * @return array<string,mixed>
+     */
     private static function ordered(array $value, array $keys): array
     {
         $ordered = array();
