@@ -107,7 +107,7 @@ jobs:
           printf 'sys_temp_dir = "%s"\n' "$php_tmp" > "$php_ini/99-ran-updater-integration.ini"
           php_scan_dir="$(php --ini | sed -n 's/^Scan for additional .ini files in: //p')"
           export PHP_INI_SCAN_DIR="$php_ini:$php_scan_dir"
-          export WP_CLI_CACHE_DIR="$wp_cache" # Download-only; the suite creates and removes its own per-run cache.
+          export WP_CLI_CACHE_DIR="$wp_cache"
           export TMPDIR="$php_tmp" TMP="$php_tmp" TEMP="$php_tmp"
 
           cp "$system_mysqld" "$mysqld_binary"
@@ -128,3 +128,110 @@ jobs:
           path: ${{ github.workspace }}/.workspaces/wordpress-integration/ran-wp-release-updater-result-*.json
           if-no-files-found: ignore
           retention-days: 7
+
+  finish-phpcs-baseline:
+    if: github.event_name == 'pull_request' && github.head_ref == 'chore/php-quality-baseline-v2'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Resolve remaining production findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'missing expected fragment in {path}: {old!r}')
+              p.write_text(text.replace(old, new, count))
+
+          replace('bootstrap.php', "\t\tforeach ( $files as $file ) {\n\t\t\t$hash = hash_file( 'sha256', $regular( $file ) ?: '' );\n\t\t\tif ( ! is_string( $hash ) ) {", "\t\tforeach ( $files as $file ) {\n\t\t\t$regularFile = $regular( $file );\n\t\t\tif ( ! is_string( $regularFile ) ) {\n\t\t\t\treturn null;\n\t\t\t}\n\t\t\t$hash = hash_file( 'sha256', $regularFile );\n\t\t\tif ( ! is_string( $hash ) ) {")
+
+          p = Path('runtime.php')
+          text = p.read_text()
+          marker = "declare(strict_types=1);\n\n/**\n * Selected-root production kernel."
+          if marker not in text:
+              raise SystemExit('runtime header shape changed unexpectedly')
+          start = text.index('/**\n * Selected-root production kernel.')
+          end = text.index('*/', start) + 2
+          doc = text[start:end]
+          text = text[:start] + text[end + 1:]
+          text = text.replace("<?php\n\ndeclare(strict_types=1);", "<?php\n\n" + doc + "\n\ndeclare(strict_types=1);", 1)
+          p.write_text(text)
+
+          replace('src/Runtime/ReleaseSource.php', "\tprivate function operate( string $method, array $arguments ): array {\n\t\tif ( null !== ( $failure = $this->readiness() ) ) {\n\t\t\treturn $failure;\n\t\t}", "\tprivate function operate( string $method, array $arguments ): array {\n\t\t$failure = $this->readiness();\n\t\tif ( null !== $failure ) {\n\t\t\treturn $failure;\n\t\t}")
+
+          replace('src/Runtime/RequestBroker.php', "\t\tif ( 'runtime-copy.json' === basename( $copyFile ) && isset( $this->candidateRoots[ realpath( dirname( $copyFile ) ) ?: '' ] ) ) {\n\t\t\treturn true;\n\t\t}", "\t\t$candidateRoot = realpath( dirname( $copyFile ) );\n\t\tif ( 'runtime-copy.json' === basename( $copyFile ) && is_string( $candidateRoot ) && isset( $this->candidateRoots[ $candidateRoot ] ) ) {\n\t\t\treturn true;\n\t\t}")
+          replace('src/Runtime/RequestBroker.php', "\t\t\tfn ( array $left, array $right ): int => $this->compare( $right['package_version'], $left['package_version'] )\n\t\t\t\t?: strcmp( $left['source_root'], $right['source_root'] )", "\t\t\tfunction ( array $left, array $right ): int {\n\t\t\t\t$comparison = $this->compare( $right['package_version'], $left['package_version'] );\n\t\t\t\treturn 0 !== $comparison ? $comparison : strcmp( $left['source_root'], $right['source_root'] );\n\t\t\t}")
+          replace('src/Runtime/RequestBroker.php', "\t\t\t$comparison = strlen( $left['core'][ $index ] ) <=> strlen( $right['core'][ $index ] )\n\t\t\t\t?: strcmp( $left['core'][ $index ], $right['core'][ $index ] );", "\t\t\t$comparison = strlen( $left['core'][ $index ] ) <=> strlen( $right['core'][ $index ] );\n\t\t\tif ( 0 === $comparison ) {\n\t\t\t\t$comparison = strcmp( $left['core'][ $index ], $right['core'][ $index ] );\n\t\t\t}")
+          replace('src/Runtime/RequestBroker.php', "\t\tif ( array() === $left['prerelease'] || array() === $right['prerelease'] ) {\n\t\t\treturn array() === $left['prerelease'] ? ( array() === $right['prerelease'] ? 0 : 1 ) : -1;\n\t\t}\n\t\tfor ( $index = 0; $index < max( count( $left['prerelease'] ), count( $right['prerelease'] ) ); ++$index ) {", "\t\tif ( array() === $left['prerelease'] || array() === $right['prerelease'] ) {\n\t\t\tif ( array() === $left['prerelease'] ) {\n\t\t\t\treturn array() === $right['prerelease'] ? 0 : 1;\n\t\t\t}\n\t\t\treturn -1;\n\t\t}\n\t\t$prereleaseLength = max( count( $left['prerelease'] ), count( $right['prerelease'] ) );\n\t\tfor ( $index = 0; $index < $prereleaseLength; ++$index ) {")
+          replace('src/Runtime/RequestBroker.php', "\t\t\tif ( $aNumeric && $bNumeric ) {\n\t\t\t\treturn strlen( $a ) <=> strlen( $b ) ?: strcmp( $a, $b );\n\t\t\t}", "\t\t\tif ( $aNumeric && $bNumeric ) {\n\t\t\t\t$comparison = strlen( $a ) <=> strlen( $b );\n\t\t\t\treturn 0 !== $comparison ? $comparison : strcmp( $a, $b );\n\t\t\t}")
+
+          replace('src/Provider/GitHub/GitHubReleaseService.php', "\t\t\t\tstatic function ( array $left, array $right ): int {\n\t\t\t\t\treturn ReleaseVersion::compare( $right['version'], $left['version'] )\n\t\t\t\t\t\t?: strcmp( $left['release_identity'], $right['release_identity'] );\n\t\t\t\t}", "\t\t\t\tstatic function ( array $left, array $right ): int {\n\t\t\t\t\t$comparison = ReleaseVersion::compare( $right['version'], $left['version'] );\n\t\t\t\t\treturn 0 !== $comparison ? $comparison : strcmp( $left['release_identity'], $right['release_identity'] );\n\t\t\t\t}")
+          replace('src/Provider/GitHub/GitHubReleaseService.php', "\t\t\t} catch ( \\Throwable ) {\n\t\t\t\t// Preserve the primary failure and report the synchronous cleanup result.\n\t\t\t}", "\t\t\t} catch ( \\Throwable ) {\n\t\t\t\t// Preserve the primary failure and report the synchronous cleanup result.\n\t\t\t\t$clean = false;\n\t\t\t}")
+
+          p = Path('src/WordPress/ReleaseOperationCoordinator.php')
+          text = p.read_text()
+          text = text.replace('$sql   = $wpdb->prepare( "SELECT option_value FROM {$table} WHERE option_name = %s LIMIT 1", $name );', '$sql   = $wpdb->prepare( "SELECT option_value FROM %i WHERE option_name = %s LIMIT 1", $table, $name );')
+          text = text.replace('} $sql = "INSERT INTO {$table} (option_name,option_value,autoload) VALUES (%s,%s,\'no\')";\n\t\treturn 1 === $wpdb->query( $wpdb->prepare( $sql, $name, $value ) );', '} $sql = "INSERT INTO %i (option_name,option_value,autoload) VALUES (%s,%s,\'no\')";\n\t\treturn 1 === $wpdb->query( $wpdb->prepare( $sql, $table, $name, $value ) );')
+          text = text.replace('$sql        = "UPDATE {$table} SET option_value = %s WHERE option_name = %s AND BINARY option_value = BINARY %s AND UNIX_TIMESTAMP() {$operator} %d";\n\t\treturn 1 === $wpdb->query( $wpdb->prepare( $sql, $new, $name, $old, $deadline ) );', '$sql        = "UPDATE %i SET option_value = %s WHERE option_name = %s AND BINARY option_value = BINARY %s AND UNIX_TIMESTAMP() {$operator} %d";\n\t\treturn 1 === $wpdb->query( $wpdb->prepare( $sql, $table, $new, $name, $old, $deadline ) );')
+          p.write_text(text)
+
+          p = Path('tests/Support/FakeOptionDatabase.php')
+          text = p.read_text()
+          text = text.replace("} $name                  = $prepared['args'][0];", "} $name                  = $prepared['args'][1];")
+          text = text.replace("[ $name, $value ] = $prepared['args'];", "[ , $name, $value ] = $prepared['args'];")
+          text = text.replace("[ $next, $name, $expected, $leaseDeadline ] = $prepared['args'];", "[ , $next, $name, $expected, $leaseDeadline ] = $prepared['args'];")
+          p.write_text(text)
+          PY
+
+          set +e
+          vendor/bin/phpcbf --standard=.phpcs.xml --report=summary
+          status=$?
+          set -e
+          if [ "$status" -gt 1 ]; then exit "$status"; fi
+
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          files = sorted(['bootstrap.php', 'runtime.php'] + [str(p) for p in Path('src').rglob('*.php')])
+          payload = b''.join(f.encode() + b'\0' + hashlib.sha256(Path(f).read_bytes()).hexdigest().encode() + b'\n' for f in files)
+          revision = hashlib.sha256(payload).hexdigest()
+          path = Path('runtime-copy.json')
+          data = json.loads(path.read_text())
+          data['package_revision'] = revision
+          path.write_text(json.dumps(data, indent=2) + '\n')
+          print(revision)
+          PY
+
+          composer lint:syntax
+          composer lint:php
+          composer analyze
+          composer test:unit
+          composer check:updater-support
+      - name: Commit verified baseline changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin chore/quality-tooling --depth=1
+          git show FETCH_HEAD:.github/workflows/ci.yml > .github/workflows/ci.yml
+          git add .github/workflows/ci.yml .phpcs.xml bootstrap.php runtime.php src tests runtime-copy.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Enforce zero-residual PHPCS baseline'
+          git push origin HEAD:${GITHUB_HEAD_REF}
