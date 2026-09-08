@@ -90,9 +90,6 @@ final class ArchiveScanner {
 		if ( null !== $collision ) {
 			return ArchiveScanResult::blocked( 'archive_path_unsafe' );
 		}
-		if ( ! is_string( $root ) ) {
-			return ArchiveScanResult::blocked( 'archive_root_mismatch' );
-		}
 
 		return ArchiveScanResult::ready( $root, $entries, $expanded );
 	}
