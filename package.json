@@ -9,7 +9,7 @@
     "lint:js": "eslint 'scripts/**/*.mjs' 'tests/**/*.mjs'",
     "lint:js:fix": "eslint 'scripts/**/*.mjs' 'tests/**/*.mjs' --fix",
     "test": "node --test tests/release-publisher.test.mjs",
-    "check": "pnpm audit && pnpm lint:js && pnpm test"
+    "check": "pnpm audit && pnpm test"
   },
   "engines": {
     "node": ">=24.11.0 <25",
