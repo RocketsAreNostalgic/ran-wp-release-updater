@@ -9,7 +9,7 @@ use PHPUnit\Framework\TestCase;
 final class NeutralKernelBoundaryTest extends TestCase {
 
 	public function testEveryProductionFileExcludesProviderProtocolAndIdentityAssumptions(): void {
-		$root = dirname( __DIR__, 2 );
+		$root  = dirname( __DIR__, 2 );
 		$files = glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE ) ?: array();
 		self::assertNotEmpty( $files );
 		foreach ( $files as $file ) {
@@ -26,7 +26,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 	}
 
 	public function testNeutralKernelContainsNoProviderProtocolOrWordPressTransport(): void {
-		$root = dirname( __DIR__, 2 );
+		$root  = dirname( __DIR__, 2 );
 		$files = array_merge(
 			glob( $root . '/src/Contract/*.php' ) ?: array(),
 			glob( $root . '/src/Runtime/*.php' ) ?: array()
@@ -54,7 +54,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		$root = dirname( __DIR__, 2 );
 		self::assertFileDoesNotExist( $root . '/runtime-catalogue.json' );
 		self::assertFileDoesNotExist( $root . '/src/Runtime/Composition/Github.php' );
-		$broker = (string) file_get_contents( $root . '/src/Runtime/RequestBroker.php' );
+		$broker  = (string) file_get_contents( $root . '/src/Runtime/RequestBroker.php' );
 		$runtime = (string) file_get_contents( $root . '/runtime.php' );
 		self::assertStringContainsString( 'registerTarget', $broker );
 		self::assertStringContainsString( 'public function boot', $runtime );
@@ -63,7 +63,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 	}
 
 	public function testRuntimeCatalogOnlyDispatchesToTheSealedGitHubAdapter(): void {
-		$root = dirname( __DIR__, 2 );
+		$root    = dirname( __DIR__, 2 );
 		$runtime = (string) file_get_contents( $root . '/runtime.php' );
 		$catalog = strstr( $runtime, '/* The sealed catalog is deliberately local to this selected runtime. */' );
 
@@ -108,7 +108,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 	}
 
 	public function testGitHubProtocolIsConfinedToTheSelectedProviderDirectory(): void {
-		$root = dirname( __DIR__, 2 );
+		$root     = dirname( __DIR__, 2 );
 		$provider = $root . '/src/Provider/GitHub';
 		self::assertFileExists( $provider . '/GitHubCredentialResolver.php' );
 		self::assertFileExists( $provider . '/GitHubReleaseService.php' );

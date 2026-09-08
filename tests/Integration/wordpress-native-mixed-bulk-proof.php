@@ -62,7 +62,7 @@ try {
 	}
 	copyTree( $root, $site . '/wp-content/plugins/ran-wp-release-updater', array( 'tests', '.git', '.github', 'vendor', 'node_modules' ) );
 	file_put_contents( $site . '/wp-config.php', config( $dbName, $socket ) );
-	$env = array(
+	$env           = array(
 		'DB_HOST'     => 'localhost:' . $socket,
 		'DB_USER'     => 'root',
 		'DB_PASSWORD' => '',
@@ -73,7 +73,7 @@ try {
 	$proofs    = array();
 	foreach ( $scenarios as $scenario ) {
 		[ $type, $mode ] = $scenario;
-		$targets        = createFixtures( $site, $type );
+		$targets         = createFixtures( $site, $type );
 		run( array( $php, $wp, '--path=' . $site, 'eval', "global \$wpdb; \$wpdb->query( \"DELETE FROM {\$wpdb->options} WHERE option_name LIKE 'ran\\\\_wp\\\\_release\\\\_updater\\\\_target\\\\_v1\\\\_%'\" );" ), $site, $env );
 		if ( 'plugin' === $type ) {
 			run( array( $php, $wp, '--path=' . $site, 'plugin', 'activate', 'managed-a' ), $site, $env );
