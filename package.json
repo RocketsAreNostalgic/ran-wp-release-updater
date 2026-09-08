@@ -4,10 +4,10 @@
   "type": "module",
   "scripts": {
     "audit": "pnpm audit --audit-level=high",
-    "format": "prettier --write 'scripts/**/*.mjs' 'tests/**/*.mjs' 'eslint.config.mjs'",
-    "format:check": "prettier --check 'scripts/**/*.mjs' 'tests/**/*.mjs' 'eslint.config.mjs'",
-    "lint:js": "eslint 'scripts/**/*.mjs' 'tests/**/*.mjs'",
-    "lint:js:fix": "eslint 'scripts/**/*.mjs' 'tests/**/*.mjs' --fix",
+    "format": "prettier --write \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"eslint.config.mjs\"",
+    "format:check": "prettier --check \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"eslint.config.mjs\"",
+    "lint:js": "eslint \"scripts/**/*.mjs\" \"tests/**/*.mjs\"",
+    "lint:js:fix": "eslint \"scripts/**/*.mjs\" \"tests/**/*.mjs\" --fix",
     "test": "node --test tests/release-publisher.test.mjs",
     "check": "pnpm audit && pnpm format:check && pnpm lint:js && pnpm test"
   },
