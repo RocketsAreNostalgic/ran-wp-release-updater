@@ -43,7 +43,8 @@ final class ReleaseSource {
 	}
 
 	private function operate( string $method, array $arguments ): array {
-		if ( null !== ( $failure = $this->readiness() ) ) {
+		$failure = $this->readiness();
+		if ( null !== $failure ) {
 			return $failure;
 		}
 		if ( ! self::directFilesystemAvailable() ) {

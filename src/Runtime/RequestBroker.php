@@ -137,7 +137,8 @@ final class RequestBroker {
 		if ( in_array( $this->state, array( 'inactive', 'conflict' ), true ) ) {
 			return false;
 		}
-		if ( 'runtime-copy.json' === basename( $copyFile ) && isset( $this->candidateRoots[ realpath( dirname( $copyFile ) ) ?: '' ] ) ) {
+		$candidateRoot = realpath( dirname( $copyFile ) );
+		if ( 'runtime-copy.json' === basename( $copyFile ) && is_string( $candidateRoot ) && isset( $this->candidateRoots[ $candidateRoot ] ) ) {
 			return true;
 		}
 		if ( 'collecting' !== $this->state ) {
@@ -993,8 +994,10 @@ final class RequestBroker {
 		}
 		usort(
 			$compatible,
-			fn ( array $left, array $right ): int => $this->compare( $right['package_version'], $left['package_version'] )
-				?: strcmp( $left['source_root'], $right['source_root'] )
+			function ( array $left, array $right ): int {
+				$comparison = $this->compare( $right['package_version'], $left['package_version'] );
+				return 0 !== $comparison ? $comparison : strcmp( $left['source_root'], $right['source_root'] );
+			}
 		);
 		$highest = array_filter(
 			$compatible,
@@ -1038,16 +1041,22 @@ final class RequestBroker {
 		$left  = $this->version( $left );
 		$right = $this->version( $right );
 		foreach ( array( 0, 1, 2 ) as $index ) {
-			$comparison = strlen( $left['core'][ $index ] ) <=> strlen( $right['core'][ $index ] )
-				?: strcmp( $left['core'][ $index ], $right['core'][ $index ] );
+			$comparison = strlen( $left['core'][ $index ] ) <=> strlen( $right['core'][ $index ] );
+			if ( 0 === $comparison ) {
+				$comparison = strcmp( $left['core'][ $index ], $right['core'][ $index ] );
+			}
 			if ( 0 !== $comparison ) {
 				return $comparison;
 			}
 		}
 		if ( array() === $left['prerelease'] || array() === $right['prerelease'] ) {
-			return array() === $left['prerelease'] ? ( array() === $right['prerelease'] ? 0 : 1 ) : -1;
+			if ( array() === $left['prerelease'] ) {
+				return array() === $right['prerelease'] ? 0 : 1;
+			}
+			return -1;
 		}
-		for ( $index = 0; $index < max( count( $left['prerelease'] ), count( $right['prerelease'] ) ); ++$index ) {
+		$prereleaseLength = max( count( $left['prerelease'] ), count( $right['prerelease'] ) );
+		for ( $index = 0; $index < $prereleaseLength; ++$index ) {
 			if ( ! isset( $left['prerelease'][ $index ] ) ) {
 				return -1;
 			}
@@ -1062,7 +1071,8 @@ final class RequestBroker {
 			$aNumeric = 1 === preg_match( '/\A[0-9]+\z/D', $a );
 			$bNumeric = 1 === preg_match( '/\A[0-9]+\z/D', $b );
 			if ( $aNumeric && $bNumeric ) {
-				return strlen( $a ) <=> strlen( $b ) ?: strcmp( $a, $b );
+				$comparison = strlen( $a ) <=> strlen( $b );
+				return 0 !== $comparison ? $comparison : strcmp( $a, $b );
 			}
 			if ( $aNumeric !== $bNumeric ) {
 				return $aNumeric ? -1 : 1;

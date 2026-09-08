@@ -264,8 +264,8 @@ final class GitHubReleaseService {
 			usort(
 				$candidates,
 				static function ( array $left, array $right ): int {
-					return ReleaseVersion::compare( $right['version'], $left['version'] )
-					?: strcmp( $left['release_identity'], $right['release_identity'] );
+					$comparison = ReleaseVersion::compare( $right['version'], $left['version'] );
+					return 0 !== $comparison ? $comparison : strcmp( $left['release_identity'], $right['release_identity'] );
 				}
 			);
 
@@ -488,6 +488,7 @@ final class GitHubReleaseService {
 				$clean = $artifact->discard() || $artifact->discard();
 			} catch ( \Throwable ) {
 				// Preserve the primary failure and report the synchronous cleanup result.
+				$clean = false;
 			}
 			throw $this->postAllocationFailure( $exception, $clean );
 		}

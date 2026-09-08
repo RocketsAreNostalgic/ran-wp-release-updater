@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 /**
  * Selected-root production kernel.
  *
@@ -10,6 +8,8 @@ declare(strict_types=1);
  * every lifecycle symbol from that root or fails closed if a loser already
  * defined one.
  */
+
+declare(strict_types=1);
 $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\Dependency\\ArchiveSafety' => 'src/Dependency/ArchiveSafety.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\CanonicalUpdateUri' => 'src/Contract/CanonicalUpdateUri.php',

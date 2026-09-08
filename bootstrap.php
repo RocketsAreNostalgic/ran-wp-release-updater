@@ -83,7 +83,11 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 		sort( $files, SORT_STRING );
 		$payload = '';
 		foreach ( $files as $file ) {
-			$hash = hash_file( 'sha256', $regular( $file ) ?: '' );
+			$regularFile = $regular( $file );
+			if ( ! is_string( $regularFile ) ) {
+				return null;
+			}
+			$hash = hash_file( 'sha256', $regularFile );
 			if ( ! is_string( $hash ) ) {
 				return null;
 			}
