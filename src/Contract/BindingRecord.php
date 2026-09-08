@@ -141,10 +141,12 @@ final readonly class BindingRecord
         }
         return $ordered;
     }
+    /** @param array<string,mixed> $value */
     private static function canonicalJson(array $value): string
     {
         return json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
     }
+    /** @param list<string> $keys */
     private static function exactKeys(mixed $value, array $keys): bool
     {
         if ( ! is_array( $value ) || count( $value ) !== count( $keys ) ) {
