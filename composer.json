@@ -47,6 +47,7 @@
       "@check:updater-support",
       "@audit:composer",
       "@lint:syntax",
+      "@lint:php",
       "@analyze",
       "@test:unit",
       "@test:no-dev-consumer"
