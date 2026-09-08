@@ -34,76 +34,71 @@ jobs:
           p = Path('src/WordPress/NativePluginUpdater.php')
           text = p.read_text()
           text = text.replace("\tprivate const MAX_MANIFEST_ENTRIES      = 10000;\n", "", 1)
-          needle = "\tprivate int $discoveryEpoch       = 0;\n"
-          insert = needle + "\tprivate OwnedArchiveStore $archiveStore;\n\tprivate StagedPackageManifest $manifestBuilder;\n"
-          if needle not in text:
-              raise SystemExit('missing updater property anchor')
-          text = text.replace(needle, insert, 1)
+          anchor = "\tprivate int $discoveryEpoch       = 0;\n"
+          if 'private OwnedArchiveStore $archiveStore;' not in text:
+              text = text.replace(anchor, anchor + "\tprivate OwnedArchiveStore $archiveStore;\n\tprivate StagedPackageManifest $manifestBuilder;\n", 1)
           old = "\t\tprivate bool $nativeDiscoveryReuse = false\n\t) {}"
           new = "\t\tprivate bool $nativeDiscoveryReuse = false\n\t) {\n\t\t$this->archiveStore = new OwnedArchiveStore();\n\t\t$this->manifestBuilder = new StagedPackageManifest();\n\t}"
-          if old not in text:
-              raise SystemExit('missing updater constructor anchor')
-          text = text.replace(old, new, 1)
+          if old in text:
+              text = text.replace(old, new, 1)
 
-          replacements = {
+          substitutions = {
               "self::archiveIdentity( $owned['path'], $fresh )": "$this->archiveStore->identity( $owned['path'], $fresh )",
               "$this->removeOwnedArchive( $owned['path'], $owned['directory'] )": "$this->archiveStore->remove( $owned['path'], $owned['directory'] )",
               "$this->removeOwnedArchive( $this->pendingArchive, $this->ownedArchiveDirectory )": "$this->archiveStore->remove( $this->pendingArchive, $this->ownedArchiveDirectory )",
               "self::sameArchiveIdentity( $file, $this->descriptor, $this->pendingArchiveIdentity )": "$this->archiveStore->sameIdentity( $file, $this->descriptor, $this->pendingArchiveIdentity )",
               "self::regularFileManifest( $source )": "$this->manifestBuilder->build( $source )",
               "self::regularFileManifest( $destination )": "$this->manifestBuilder->build( $destination )",
-              "self::manifestHash( $manifest )": "$this->manifestBuilder->hash( $manifest )",
-              "self::manifestExpandedBytes( $manifest )": "$this->manifestBuilder->expandedBytes( $manifest )",
               "$proof->isValid() ? $this->copyOwnedArchive( $path ) : null": "$proof->isValid() ? $this->archiveStore->copy( $path, $descriptor ) : null",
           }
-          for old, new in replacements.items():
-              if old not in text:
-                  raise SystemExit(f'missing updater fragment: {old}')
+          for old, new in substitutions.items():
               text = text.replace(old, new)
+          text = text.replace('self::manifestHash( ', '$this->manifestBuilder->hash( ')
+          text = text.replace('self::manifestExpandedBytes( ', '$this->manifestBuilder->expandedBytes( ')
 
-          start = text.index("\t/** @return array{directory:string,path:string}|null */ private function copyOwnedArchive")
-          end = text.index("\tprivate static function validNativeIdentity", start)
-          text = text[:start] + text[end:]
-
-          start = text.index("\t/** @return array<string,int>|null */ private static function archiveIdentity")
-          end = text.index("\t/** @param array<string,mixed> $value", start)
-          text = text[:start] + text[end:]
+          marker = "\t/** @return array{directory:string,path:string}|null */ private function copyOwnedArchive"
+          if marker in text:
+              start = text.index(marker)
+              end = text.index("\tprivate static function validNativeIdentity", start)
+              text = text[:start] + text[end:]
+          marker = "\t/** @return array<string,int>|null */ private static function archiveIdentity"
+          if marker in text:
+              start = text.index(marker)
+              end = text.index("\t/** @param array<string,mixed> $value", start)
+              text = text[:start] + text[end:]
           p.write_text(text)
 
           p = Path('runtime.php')
           text = p.read_text()
           anchor = "\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\Contract\\\\AcquisitionReceipt' => 'src/Contract/AcquisitionReceipt.php',\n"
-          insertion = anchor + "\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\WordPress\\\\OwnedArchiveStore' => 'src/WordPress/OwnedArchiveStore.php',\n\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\WordPress\\\\StagedPackageManifest' => 'src/WordPress/StagedPackageManifest.php',\n"
-          if anchor not in text:
-              raise SystemExit('missing runtime map anchor')
-          p.write_text(text.replace(anchor, insertion, 1))
+          if 'WordPress\\\\OwnedArchiveStore' not in text:
+              text = text.replace(anchor, anchor + "\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\WordPress\\\\OwnedArchiveStore' => 'src/WordPress/OwnedArchiveStore.php',\n\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\WordPress\\\\StagedPackageManifest' => 'src/WordPress/StagedPackageManifest.php',\n", 1)
+          p.write_text(text)
 
           p = Path('.phpcs.xml')
           text = p.read_text()
           for rule in ('WordPress.WP.AlternativeFunctions', 'WordPress.PHP.NoSilencedErrors'):
               start = text.index(f'<rule ref="{rule}">')
               anchor = '\t\t<exclude-pattern>/src/WordPress/NativePluginUpdater.php</exclude-pattern>'
-              pos = text.index(anchor, start)
-              addition = '\t\t<exclude-pattern>/src/WordPress/OwnedArchiveStore.php</exclude-pattern>\n\t\t<exclude-pattern>/src/WordPress/StagedPackageManifest.php</exclude-pattern>\n' + anchor
-              text = text[:pos] + text[pos:].replace(anchor, addition, 1)
+              segment = text[start:text.index('</rule>', start)]
+              if 'OwnedArchiveStore.php' not in segment:
+                  text = text[:start] + text[start:].replace(anchor, '\t\t<exclude-pattern>/src/WordPress/OwnedArchiveStore.php</exclude-pattern>\n\t\t<exclude-pattern>/src/WordPress/StagedPackageManifest.php</exclude-pattern>\n' + anchor, 1)
           p.write_text(text)
 
           p = Path('phpstan.neon')
           text = p.read_text()
-          anchor = "\t\t- src/Contract\n"
-          addition = anchor + "\t\t- src/WordPress/OwnedArchiveStore.php\n\t\t- src/WordPress/StagedPackageManifest.php\n"
-          if anchor not in text:
-              raise SystemExit('missing PHPStan path anchor')
-          p.write_text(text.replace(anchor, addition, 1))
+          if 'src/WordPress/OwnedArchiveStore.php' not in text:
+              text = text.replace("\t\t- src/Contract\n", "\t\t- src/Contract\n\t\t- src/WordPress/OwnedArchiveStore.php\n\t\t- src/WordPress/StagedPackageManifest.php\n", 1)
+          p.write_text(text)
 
-          files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
-          payload = b''.join(path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n' for path in files)
-          revision = hashlib.sha256(payload).hexdigest()
-          p = Path('runtime-copy.json')
-          data = json.loads(p.read_text())
-          data['package_revision'] = revision
-          p.write_text(json.dumps(data, indent=2) + '\n')
-          print(revision)
+          def refresh_revision():
+              files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
+              payload = b''.join(path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n' for path in files)
+              r = Path('runtime-copy.json')
+              data = json.loads(r.read_text())
+              data['package_revision'] = hashlib.sha256(payload).hexdigest()
+              r.write_text(json.dumps(data, indent=2) + '\n')
+          refresh_revision()
           PY
           set +e
           composer format:php
@@ -115,10 +110,7 @@ jobs:
           import hashlib, json
           files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
           payload = b''.join(path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n' for path in files)
-          p = Path('runtime-copy.json')
-          data = json.loads(p.read_text())
-          data['package_revision'] = hashlib.sha256(payload).hexdigest()
-          p.write_text(json.dumps(data, indent=2) + '\n')
+          p = Path('runtime-copy.json'); data = json.loads(p.read_text()); data['package_revision'] = hashlib.sha256(payload).hexdigest(); p.write_text(json.dumps(data, indent=2) + '\n')
           PY
           composer check
       - name: Commit verified refactor
