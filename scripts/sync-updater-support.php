@@ -41,15 +41,31 @@ if (is_link($target)) {
 	fwrite(STDERR, "Generated updater-support runtime copy is unsafe.\n");
 	exit(1);
 }
-if (is_link(dirname($target))) {
+$targetDirectory = dirname($target);
+if (is_link($targetDirectory)) {
 	fwrite(STDERR, "Generated dependency directory is unsafe.\n");
 	exit(1);
 }
-if (! is_dir(dirname($target)) && ! mkdir(dirname($target), 0755, true)) {
+if (! is_dir($targetDirectory) && ! mkdir($targetDirectory, 0755, true)) {
 	fwrite(STDERR, "Generated dependency directory could not be created.\n");
 	exit(1);
 }
-if (strlen($generated) !== file_put_contents($target, $generated, LOCK_EX)) {
+$temporary = tempnam($targetDirectory, '.updater-support-');
+if (! is_string($temporary) || is_link($temporary) || ! is_file($temporary) || realpath(dirname($temporary)) !== realpath($targetDirectory)) {
+	if (is_string($temporary) && is_file($temporary) && ! is_link($temporary)) {
+		@unlink($temporary);
+	}
+	fwrite(STDERR, "Generated updater-support temporary file could not be created safely.\n");
+	exit(1);
+}
+$written = file_put_contents($temporary, $generated, LOCK_EX);
+if (strlen($generated) !== $written || ! @chmod($temporary, 0644)) {
+	@unlink($temporary);
 	fwrite(STDERR, "Generated updater-support runtime copy could not be written.\n");
+	exit(1);
+}
+if (! @rename($temporary, $target)) {
+	@unlink($temporary);
+	fwrite(STDERR, "Generated updater-support runtime copy could not be replaced atomically.\n");
 	exit(1);
 }
