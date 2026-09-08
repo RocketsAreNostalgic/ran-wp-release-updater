@@ -63,13 +63,15 @@ jobs:
           package_path.write_text(json.dumps(package, indent=2) + '\n')
           PY
           pnpm format
+          pnpm lint:js:fix
+          pnpm format
           pnpm check
       - name: Commit verified JavaScript quality gate
         shell: bash
         run: |
           set -euo pipefail
           rm .github/workflows/finish-js-quality.yml
-          git add scripts/release-publisher.mjs package.json .github/workflows/finish-js-quality.yml
+          git add scripts tests eslint.config.mjs package.json .github/workflows/finish-js-quality.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Enforce JavaScript formatting and linting'
