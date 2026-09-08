@@ -19,16 +19,18 @@ final class PackageIdentityValidator {
 	private const MAX_HEADER_BYTES = 8192;
 	private const PROSPECTIVE_POLICY_KEYS = array( 'artifact_sha256', 'artifact_size', 'canonical_update_uri', 'maximum_artifact_bytes', 'php_runtime_version', 'target_type', 'version', 'wordpress_runtime_version' );
 	private const POLICY_KEYS = array( 'archive_root', 'configuration_update_uri', 'header_file', 'installed_package_identity', 'maximum_artifact_bytes', 'metadata_name', 'offer_update_uri', 'php_runtime_version', 'provider_code', 'repository_identity', 'repository_locator', 'staged_package_update_uri', 'target_type', 'theme_template', 'wordpress_runtime_version' );
-	private ?\Closure $afterOpen = null;
+	private ?\Closure $afterOpen;
 	/** @var WeakMap<ValidatedPackage, array{descriptor_fingerprint:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,sha256:string,size:int,update_uri:string}> */
 	private WeakMap $receiptProofs;
 
-	public function __construct() { $this->receiptProofs = new WeakMap(); }
+	/** @internal The optional callback is a deterministic TOCTOU test seam. */
+	public function __construct( ?\Closure $afterOpen = null ) { $this->afterOpen = $afterOpen; $this->receiptProofs = new WeakMap(); }
 	private function __clone(): void {}
-	/** @internal Test-only race seam; invoked reflectively without widening the public API. */
-	private function setAfterOpenForTesting( ?\Closure $afterOpen ): void { $this->afterOpen = $afterOpen; }
 
-	/** @param array<string,mixed> $policy @return array{package_root:string,main_file:string}|null */
+	/**
+	 * @param array<string,mixed> $policy
+	 * @return array{package_root:string,main_file:string}|null
+	 */
 	public function inspectProspective( array $policy, string $archivePath ): ?array {
 		if ( count( $policy ) !== count( self::PROSPECTIVE_POLICY_KEYS ) ) {
 			return null;
@@ -201,7 +203,7 @@ final class PackageIdentityValidator {
 		return array( 'descriptor_fingerprint' => $proof['descriptor_fingerprint'], 'manifest_entry_count' => $proof['manifest_entry_count'], 'manifest_expanded_bytes' => $proof['manifest_expanded_bytes'], 'manifest_hash' => $proof['manifest_hash'], 'sha256' => $proof['sha256'], 'size' => $proof['size'], 'update_uri' => $proof['update_uri'] );
 	}
 
-	/** @param array<string, scalar> $snapshot */
+	/** @param array{archive_root:string,header_file:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,metadata_name:string,package_type:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string} $snapshot */
 	private function ready( array $snapshot ): ValidatedPackage { $package = ValidatedPackage::ready( $snapshot ); $this->receiptProofs[ $package ] = array( 'descriptor_fingerprint' => $snapshot['descriptor_fingerprint'], 'manifest_entry_count' => $snapshot['manifest_entry_count'], 'manifest_expanded_bytes' => $snapshot['manifest_expanded_bytes'], 'manifest_hash' => $snapshot['manifest_hash'], 'sha256' => $snapshot['sha256'], 'size' => $snapshot['size'], 'update_uri' => $snapshot['update_uri'] ); return $package; }
 
 	/** @param array<string, mixed> $policy */
@@ -217,7 +219,10 @@ final class PackageIdentityValidator {
 		return $facts['canonical_update_uri'] === CanonicalUpdateUri::canonicalizeBoundaries( array( 'archive_preflight' => $facts['canonical_update_uri'], 'configuration' => $policy['configuration_update_uri'], 'offer' => $policy['offer_update_uri'], 'staged_package' => $policy['staged_package_update_uri'] ) );
 	}
 
-	/** @param array<string,mixed> $facts @return array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null */
+	/**
+	 * @param array<string,mixed> $facts
+	 * @return array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null
+	 */
 	private function archiveIdentity( string $path, array $facts ): ?array {
 		clearstatcache( true, $path ); $stat = @lstat( $path );
 		if ( ! is_array( $stat ) || ! is_readable( $path ) || ( $stat['mode'] & 0170000 ) !== 0100000 || $stat['size'] !== $facts['artifact_size'] ) return null;
