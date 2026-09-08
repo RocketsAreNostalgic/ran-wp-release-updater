@@ -7,6 +7,8 @@ parameters:
 	paths:
 		- src/Archive
 		- src/Contract
+		- src/WordPress/OwnedArchiveStore.php
+		- src/WordPress/StagedPackageManifest.php
 	scanDirectories:
 		- src
 	excludePaths:

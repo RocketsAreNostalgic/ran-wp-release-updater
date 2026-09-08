@@ -18,7 +18,6 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 /** The single native WordPress lifecycle owner for a sealed neutral release. */
 final class NativePluginUpdater {
 	private const MAX_DIAGNOSTICS           = 16;
-	private const MAX_MANIFEST_ENTRIES      = 10000;
 	private const CONFIGURATION_KEYS        = array( 'headers', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
 	private const HEADER_KEYS               = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
 	private bool $registered                = false;
@@ -56,6 +55,8 @@ final class NativePluginUpdater {
 	/** @var array{claim:array<string,mixed>,descriptor:IdentityDescriptor,installed:string}|null */
 	private ?array $discoverySnapshot = null;
 	private int $discoveryEpoch       = 0;
+	private OwnedArchiveStore $archiveStore;
+	private StagedPackageManifest $manifestBuilder;
 
 	/** @param array<string,string> $headers @param array<string,mixed> $archivePolicy */
 	private function __construct(
@@ -71,7 +72,10 @@ final class NativePluginUpdater {
 		private PackageIdentityValidator $validator,
 		private ?SelectedRuntimeState $selectedRuntimeState = null,
 		private bool $nativeDiscoveryReuse = false
-	) {}
+	) {
+		$this->archiveStore    = new OwnedArchiveStore();
+		$this->manifestBuilder = new StagedPackageManifest();
+	}
 
 	/** @param array<string,mixed> $configuration @param array<string,mixed> $archivePolicy */
 	public static function fromConfiguration(
@@ -297,21 +301,21 @@ final class NativePluginUpdater {
 		if ( ! is_array( $owned ) ) {
 			return $this->failure( 'acquisition_identity_invalid' );
 		}
-		$identity = self::archiveIdentity( $owned['path'], $fresh );
+		$identity = $this->archiveStore->identity( $owned['path'], $fresh );
 		if ( null === $identity ) {
-			$this->removeOwnedArchive( $owned['path'], $owned['directory'] );
+			$this->archiveStore->remove( $owned['path'], $owned['directory'] );
 			return $this->failure( 'acquisition_identity_invalid' );
 		}
 		$verified = $this->verifyCurrent();
 		if ( null === $verified ) {
-			$this->removeOwnedArchive( $owned['path'], $owned['directory'] );
+			$this->archiveStore->remove( $owned['path'], $owned['directory'] );
 			return $this->failure( 'binding_fence_lost' );
 		}
 		try {
 			$proof   = $this->validator->validate( $fresh, $this->archivePolicy, $owned['path'] );
 			$receipt = AcquisitionReceipt::issue( $verified['current'], $fresh, $this->validator, $proof, $verified['now'] );
 		} catch ( \Throwable ) {
-			$this->removeOwnedArchive( $owned['path'], $owned['directory'] );
+			$this->archiveStore->remove( $owned['path'], $owned['directory'] );
 			return $this->failure( 'acquisition_identity_invalid' );
 		}
 		$this->state                  = $verified['current'];
@@ -340,7 +344,7 @@ final class NativePluginUpdater {
 			! $this->directFilesystem()
 			|| null === $verified
 			|| ! is_array( $this->pendingArchiveIdentity )
-			|| ! self::sameArchiveIdentity( $file, $this->descriptor, $this->pendingArchiveIdentity )
+			|| ! $this->archiveStore->sameIdentity( $file, $this->descriptor, $this->pendingArchiveIdentity )
 			|| ! $this->pendingReceipt instanceof AcquisitionReceipt
 		) {
 			$this->clearPending();
@@ -372,7 +376,7 @@ final class NativePluginUpdater {
 		}
 
 		$manifest = is_string( $source ) && $this->matchesStagedMetadata( $source )
-			? self::regularFileManifest( $source )
+			? $this->manifestBuilder->build( $source )
 			: null;
 		$verified = $this->verifyCurrent();
 		if (
@@ -394,9 +398,9 @@ final class NativePluginUpdater {
 				$verified['current'],
 				$this->descriptor,
 				$verified['now'],
-				self::manifestHash( $manifest ),
+				$this->manifestBuilder->hash( $manifest ),
 				count( $manifest ),
-				self::manifestExpandedBytes( $manifest )
+				$this->manifestBuilder->expandedBytes( $manifest )
 			);
 		} catch ( InvalidArgumentException ) {
 			$this->clearPending();
@@ -487,7 +491,7 @@ final class NativePluginUpdater {
 			$destination             = is_array( $this->installResult ) && is_string( $this->installResult['destination'] ?? null )
 				? $this->installResult['destination']
 				: null;
-			$manifest                = is_string( $destination ) ? self::regularFileManifest( $destination ) : null;
+			$manifest                = is_string( $destination ) ? $this->manifestBuilder->build( $destination ) : null;
 			$verified                = $this->verifyCurrent();
 			$archiveManifestVerified = false;
 			if (
@@ -501,9 +505,9 @@ final class NativePluginUpdater {
 						$verified['current'],
 						$this->descriptor,
 						$verified['now'],
-						self::manifestHash( $manifest ),
+						$this->manifestBuilder->hash( $manifest ),
 						count( $manifest ),
-						self::manifestExpandedBytes( $manifest )
+						$this->manifestBuilder->expandedBytes( $manifest )
 					);
 					$archiveManifestVerified = true;
 					$this->state             = $verified['current'];
@@ -518,7 +522,7 @@ final class NativePluginUpdater {
 				|| ! is_string( $destination )
 				|| ! is_array( $this->stagedManifest )
 				|| ! is_array( $manifest )
-				|| ! hash_equals( self::manifestHash( $this->stagedManifest ), self::manifestHash( $manifest ) )
+				|| ! hash_equals( $this->manifestBuilder->hash( $this->stagedManifest ), $this->manifestBuilder->hash( $manifest ) )
 				|| ! $this->matchesStagedMetadata( $destination )
 			) {
 				$this->diagnose( 'outcome_uncertain', null );
@@ -869,7 +873,7 @@ final class NativePluginUpdater {
 			$proof = $this->validator->validate( $descriptor, $this->archivePolicy, $path );
 		} catch ( \Throwable ) {
 			return null;
-		} return $proof->isValid() ? $this->copyOwnedArchive( $path ) : null; }
+		} return $proof->isValid() ? $this->archiveStore->copy( $path, $descriptor ) : null; }
 	/** @return array<string,mixed> */ private function claim( BindingState $state ): array {
 		return array(
 			'binding_generation' => $state->bindingGeneration(),
@@ -887,7 +891,7 @@ final class NativePluginUpdater {
 		) : null; }
 	private function clearPending( bool $release = true ): void {
 		$this->clearDiscoverySnapshot();
-		$this->removeOwnedArchive( $this->pendingArchive, $this->ownedArchiveDirectory );
+		$this->archiveStore->remove( $this->pendingArchive, $this->ownedArchiveDirectory );
 		$this->pending                = false;
 		$this->extractionAdmitted     = false;
 		$this->stagedManifest         = null;
@@ -929,164 +933,12 @@ final class NativePluginUpdater {
 		return class_exists( '\\WP_Error' ) ? new \WP_Error( 'ran_wp_release_updater_' . $code, 'The update operation was not admitted.' ) : false; }
 	private function directFilesystem(): bool {
 		return function_exists( 'get_filesystem_method' ) && 'direct' === get_filesystem_method(); }
-	/** @return array{directory:string,path:string}|null */ private function copyOwnedArchive( string $source ): ?array {
-		$facts  = $this->descriptor->toArray();
-		$before = self::archiveIdentity( $source, $this->descriptor );
-		if ( null === $before ) {
-			return null;
-		}
-		try {
-			$suffix = bin2hex( random_bytes( 16 ) );
-		} catch ( \Throwable ) {
-			return null;
-		} $directory = rtrim( sys_get_temp_dir(), '/\\' ) . DIRECTORY_SEPARATOR . 'ran-wp-release-updater-' . $suffix;
-		if ( ! @mkdir( $directory, 0700 ) || ! @chmod( $directory, 0700 ) ) {
-			return null;
-		}
-		$path   = $directory . DIRECTORY_SEPARATOR . 'package.zip';
-		$input  = @fopen( $source, 'rb' );
-		$output = @fopen( $path, 'x+b' );
-		if ( ! is_resource( $input ) || ! is_resource( $output ) || ! @chmod( $path, 0600 ) ) {
-			if ( is_resource( $input ) ) {
-				fclose( $input );
-			} if ( is_resource( $output ) ) {
-				fclose( $output );
-			} $this->removeOwnedArchive( $path, $directory );
-			return null; }
-		$context = hash_init( 'sha256' );
-		$size    = 0;
-		$ok      = true;
-		while ( ! feof( $input ) ) {
-			$chunk = fread( $input, 65536 );
-			if ( ! is_string( $chunk ) || ( '' === $chunk && ! feof( $input ) ) || strlen( $chunk ) > $facts['artifact_size'] - $size ) {
-				$ok = false;
-				break; } for ( $written = 0, $length = strlen( $chunk ); $written < $length; ) {
-					$result = fwrite( $output, substr( $chunk, $written ) );
-				if ( ! is_int( $result ) || 0 === $result ) {
-					$ok = false;
-					break 2;
-				} $written += $result;
-				} $size += $length;
-				hash_update( $context, $chunk );
-		} fflush( $output );
-		fclose( $input );
-		fclose( $output );
-		clearstatcache( true, $source );
-		$after = self::archiveIdentity( $source, $this->descriptor );
-		if ( ! @chmod( $path, 0400 ) ) {
-			$ok = false;
-		} $copy = self::archiveIdentity( $path, $this->descriptor );
-		if ( ! $ok || $size !== $facts['artifact_size'] || ! hash_equals( $facts['artifact_sha256'], hash_final( $context ) ) || ! is_array( $after ) || $after !== $before || null === $copy ) {
-			$this->removeOwnedArchive( $path, $directory );
-			return null;
-		} return array(
-			'directory' => $directory,
-			'path'      => $path,
-		);
-	}
-	private function removeOwnedArchive( ?string $path, ?string $directory ): void {
-		if ( is_string( $path ) && is_string( $directory ) && hash_equals( $directory . DIRECTORY_SEPARATOR . 'package.zip', $path ) ) {
-			$entry = @lstat( $path );
-			if ( is_array( $entry ) ) {
-				if ( 0040000 === ( $entry['mode'] & 0170000 ) ) {
-					@rmdir( $path );
-				} else {
-					@unlink( $path );
-				}
-			}
-		} if ( is_string( $directory ) && is_dir( $directory ) ) {
-			@rmdir( $directory );
-		} }
 	private static function validNativeIdentity( mixed $type, mixed $identity ): bool {
 		if ( ! is_string( $identity ) ) {
 			return false;
 		} if ( 'theme' === $type ) {
 			return 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $identity );
 		} return 'plugin' === $type && 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D', $identity ); }
-	/** @return array<string,int>|null */ private static function archiveIdentity( string $path, IdentityDescriptor $descriptor ): ?array {
-		$facts = $descriptor->toArray();
-		clearstatcache( true, $path );
-		$stat = @lstat( $path );
-		$hash = is_file( $path ) ? hash_file( 'sha256', $path ) : false;
-		if ( ! is_array( $stat ) || 0100000 !== ( $stat['mode'] & 0170000 ) || $stat['size'] !== $facts['artifact_size'] || ! is_string( $hash ) || ! hash_equals( $facts['artifact_sha256'], $hash ) ) {
-			return null;
-		} return array(
-			'dev'   => $stat['dev'],
-			'ino'   => $stat['ino'],
-			'mode'  => $stat['mode'],
-			'mtime' => $stat['mtime'],
-			'ctime' => $stat['ctime'],
-			'size'  => $stat['size'],
-		); }
-	/** @param array<string,int> $identity */ private static function sameArchiveIdentity( string $path, IdentityDescriptor $descriptor, array $identity ): bool {
-		$current = self::archiveIdentity( $path, $descriptor );
-		if ( ! is_array( $current ) ) {
-			return false;
-		} foreach ( $identity as $key => $value ) {
-			if ( ! array_key_exists( $key, $current ) || $current[ $key ] !== $value ) {
-				return false;
-			}
-		} return true; }
-	/** @return array<string,array{sha256:string,size:int}>|null */ private static function regularFileManifest( string $root ): ?array {
-		$root     = rtrim( $root, '/\\' );
-		$rootStat = @lstat( $root );
-		if ( ! is_array( $rootStat ) || 0040000 !== ( $rootStat['mode'] & 0170000 ) ) {
-			return null;
-		} $queue     = array(
-			array(
-				'path'     => $root,
-				'relative' => '',
-			),
-		);
-		$manifest    = array();
-		$total       = 0;
-		$entriesSeen = 0;
-		while ( array() !== $queue ) {
-			$next    = array_pop( $queue );
-			$entries = @scandir( $next['path'] );
-			if ( ! is_array( $entries ) ) {
-				return null;
-			} foreach ( $entries as $entry ) {
-				if ( '.' === $entry || '..' === $entry ) {
-					continue;
-				} if ( ++$entriesSeen > self::MAX_MANIFEST_ENTRIES ) {
-					return null;
-				} $path   = $next['path'] . DIRECTORY_SEPARATOR . $entry;
-				$relative = '' === $next['relative'] ? $entry : $next['relative'] . '/' . $entry;
-				if ( strlen( $relative ) > PackageIdentityValidator::MAX_ARCHIVE_PATH_BYTES || 1 === preg_match( '/[^\x20-\x7E]|[\\\\:]/', $relative ) ) {
-					return null;
-				} $stat = @lstat( $path );
-				if ( ! is_array( $stat ) ) {
-					return null;
-				} $type = $stat['mode'] & 0170000;
-				if ( 0040000 === $type ) {
-					$queue[] = array(
-						'path'     => $path,
-						'relative' => $relative,
-					);
-					continue;
-				} if ( 0100000 !== $type || $stat['size'] < 0 || $stat['size'] > PackageIdentityValidator::MAX_EXPANDED_ARCHIVE_BYTES - $total ) {
-					return null;
-				} $hash = @hash_file( 'sha256', $path );
-				clearstatcache( true, $path );
-				$after = @lstat( $path );
-				if ( ! is_string( $hash ) || ! is_array( $after ) || $after['dev'] !== $stat['dev'] || $after['ino'] !== $stat['ino'] || $after['mode'] !== $stat['mode'] || $after['mtime'] !== $stat['mtime'] || $after['ctime'] !== $stat['ctime'] || $after['size'] !== $stat['size'] ) {
-					return null;
-				} $total              += $stat['size'];
-				$manifest[ $relative ] = array(
-					'sha256' => $hash,
-					'size'   => $stat['size'],
-				);
-			}
-		} ksort( $manifest, SORT_STRING );
-		return array() === $manifest ? null : $manifest; }
-	/** @param array<string,array{sha256:string,size:int}> $manifest */ private static function manifestHash( array $manifest ): string {
-		return hash( 'sha256', json_encode( $manifest, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) ); }
-	/** @param array<string,array{sha256:string,size:int}> $manifest */ private static function manifestExpandedBytes( array $manifest ): int {
-		$total = 0;
-		foreach ( $manifest as $entry ) {
-			$total += $entry['size'];
-		} return $total; }
 	/** @param array<string,mixed> $value @param list<string> $keys */ private static function exactKeys( mixed $value, array $keys ): bool {
 		if ( ! is_array( $value ) || count( $value ) !== count( $keys ) ) {
 			return false;

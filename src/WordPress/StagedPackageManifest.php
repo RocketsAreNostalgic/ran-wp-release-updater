@@ -19,7 +19,7 @@ final class StagedPackageManifest {
 			return null;
 		}
 
-		$queue = array(
+		$queue       = array(
 			array(
 				'path'     => $root,
 				'relative' => '',
@@ -37,10 +37,10 @@ final class StagedPackageManifest {
 			foreach ( $entries as $entry ) {
 				if ( '.' === $entry || '..' === $entry ) {
 					continue;
-			}
+				}
 				if ( ++$entriesSeen > self::MAX_ENTRIES ) {
 					return null;
-			}
+				}
 				$path     = $next['path'] . DIRECTORY_SEPARATOR . $entry;
 				$relative = '' === $next['relative'] ? $entry : $next['relative'] . '/' . $entry;
 				if ( strlen( $relative ) > PackageIdentityValidator::MAX_ARCHIVE_PATH_BYTES || 1 === preg_match( '/[^\x20-\x7E]|[\\\\:]/', $relative ) ) {
@@ -76,7 +76,7 @@ final class StagedPackageManifest {
 				) {
 					return null;
 				}
-				$total                 += $stat['size'];
+				$total                += $stat['size'];
 				$manifest[ $relative ] = array(
 					'sha256' => $hash,
 					'size'   => $stat['size'],
