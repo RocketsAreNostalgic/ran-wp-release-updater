@@ -1,0 +1,76 @@
+name: Finish JavaScript Quality
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/finish-js-quality.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finish:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'chore/quality-tooling'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24.11.0'
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@11.7.0 --activate
+          pnpm install --frozen-lockfile
+      - name: Resolve residual JavaScript lint findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import json
+
+          path = Path('scripts/release-publisher.mjs')
+          text = path.read_text()
+          replacements = [
+              (
+                  "const { manifest, runtimeCopy, changelog } = entries;\n\tif (manifest === null && runtimeCopy === null && changelog === null)",
+                  "const { manifest, runtimeCopy: runtimeCopyEntry, changelog } = entries;\n\tif (manifest === null && runtimeCopyEntry === null && changelog === null)",
+              ),
+              ("runtimeCopy?.mode === '100644'", "runtimeCopyEntry?.mode === '100644'"),
+              ("runtimeCopy.type === 'blob'", "runtimeCopyEntry.type === 'blob'"),
+              ("runtimeCopy.sha === LEGACY_BOOTSTRAP_RUNTIME_COPY_BLOB", "runtimeCopyEntry.sha === LEGACY_BOOTSTRAP_RUNTIME_COPY_BLOB"),
+              ("if (manifest === null || runtimeCopy === null || changelog === null)", "if (manifest === null || runtimeCopyEntry === null || changelog === null)"),
+              (
+                  "\tconst delta =\n\t\t!parentState || unreleased\n\t\t\t? { parentVersion }\n\t\t\t: unchangedVersion\n\t\t\t\t? { parentVersion: identity.version }\n\t\t\t\t: verifyReleaseDelta(parentState, candidateContents);",
+                  "\tlet delta;\n\tif (!parentState || unreleased) {\n\t\tdelta = { parentVersion };\n\t} else if (unchangedVersion) {\n\t\tdelta = { parentVersion: identity.version };\n\t} else {\n\t\tdelta = verifyReleaseDelta(parentState, candidateContents);\n\t}",
+              ),
+              ("\t\tconsole.error(error);", "\t\tprocess.stderr.write(`${String(error)}\\n`);"),
+          ]
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f'missing expected JavaScript fragment: {old!r}')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          package_path = Path('package.json')
+          package = json.loads(package_path.read_text())
+          package['scripts']['check'] = 'pnpm audit && pnpm format:check && pnpm lint:js && pnpm test'
+          package_path.write_text(json.dumps(package, indent=2) + '\n')
+          PY
+          pnpm format
+          pnpm check
+      - name: Commit verified JavaScript quality gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/finish-js-quality.yml
+          git add scripts/release-publisher.mjs package.json .github/workflows/finish-js-quality.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Enforce JavaScript formatting and linting'
+          git push origin HEAD:${GITHUB_HEAD_REF}
