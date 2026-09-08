@@ -15,7 +15,10 @@ final readonly class ValidatedPackage {
 	/** @param array<string, scalar> $snapshot */
 	private function __construct( private string $code, private array $snapshot ) {}
 
-	/** @internal @param array<string, scalar> $snapshot */
+	/**
+	 * @internal
+	 * @param array{archive_root:string,header_file:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,metadata_name:string,package_type:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string} $snapshot
+	 */
 	public static function ready( array $snapshot ): self { return new self( 'archive_identity_verified', $snapshot ); }
 	public static function blocked( string $code ): self { return new self( $code, array() ); }
 	public function isValid(): bool { return 'archive_identity_verified' === $this->code; }
