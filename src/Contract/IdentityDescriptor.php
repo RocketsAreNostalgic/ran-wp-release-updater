@@ -141,7 +141,10 @@ final readonly class IdentityDescriptor
             && self::isBoundedOpaqueIdentity($value['repository_identity']) && self::isBoundedOpaqueIdentity($value['repository_locator'], 255);
     }
 
-    /** @param array<string, mixed> $facts @return array<string, mixed> */
+    /**
+     * @param array<string,mixed> $facts
+     * @return array<string,mixed>
+     */
     private static function canonicalFacts(array $facts): array
     {
         $canonical = array();
