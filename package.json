@@ -1,0 +1,29 @@
+{
+  "name": "ran-wp-release-updater-development",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write 'scripts/**/*.mjs' 'tests/**/*.mjs' 'eslint.config.mjs'",
+    "format:check": "prettier --check 'scripts/**/*.mjs' 'tests/**/*.mjs' 'eslint.config.mjs'",
+    "lint:js": "eslint 'scripts/**/*.mjs' 'tests/**/*.mjs'",
+    "lint:js:fix": "eslint 'scripts/**/*.mjs' 'tests/**/*.mjs' --fix",
+    "test": "node --test tests/release-publisher.test.mjs",
+    "check": "pnpm format:check && pnpm lint:js && pnpm test"
+  },
+  "engines": {
+    "node": ">=24.11.0 <25",
+    "pnpm": ">=11 <12"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "volta": {
+    "node": "24.11.0"
+  },
+  "devDependencies": {
+    "@wordpress/eslint-plugin": "^25.7.0",
+    "@wordpress/prettier-config": "^4.51.0",
+    "eslint": "^9.39.5",
+    "globals": "^16.4.0",
+    "prettier": "^3.9.5"
+  },
+  "prettier": "@wordpress/prettier-config"
+}
