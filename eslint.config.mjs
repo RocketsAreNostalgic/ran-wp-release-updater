@@ -11,5 +11,10 @@ export default [
 		languageOptions: {
 			globals: globals.node,
 		},
+		settings: {
+			react: {
+				version: 'latest',
+			},
+		},
 	},
 ];
