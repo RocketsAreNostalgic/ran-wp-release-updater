@@ -67,6 +67,7 @@ final readonly class AcquisitionReceipt {
 
 	private static function equal( mixed $left, mixed $right ): bool { return is_string( $left ) && is_string( $right ) && hash_equals( $left, $right ); }
 	private static function sha256( mixed $value ): bool { return is_string( $value ) && 1 === preg_match( '/\A[a-f0-9]{64}\z/D', $value ); }
+	/** @return WeakMap<self, array{lease_deadline:int,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,owner_token:string}> */
 	private static function issued(): WeakMap { static $issued = null; return $issued ??= new WeakMap(); }
 	private static function exactKeys( mixed $value ): bool { if ( ! is_array( $value ) || count( $value ) !== count( self::KEYS ) ) return false; foreach ( self::KEYS as $key ) if ( ! array_key_exists( $key, $value ) ) return false; return true; }
 }
