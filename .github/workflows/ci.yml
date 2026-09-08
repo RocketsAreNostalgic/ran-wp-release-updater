@@ -93,7 +93,6 @@ jobs:
           wp_cli="$(command -v wp)"
           system_mysqld="$(command -v mysqld)"
           php -m | grep -Fx mysqli
-
           integration_root="$GITHUB_WORKSPACE/.workspaces/wordpress-integration"
           socket_root="$GITHUB_WORKSPACE/.workspaces/sock"
           php_tmp="$integration_root/php-tmp"
@@ -109,7 +108,6 @@ jobs:
           export PHP_INI_SCAN_DIR="$php_ini:$php_scan_dir"
           export WP_CLI_CACHE_DIR="$wp_cache"
           export TMPDIR="$php_tmp" TMP="$php_tmp" TEMP="$php_tmp"
-
           cp "$system_mysqld" "$mysqld_binary"
           cmp "$system_mysqld" "$mysqld_binary"
           php -d "sys_temp_dir=$php_tmp" "$wp_cli" core download --version=${{ matrix.wordpress }} --skip-content --path="$wp_root"
@@ -182,7 +180,7 @@ jobs:
           replace('src/Runtime/RequestBroker.php', "\t\tif ( array() === $left['prerelease'] || array() === $right['prerelease'] ) {\n\t\t\treturn array() === $left['prerelease'] ? ( array() === $right['prerelease'] ? 0 : 1 ) : -1;\n\t\t}\n\t\tfor ( $index = 0; $index < max( count( $left['prerelease'] ), count( $right['prerelease'] ) ); ++$index ) {", "\t\tif ( array() === $left['prerelease'] || array() === $right['prerelease'] ) {\n\t\t\tif ( array() === $left['prerelease'] ) {\n\t\t\t\treturn array() === $right['prerelease'] ? 0 : 1;\n\t\t\t}\n\t\t\treturn -1;\n\t\t}\n\t\t$prereleaseLength = max( count( $left['prerelease'] ), count( $right['prerelease'] ) );\n\t\tfor ( $index = 0; $index < $prereleaseLength; ++$index ) {")
           replace('src/Runtime/RequestBroker.php', "\t\t\tif ( $aNumeric && $bNumeric ) {\n\t\t\t\treturn strlen( $a ) <=> strlen( $b ) ?: strcmp( $a, $b );\n\t\t\t}", "\t\t\tif ( $aNumeric && $bNumeric ) {\n\t\t\t\t$comparison = strlen( $a ) <=> strlen( $b );\n\t\t\t\treturn 0 !== $comparison ? $comparison : strcmp( $a, $b );\n\t\t\t}")
 
-          replace('src/Provider/GitHub/GitHubReleaseService.php', "\t\t\t\tstatic function ( array $left, array $right ): int {\n\t\t\t\t\treturn ReleaseVersion::compare( $right['version'], $left['version'] )\n\t\t\t\t\t\t?: strcmp( $left['release_identity'], $right['release_identity'] );\n\t\t\t\t}", "\t\t\t\tstatic function ( array $left, array $right ): int {\n\t\t\t\t\t$comparison = ReleaseVersion::compare( $right['version'], $left['version'] );\n\t\t\t\t\treturn 0 !== $comparison ? $comparison : strcmp( $left['release_identity'], $right['release_identity'] );\n\t\t\t\t}")
+          replace('src/Provider/GitHub/GitHubReleaseService.php', "\t\t\t\tstatic function ( array $left, array $right ): int {\n\t\t\t\t\treturn ReleaseVersion::compare( $right['version'], $left['version'] )\n\t\t\t\t\t?: strcmp( $left['release_identity'], $right['release_identity'] );\n\t\t\t\t}", "\t\t\t\tstatic function ( array $left, array $right ): int {\n\t\t\t\t\t$comparison = ReleaseVersion::compare( $right['version'], $left['version'] );\n\t\t\t\t\treturn 0 !== $comparison ? $comparison : strcmp( $left['release_identity'], $right['release_identity'] );\n\t\t\t\t}")
           replace('src/Provider/GitHub/GitHubReleaseService.php', "\t\t\t} catch ( \\Throwable ) {\n\t\t\t\t// Preserve the primary failure and report the synchronous cleanup result.\n\t\t\t}", "\t\t\t} catch ( \\Throwable ) {\n\t\t\t\t// Preserve the primary failure and report the synchronous cleanup result.\n\t\t\t\t$clean = false;\n\t\t\t}")
 
           p = Path('src/WordPress/ReleaseOperationCoordinator.php')
@@ -199,13 +197,11 @@ jobs:
           text = text.replace("[ $next, $name, $expected, $leaseDeadline ] = $prepared['args'];", "[ , $next, $name, $expected, $leaseDeadline ] = $prepared['args'];")
           p.write_text(text)
           PY
-
           set +e
           vendor/bin/phpcbf --standard=.phpcs.xml --report=summary
           status=$?
           set -e
           if [ "$status" -gt 1 ]; then exit "$status"; fi
-
           python3 <<'PY'
           from pathlib import Path
           import hashlib, json
@@ -218,7 +214,6 @@ jobs:
           path.write_text(json.dumps(data, indent=2) + '\n')
           print(revision)
           PY
-
           composer lint:syntax
           composer lint:php
           composer analyze
