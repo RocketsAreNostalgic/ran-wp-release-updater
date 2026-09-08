@@ -37,11 +37,12 @@ function git(root, args) {
 }
 function blob(root, sha, file) {
 	const entry = git(root, ['ls-tree', sha, '--', file]);
-	if (!/^100644 blob [a-f0-9]{40}\t/.test(entry))
+	if (!/^100644 blob [a-f0-9]{40}\t/.test(entry)) {
 		refuse(
 			'release_content_drift',
 			`${file} must be an ordinary non-executable Git blob`
 		);
+	}
 	return execFileSync('git', ['show', `${sha}:${file}`], {
 		cwd: root,
 		encoding: 'utf8',
@@ -62,23 +63,26 @@ function treeEntry(root, sha, file) {
 	return match ? { mode: match[1], type: match[2], sha: match[3] } : null;
 }
 export function classifyParentReleaseMetadata(sha, entries) {
-	const { manifest, runtimeCopy, changelog } = entries;
-	if (manifest === null && runtimeCopy === null && changelog === null)
+	const { manifest, runtimeCopy: runtimeCopyEntry, changelog } = entries;
+	if (manifest === null && runtimeCopyEntry === null && changelog === null) {
 		return 'absent';
+	}
 	if (
 		sha === LEGACY_BOOTSTRAP_PARENT_SHA &&
 		manifest === null &&
 		changelog === null &&
-		runtimeCopy?.mode === '100644' &&
-		runtimeCopy.type === 'blob' &&
-		runtimeCopy.sha === LEGACY_BOOTSTRAP_RUNTIME_COPY_BLOB
-	)
+		runtimeCopyEntry?.mode === '100644' &&
+		runtimeCopyEntry.type === 'blob' &&
+		runtimeCopyEntry.sha === LEGACY_BOOTSTRAP_RUNTIME_COPY_BLOB
+	) {
 		return 'legacy_bootstrap';
-	if (manifest === null || runtimeCopy === null || changelog === null)
+	}
+	if (manifest === null || runtimeCopyEntry === null || changelog === null) {
 		refuse(
 			'release_content_drift',
 			'parent release metadata is incomplete'
 		);
+	}
 	return 'complete';
 }
 function parentContents(root, sha) {
@@ -100,11 +104,12 @@ export function revisionAt(root, sha) {
 				/^src\/.+\.php$/.test(file)
 		)
 		.sort();
-	if (files.length < 3)
+	if (files.length < 3) {
 		refuse(
 			'runtime_copy_invalid',
 			'runtime identity source family is incomplete'
 		);
+	}
 	const payload = files
 		.map(
 			(file) =>
@@ -118,11 +123,12 @@ export function revisionAt(root, sha) {
 
 export function validateCandidate(root, sha) {
 	const identity = candidateIdentity(contents(root, sha), sha);
-	if (identity.packageRevision !== revisionAt(root, sha))
+	if (identity.packageRevision !== revisionAt(root, sha)) {
 		refuse(
 			'runtime_revision_drift',
 			'runtime-copy package_revision does not hash bootstrap.php, runtime.php and src PHP bytes'
 		);
+	}
 	return identity;
 }
 
@@ -164,10 +170,13 @@ export async function hydrateExactReleasePullTree(
 	request = api
 ) {
 	const { exact, stale } = exactPulls(pulls, candidateSha);
-	if (exact.length !== 1 || stale.length) return pulls;
+	if (exact.length !== 1 || stale.length) {
+		return pulls;
+	}
 	const pull = exact[0];
-	if (!FULL_SHA.test(pull?.head?.sha ?? ''))
+	if (!FULL_SHA.test(pull?.head?.sha ?? '')) {
 		refuse('release_pr_invalid', 'Release Please head identity is invalid');
+	}
 	const response = await request(
 		`/repos/${repository}/git/commits/${pull.head.sha}`
 	);
@@ -175,11 +184,12 @@ export async function hydrateExactReleasePullTree(
 	if (
 		headCommit?.sha !== pull.head.sha ||
 		!FULL_SHA.test(headCommit?.tree?.sha ?? '')
-	)
+	) {
 		refuse(
 			'release_pr_head_tree_invalid',
 			'Release Please head tree readback is invalid'
 		);
+	}
 	return pulls.map((value) =>
 		value === pull
 			? { ...value, head_tree_sha: headCommit.tree.sha }
@@ -197,11 +207,12 @@ export function decidePublication(input) {
 		repository,
 		repositoryId,
 	} = input;
-	if (identity?.candidateSha !== candidateSha)
+	if (identity?.candidateSha !== candidateSha) {
 		refuse(
 			'candidate_identity_drift',
 			'checked-out candidate identity differs from CI'
 		);
+	}
 	if (
 		event?.event !== 'push' ||
 		event?.conclusion !== 'success' ||
@@ -210,30 +221,34 @@ export function decidePublication(input) {
 		!Number.isInteger(repositoryId) ||
 		event?.head_repository?.id !== repositoryId ||
 		event?.head_repository?.full_name !== repository
-	)
+	) {
 		refuse(
 			'quality_identity_invalid',
 			'publisher requires the exact successful same-repository main CI candidate'
 		);
-	if (mainSha !== candidateSha)
+	}
+	if (mainSha !== candidateSha) {
 		refuse(
 			'main_moved',
 			'main no longer points at the successful candidate'
 		);
+	}
 	const { exact, stale } = exactPulls(pulls, candidateSha);
 	if (!exact.length && !stale.length) {
-		if (commit?.parentVersion !== identity.version)
+		if (commit?.parentVersion !== identity.version) {
 			refuse(
 				'unrecognized_release_commit',
 				'manifest changed without an exact Release Please merge'
 			);
+		}
 		return { action: 'none', reason: 'ordinary_main' };
 	}
-	if (exact.length !== 1 || stale.length)
+	if (exact.length !== 1 || stale.length) {
 		refuse(
 			'release_pr_ambiguous',
 			'candidate has no single exact Release Please merge'
 		);
+	}
 	const pull = exact[0];
 	if (
 		pull?.state !== 'closed' ||
@@ -252,65 +267,75 @@ export function decidePublication(input) {
 		pull.number < 1 ||
 		!FULL_SHA.test(pull?.head?.sha ?? '') ||
 		pull.head.sha === candidateSha
-	)
+	) {
 		refuse('release_pr_invalid', 'release PR identity is invalid');
+	}
 	if (
 		commit?.sha !== candidateSha ||
 		commit.parents?.length !== 2 ||
 		commit.parents[0]?.sha !== pull.base.sha ||
 		commit.parents[1]?.sha !== pull.head.sha ||
 		commit.tree?.sha !== pull.head_tree_sha
-	)
+	) {
 		refuse(
 			'release_pr_not_normal_merge',
 			'candidate must be the normal two-parent merge of the exact Release Please head'
 		);
+	}
 	if (
 		typeof commit.parentVersion !== 'string' ||
 		(commit.parentVersion !== '0.0.0' && !BETA.test(commit.parentVersion))
-	)
+	) {
 		refuse(
 			'release_parent_version_invalid',
 			'release parent version is invalid'
 		);
+	}
 	if (
 		!Array.isArray(commit.changedPaths) ||
 		JSON.stringify(commit.changedPaths) !== JSON.stringify(RELEASE_PATHS)
-	)
+	) {
 		refuse('release_paths_invalid', 'release changed paths are not exact');
-	if (commit.parentVersion === identity.version)
+	}
+	if (commit.parentVersion === identity.version) {
 		refuse(
 			'release_version_unchanged',
 			'release did not advance the manifest'
 		);
+	}
 	const pending = labels(pull).includes(PENDING_LABEL);
 	const tagged = labels(pull).includes(TAGGED_LABEL);
-	if (input.release !== null && input.tagRef === null)
+	if (input.release !== null && input.tagRef === null) {
 		refuse('release_without_tag', 'release exists without its tag');
+	}
 	if (input.release !== null) {
 		verifyPublishedState(input.tagRef, input.release, identity);
-		if (!pending && !tagged)
+		if (!pending && !tagged) {
 			refuse(
 				'release_pr_label_conflict',
 				'published candidate has no lifecycle label'
 			);
+		}
 		return {
 			action: tagged ? 'already_published' : 'reconcile_labels',
 			pullNumber: pull.number,
 		};
 	}
-	if (!pending || tagged)
+	if (!pending || tagged) {
 		refuse(
 			'release_pr_label_conflict',
 			'unpublished candidate must have only pending label'
 		);
-	if (input.tagRef !== null)
+	}
+	if (input.tagRef !== null) {
 		refuse('partial_publication_state', 'tag exists without release');
-	if (input.immutableReleasesEnabled === false)
+	}
+	if (input.immutableReleasesEnabled === false) {
 		refuse(
 			'immutable_releases_disabled',
 			'immutable-release acknowledgement is missing or mismatched'
 		);
+	}
 	return { action: 'create_release', pullNumber: pull.number };
 }
 export function verifyPublishedState(tagRef, release, identity) {
@@ -326,18 +351,21 @@ export function verifyPublishedState(tagRef, release, identity) {
 		release?.immutable !== true ||
 		!Number.isInteger(release?.id) ||
 		release.id < 1
-	)
+	) {
 		refuse(
 			'release_state_conflict',
 			'tag or immutable release readback is not exact'
 		);
-	if (!Array.isArray(release.assets) || release.assets.length)
+	}
+	if (!Array.isArray(release.assets) || release.assets.length) {
 		refuse('release_asset_conflict', 'release must have no assets');
+	}
 	return true;
 }
 async function api(path, options = {}) {
-	if (!process.env.GITHUB_TOKEN)
+	if (!process.env.GITHUB_TOKEN) {
 		refuse('token_missing', 'GITHUB_TOKEN is required');
+	}
 	const response = await fetch(`https://api.github.com${path}`, {
 		method: options.method ?? 'GET',
 		headers: {
@@ -352,13 +380,15 @@ async function api(path, options = {}) {
 				: JSON.stringify(options.body),
 		redirect: 'error',
 	});
-	if (options.allow404 && response.status === 404)
+	if (options.allow404 && response.status === 404) {
 		return { data: null, headers: response.headers };
-	if (!response.ok)
+	}
+	if (!response.ok) {
 		refuse(
 			'github_api_failed',
 			`${options.method ?? 'GET'} ${path} returned ${response.status}`
 		);
+	}
 	return {
 		data: response.status === 204 ? null : await response.json(),
 		headers: response.headers,
@@ -370,14 +400,16 @@ async function associatedPulls(repository, sha) {
 		const response = await api(
 			`/repos/${repository}/commits/${sha}/pulls?per_page=100&page=${page}`
 		);
-		if (!Array.isArray(response.data))
+		if (!Array.isArray(response.data)) {
 			refuse(
 				'pull_readback_invalid',
 				'commit pull request response is not a list'
 			);
+		}
 		pulls.push(...response.data);
-		if (!/<[^>]+>;\s*rel="next"/.test(response.headers.get('link') ?? ''))
+		if (!/<[^>]+>;\s*rel="next"/.test(response.headers.get('link') ?? '')) {
 			return pulls;
+		}
 	}
 	refuse(
 		'pull_readback_unbounded',
@@ -396,27 +428,31 @@ async function remoteState(repository, tag) {
 	return { tagRef: tagRef.data, release: release.data };
 }
 async function reconcileLabels(repository, number, value) {
-	if (!value.includes(TAGGED_LABEL))
+	if (!value.includes(TAGGED_LABEL)) {
 		await api(`/repos/${repository}/issues/${number}/labels`, {
 			method: 'POST',
 			body: { labels: [TAGGED_LABEL] },
 		});
-	if (value.includes(PENDING_LABEL))
+	}
+	if (value.includes(PENDING_LABEL)) {
 		await api(
 			`/repos/${repository}/issues/${number}/labels/${encodeURIComponent(PENDING_LABEL)}`,
 			{ method: 'DELETE', allow404: true }
 		);
+	}
 }
 export async function runPublisher(root = process.cwd()) {
 	const eventPath = process.env.GITHUB_EVENT_PATH;
 	const repository = process.env.GITHUB_REPOSITORY;
-	if (repository !== REPOSITORY || !eventPath || !process.env.GITHUB_TOKEN)
+	if (repository !== REPOSITORY || !eventPath || !process.env.GITHUB_TOKEN) {
 		refuse('environment_invalid', 'publisher environment is incomplete');
+	}
 	const payload = JSON.parse(readFileSync(eventPath, 'utf8'));
 	const event = payload.workflow_run;
 	const sha = event?.head_sha;
-	if (!FULL_SHA.test(sha ?? '') || git(root, ['rev-parse', 'HEAD']) !== sha)
+	if (!FULL_SHA.test(sha ?? '') || git(root, ['rev-parse', 'HEAD']) !== sha) {
 		refuse('checkout_drift', 'checkout is not the CI candidate');
+	}
 	const candidateContents = contents(root, sha);
 	const parent = git(root, ['rev-parse', `${sha}^`]);
 	const parentState = parentContents(root, parent);
@@ -434,27 +470,31 @@ export async function runPublisher(root = process.cwd()) {
 					.package_revision,
 			}
 		: validateCandidate(root, sha);
-	if (unreleased && identity.packageRevision !== revisionAt(root, sha))
+	if (unreleased && identity.packageRevision !== revisionAt(root, sha)) {
 		refuse(
 			'runtime_revision_drift',
 			'runtime-copy package_revision does not hash bootstrap.php, runtime.php and src PHP bytes'
 		);
+	}
 	const parentVersion = parentState
 		? manifestVersion(parentState.manifest, 'parent', true)
 		: '0.0.0';
-	if (unreleased && parentState && parentVersion !== '0.0.0')
+	if (unreleased && parentState && parentVersion !== '0.0.0') {
 		refuse(
 			'release_version_regression',
 			'released beta metadata may not return to 0.0.0'
 		);
+	}
 	const unchangedVersion =
 		parentState?.manifest === candidateContents.manifest;
-	const delta =
-		!parentState || unreleased
-			? { parentVersion }
-			: unchangedVersion
-				? { parentVersion: identity.version }
-				: verifyReleaseDelta(parentState, candidateContents);
+	let delta;
+	if (!parentState || unreleased) {
+		delta = { parentVersion };
+	} else if (unchangedVersion) {
+		delta = { parentVersion: identity.version };
+	} else {
+		delta = verifyReleaseDelta(parentState, candidateContents);
+	}
 	const [main, pulls, state] = await Promise.all([
 		api(`/repos/${repository}/git/ref/heads/main`),
 		associatedPulls(repository, sha),
@@ -492,12 +532,15 @@ export async function runPublisher(root = process.cwd()) {
 		release: state.release,
 	};
 	let result = decidePublication(input);
-	if (result.action === 'none') return result;
-	if (process.env.RAN_RELEASE_PUBLISHER_MUTATE !== '1')
+	if (result.action === 'none') {
+		return result;
+	}
+	if (process.env.RAN_RELEASE_PUBLISHER_MUTATE !== '1') {
 		refuse(
 			'mutation_disabled',
 			'publisher mutation requires RAN_RELEASE_PUBLISHER_MUTATE=1'
 		);
+	}
 	const [freshMain, freshPulls, freshState] = await Promise.all([
 		api(`/repos/${repository}/git/ref/heads/main`),
 		associatedPulls(repository, sha),
@@ -517,7 +560,7 @@ export async function runPublisher(root = process.cwd()) {
 				: undefined,
 	};
 	result = decidePublication(input);
-	if (result.action === 'create_release')
+	if (result.action === 'create_release') {
 		await api(`/repos/${repository}/releases`, {
 			method: 'POST',
 			apiVersion: IMMUTABLE_RELEASES_API_VERSION,
@@ -531,6 +574,7 @@ export async function runPublisher(root = process.cwd()) {
 				generate_release_notes: false,
 			},
 		});
+	}
 	const checked = await remoteState(repository, identity.tag);
 	verifyPublishedState(checked.tagRef, checked.release, identity);
 	const original = input.pulls.find(
@@ -552,15 +596,17 @@ export async function runPublisher(root = process.cwd()) {
 	if (
 		!labels(finalPull).includes(TAGGED_LABEL) ||
 		labels(finalPull).includes(PENDING_LABEL)
-	)
+	) {
 		refuse(
 			'release_label_readback_failed',
 			'release PR labels did not reconcile to tagged'
 		);
+	}
 	return { ...result, releaseId: checked.release.id };
 }
-if (process.argv[1] === fileURLToPath(import.meta.url))
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	runPublisher().catch((error) => {
-		console.error(error);
+		process.stderr.write(`${String(error)}\n`);
 		process.exitCode = 1;
 	});
+}

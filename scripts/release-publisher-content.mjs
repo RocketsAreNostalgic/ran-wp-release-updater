@@ -64,25 +64,28 @@ function firstNotes(changelog, version) {
 		'm'
 	);
 	const start = changelog.search(heading);
-	if (start < 0 || changelog.match(/^## (?:\[|[0-9])/m)?.index !== start)
+	if (start < 0 || changelog.match(/^## (?:\[|[0-9])/m)?.index !== start) {
 		refuse(
 			'release_notes_missing',
 			'candidate must prepend its changelog section'
 		);
+	}
 	const tail = changelog.slice(start);
 	const next = tail.slice(1).search(/^## (?:\[|[0-9])/m);
 	const notes = (next < 0 ? tail : tail.slice(0, next + 1)).trim();
-	if (notes.length < 20 || notes.length > 125000)
+	if (notes.length < 20 || notes.length > 125000) {
 		refuse(
 			'release_notes_invalid',
 			'candidate notes are empty or unbounded'
 		);
+	}
 	return notes;
 }
 
 export function candidateIdentity(contents, candidateSha) {
-	if (!/^[a-f0-9]{40}$/.test(candidateSha))
+	if (!/^[a-f0-9]{40}$/.test(candidateSha)) {
 		refuse('candidate_invalid', 'candidate SHA is invalid');
+	}
 	const version = manifestVersion(contents.manifest, 'candidate');
 	const copy = runtimeCopy(contents.runtimeCopy);
 	let composer;
@@ -95,16 +98,18 @@ export function candidateIdentity(contents, candidateSha) {
 		composer?.name !== 'ran/wp-release-updater' ||
 		composer?.type !== 'library' ||
 		Object.hasOwn(composer, 'version')
-	)
+	) {
 		refuse(
 			'composer_identity_invalid',
 			'Composer identity is not the unversioned target library'
 		);
-	if (copy.package_version !== version)
+	}
+	if (copy.package_version !== version) {
 		refuse(
 			'version_source_drift',
 			'manifest and runtime-copy package_version disagree'
 		);
+	}
 	return {
 		candidateSha,
 		packageName: composer.name,
@@ -118,19 +123,21 @@ export function candidateIdentity(contents, candidateSha) {
 export function verifyReleaseDelta(parent, candidate) {
 	const before = manifestVersion(parent.manifest, 'parent', true);
 	const after = manifestVersion(candidate.manifest, 'candidate');
-	if (before !== UNRELEASED && !BETA.test(before))
+	if (before !== UNRELEASED && !BETA.test(before)) {
 		refuse('release_content_drift', 'parent release state is invalid');
+	}
 	if (before !== UNRELEASED) {
 		const beforeParts = before.match(BETA).slice(1).map(Number);
 		const afterParts = after.match(BETA).slice(1).map(Number);
 		const changed = afterParts.findIndex(
 			(part, index) => part !== beforeParts[index]
 		);
-		if (changed < 0 || afterParts[changed] < beforeParts[changed])
+		if (changed < 0 || afterParts[changed] < beforeParts[changed]) {
 			refuse(
 				'release_version_not_advanced',
 				'release version must advance'
 			);
+		}
 	}
 	const parentCopy = runtimeCopy(parent.runtimeCopy);
 	const candidateCopy = runtimeCopy(candidate.runtimeCopy);
@@ -138,11 +145,12 @@ export function verifyReleaseDelta(parent, candidate) {
 		parentCopy.package_version !== before ||
 		candidateCopy.package_version !== after ||
 		parentCopy.package_revision !== candidateCopy.package_revision
-	)
+	) {
 		refuse(
 			'release_content_drift',
 			'only runtime-copy package_version may change'
 		);
+	}
 	if (
 		candidate.manifest !==
 			parent.manifest.replace(
@@ -154,11 +162,12 @@ export function verifyReleaseDelta(parent, candidate) {
 				JSON.stringify(before),
 				JSON.stringify(after)
 			)
-	)
+	) {
 		refuse(
 			'release_content_drift',
 			'version files may change only their version token'
 		);
+	}
 	const prefix = '# Changelog\n\n';
 	const escapedBefore = before.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	const escapedAfter = after.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -184,25 +193,28 @@ export function verifyReleaseDelta(parent, candidate) {
 		!candidate.changelog.startsWith(prefix) ||
 		parentMatch?.index !== prefix.length ||
 		candidateMatch?.index !== prefix.length
-	)
+	) {
 		refuse(
 			'release_content_drift',
 			'CHANGELOG heading or prefix is not an exact Release Please insertion'
 		);
+	}
 	const parentHistory = parent.changelog.slice(prefix.length);
-	if (!candidate.changelog.endsWith(parentHistory))
+	if (!candidate.changelog.endsWith(parentHistory)) {
 		refuse(
 			'release_content_drift',
 			'CHANGELOG prior history must remain byte-identical'
 		);
+	}
 	const inserted = candidate.changelog.slice(
 		prefix.length,
 		candidate.changelog.length - parentHistory.length
 	);
-	if (!inserted.endsWith('\n\n') || !candidateHeading.test(inserted))
+	if (!inserted.endsWith('\n\n') || !candidateHeading.test(inserted)) {
 		refuse(
 			'release_content_drift',
 			'CHANGELOG insertion is not a complete Release Please section'
 		);
+	}
 	return { parentVersion: before, candidateVersion: after };
 }

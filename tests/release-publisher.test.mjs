@@ -193,13 +193,14 @@ test('only exact green CI normal merge and changed paths can publish', () => {
 	refusal('main_moved', () =>
 		decidePublication({ ...input, mainSha: undefined })
 	);
-	for (const parentVersion of ['0.2.0-beta.1', '1.0.0-beta.1'])
+	for (const parentVersion of ['0.2.0-beta.1', '1.0.0-beta.1']) {
 		refusal('release_parent_version_invalid', () =>
 			decidePublication({
 				...input,
 				commit: { ...input.commit, parentVersion },
 			})
 		);
+	}
 });
 
 test('exact merged Release Please pull hydrates its head tree', async () => {
@@ -322,10 +323,11 @@ test('only the exact historical runtime-copy partial parent is bootstrap metadat
 			'ec9e1058939b3d699fb49eb700dded1a2caddb19',
 			{ manifest: null, runtimeCopy: null, changelog: otherBlob },
 		],
-	])
+	]) {
 		refusal('release_content_drift', () =>
 			classifyParentReleaseMetadata(sha, entries)
 		);
+	}
 });
 
 test('immutable release readback rejects mutable or asset-bearing releases', () => {
@@ -464,21 +466,26 @@ function transport(fixture, options = {}) {
 			},
 			labels: state.labels.map((name) => ({ name })),
 		};
-		if (value.pathname.endsWith(`/commits/${fixture.candidate}/pulls`))
+		if (value.pathname.endsWith(`/commits/${fixture.candidate}/pulls`)) {
 			return response(options.ordinary ? [] : [pr]);
-		if (value.pathname.endsWith(`/git/commits/${fixture.head}`))
+		}
+		if (value.pathname.endsWith(`/git/commits/${fixture.head}`)) {
 			return response({
 				sha: fixture.head,
 				tree: { sha: options.badTree ? 'bad' : fixture.tree },
 			});
-		if (value.pathname.endsWith('/git/ref/heads/main'))
+		}
+		if (value.pathname.endsWith('/git/ref/heads/main')) {
 			return response({ object: { sha: fixture.candidate } });
-		if (value.pathname.includes('/git/ref/tags/'))
+		}
+		if (value.pathname.includes('/git/ref/tags/')) {
 			return state.tag ? response(state.tag) : response(null, 404);
-		if (value.pathname.includes('/releases/tags/'))
+		}
+		if (value.pathname.includes('/releases/tags/')) {
 			return state.release
 				? response(state.release)
 				: response(null, 404);
+		}
 		if (value.pathname.endsWith('/releases') && method === 'POST') {
 			state.tag = { object: { type: 'commit', sha: fixture.candidate } };
 			const body = JSON.parse(init.body);
@@ -500,7 +507,9 @@ function transport(fixture, options = {}) {
 			state.labels = ['autorelease: tagged'];
 			return response(null, 204);
 		}
-		if (value.pathname.endsWith('/pulls/7')) return response(pr);
+		if (value.pathname.endsWith('/pulls/7')) {
+			return response(pr);
+		}
 		throw new Error(`unexpected ${method} ${value.pathname}`);
 	};
 	return { calls, fetch, state };
@@ -527,8 +536,11 @@ function publisherEnvironment(fixture, fetch) {
 	globalThis.fetch = fetch;
 	return () => {
 		for (const name of names) {
-			if (before[name] === undefined) delete process.env[name];
-			else process.env[name] = before[name];
+			if (before[name] === undefined) {
+				delete process.env[name];
+			} else {
+				process.env[name] = before[name];
+			}
 		}
 		globalThis.fetch = previousFetch;
 		rmSync(fixture.root, { recursive: true, force: true });
@@ -602,23 +614,27 @@ test('runPublisher ordinary, malformed, and disabled mutation paths never write'
 		}
 		const mocked = transport(fixture, options);
 		const restore = publisherEnvironment(fixture, mocked.fetch);
-		if (!options.ordinary && !options.badTree)
+		if (!options.ordinary && !options.badTree) {
 			delete process.env.RAN_RELEASE_PUBLISHER_MUTATE;
+		}
 		try {
-			if (options.ordinary)
+			if (options.ordinary) {
 				assert.equal((await runPublisher(fixture.root)).action, 'none');
-			else await assert.rejects(runPublisher(fixture.root));
+			} else {
+				await assert.rejects(runPublisher(fixture.root));
+			}
 			assert.equal(
 				mocked.calls.filter((call) => call.method !== 'GET').length,
 				0
 			);
-			if (options.ordinary)
+			if (options.ordinary) {
 				assert.equal(
 					mocked.calls.filter((call) =>
 						call.path.includes('/git/commits/')
 					).length,
 					0
 				);
+			}
 		} finally {
 			restore();
 		}
@@ -630,12 +646,13 @@ test('missing or mismatched immutable acknowledgement refuses before any write',
 		const fixture = publisherFixture();
 		const mocked = transport(fixture);
 		const restore = publisherEnvironment(fixture, mocked.fetch);
-		if (acknowledgement === undefined)
+		if (acknowledgement === undefined) {
 			delete process.env
 				.RAN_RELEASE_PUBLISHER_IMMUTABLE_RELEASES_ACKNOWLEDGED_REPOSITORY_ID;
-		else
+		} else {
 			process.env.RAN_RELEASE_PUBLISHER_IMMUTABLE_RELEASES_ACKNOWLEDGED_REPOSITORY_ID =
 				acknowledgement;
+		}
 		try {
 			await assert.rejects(
 				runPublisher(fixture.root),
