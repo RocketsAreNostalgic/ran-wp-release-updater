@@ -66,7 +66,7 @@ final class ArchiveScanner {
 			$parts = explode( '/', $path['path'] );
 			$root ??= $parts[0];
 			if (
-				( is_string( $expectedRoot ) && ! hash_equals( $expectedRoot, $parts[0] ) )
+				( null !== $expectedRoot && ! hash_equals( $expectedRoot, $parts[0] ) )
 				|| ! hash_equals( $root, $parts[0] )
 				|| ( 1 === count( $parts ) && ! $path['directory'] )
 			) {
