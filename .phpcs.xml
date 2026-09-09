@@ -154,8 +154,6 @@
 	<rule ref="Universal.Namespaces.OneDeclarationPerFile.MultipleFound"><exclude-pattern>/tests/</exclude-pattern></rule>
 	<rule ref="Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden"><exclude-pattern>/tests/</exclude-pattern></rule>
 	<rule ref="Generic.Files.OneObjectStructurePerFile">
-		<!-- BindingState is already scheduled for a dedicated stacked extraction. -->
-		<exclude-pattern>/src/WordPress/ReleaseOperationCoordinator.php</exclude-pattern>
 		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 	<rule ref="Generic.Classes.DuplicateClassName.Found"><exclude-pattern>/tests/</exclude-pattern></rule>
