@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   quality:
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
@@ -62,7 +62,7 @@ jobs:
       - run: php vendor/bin/phpunit --configuration phpunit.xml tests/Runtime/WindowsPortabilityProofTest.php
 
   wordpress-installed-integration:
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 15
     strategy:
       fail-fast: false
