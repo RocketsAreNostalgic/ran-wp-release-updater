@@ -1,0 +1,37 @@
+{
+  "name": "ran/updater-support",
+  "description": "Shared contracts and utilities for RAN updater packages.",
+  "type": "library",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": "^8.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "RAN\\UpdaterSupport\\V1\\": "src/"
+    }
+  },
+  "scripts": {
+    "check": [
+      "@validate:strict",
+      "@test:contract",
+      "@test:release-publisher",
+      "@lint:php"
+    ],
+    "validate:strict": "composer validate --strict --no-check-publish",
+    "test:contract": "php tests/contract.php",
+    "lint:php": "find src tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l",
+    "test:release-publisher": "node --test tests/release-publisher.test.mjs"
+  },
+  "config": {
+    "platform": {
+      "php": "8.2.0"
+    },
+    "sort-packages": true
+  },
+  "support": {
+    "issues": "https://github.com/RocketsAreNostalgic/ran-updater-support/issues",
+    "security": "https://github.com/RocketsAreNostalgic/ran-updater-support/security/advisories/new",
+    "source": "https://github.com/RocketsAreNostalgic/ran-updater-support"
+  }
+}
