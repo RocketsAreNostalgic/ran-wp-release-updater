@@ -1,0 +1,23 @@
+name: Phase 4 validator preflight
+
+on:
+  push:
+    branches:
+      - refactor/phase4-architecture
+    paths:
+      - .github/workflows/phase4-validator-preflight.yml
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Show broker sibling fixture coupling
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -n -C 2 'RuntimeCopySelector.php' tests/Runtime || true
+          grep -R -n -C 2 "ReflectionMethod( .*'\(declarationCode\|releaseDeclarationCode\|validStatus\|validDiagnostics\|exactKeys\|ownedBy\|exactPublicMethods\)'" tests || true
