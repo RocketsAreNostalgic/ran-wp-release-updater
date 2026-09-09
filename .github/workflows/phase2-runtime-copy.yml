@@ -32,6 +32,14 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
+          selector_file = Path('src/Runtime/RuntimeCopySelector.php')
+          selector_text = selector_file.read_text()
+          compact_doc = "\t/** @param array<string,mixed> $value @param list<string> $keys */\n\tprivate function exactKeys( array $value, array $keys ): bool {"
+          expanded_doc = "\t/**\n\t * @param array<string,mixed> $value\n\t * @param list<string> $keys\n\t */\n\tprivate function exactKeys( array $value, array $keys ): bool {"
+          if compact_doc not in selector_text:
+              raise SystemExit('RuntimeCopySelector exactKeys PHPDoc anchor not found')
+          selector_file.write_text(selector_text.replace(compact_doc, expanded_doc, 1))
+
           broker = Path('src/Runtime/RequestBroker.php')
           text = broker.read_text()
 
