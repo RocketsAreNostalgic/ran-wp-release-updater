@@ -418,7 +418,8 @@ namespace Tests\Performance {
 		);
 		$ownedPaths      = array();
 		foreach ( $natives as $item ) {
-			$path = ( new \ReflectionProperty( $item ['native'], 'pendingArchive' ) )->getValue( $item ['native'] );
+			$pending = ( new \ReflectionProperty( $item ['native'], 'pendingInstall' ) )->getValue( $item ['native'] );
+			$path    = $pending instanceof \RAN\WPReleaseUpdater\V1\WordPress\PendingInstallState ? $pending->archive() : null;
 			if ( is_string( $path ) && is_file( $path ) ) {
 				$ownedPaths [] = $path;
 			}
