@@ -25,7 +25,10 @@ final class GitHubApiClient {
 		return self::API_ORIGIN . $path;
 	}
 
-	/** @return array<string,mixed> */
+	/**
+	 * @param array<string,string> $headers
+	 * @return array<string,mixed>
+	 */
 	public function request(
 		string $url,
 		?string $token,
@@ -116,7 +119,10 @@ final class GitHubApiClient {
 		}
 	}
 
-	/** @return array<string,mixed> */
+	/**
+	 * @param array<string,string> $headers
+	 * @return array<string,mixed>
+	 */
 	private static function send( string $url, array $headers, int $limit, ?string $filename ): array {
 		if ( ! function_exists( 'wp_safe_remote_get' ) || ! function_exists( 'is_wp_error' ) ) {
 			throw new GitHubReleaseReadUnavailable( 'WordPress safe HTTP is unavailable.' );
@@ -205,7 +211,7 @@ final class GitHubApiClient {
 			if ( 1 !== preg_match( '/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?Z\z/D', $values['se'] ) ) {
 				return true;
 			}
-			$base = substr( $values['se'], 0, 19 ) . 'Z';
+			$base      = substr( $values['se'], 0, 19 ) . 'Z';
 			$expiresAt = self::exactUtcDate( '!Y-m-d\TH:i:s\Z', $base );
 			return null === $expiresAt || $expiresAt <= time();
 		}
@@ -224,7 +230,7 @@ final class GitHubApiClient {
 	}
 
 	private static function exactUtcDate( string $format, string $value ): ?int {
-		$date = \DateTimeImmutable::createFromFormat( $format, $value, new \DateTimeZone( 'UTC' ) );
+		$date   = \DateTimeImmutable::createFromFormat( $format, $value, new \DateTimeZone( 'UTC' ) );
 		$errors = \DateTimeImmutable::getLastErrors();
 		if (
 			false === $date
