@@ -80,7 +80,7 @@ final class RuntimeCopySelector {
 			$this->version( $environment['php_version'] );
 			$this->wordpressVersion( $environment['wordpress_version'] );
 			return true;
-		} catch ( RuntimeException ) {
+		} catch ( \Throwable ) {
 			return false;
 		}
 	}
