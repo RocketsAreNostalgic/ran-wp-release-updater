@@ -1,0 +1,58 @@
+name: Repair phase 4 performance fixture
+
+on:
+  push:
+    branches:
+      - refactor/phase4-architecture
+    paths:
+      - .github/workflows/phase4-fix-benchmark.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: refactor/phase4-architecture
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Repair pending-install benchmark probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('tests/Performance/native-discovery-measure.php')
+          text = path.read_text()
+          old = "\t\tforeach ( $natives as $item ) {\n\t\t\t$path = ( new \\ReflectionProperty( $item ['native'], 'pendingArchive' ) )->getValue( $item ['native'] );\n\t\t\tif ( is_string( $path ) && is_file( $path ) ) {\n\t\t\t\t$ownedPaths [] = $path;\n\t\t\t}\n\t\t}\n"
+          new = "\t\tforeach ( $natives as $item ) {\n\t\t\t$pending = ( new \\ReflectionProperty( $item ['native'], 'pendingInstall' ) )->getValue( $item ['native'] );\n\t\t\t$path    = $pending instanceof \\RAN\\WPReleaseUpdater\\V1\\WordPress\\PendingInstallState ? $pending->archive() : null;\n\t\t\tif ( is_string( $path ) && is_file( $path ) ) {\n\t\t\t\t$ownedPaths [] = $path;\n\t\t\t}\n\t\t}\n"
+          if old not in text:
+              raise SystemExit('Expected stale pendingArchive probe was not found.')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          set +e
+          composer format:php
+          code=$?
+          set -e
+          if [ "$code" -gt 1 ]; then exit "$code"; fi
+          mkdir -p .workspaces/php-tmp
+          TMPDIR="$PWD/.workspaces/php-tmp" php -d sys_temp_dir="$PWD/.workspaces/php-tmp" tests/Performance/native-discovery-measure.php
+          composer check
+      - name: Commit repaired fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/Performance/native-discovery-measure.php
+          git commit -m 'test(performance): follow pending install state extraction'
+          git push origin HEAD:refactor/phase4-architecture
