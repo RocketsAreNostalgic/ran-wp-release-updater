@@ -51,27 +51,119 @@
 	</rule>
 
 	<!-- WordPress hooks and compatibility contracts retain required parameter names. -->
-	<rule ref="Generic.CodeAnalysis.UnusedFunctionParameter">
-		<severity>0</severity>
-	</rule>
-	<rule ref="Generic.CodeAnalysis.UselessOverridingMethod">
-		<severity>0</severity>
-	</rule>
-	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames">
-		<severity>0</severity>
-	</rule>
+	<rule ref="Generic.CodeAnalysis.UnusedFunctionParameter"><severity>0</severity></rule>
+	<rule ref="Generic.CodeAnalysis.UselessOverridingMethod"><severity>0</severity></rule>
+	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames"><severity>0</severity></rule>
 
-	<!-- Security-sensitive filesystem code intentionally uses native primitives for custody and atomicity. -->
+	<!--
+		This is a library, not a rendering layer. Exception messages are internal
+		failure data and are never emitted as HTML; escaping them would corrupt the
+		closed failure protocol rather than improve output safety.
+	-->
+	<rule ref="WordPress.Security.EscapeOutput.ExceptionNotEscaped"><severity>0</severity></rule>
+
+	<!--
+		Canonical protocol/hash JSON deliberately uses native json_encode() with
+		JSON_THROW_ON_ERROR and exact flags. wp_json_encode() is not available at
+		all bootstrap boundaries and would make byte identity depend on WordPress.
+	-->
+	<rule ref="WordPress.WP.AlternativeFunctions.json_encode_json_encode"><severity>0</severity></rule>
+
+	<!--
+		URL canonicalization is part of the provider-neutral runtime and bootstrap
+		contract. It must work before WordPress helpers are guaranteed to exist.
+	-->
+	<rule ref="WordPress.WP.AlternativeFunctions.parse_url_parse_url"><severity>0</severity></rule>
+
+	<!-- Security-sensitive filesystem code intentionally uses native primitives for custody, identity and atomicity. -->
 	<rule ref="WordPress.WP.AlternativeFunctions">
 		<exclude-pattern>/src/Archive/</exclude-pattern>
+		<exclude-pattern>/src/Provider/GitHub/GitHubReleaseService.php</exclude-pattern>
+		<exclude-pattern>/src/WordPress/InstalledPackageResolver.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/NativePluginUpdater.php</exclude-pattern>
 		<exclude-pattern>/scripts/</exclude-pattern>
 		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 	<rule ref="WordPress.PHP.NoSilencedErrors">
 		<exclude-pattern>/src/Archive/</exclude-pattern>
+		<exclude-pattern>/src/Provider/GitHub/GitHubReleaseService.php</exclude-pattern>
+		<exclude-pattern>/src/WordPress/InstalledPackageResolver.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/NativePluginUpdater.php</exclude-pattern>
 		<exclude-pattern>/scripts/</exclude-pattern>
+		<exclude-pattern>/tests/</exclude-pattern>
+	</rule>
+
+	<!-- Bootstrap and broker read local trusted runtime metadata, never remote URLs. -->
+	<rule ref="WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents">
+		<exclude-pattern>/bootstrap.php</exclude-pattern>
+		<exclude-pattern>/src/Runtime/RequestBroker.php</exclude-pattern>
+	</rule>
+
+	<!--
+		ReleaseOperationCoordinator validates the options-table identifier before use
+		and prepares every data value. WPCS cannot follow that closed identifier/CAS
+		construction through the local SQL variable, so suppress only those parser
+		false positives for this single persistence boundary.
+	-->
+	<rule ref="WordPress.DB.PreparedSQL.InterpolatedNotPrepared">
+		<exclude-pattern>/src/WordPress/ReleaseOperationCoordinator.php</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.DB.PreparedSQL.NotPrepared">
+		<exclude-pattern>/src/WordPress/ReleaseOperationCoordinator.php</exclude-pattern>
+	</rule>
+
+	<!-- NativePluginUpdater uses URL-safe base64 solely as a bounded opaque operation token, never to conceal executable code. -->
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode">
+		<exclude-pattern>/src/WordPress/NativePluginUpdater.php</exclude-pattern>
+		<exclude-pattern>/tests/</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode">
+		<exclude-pattern>/src/WordPress/NativePluginUpdater.php</exclude-pattern>
+		<exclude-pattern>/tests/</exclude-pattern>
+	</rule>
+
+	<!--
+		Integration/compatibility tests intentionally construct synthetic plugins,
+		classes, namespaces, hooks and subprocesses. These rules are meaningful for
+		production code but would make the fixtures less representative.
+	-->
+	<rule ref="WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.PHP.DevelopmentFunctions.error_log_var_export"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Universal.Operators.DisallowShortTernary.Found"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.WP.GlobalVariablesOverride.Prohibited">
+		<exclude-pattern>/tests/</exclude-pattern>
+		<exclude-pattern>/scripts/</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open">
+		<exclude-pattern>/tests/</exclude-pattern>
+		<exclude-pattern>/scripts/lint-php.php</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Universal.Files.SeparateFunctionsFromOO.Mixed"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Universal.Namespaces.OneDeclarationPerFile.MultipleFound"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Generic.Files.OneObjectStructurePerFile">
+		<!-- BindingState is already scheduled for a dedicated stacked extraction. -->
+		<exclude-pattern>/src/WordPress/ReleaseOperationCoordinator.php</exclude-pattern>
+		<exclude-pattern>/tests/</exclude-pattern>
+	</rule>
+	<rule ref="Generic.Classes.DuplicateClassName.Found"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Generic.CodeAnalysis.EmptyStatement.DetectedCatch"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Generic.CodeAnalysis.ForLoopWithTestFunctionCall.NotAllowed"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.NamingConventions.ValidHookName.UseUnderscores"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.DB.RestrictedFunctions.mysql_mysqli_init"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.DB.RestrictedFunctions.mysql_mysqli_real_connect"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.DB.RestrictedFunctions.mysql_mysqli_report"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Squiz.PHP.Eval.Discouraged"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Generic.Strings.UnnecessaryStringConcat.Found"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Squiz.Operators.IncrementDecrementUsage.NoBrackets"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.Security.EscapeOutput.OutputNotEscaped">
+		<exclude-pattern>/scripts/lint-php.php</exclude-pattern>
 		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 </ruleset>

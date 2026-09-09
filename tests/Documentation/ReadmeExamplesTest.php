@@ -8,12 +8,11 @@ use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 
-final class ReadmeExamplesTest extends TestCase
-{
+final class ReadmeExamplesTest extends TestCase {
+
 	private string $root;
 
-	protected function setUp(): void
-	{
+	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.5/php-tmp/readme-examples-' . bin2hex( random_bytes( 6 ) );
 		mkdir( $this->root . '/plugins/example-plugin/vendor/ran', 0700, true );
 		mkdir( $this->root . '/themes/example-theme/vendor/ran', 0700, true );
@@ -25,8 +24,7 @@ final class ReadmeExamplesTest extends TestCase
 		file_put_contents( $this->root . '/themes/managed-theme/style.css', "/*\nTheme Name: Managed Theme\nVersion: 1.2.3\nRequires at least: 6.5\nRequires PHP: 8.2\nUpdate URI: https://github.com/acme/managed-theme\n*/\n" );
 	}
 
-	protected function tearDown(): void
-	{
+	protected function tearDown(): void {
 		$workspace = dirname( __DIR__, 2 ) . '/.workspaces/p0.5/php-tmp/';
 		if ( ! str_starts_with( $this->root, $workspace . 'readme-examples-' ) || ! is_dir( $this->root ) ) {
 			return;
@@ -38,8 +36,7 @@ final class ReadmeExamplesTest extends TestCase
 		rmdir( $this->root );
 	}
 
-	public function testEveryReadmePhpFenceIsSyntaxValidAndItsRegistrationContractExecutes(): void
-	{
+	public function testEveryReadmePhpFenceIsSyntaxValidAndItsRegistrationContractExecutes(): void {
 		$examples = $this->phpExamples();
 		self::assertCount( 8, $examples, 'Update this proof when adding, removing, or materially changing a README PHP example.' );
 		self::assertStringContainsString( 'Plugin Name: Example Plugin', $examples[0] );
@@ -61,10 +58,9 @@ final class ReadmeExamplesTest extends TestCase
 		$this->assertReleaseSourceFence( 'theme', 'fence-inspect', $examples[5] );
 	}
 
-	public function testPublicGuidesStayForwardLookingAndLinkTheProviderArchitecture(): void
-	{
-		$readme = file_get_contents( dirname( __DIR__, 2 ) . '/README.md' );
-		$contributing = file_get_contents( dirname( __DIR__, 2 ) . '/CONTRIBUTING.md' );
+	public function testPublicGuidesStayForwardLookingAndLinkTheProviderArchitecture(): void {
+		$readme               = file_get_contents( dirname( __DIR__, 2 ) . '/README.md' );
+		$contributing         = file_get_contents( dirname( __DIR__, 2 ) . '/CONTRIBUTING.md' );
 		$providerArchitecture = file_get_contents( dirname( __DIR__, 2 ) . '/docs/provider-architecture.md' );
 		self::assertIsString( $readme );
 		self::assertIsString( $contributing );
@@ -85,13 +81,12 @@ final class ReadmeExamplesTest extends TestCase
 		self::assertStringContainsString( '52,428,800-byte', $readme );
 	}
 
-	public function testReleaseSourceExamplesExecuteThroughThePublicBootstrap(): void
-	{
+	public function testReleaseSourceExamplesExecuteThroughThePublicBootstrap(): void {
 		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
 			foreach ( array( 'happy', 'liveness', 'discard' ) as $scenario ) {
 				$command = $this->childPhpCommand( $script, array( $type, $scenario ) );
-				$output = array();
+				$output  = array();
 				exec( $command, $output, $status );
 				self::assertSame( 0, $status, implode( "\n", $output ) );
 				$result = json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
@@ -99,48 +94,61 @@ final class ReadmeExamplesTest extends TestCase
 				self::assertSame( $scenario, $result['scenario'] );
 				self::assertSame( 'runtime_not_ready', $result['before'] );
 				self::assertSame( 3, $result['credential_operations'] );
-				self::assertSame( array( 'requests' => 1, 'zips' => 0 ), $result['http']['list'] );
-				self::assertSame( array( 'requests' => 6, 'zips' => 1 ), $result['http']['inspect'] );
-				self::assertSame( array( 'requests' => 6, 'zips' => 1 ), $result['http']['acquire'] );
+				self::assertSame(
+					array(
+						'requests' => 1,
+						'zips'     => 0,
+					),
+					$result['http']['list']
+				);
+				self::assertSame(
+					array(
+						'requests' => 6,
+						'zips'     => 1,
+					),
+					$result['http']['inspect']
+				);
+				self::assertSame(
+					array(
+						'requests' => 6,
+						'zips'     => 1,
+					),
+					$result['http']['acquire']
+				);
 			}
 		}
 	}
 
-	public function testReleaseManagementAcquisitionFenceExecutesAgainstThePublicSource(): void
-	{
+	public function testReleaseManagementAcquisitionFenceExecutesAgainstThePublicSource(): void {
 		$fences = $this->phpFences( dirname( __DIR__, 2 ) . '/docs/release-management.md' );
 		self::assertCount( 1, $fences );
 		self::assertStringContainsString( '$source->acquire(', $fences[0] );
 		$this->assertReleaseSourceFence( 'plugin', 'fence-acquire', $fences[0] );
 	}
 
-	public function testReleaseFenceCannotPassWhenItsCallbackDoesNoOperation(): void
-	{
-		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
-		$fence = '$source = $registrar->releases(provider: "github", packageType: "plugin", repository: "acme/consumer", repositoryId: "99"); add_action("init", static function (): void {});';
+	public function testReleaseFenceCannotPassWhenItsCallbackDoesNoOperation(): void {
+		$script  = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
+		$fence   = '$source = $registrar->releases(provider: "github", packageType: "plugin", repository: "acme/consumer", repositoryId: "99"); add_action("init", static function (): void {});';
 		$command = $this->childPhpCommand( $script, array( 'plugin', 'fence-list', base64_encode( $fence ) ) );
 		exec( $command, $output, $status );
 		self::assertNotSame( 0, $status, 'A release fence without an operation must fail its proof.' );
 	}
 
 	/** @return list<string> */
-	private function phpExamples(): array
-	{
+	private function phpExamples(): array {
 		return $this->phpFences( dirname( __DIR__, 2 ) . '/README.md' );
 	}
 
 	/** @return list<string> */
-	private function phpFences( string $path ): array
-	{
+	private function phpFences( string $path ): array {
 		$contents = file_get_contents( $path );
 		self::assertIsString( $contents );
 		preg_match_all( '/```php\\n(.*?)\\n```/s', $contents, $matches );
 		return $matches[1];
 	}
 
-	private function assertReleaseSourceFence( string $type, string $scenario, string $fence ): void
-	{
-		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
+	private function assertReleaseSourceFence( string $type, string $scenario, string $fence ): void {
+		$script  = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
 		$command = $this->childPhpCommand( $script, array( $type, $scenario, base64_encode( $fence ) ) );
 		exec( $command, $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
@@ -149,11 +157,10 @@ final class ReadmeExamplesTest extends TestCase
 	}
 
 	/** @param list<string> $arguments */
-	private function childPhpCommand( string $script, array $arguments ): string
-	{
-		$command = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root );
+	private function childPhpCommand( string $script, array $arguments ): string {
+		$command            = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root );
 		$extensionDirectory = ini_get( 'extension_dir' );
-		$zipLibrary = is_string( $extensionDirectory ) ? $extensionDirectory . DIRECTORY_SEPARATOR . ( DIRECTORY_SEPARATOR === '\\' ? 'php_zip.dll' : 'zip.so' ) : '';
+		$zipLibrary         = is_string( $extensionDirectory ) ? $extensionDirectory . DIRECTORY_SEPARATOR . ( DIRECTORY_SEPARATOR === '\\' ? 'php_zip.dll' : 'zip.so' ) : '';
 		if ( extension_loaded( 'zip' ) && is_file( $zipLibrary ) ) {
 			$command .= ' -d extension=' . escapeshellarg( $zipLibrary );
 		}
@@ -164,8 +171,7 @@ final class ReadmeExamplesTest extends TestCase
 		return $command;
 	}
 
-	private function assertPlugin( string $example, bool $private ): void
-	{
+	private function assertPlugin( string $example, bool $private ): void {
 		if ( $private ) {
 			$example = str_replace(
 				"static fn (): ?string => getenv( 'EXAMPLE_PLUGIN_GITHUB_TOKEN' ) ?: null",
@@ -174,7 +180,7 @@ final class ReadmeExamplesTest extends TestCase
 			);
 			$example = '$registrar = require __DIR__ . \'/vendor/ran/wp-release-updater/bootstrap.php\';' . "\n\n" . $example;
 		}
-		$body = $this->pluginHeader() . "\n" . $example . "\n"
+		$body   = $this->pluginHeader() . "\n" . $example . "\n"
 			. '$before=readmeSnapshot($registrar);$status=$releaseUpdater->status();$diagnostics=$releaseUpdater->diagnostics();$refresh=$releaseUpdater->refresh();'
 			. 'runAfterSetupTheme();echo json_encode(["before"=>$before,"registered"=>$releaseUpdater->register(),"status"=>$releaseUpdater->status(),"diagnostics"=>$releaseUpdater->diagnostics(),"refresh"=>$refresh,"credential_calls"=>$GLOBALS["readme_credential_calls"]]);';
 		$result = $this->executeExample( 'example-plugin.php', $body, $this->root . '/plugins/example-plugin' );
@@ -186,9 +192,8 @@ final class ReadmeExamplesTest extends TestCase
 		$this->assertActivationOrdering( $result, 'plugin', 'example-plugin.php', 'acme/example-plugin' );
 	}
 
-	private function assertTheme( string $example ): void
-	{
-		$body = $example . "\n"
+	private function assertTheme( string $example ): void {
+		$body   = $example . "\n"
 			. '$before=readmeSnapshot($registrar);runAfterSetupTheme();echo json_encode(["before"=>$before,"registered"=>$releaseUpdater->register(),"status"=>$releaseUpdater->status(),"diagnostics"=>$releaseUpdater->diagnostics()]);';
 		$result = $this->executeExample( 'active-theme.php', $body, $this->root . '/themes/example-theme' );
 		self::assertTrue( $result['registered'] );
@@ -197,9 +202,8 @@ final class ReadmeExamplesTest extends TestCase
 		$this->assertActivationOrdering( $result, 'theme', 'example-theme/style.css', 'acme/example-theme' );
 	}
 
-	private function assertStatusMethods( string $registration, string $example ): void
-	{
-		$body = $this->pluginHeader() . "\n" . $registration . "\n" . $example . "\n"
+	private function assertStatusMethods( string $registration, string $example ): void {
+		$body   = $this->pluginHeader() . "\n" . $registration . "\n" . $example . "\n"
 			. '$before=readmeSnapshot($registrar);runAfterSetupTheme();echo json_encode(["before"=>$before,"status"=>$releaseUpdater->status(),"diagnostics"=>$releaseUpdater->diagnostics(),"refresh"=>$releaseUpdater->refresh()]);';
 		$result = $this->executeExample( 'example-plugin.php', $body, $this->root . '/plugins/example-plugin' );
 		self::assertSame( 'target_active', $result['status']['code'] );
@@ -208,12 +212,11 @@ final class ReadmeExamplesTest extends TestCase
 		$this->assertActivationOrdering( $result, 'plugin', 'example-plugin.php', 'acme/example-plugin' );
 	}
 
-	private function assertManagedTheme( string $example ): void
-	{
+	private function assertManagedTheme( string $example ): void {
 		$bootstrap = var_export( $this->root . '/plugins/example-plugin/vendor/ran/wp-release-updater/bootstrap.php', true );
-		$body = '$registrar=require ' . $bootstrap . ';' . "\n" . $example . "\n"
+		$body      = '$registrar=require ' . $bootstrap . ';' . "\n" . $example . "\n"
 			. '$before=readmeSnapshot($registrar);runAfterSetupTheme();echo json_encode(["before"=>$before,"registered"=>$managedThemeUpdater->register(),"status"=>$managedThemeUpdater->status(),"diagnostics"=>$managedThemeUpdater->diagnostics()]);';
-		$result = $this->executeExample( 'managed-theme.php', $body, $this->root . '/plugins/example-plugin' );
+		$result    = $this->executeExample( 'managed-theme.php', $body, $this->root . '/plugins/example-plugin' );
 		self::assertTrue( $result['registered'] );
 		self::assertSame( 'target_active', $result['status']['code'] );
 		self::assertSame( 'active', $result['diagnostics']['state'] );
@@ -221,32 +224,36 @@ final class ReadmeExamplesTest extends TestCase
 	}
 
 	/** @param array<string,mixed> $expected */
-	private function assertScript( string $name, string $example, string $tail, array $expected ): void
-	{
+	private function assertScript( string $name, string $example, string $tail, array $expected ): void {
 		self::assertSame( $expected, $this->executeExample( $name, $example . "\n" . $tail, $this->root . '/plugins/example-plugin' ) );
 	}
 
-	private function pluginHeader(): string
-	{
+	private function pluginHeader(): string {
 		return '/* Plugin Name: Example Plugin' . "\n" . 'Version: 1.2.3' . "\n" . 'Update URI: https://github.com/acme/example-plugin' . "\n" . '*/';
 	}
 
 	/** @param array<string,mixed> $result */
-	private function assertActivationOrdering( array $result, string $type, string $file, string $repository ): void
-	{
+	private function assertActivationOrdering( array $result, string $type, string $file, string $repository ): void {
 		self::assertSame( 'collecting', $result['before']['broker']['state'] );
 		self::assertSame( 1, $result['before']['broker']['submission_count'] );
-		self::assertSame( array( array( 'hook' => 'after_setup_theme', 'priority' => PHP_INT_MAX ) ), $result['before']['schedule'] );
+		self::assertSame(
+			array(
+				array(
+					'hook'     => 'after_setup_theme',
+					'priority' => PHP_INT_MAX,
+				),
+			),
+			$result['before']['schedule']
+		);
 		self::assertSame( $type, $result['before']['declaration']['target_type'] );
 		self::assertStringEndsWith( '/' . $file, $result['before']['declaration']['installed_file'] );
 		self::assertSame( $repository, $result['before']['declaration']['repository_locator'] );
 	}
 
 	/** @return array<string,mixed> */
-	private function executeExample( string $name, string $body, string $directory ): array
-	{
-		$file = $directory . '/' . $name;
-		$body = str_replace( '<?php', '', $body );
+	private function executeExample( string $name, string $body, string $directory ): array {
+		$file   = $directory . '/' . $name;
+		$body   = str_replace( '<?php', '', $body );
 		$prefix = '<?php '
 			. 'define("WP_PLUGIN_DIR", ' . var_export( $this->root . '/plugins', true ) . ');'
 			. '$GLOBALS["readme_hooks"]=[];$GLOBALS["readme_credential_calls"]=0;$GLOBALS["wpdb"]=new stdClass();$GLOBALS["wp_version"]="6.8.0";$GLOBALS["wp_theme_directories"]=[' . var_export( $this->root . '/themes', true ) . '];'

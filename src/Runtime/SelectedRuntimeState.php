@@ -7,30 +7,26 @@ namespace RAN\WPReleaseUpdater\V1\Runtime;
 /**
  * Request-local ownership of the selected protocol-4 broker.
  */
-final class SelectedRuntimeState
-{
+final class SelectedRuntimeState {
+
 	private const MAX_WORDPRESS_VERSION_LENGTH = 100;
 
 	/** @var array<string,true> */
 	private array $operations = array();
 
-	public function __construct( private ?RequestBroker $broker = null )
-	{
+	public function __construct( private ?RequestBroker $broker = null ) {
 	}
 
-	public function bind( RequestBroker $broker ): void
-	{
+	public function bind( RequestBroker $broker ): void {
 		$this->broker = $broker;
 	}
 
-	public function brokerIsLive(): bool
-	{
+	public function brokerIsLive(): bool {
 		return null === $this->livenessCode();
 	}
 
 	/** @internal */
-	public function livenessCode(): ?string
-	{
+	public function livenessCode(): ?string {
 		if (
 			! $this->broker instanceof RequestBroker
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
@@ -54,10 +50,11 @@ final class SelectedRuntimeState
 	}
 
 	/** @internal */
-	public function releaseReadinessCode(): ?string
-	{
+	public function releaseReadinessCode(): ?string {
 		$liveness = $this->livenessCode();
-		if ( null !== $liveness ) return 'runtime_unavailable';
+		if ( null !== $liveness ) {
+			return 'runtime_unavailable';
+		}
 		try {
 			return 'active' === ( $this->broker?->diagnostics()['state'] ?? null ) ? null : 'runtime_not_ready';
 		} catch ( \Throwable ) {
@@ -65,13 +62,12 @@ final class SelectedRuntimeState
 		}
 	}
 
-	public function activate(): array
-	{
+	public function activate(): array {
 		if ( ! $this->broker instanceof RequestBroker ) {
 			return array(
-				'loaded' => false,
-				'state' => 'inactive',
-				'code' => 'protocol_conflict_inactive',
+				'loaded'      => false,
+				'state'       => 'inactive',
+				'code'        => 'protocol_conflict_inactive',
 				'diagnostics' => array( array( 'code' => 'protocol_conflict_inactive' ) ),
 			);
 		}
@@ -81,36 +77,33 @@ final class SelectedRuntimeState
 			}
 			return $this->broker->activate(
 				array(
-					'php_version' => PHP_VERSION,
-					'runtime_protocol' => 4,
+					'php_version'       => PHP_VERSION,
+					'runtime_protocol'  => 4,
 					'wordpress_version' => self::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null ),
 				)
 			);
 		} catch ( \Throwable ) {
 			return array(
-				'loaded' => false,
-				'state' => 'inactive',
-				'code' => 'protocol_conflict_inactive',
+				'loaded'      => false,
+				'state'       => 'inactive',
+				'code'        => 'protocol_conflict_inactive',
 				'diagnostics' => array( array( 'code' => 'protocol_conflict_inactive' ) ),
 			);
 		}
 	}
 
-	public function operationStarted( string $type ): bool
-	{
+	public function operationStarted( string $type ): bool {
 		return $this->validType( $type ) && isset( $this->operations[ $type ] );
 	}
 
-	public function beginOperation( string $type ): void
-	{
+	public function beginOperation( string $type ): void {
 		if ( $this->validType( $type ) ) {
 			$this->operations[ $type ] = true;
 		}
 	}
 
 	/** @internal Normalizes WordPress core's bounded development-version forms. */
-	public static function normalizeWordPressVersion( mixed $value ): ?string
-	{
+	public static function normalizeWordPressVersion( mixed $value ): ?string {
 		if ( ! is_string( $value ) || self::MAX_WORDPRESS_VERSION_LENGTH < strlen( $value ) ) {
 			return null;
 		}
@@ -135,8 +128,7 @@ final class SelectedRuntimeState
 		return 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?\z/D', $value ) ? $value : null;
 	}
 
-	private function validType( string $type ): bool
-	{
+	private function validType( string $type ): bool {
 		return 'plugin' === $type || 'theme' === $type;
 	}
 }

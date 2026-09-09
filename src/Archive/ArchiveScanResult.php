@@ -24,12 +24,24 @@ final readonly class ArchiveScanResult {
 		return new self( null, $root, $entries, $expandedBytes );
 	}
 
-	public function isValid(): bool { return null === $this->failureCode; }
-	public function failureCode(): ?string { return $this->failureCode; }
-	public function root(): ?string { return $this->root; }
+	public function isValid(): bool {
+		return null === $this->failureCode;
+	}
+
+	public function failureCode(): ?string {
+		return $this->failureCode;
+	}
+
+	public function root(): ?string {
+		return $this->root;
+	}
 
 	/** @return list<array{name:string,path:string,directory:bool,size:int,compressed_size:int}> */
-	public function entries(): array { return $this->entries; }
+	public function entries(): array {
+		return $this->entries;
+	}
 
-	public function expandedBytes(): int { return $this->expandedBytes; }
+	public function expandedBytes(): int {
+		return $this->expandedBytes;
+	}
 }
