@@ -1,0 +1,145 @@
+name: Finalize phase 4 architecture
+
+on:
+  push:
+    branches:
+      - refactor/phase4-architecture
+    paths:
+      - .github/workflows/phase4-finalize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: refactor/phase4-architecture
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Restore intended scope and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin refactor/runtime-copy-selector
+          base=origin/refactor/runtime-copy-selector
+
+          git checkout "$base" -- \
+            .github/workflows/ci.yml \
+            composer.json \
+            src/Provider/GitHub/GitHubReleaseAdapter.php \
+            src/Provider/GitHub/ProspectiveReleaseInspection.php \
+            src/Runtime/SelectedRuntimeState.php \
+            tests/Archive/PackageIdentityValidatorTest.php \
+            tests/Contract/CanonicalUpdateUriTest.php \
+            tests/Contract/ReleaseVersionTest.php \
+            tests/Provider/GitHubReleaseAdapterTest.php \
+            tests/Runtime/P03NegativeCompositionTest.php \
+            tests/Runtime/P03PairedCompositionTest.php \
+            tests/Runtime/P04CompatibilityNetworkScaleTest.php \
+            tests/Runtime/SelectedRuntimeActivationBoundaryTest.php \
+            tests/WordPress/FakeAdapterLifecycleTest.php \
+            phpstan.neon
+
+          rm -f .github/phase4-apply.py
+          rm -f \
+            .github/workflows/phase4-apply.yml \
+            .github/workflows/phase4-assessment.yml \
+            .github/workflows/phase4-benchmark-summary.yml \
+            .github/workflows/phase4-fix-benchmark.yml \
+            .github/workflows/phase4-validator-preflight.yml
+
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('phpstan.neon')
+          text = path.read_text()
+          needle = '\t\t- src/Runtime/RuntimeCopySelector.php\n'
+          replacement = '\t\t- src/Runtime/RequestProtocolValidator.php\n' + needle
+          if needle not in text:
+              raise SystemExit('RuntimeCopySelector PHPStan ratchet anchor not found')
+          path.write_text(text.replace(needle, replacement, 1))
+          PY
+
+          set +e
+          vendor/bin/phpcbf --standard=.phpcs.xml --report=summary \
+            src/Runtime/RequestBroker.php \
+            src/Runtime/RequestProtocolValidator.php \
+            tests/Runtime/RequestBrokerTest.php \
+            tests/Runtime/RequestBrokerActivationDrainTest.php \
+            tests/Performance/native-discovery-measure.php
+          phpcbf_status=$?
+          set -e
+          if [ "$phpcbf_status" -gt 1 ]; then
+            exit "$phpcbf_status"
+          fi
+
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
+          payload = b''.join(path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n' for path in files)
+          manifest = Path('runtime-copy.json')
+          data = json.loads(manifest.read_text())
+          data['package_revision'] = hashlib.sha256(payload).hexdigest()
+          manifest.write_text(json.dumps(data, indent=2) + '\n')
+          print('PHASE4_RUNTIME_REVISION=' + data['package_revision'])
+          PY
+
+          composer check
+          php vendor/bin/phpunit --configuration phpunit.xml \
+            tests/Runtime/RequestBrokerTest.php \
+            tests/Runtime/RequestBrokerActivationDrainTest.php
+
+          mkdir -p .workspaces/php-tmp
+          TMPDIR="$PWD/.workspaces/php-tmp" php -d sys_temp_dir="$PWD/.workspaces/php-tmp" tests/Performance/native-discovery-measure.php > /tmp/phase4-after.json
+          python3 <<'PY'
+          import json, statistics
+          data = json.load(open('/tmp/phase4-after.json'))
+          rows = data['measurements']
+          totals = [sum(r[k] for k in ('bootstrap_ns','declaration_ns','activation_ns','operations_ns')) for r in rows]
+          one = [r for r in rows if r['physical_copies'] == 1 and r['distinct_targets'] == 1]
+          def total(r):
+              return sum(r[k] for k in ('bootstrap_ns','declaration_ns','activation_ns','operations_ns'))
+          print('PHASE4_FINAL_BENCHMARK=' + json.dumps({
+              'runtime_php_files': data['source_inventory']['runtime_php_files'],
+              'runtime_php_bytes': data['source_inventory']['runtime_php_bytes'],
+              'rows': len(rows),
+              'median_total_ns': int(statistics.median(totals)),
+              'max_total_ns': max(totals),
+              'one_copy_one_target_total_ns': {r['scenario']: total(r) for r in one},
+          }, sort_keys=True))
+          PY
+
+          git diff --name-only "$base" | sort > /tmp/phase4-files.txt
+          cat > /tmp/phase4-expected.txt <<'EOF'
+          .github/workflows/phase4-finalize.yml
+          phpstan.neon
+          runtime-copy.json
+          src/Runtime/RequestBroker.php
+          src/Runtime/RequestProtocolValidator.php
+          tests/Performance/native-discovery-measure.php
+          tests/Runtime/RequestBrokerActivationDrainTest.php
+          tests/Runtime/RequestBrokerTest.php
+          EOF
+          sort -o /tmp/phase4-expected.txt /tmp/phase4-expected.txt
+          diff -u /tmp/phase4-expected.txt /tmp/phase4-files.txt
+
+      - name: Commit verified Phase 4 tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/phase4-finalize.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          git add src/Runtime/RequestProtocolValidator.php
+          git commit -m 'refactor(runtime): finalize request protocol validation'
+          git push origin HEAD:refactor/phase4-architecture
