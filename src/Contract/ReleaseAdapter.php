@@ -16,7 +16,10 @@ use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
  */
 interface ReleaseAdapter
 {
-	/** @return array<string, mixed> */
+	/**
+	 * @param array<string,mixed> $conditional
+	 * @return array<string,mixed>
+	 */
 	public function listReleases( array $conditional = array() ): array;
 	public function inspect( string $releaseIdentity, ?string $expectedTag = null ): IdentityDescriptor;
 	public function acquire(IdentityDescriptor $descriptor): TemporaryArtifact;

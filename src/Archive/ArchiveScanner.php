@@ -66,7 +66,7 @@ final class ArchiveScanner {
 			$parts = explode( '/', $path['path'] );
 			$root ??= $parts[0];
 			if (
-				( is_string( $expectedRoot ) && ! hash_equals( $expectedRoot, $parts[0] ) )
+				( null !== $expectedRoot && ! hash_equals( $expectedRoot, $parts[0] ) )
 				|| ! hash_equals( $root, $parts[0] )
 				|| ( 1 === count( $parts ) && ! $path['directory'] )
 			) {
@@ -89,9 +89,6 @@ final class ArchiveScanner {
 		}
 		if ( null !== $collision ) {
 			return ArchiveScanResult::blocked( 'archive_path_unsafe' );
-		}
-		if ( ! is_string( $root ) ) {
-			return ArchiveScanResult::blocked( 'archive_root_mismatch' );
 		}
 
 		return ArchiveScanResult::ready( $root, $entries, $expanded );

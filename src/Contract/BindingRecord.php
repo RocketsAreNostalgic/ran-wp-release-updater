@@ -132,7 +132,11 @@ final readonly class BindingRecord
             && IdentityDescriptor::isBoundedOpaqueIdentity( $value['php_runtime_version'], 64 )
             && IdentityDescriptor::isBoundedOpaqueIdentity( $value['wordpress_runtime_version'], 64 );
     }
-    /** @param array<string,mixed> $value @param list<string> $keys @return array<string,mixed> */
+    /**
+     * @param array<string,mixed> $value
+     * @param list<string> $keys
+     * @return array<string,mixed>
+     */
     private static function ordered(array $value, array $keys): array
     {
         $ordered = array();
@@ -141,10 +145,12 @@ final readonly class BindingRecord
         }
         return $ordered;
     }
+    /** @param array<string,mixed> $value */
     private static function canonicalJson(array $value): string
     {
         return json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
     }
+    /** @param list<string> $keys */
     private static function exactKeys(mixed $value, array $keys): bool
     {
         if ( ! is_array( $value ) || count( $value ) !== count( $keys ) ) {

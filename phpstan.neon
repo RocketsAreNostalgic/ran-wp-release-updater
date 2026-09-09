@@ -5,8 +5,9 @@ parameters:
 	level: 8
 	treatPhpDocTypesAsCertain: false
 	paths:
-		- bootstrap.php
-		- runtime.php
+		- src/Archive
+		- src/Contract
+	scanDirectories:
 		- src
 	excludePaths:
 		analyse:
