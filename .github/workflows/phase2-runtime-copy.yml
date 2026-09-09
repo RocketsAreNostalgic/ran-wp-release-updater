@@ -32,14 +32,6 @@ jobs:
           python3 <<'PY'
           from pathlib import Path
 
-          selector_file = Path('src/Runtime/RuntimeCopySelector.php')
-          selector_text = selector_file.read_text()
-          compact_doc = "\t/** @param array<string,mixed> $value @param list<string> $keys */\n\tprivate function exactKeys( array $value, array $keys ): bool {"
-          expanded_doc = "\t/**\n\t * @param array<string,mixed> $value\n\t * @param list<string> $keys\n\t */\n\tprivate function exactKeys( array $value, array $keys ): bool {"
-          if compact_doc not in selector_text:
-              raise SystemExit('RuntimeCopySelector exactKeys PHPDoc anchor not found')
-          selector_file.write_text(selector_text.replace(compact_doc, expanded_doc, 1))
-
           broker = Path('src/Runtime/RequestBroker.php')
           text = broker.read_text()
 
@@ -77,6 +69,34 @@ jobs:
               raise SystemExit('RequestBroker select call not found')
           text = text.replace('$this->select( $environment )', '$this->runtimeCopySelector->select( $this->candidates, $environment )', 1)
 
+          old_environment = '''\t/** @param array<string,mixed> $environment */
+\tprivate function validEnvironment( array $environment ): bool {
+\t\tif (
+\t\t\t! $this->exactKeys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
+\t\t\t|| 4 !== $environment['runtime_protocol']
+\t\t\t|| ! is_string( $environment['php_version'] )
+\t\t\t|| ! is_string( $environment['wordpress_version'] )
+\t\t) {
+\t\t\treturn false;
+\t\t}
+\t\ttry {
+\t\t\t$this->version( $environment['php_version'] );
+\t\t\t$this->wordpressVersion( $environment['wordpress_version'] );
+\t\t\treturn true;
+\t\t} catch ( Throwable ) {
+\t\t\treturn false;
+\t\t}
+\t}
+'''
+          new_environment = '''\t/** @param array<string,mixed> $environment */
+\tprivate function validEnvironment( array $environment ): bool {
+\t\treturn $this->runtimeCopySelector->validEnvironment( $environment );
+\t}
+'''
+          if old_environment not in text:
+              raise SystemExit('RequestBroker environment validator not found')
+          text = text.replace(old_environment, new_environment, 1)
+
           start_marker = "\t/** @return array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string} */\n\tprivate function candidate("
           end_marker = "\tprivate function exactKeys( array $value, array $keys ): bool {"
           start = text.find(start_marker)
@@ -90,6 +110,28 @@ jobs:
               raise SystemExit('RequestBroker read method not found')
           text = text.replace(read_method, '\n', 1)
           broker.write_text(text)
+
+          # Minimal physical-copy fixtures must model the new sibling file and include it in explicit identities.
+          request_broker_test = Path('tests/Runtime/RequestBrokerTest.php')
+          text = request_broker_test.read_text()
+          old_files = "array( 'bootstrap.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/SelectedRuntimeState.php' )"
+          new_files = "array( 'bootstrap.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' )"
+          if old_files not in text:
+              raise SystemExit('RequestBrokerTest minimal copy list not found')
+          request_broker_test.write_text(text.replace(old_files, new_files, 1))
+
+          drain_test = Path('tests/Runtime/RequestBrokerActivationDrainTest.php')
+          text = drain_test.read_text()
+          old_copy = "\t\tcopy( dirname( __DIR__, 2 ) . '/src/Runtime/RequestBroker.php', $root . '/src/Runtime/RequestBroker.php' );\n\t\tcopy( dirname( __DIR__, 2 ) . '/src/Runtime/SelectedRuntimeState.php', $root . '/src/Runtime/SelectedRuntimeState.php' );"
+          new_copy = "\t\tcopy( dirname( __DIR__, 2 ) . '/src/Runtime/RequestBroker.php', $root . '/src/Runtime/RequestBroker.php' );\n\t\tcopy( dirname( __DIR__, 2 ) . '/src/Runtime/RuntimeCopySelector.php', $root . '/src/Runtime/RuntimeCopySelector.php' );\n\t\tcopy( dirname( __DIR__, 2 ) . '/src/Runtime/SelectedRuntimeState.php', $root . '/src/Runtime/SelectedRuntimeState.php' );"
+          if old_copy not in text:
+              raise SystemExit('RequestBrokerActivationDrainTest copy block not found')
+          text = text.replace(old_copy, new_copy, 1)
+          old_identity = "array( 'bootstrap.php', 'runtime.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/SelectedRuntimeState.php' )"
+          new_identity = "array( 'bootstrap.php', 'runtime.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' )"
+          if old_identity not in text:
+              raise SystemExit('RequestBrokerActivationDrainTest identity list not found')
+          drain_test.write_text(text.replace(old_identity, new_identity, 1))
 
           phpcs = Path('.phpcs.xml')
           text = phpcs.read_text()
@@ -146,6 +188,6 @@ jobs:
           rm .github/workflows/phase2-runtime-copy.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/Runtime/RuntimeCopySelector.php src/Runtime/RequestBroker.php runtime-copy.json .phpcs.xml phpstan.neon .github/workflows/phase2-runtime-copy.yml
+          git add src/Runtime/RuntimeCopySelector.php src/Runtime/RequestBroker.php tests/Runtime/RequestBrokerTest.php tests/Runtime/RequestBrokerActivationDrainTest.php runtime-copy.json .phpcs.xml phpstan.neon .github/workflows/phase2-runtime-copy.yml
           git commit -m 'refactor(runtime): extract runtime copy selector'
           git push origin HEAD:refactor/runtime-copy-selector
