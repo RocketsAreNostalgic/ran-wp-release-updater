@@ -13,11 +13,10 @@ use WeakMap;
 /** Inspects a locally acquired ZIP; it never extracts or changes the filesystem. */
 final class PackageIdentityValidator {
 
-	public const MAX_EXPANDED_ARCHIVE_BYTES = 127826407;
+	public const MAX_EXPANDED_ARCHIVE_BYTES = ArchiveScanner::MAX_EXPANDED_ARCHIVE_BYTES;
 	public const MAX_ARCHIVE_PATH_BYTES = ArchiveSafety::MAX_PATH_BYTES;
-	private const MAX_ARCHIVE_ENTRIES = 10000;
+	private const MAX_ARCHIVE_ENTRIES = ArchiveScanner::MAX_ENTRIES;
 	private const MAX_HEADER_BYTES = 8192;
-	private const MAX_COMPRESSION_RATIO = 100;
 	private const PROSPECTIVE_POLICY_KEYS = array( 'artifact_sha256', 'artifact_size', 'canonical_update_uri', 'maximum_artifact_bytes', 'php_runtime_version', 'target_type', 'version', 'wordpress_runtime_version' );
 	private const POLICY_KEYS = array( 'archive_root', 'configuration_update_uri', 'header_file', 'installed_package_identity', 'maximum_artifact_bytes', 'metadata_name', 'offer_update_uri', 'php_runtime_version', 'provider_code', 'repository_identity', 'repository_locator', 'staged_package_update_uri', 'target_type', 'theme_template', 'wordpress_runtime_version' );
 	private ?\Closure $afterOpen = null;
@@ -69,61 +68,20 @@ final class PackageIdentityValidator {
 			if ( null !== $this->afterOpen ) {
 				( $this->afterOpen )( $archivePath );
 			}
-			if (
-				! $this->matchesArchiveIdentity( $archivePath, $facts, $identity )
-				|| $zip->numFiles < 1
-				|| $zip->numFiles > self::MAX_ARCHIVE_ENTRIES
-			) {
+			if ( ! $this->matchesArchiveIdentity( $archivePath, $facts, $identity ) ) {
 				return null;
 			}
-			$root = null;
-			$seen = array();
-			$entries = array();
-			$expanded = 0;
+			$scan = ArchiveScanner::scan( $zip );
+			$root = $scan->root();
+			if ( ! $scan->isValid() || ! is_string( $root ) ) {
+				return null;
+			}
 			$candidate = null;
-			for ( $index = 0; $index < $zip->numFiles; ++$index ) {
-				$name = $zip->getNameIndex( $index, \ZipArchive::FL_UNCHANGED );
-				$stat = $zip->statIndex( $index, \ZipArchive::FL_UNCHANGED );
-				$path = is_string( $name ) ? ArchiveSafety::normalizePath( $name ) : null;
-				$origin = 0;
-				$attributes = 0;
-				$typeFailure = null === $path || ! $zip->getExternalAttributesIndex( $index, $origin, $attributes, \ZipArchive::FL_UNCHANGED )
-					? ArchiveSafety::entryTypeFailure( null, null, false )
-					: ArchiveSafety::entryTypeFailure( $origin, $attributes, $path['directory'] );
-				if (
-					null === $path
-					|| ! is_array( $stat )
-					|| ! is_int( $stat['size'] ?? null )
-					|| ! is_int( $stat['comp_size'] ?? null )
-					|| $stat['size'] < 0
-					|| $stat['comp_size'] < 0
-					|| null !== $typeFailure
-					|| $stat['size'] > self::MAX_EXPANDED_ARCHIVE_BYTES - $expanded
-					|| (
-						$stat['size'] > 0
-						&& (
-							0 === $stat['comp_size']
-							|| $stat['size'] > self::MAX_COMPRESSION_RATIO * $stat['comp_size']
-						)
-					)
-				) {
-					return null;
-				}
-				$expanded += $stat['size'];
-				$key = strtolower( $path['path'] );
-				if ( isset( $seen[ $key ] ) ) {
-					return null;
-				}
-				$seen[ $key ] = true;
-				$entries[] = $path;
-				$parts = explode( '/', $path['path'] );
-				$root ??= $parts[0];
-				if ( ! hash_equals( $root, $parts[0] ) || ( 1 === count( $parts ) && ! $path['directory'] ) ) {
-					return null;
-				}
-				$isThemeHeader = $root . '/style.css' === $path['path'];
+			foreach ( $scan->entries() as $entry ) {
+				$parts = explode( '/', $entry['path'] );
+				$isThemeHeader = $root . '/style.css' === $entry['path'];
 				$isPluginHeader = 2 === count( $parts )
-					&& ! $path['directory']
+					&& ! $entry['directory']
 					&& str_ends_with( $parts[1], '.php' );
 				$header = 'theme' === $policy['target_type']
 					? ( $isThemeHeader ? 'style.css' : null )
@@ -135,7 +93,7 @@ final class PackageIdentityValidator {
 				if ( null === $header ) {
 					continue;
 				}
-				$contents = self::readHeader( $zip, $name );
+				$contents = self::readHeader( $zip, $entry['name'] );
 				$parsed = is_string( $contents ) ? self::parseHeader( $contents, $policy['target_type'] ) : array();
 				$metadata = isset( $parsed['headers']['Name'] ) ? $parsed['headers']['Name'] : null;
 				if ( 'plugin' === $policy['target_type'] && null === $metadata ) {
@@ -163,12 +121,11 @@ final class PackageIdentityValidator {
 				}
 				$candidate = array( 'package_root' => $root, 'main_file' => $header );
 			}
-			return null === ArchiveSafety::collisionFailure( $entries ) && $this->matchesArchiveIdentity( $archivePath, $facts, $identity ) ? $candidate : null;
+			return $this->matchesArchiveIdentity( $archivePath, $facts, $identity ) ? $candidate : null;
 		} finally {
 			$zip->close();
 		}
 	}
-
 
 	/**
 	 * @param array<string, mixed> $policy Exact target and archive policy, not caller-controlled discovery hints.
@@ -185,34 +142,23 @@ final class PackageIdentityValidator {
 		try {
 			if ( null !== $this->afterOpen ) ( $this->afterOpen )( $archivePath );
 			if ( ! $this->matchesArchiveIdentity( $archivePath, $descriptorFacts, $identity ) ) return ValidatedPackage::blocked( 'archive_file_identity_mismatch' );
-			if ( $zip->numFiles < 1 || $zip->numFiles > self::MAX_ARCHIVE_ENTRIES ) return ValidatedPackage::blocked( 'archive_entry_limit' );
-			$seen = array(); $entries = array(); $expanded = 0; $header = null; $manifest = array(); $manifestBytes = 0;
+			$scan = ArchiveScanner::scan( $zip, $policy['archive_root'] );
+			if ( ! $scan->isValid() ) return ValidatedPackage::blocked( $scan->failureCode() ?? 'archive_path_unsafe' );
+			$header = null; $manifest = array(); $manifestBytes = 0;
 			$expectedPath = $policy['archive_root'] . '/' . $policy['header_file'];
-			for ( $index = 0; $index < $zip->numFiles; ++$index ) {
-				$name = $zip->getNameIndex( $index, \ZipArchive::FL_UNCHANGED );
-				$stat = $zip->statIndex( $index, \ZipArchive::FL_UNCHANGED );
-				$path = is_string( $name ) ? ArchiveSafety::normalizePath( $name ) : null;
-				$origin = 0; $attributes = 0;
-				$typeFailure = null === $path || ! $zip->getExternalAttributesIndex( $index, $origin, $attributes, \ZipArchive::FL_UNCHANGED )
-					? ArchiveSafety::entryTypeFailure( null, null, false )
-					: ArchiveSafety::entryTypeFailure( $origin, $attributes, $path['directory'] );
-				if ( null === $path || ! is_array( $stat ) || ! isset( $stat['size'], $stat['comp_size'] ) || ! is_int( $stat['size'] ) || ! is_int( $stat['comp_size'] ) || $stat['size'] < 0 || $stat['comp_size'] < 0 || null !== $typeFailure ) return ValidatedPackage::blocked( 'archive_path_unsafe' );
-				if ( $stat['size'] > self::MAX_EXPANDED_ARCHIVE_BYTES - $expanded || ( $stat['size'] > 0 && ( 0 === $stat['comp_size'] || $stat['size'] > self::MAX_COMPRESSION_RATIO * $stat['comp_size'] ) ) ) return ValidatedPackage::blocked( 'archive_size_limit' );
-				$expanded += $stat['size']; $key = strtolower( $path['path'] );
-				if ( isset( $seen[ $key ] ) ) return ValidatedPackage::blocked( 'archive_path_duplicate' );
-				$seen[ $key ] = true;
-				$entries[] = $path;
-				$parts = explode( '/', $path['path'] );
-				if ( ! hash_equals( $policy['archive_root'], $parts[0] ) || ( 1 === count( $parts ) && ! $path['directory'] ) ) return ValidatedPackage::blocked( 'archive_root_mismatch' );
-				if ( ! $path['directory'] ) { $relative = substr( $path['path'], strlen( $policy['archive_root'] ) + 1 ); $entry = self::entryIdentity( $zip, $name, $stat['size'] ); if ( '' === $relative || null === $entry ) return ValidatedPackage::blocked( 'archive_entry_unreadable' ); $manifest[ $relative ] = $entry; $manifestBytes += $entry['size']; }
-				if ( ! hash_equals( $expectedPath, $path['path'] ) ) continue;
-				if ( $path['directory'] || null !== $header ) return ValidatedPackage::blocked( 'archive_header_duplicate' );
-				$header = self::readHeader( $zip, $name );
+			foreach ( $scan->entries() as $entry ) {
+				if ( ! $entry['directory'] ) {
+					$relative = substr( $entry['path'], strlen( $policy['archive_root'] ) + 1 );
+					$entryIdentity = self::entryIdentity( $zip, $entry['name'], $entry['size'] );
+					if ( '' === $relative || null === $entryIdentity ) return ValidatedPackage::blocked( 'archive_entry_unreadable' );
+					$manifest[ $relative ] = $entryIdentity;
+					$manifestBytes += $entryIdentity['size'];
+				}
+				if ( ! hash_equals( $expectedPath, $entry['path'] ) ) continue;
+				if ( $entry['directory'] || null !== $header ) return ValidatedPackage::blocked( 'archive_header_duplicate' );
+				$header = self::readHeader( $zip, $entry['name'] );
 				if ( null === $header ) return ValidatedPackage::blocked( 'archive_header_unreadable' );
 			}
-			$collision = ArchiveSafety::collisionFailure( $entries );
-			if ( 'path_duplicate' === $collision ) return ValidatedPackage::blocked( 'archive_path_duplicate' );
-			if ( null !== $collision ) return ValidatedPackage::blocked( 'archive_path_unsafe' );
 			if ( ! is_string( $header ) ) return ValidatedPackage::blocked( 'archive_header_missing' );
 			$parsed = self::parseHeader( $header, $policy['target_type'] );
 			if ( 'installed_header_verified' !== $parsed['code'] ) {
@@ -365,7 +311,7 @@ final class PackageIdentityValidator {
 		} elseif (
 			'' !== $result['Template']
 			&& 1 !== preg_match(
-				'/\\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}\\z/D',
+				'/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}\z/D',
 				$result['Template']
 			)
 		) {
