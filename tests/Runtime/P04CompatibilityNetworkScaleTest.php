@@ -96,7 +96,7 @@ PHP,
 		self::assertArrayNotHasKey( 'blog_id', $result['subsite'] );
 	}
 
-	/** @dataProvider targetCounts */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'targetCounts' )]
 	public function testMixedTargetRegistrationStaysWithinTheP0ScaleEnvelope( int $count ): void {
 		$targets = array();
 		for ( $index = 0; $index < $count; ++$index ) {

@@ -194,7 +194,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertNull( ( new PackageIdentityValidator() )->inspectProspective( $this->prospectivePolicy( $archive, 'plugin' ), $archive ) );
 	}
 
-	/** @dataProvider prospectiveUnsafeArchives */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'prospectiveUnsafeArchives' )]
 	public function testProspectiveInspectionRejectsUnsafeAndAmbiguousShapes(
 		array $entries,
 		array $links = array()
@@ -401,7 +401,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertSame( 'archive_update_uri_mismatch', ( new PackageIdentityValidator() )->validate( $this->descriptor( $conflict, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $conflict )->code() );
 	}
 
-	/** @dataProvider unsafeArchives */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafeArchives' )]
 	public function testRejectsUnsafeOrAmbiguousArchiveShapes( array $entries, string $expected ): void {
 		$archive = $this->archive( $entries );
 		$result  = ( new PackageIdentityValidator() )->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $archive );
@@ -490,7 +490,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $mismatch, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $mismatch )->code() );
 	}
 
-	/** @dataProvider archiveCompatibilityCases */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'archiveCompatibilityCases' )]
 	public function testValidatesArchiveVersionAndOptionalRuntimeRequirements( string $header, string $expected ): void {
 		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
 		$result  = ( new PackageIdentityValidator() )->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $archive );

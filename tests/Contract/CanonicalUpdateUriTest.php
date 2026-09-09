@@ -9,9 +9,7 @@ use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 
 final class CanonicalUpdateUriTest extends TestCase {
 
-	/**
-	 * @dataProvider canonicalUris
-	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'canonicalUris' )]
 	public function testCanonicalizesOnlySchemeAndHostAndRemovesOneTerminalSlash(
 		string $uri,
 		string $expected
@@ -35,9 +33,7 @@ final class CanonicalUpdateUriTest extends TestCase {
 		);
 	}
 
-	/**
-	 * @dataProvider invalidUris
-	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'invalidUris' )]
 	public function testRejectsNonCanonicalV1Inputs( string $uri ): void {
 		self::assertNull( CanonicalUpdateUri::canonicalize( $uri ) );
 	}

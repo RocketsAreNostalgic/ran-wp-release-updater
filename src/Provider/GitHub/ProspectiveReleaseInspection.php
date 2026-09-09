@@ -173,7 +173,10 @@ final readonly class ProspectiveReleaseInspection {
 		return true;
 	}
 
-	/** @param array<string, mixed> $facts @return array<string, mixed> */
+	/**
+	 * @param array<string, mixed> $facts
+	 * @return array<string, mixed>
+	 */
 	private static function orderedFacts( array $facts ): array {
 		$ordered                    = self::ordered( $facts, self::FACT_KEYS );
 		$ordered['assurance_facts'] = self::ordered( $facts['assurance_facts'], self::ASSURANCE_FACT_KEYS );
@@ -185,7 +188,11 @@ final readonly class ProspectiveReleaseInspection {
 		return 'v2:' . hash( 'sha256', json_encode( $facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
 	}
 
-	/** @param array<string, mixed> $value @param list<string> $keys @return array<string, mixed> */
+	/**
+	 * @param array<string, mixed> $value
+	 * @param list<string> $keys
+	 * @return array<string, mixed>
+	 */
 	private static function ordered( array $value, array $keys ): array {
 		$ordered = array();
 		foreach ( $keys as $key ) {
