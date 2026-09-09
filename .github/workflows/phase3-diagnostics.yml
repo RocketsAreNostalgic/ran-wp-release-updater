@@ -1,0 +1,54 @@
+name: Phase 3 diagnostics
+
+on:
+  push:
+    branches:
+      - chore/phase3-quality-baseline
+    paths:
+      - .github/workflows/phase3-diagnostics.yml
+
+permissions:
+  contents: read
+
+jobs:
+  phpunit-deprecations:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Display PHPUnit deprecations
+        run: php vendor/bin/phpunit --configuration phpunit.xml --display-deprecations --display-phpunit-deprecations
+
+  phpstan-all-src:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Analyze all production source at level 8
+        run: php vendor/bin/phpstan analyse src --level=8 --no-progress --memory-limit=1G --error-format=raw
+
+  php-85:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer check
