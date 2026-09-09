@@ -42,6 +42,14 @@ jobs:
               raise SystemExit('BindingState extraction anchors were not found')
 
           binding_class = text[start:end].rstrip() + '\n'
+          closed_signature = '\tprivate static function closed( array $value ): bool {'
+          if closed_signature not in binding_class:
+              raise SystemExit('BindingState closed() signature was not found')
+          binding_class = binding_class.replace(
+              closed_signature,
+              '\t/** @param array<string,mixed> $value */\n' + closed_signature,
+              1,
+          )
           binding_file = Path('src/WordPress/BindingState.php')
           if binding_file.exists():
               raise SystemExit('BindingState.php already exists')
