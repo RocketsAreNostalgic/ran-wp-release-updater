@@ -59,7 +59,7 @@ PHP
 		self::assertSame( array(), $result['diagnostics'] );
 	}
 
-	/** @dataProvider missedBoundaryCases */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'missedBoundaryCases' )]
 	public function testMissedOrMalformedActivationBoundariesFailClosedWithoutScheduling( string $scenario ): void {
 		$result = $this->probe(
 			match ( $scenario ) {
@@ -152,7 +152,7 @@ PHP
 		self::assertSame( array( array( 'code' => 'activation_boundary_missed' ) ), $result['diagnostics']['diagnostics'] );
 	}
 
-	/** @dataProvider invalidWordPressVersions */
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'invalidWordPressVersions' )]
 	public function testMissingOrMalformedWordPressVersionFailsAtScheduledActivation( mixed $version ): void {
 		$result = $this->probe(
 			<<<'PHP'
