@@ -69,11 +69,15 @@ jobs:
           tools: composer:v2
       - name: Verify current stable PHP
         run: composer check
-      - name: Commit verified phase 3 baseline
+      - name: Commit verified non-workflow changes
         shell: bash
         run: |
           set -euo pipefail
-          rm .github/phase3-apply.py .github/workflows/phase3-apply.yml .github/workflows/phase3-diagnostics.yml
+          # The Actions token cannot update workflow files. The same CI change was
+          # exercised above, then is restored here and will be committed directly
+          # through GitHub after the verified source/config commit lands.
+          git checkout HEAD -- .github/workflows/ci.yml
+          rm .github/phase3-apply.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -u
