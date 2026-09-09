@@ -1,0 +1,126 @@
+name: Verify BindingState extraction
+
+on:
+  push:
+    branches:
+      - refactor/binding-state-file
+    paths:
+      - .github/workflows/phase1-binding-state.yml
+
+permissions:
+  contents: write
+
+jobs:
+  extract-and-verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: refactor/binding-state-file
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Extract BindingState and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          coordinator = Path('src/WordPress/ReleaseOperationCoordinator.php')
+          text = coordinator.read_text()
+          state_marker = 'final readonly class BindingState {'
+          coordinator_marker = 'final class ReleaseOperationCoordinator {'
+          start = text.find(state_marker)
+          end = text.find(coordinator_marker)
+          if start < 0 or end < 0 or end <= start:
+              raise SystemExit('BindingState extraction anchors were not found')
+
+          binding_class = text[start:end].rstrip() + '\n'
+          binding_file = Path('src/WordPress/BindingState.php')
+          if binding_file.exists():
+              raise SystemExit('BindingState.php already exists')
+          binding_file.write_text(
+              "<?php\n\ndeclare(strict_types=1);\n\n"
+              "namespace RAN\\WPReleaseUpdater\\V1\\WordPress;\n\n"
+              "use InvalidArgumentException;\n"
+              "use RAN\\WPReleaseUpdater\\V1\\Contract\\BindingRecord;\n\n"
+              + binding_class
+          )
+          coordinator.write_text(text[:start] + text[end:])
+
+          runtime = Path('runtime.php')
+          text = runtime.read_text()
+          runtime_anchor = "\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\WordPress\\\\ReleaseOperationCoordinator' => 'src/WordPress/ReleaseOperationCoordinator.php',\n"
+          if runtime_anchor not in text:
+              raise SystemExit('runtime class-map anchor was not found')
+          binding_entry = "\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\WordPress\\\\BindingState' => 'src/WordPress/BindingState.php',\n"
+          if binding_entry in text:
+              raise SystemExit('BindingState is already in the runtime class map')
+          runtime.write_text(text.replace(runtime_anchor, binding_entry + runtime_anchor, 1))
+
+          phpcs = Path('.phpcs.xml')
+          text = phpcs.read_text()
+          old_rule = '''\t<rule ref="Generic.Files.OneObjectStructurePerFile">\n\t\t<!-- BindingState is already scheduled for a dedicated stacked extraction. -->\n\t\t<exclude-pattern>/src/WordPress/ReleaseOperationCoordinator.php</exclude-pattern>\n\t\t<exclude-pattern>/tests/</exclude-pattern>\n\t</rule>'''
+          new_rule = '''\t<rule ref="Generic.Files.OneObjectStructurePerFile">\n\t\t<exclude-pattern>/tests/</exclude-pattern>\n\t</rule>'''
+          if old_rule not in text:
+              raise SystemExit('temporary BindingState PHPCS exception was not found')
+          phpcs.write_text(text.replace(old_rule, new_rule, 1))
+
+          phpstan = Path('phpstan.neon')
+          text = phpstan.read_text()
+          phpstan_anchor = '\t\t- src/WordPress/PendingInstallState.php\n'
+          if phpstan_anchor not in text:
+              raise SystemExit('PHPStan WordPress ratchet anchor was not found')
+          binding_path = '\t\t- src/WordPress/BindingState.php\n'
+          if binding_path in text:
+              raise SystemExit('BindingState is already in the PHPStan ratchet')
+          text = text.replace(phpstan_anchor, phpstan_anchor + binding_path, 1)
+          text = text.replace(
+              '# Security-sensitive custody and pending-state collaborators are required to remain level-8 clean.',
+              '# Security-sensitive custody, pending-state, and binding-state collaborators are required to remain level-8 clean.',
+              1,
+          )
+          phpstan.write_text(text)
+          PY
+
+          set +e
+          composer format:php
+          phpcbf_status=$?
+          set -e
+          if [ "$phpcbf_status" -gt 1 ]; then
+            exit "$phpcbf_status"
+          fi
+
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib, json
+
+          files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
+          payload = b''.join(
+              path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n'
+              for path in files
+          )
+          manifest = Path('runtime-copy.json')
+          data = json.loads(manifest.read_text())
+          data['package_revision'] = hashlib.sha256(payload).hexdigest()
+          manifest.write_text(json.dumps(data, indent=2) + '\n')
+          print(data['package_revision'])
+          PY
+
+          composer check
+      - name: Commit verified extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/phase1-binding-state.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/WordPress/BindingState.php src/WordPress/ReleaseOperationCoordinator.php runtime.php runtime-copy.json .phpcs.xml phpstan.neon .github/workflows/phase1-binding-state.yml
+          git commit -m 'refactor: extract BindingState into its own file'
+          git push origin HEAD:refactor/binding-state-file
