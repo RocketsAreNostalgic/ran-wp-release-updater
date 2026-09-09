@@ -34,7 +34,7 @@ final class ReleaseVersionTest extends TestCase {
 		self::assertSame( 0, ReleaseVersion::compare( '2.1', '2.1.0' ) );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'invalidComparisonProvider' )]
+	/** @dataProvider invalidComparisonProvider */
 	public function testInvalidVersionsHaveOneFixedRelationship( string $version ): void {
 		self::assertNull( ReleaseVersion::compare( $version, '1.0.0' ) );
 		self::assertNull( ReleaseVersion::compare( '1.0.0', $version ) );

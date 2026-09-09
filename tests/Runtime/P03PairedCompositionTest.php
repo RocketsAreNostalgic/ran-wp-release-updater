@@ -16,7 +16,7 @@ final class P03PairedCompositionTest extends TestCase {
 		mkdir( $this->root, 0700, true );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'targetTypes' )]
+	/** @dataProvider targetTypes */
 	public function testConciseGithubCompositionMatchesTheExplicitNativePath( string $type ): void {
 		$result = $this->probe( $type );
 

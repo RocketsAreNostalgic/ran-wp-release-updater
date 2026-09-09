@@ -15,7 +15,7 @@ final class P03NegativeCompositionTest extends TestCase {
 		mkdir( $this->root, 0700, true );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'malformedInstalledPackageCases' )]
+	/** @dataProvider malformedInstalledPackageCases */
 	public function testMalformedInstalledFactsFailBeforeSelectedGitHubComposition(
 		string $type,
 		string $headers,
@@ -83,7 +83,7 @@ PHP,
 		);
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'unsupportedFilesystemMethods' )]
+	/** @dataProvider unsupportedFilesystemMethods */
 	public function testEveryUnsupportedFilesystemMethodIsPassiveAcrossNativeCallbacks( string $method ): void {
 		$result = $this->probe(
 			<<<'PHP'

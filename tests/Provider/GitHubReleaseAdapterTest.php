@@ -986,7 +986,7 @@ namespace Tests\Provider {
 			}
 		}
 
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'readUnavailableStatusProvider' )]
+		/** @dataProvider readUnavailableStatusProvider */
 		public function testAuthenticatedAuthorizationFailuresAreNotRateLimits( int $status ): void {
 			$GLOBALS['ran_github_responses'] = array( $this->response( $status, null ) );
 			$this->expectException( ReleaseFailure::class );
@@ -1323,7 +1323,7 @@ namespace Tests\Provider {
 			self::assertSame( $limit, ( new GitHubReleaseAdapter( $this->binding( maximumArtifactBytes: $limit ) ) )->inspect( '7' )->toArray()['artifact_size'] );
 		}
 
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'invalidInspectionProvider' )]
+		/** @dataProvider invalidInspectionProvider */
 		public function testInspectionRejectsChangedOrAmbiguousIdentity(
 			string $failure,
 			callable $mutate
@@ -1874,7 +1874,7 @@ namespace Tests\Provider {
 			self::assertSame( 0, $calls );
 		}
 
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafeRedirectProvider' )]
+		/** @dataProvider unsafeRedirectProvider */
 		public function testUnsafeExpiredAndExcessRedirectsFailClosed( string $location ): void {
 			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
 			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );

@@ -142,10 +142,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		);
 	}
 
-	/**
-	 * @param array<string, mixed> $configuration
-	 * @param array<string, mixed> $archivePolicy
-	 */
+	/** @param array<string, mixed> $configuration @param array<string, mixed> $archivePolicy */
 	public static function registerFromConfiguration(
 		array $configuration,
 		BindingRecord $binding,

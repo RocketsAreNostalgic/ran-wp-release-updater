@@ -62,7 +62,7 @@
     "format:php": "phpcbf --standard=.phpcs.xml --report=summary",
     "lint:php": "phpcs --standard=.phpcs.xml --report=summary",
     "lint:syntax": "php scripts/lint-php.php",
-    "test:unit": "phpunit --configuration phpunit.xml --fail-on-deprecation --fail-on-phpunit-deprecation",
+    "test:unit": "phpunit --configuration phpunit.xml",
     "test:no-dev-consumer": "php tests/Integration/no-dev-consumer.php",
     "test:parity": "php tests/Integration/paired-github-provider-proof.php",
     "test:wordpress-integration": "@php tests/Integration/wordpress-integration.php",

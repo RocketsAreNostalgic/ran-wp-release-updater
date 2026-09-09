@@ -62,7 +62,6 @@ final class SelectedRuntimeState {
 		}
 	}
 
-	/** @return array{loaded:bool,state:string,code:string,diagnostics:list<array{code:string}>} */
 	public function activate(): array {
 		if ( ! $this->broker instanceof RequestBroker ) {
 			return array(
@@ -123,7 +122,7 @@ final class SelectedRuntimeState {
 		) {
 			$prerelease = '' !== ( $matches[4] ?? '' )
 				? 'alpha.0'
-				: strtolower( $matches[5] ?? '' ) . '.' . ( $matches[6] ?? '' );
+				: strtolower( $matches[5] ) . '.' . $matches[6];
 			return $matches[1] . '.' . $matches[2] . '.' . ( '' !== ( $matches[3] ?? '' ) ? $matches[3] : '0' ) . '-' . $prerelease;
 		}
 		return 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?\z/D', $value ) ? $value : null;

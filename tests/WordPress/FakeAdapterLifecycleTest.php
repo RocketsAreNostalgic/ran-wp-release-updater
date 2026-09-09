@@ -63,7 +63,7 @@ namespace Tests\WordPress {
 			);
 		}
 
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'lifecycleCases' )]
+		/** @dataProvider lifecycleCases */
 		public function testDiscoveryReachesVerifiedLifecycleCompletionAcrossTheFourBoundaries( string $targetType, string $channel, string $version, string $tag, bool $prerelease ): void {
 			$this->assertCompletedLifecycle( $targetType, $channel, $version, $tag, $prerelease );
 		}
