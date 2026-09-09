@@ -56,7 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           rm .github/apply-github-boundaries.py .github/workflows/apply-github-boundaries.yml
-          git add src/Provider/GitHub/GitHubReleaseService.php src/Provider/GitHub/GitHubApiClient.php src/Provider/GitHub/GitHubArtifactStore.php runtime.php runtime-copy.json .phpcs.xml phpstan.neon .github/apply-github-boundaries.py .github/workflows/apply-github-boundaries.yml
+          git add src/Provider/GitHub/GitHubReleaseService.php src/Provider/GitHub/GitHubApiClient.php src/Provider/GitHub/GitHubArtifactCustodyFailure.php src/Provider/GitHub/GitHubArtifactStore.php runtime.php runtime-copy.json .phpcs.xml phpstan.neon .github/apply-github-boundaries.py .github/workflows/apply-github-boundaries.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'refactor(github): isolate transport and artifact custody'
