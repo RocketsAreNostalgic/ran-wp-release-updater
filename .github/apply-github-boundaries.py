@@ -19,7 +19,6 @@ if asset_hosts not in text:
     raise SystemExit('missing release asset hosts block')
 text = text.replace(asset_hosts, '', 1)
 
-# Add the two internal collaborators.
 property_anchor = "\tprivate GitHubCredentialResolver $credentials;\n"
 if property_anchor not in text:
     raise SystemExit('missing credential property anchor')
@@ -39,7 +38,6 @@ text = text.replace(
     1,
 )
 
-# Migrate call sites before removing the old implementations.
 replacements = {
     '$this->request(': '$this->client->request(',
     'self::responseCode(': 'GitHubApiClient::responseCode(',
@@ -55,39 +53,43 @@ for old, new in replacements.items():
         raise SystemExit(f'missing service call site: {old}')
     text = text.replace(old, new)
 
-# Remove request/send; response parsing and provider policy remain in the service.
+# The new custody API reports allocation cleanup through a typed exception rather than a by-reference out parameter.
+text = text.replace("\t\t$allocationClean = null;\n", "", 1)
+old_allocate = "$this->artifactStore->allocate( $facts['artifact_filename'], $allocationClean )"
+if old_allocate not in text:
+    raise SystemExit('missing migrated artifact allocation call')
+text = text.replace(old_allocate, "$this->artifactStore->allocate( $facts['artifact_filename'] )", 1)
+old_catch = "\t\t\tif ( is_string( $path ) && is_array( $initialIdentity ) ) {\n\t\t\t\t$clean = $this->artifactStore->remove( $path, $initialIdentity );\n\t\t\t} elseif ( is_bool( $allocationClean ) ) {\n\t\t\t\t$clean = $allocationClean;\n\t\t\t} else {\n\t\t\t\tthrow $exception;\n\t\t\t}"
+new_catch = "\t\t\tif ( is_string( $path ) && is_array( $initialIdentity ) ) {\n\t\t\t\t$clean = $this->artifactStore->remove( $path, $initialIdentity );\n\t\t\t} elseif ( $exception instanceof GitHubArtifactCustodyFailure ) {\n\t\t\t\t$clean = $exception->cleanupComplete;\n\t\t\t} else {\n\t\t\t\tthrow $exception;\n\t\t\t}"
+if old_catch not in text:
+    raise SystemExit('missing allocation cleanup catch block')
+text = text.replace(old_catch, new_catch, 1)
+
 start = text.index("\t/** @return array<string, mixed> */\n\tprivate function request(")
 end = text.index("\t/** @return array<string, mixed> */\n\tprivate function jsonSuccess(", start)
 text = text[:start] + text[end:]
 
-# repositoryApiUrl now uses the client directly; remove the trivial api() wrapper.
 api_method = "\n\tprivate function api( string $path ): string {\n\t\treturn self::API_ORIGIN . $path;\n\t}\n"
 if api_method in text:
     text = text.replace(api_method, '\n', 1)
 
-# Remove response accessor implementations now delegated to GitHubApiClient.
 start = text.index("\t/** @param array<string, mixed> $response */\n\tprivate static function responseCode(")
 end = text.index("\t/** @return list<array<string, mixed>> */\n\tprivate static function decodeList(", start)
 text = text[:start] + text[end:]
 
-# Remove temporary-file custody methods now delegated to GitHubArtifactStore.
 start = text.index("\t/** @param-out ?bool $allocationClean @return array{0:string,1:array<string,int>} */\n\tprivate function temporaryFile(")
 end = text.index("\tprivate static function validatedRedirectUrl(", start)
 text = text[:start] + text[end:]
 
-# Remove redirect/signed-URL validation now delegated to GitHubApiClient.
 start = text.index("\tprivate static function validatedRedirectUrl(")
 end = text.index("\tprivate static function validLocator(", start)
 text = text[:start] + text[end:]
 
-# exactUtcDate only served signed-URL validation.
 start = text.index("\tprivate static function exactUtcDate(")
 end = text.index("\tprivate static function nonNegativeHeader(", start)
 text = text[:start] + text[end:]
-
 service.write_text(text)
 
-# Register the internal runtime symbols.
 runtime = Path('runtime.php')
 text = runtime.read_text()
 anchor = "\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\Provider\\\\GitHub\\\\GitHubReleaseReadUnavailable' => 'src/Provider/GitHub/GitHubReleaseReadUnavailable.php',\n"
@@ -96,12 +98,12 @@ if anchor not in text:
 addition = (
     anchor
     + "\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\Provider\\\\GitHub\\\\GitHubApiClient' => 'src/Provider/GitHub/GitHubApiClient.php',\n"
+    + "\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\Provider\\\\GitHub\\\\GitHubArtifactCustodyFailure' => 'src/Provider/GitHub/GitHubArtifactCustodyFailure.php',\n"
     + "\t'RAN\\\\WPReleaseUpdater\\\\V1\\\\Provider\\\\GitHub\\\\GitHubArtifactStore' => 'src/Provider/GitHub/GitHubArtifactStore.php',\n"
 )
 text = text.replace(anchor, addition, 1)
 runtime.write_text(text)
 
-# Native filesystem operations in these custody/transport helpers have the same security rationale as the service they replace.
 phpcs = Path('.phpcs.xml')
 text = phpcs.read_text()
 for rule in ('WordPress.WP.AlternativeFunctions', 'WordPress.PHP.NoSilencedErrors'):
@@ -116,7 +118,6 @@ for rule in ('WordPress.WP.AlternativeFunctions', 'WordPress.PHP.NoSilencedError
     text = text[:pos] + text[pos:].replace(anchor, addition, 1)
 phpcs.write_text(text)
 
-# Ratchet the new security-sensitive collaborators at PHPStan level 8.
 phpstan = Path('phpstan.neon')
 text = phpstan.read_text()
 anchor = "\t\t- src/WordPress/PendingInstallState.php\n"
@@ -126,12 +127,12 @@ text = text.replace(
     anchor,
     anchor
     + "\t\t- src/Provider/GitHub/GitHubApiClient.php\n"
+    + "\t\t- src/Provider/GitHub/GitHubArtifactCustodyFailure.php\n"
     + "\t\t- src/Provider/GitHub/GitHubArtifactStore.php\n",
     1,
 )
 phpstan.write_text(text)
 
-# Refresh sealed runtime content identity; PHPCBF may alter bytes again in the workflow, so it is recomputed there too.
 files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
 payload = b''.join(
     path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n'
