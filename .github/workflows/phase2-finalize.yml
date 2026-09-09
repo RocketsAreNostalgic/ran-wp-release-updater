@@ -1,0 +1,73 @@
+name: Verify fail-closed selector boundary
+
+on:
+  push:
+    branches:
+      - refactor/runtime-copy-selector
+    paths:
+      - .github/workflows/phase2-finalize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: refactor/runtime-copy-selector
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Preserve fail-closed environment validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('src/Runtime/RuntimeCopySelector.php')
+          text = path.read_text()
+          old = '} catch ( RuntimeException ) {'
+          new = '} catch ( \\Throwable ) {'
+          if text.count(old) != 1:
+              raise SystemExit('selector environment catch anchor invalid')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          set +e
+          composer format:php
+          phpcbf_status=$?
+          set -e
+          if [ "$phpcbf_status" -gt 1 ]; then
+            exit "$phpcbf_status"
+          fi
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
+          payload = b''.join(
+              path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n'
+              for path in files
+          )
+          manifest = Path('runtime-copy.json')
+          data = json.loads(manifest.read_text())
+          data['package_revision'] = hashlib.sha256(payload).hexdigest()
+          manifest.write_text(json.dumps(data, indent=2) + '\n')
+          print(data['package_revision'])
+          PY
+          composer check
+      - name: Commit verified fail-closed fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/phase2-finalize.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Runtime/RuntimeCopySelector.php runtime-copy.json .github/workflows/phase2-finalize.yml
+          git commit -m 'fix(runtime): preserve fail-closed version validation'
+          git push origin HEAD:refactor/runtime-copy-selector
