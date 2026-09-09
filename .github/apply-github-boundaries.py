@@ -34,7 +34,7 @@ if ctor_anchor not in text:
 text = text.replace(
     ctor_anchor,
     ctor_anchor
-    + "\t\t$this->client        = new GitHubApiClient( fn (): void => $this->assertLive() );\n"
+    + "\t\t$this->client        = new GitHubApiClient( function (): void {\n\t\t\t$this->assertLive();\n\t\t} );\n"
     + "\t\t$this->artifactStore = new GitHubArtifactStore();\n",
     1,
 )
@@ -64,11 +64,6 @@ text = text[:start] + text[end:]
 api_method = "\n\tprivate function api( string $path ): string {\n\t\treturn self::API_ORIGIN . $path;\n\t}\n"
 if api_method in text:
     text = text.replace(api_method, '\n', 1)
-else:
-    # The call-site replacement can alter the body before removal.
-    altered = "\n\tprivate function api( string $path ): string {\n\t\treturn self::API_ORIGIN . $path;\n\t}\n"
-    if altered in text:
-        text = text.replace(altered, '\n', 1)
 
 # Remove response accessor implementations now delegated to GitHubApiClient.
 start = text.index("\t/** @param array<string, mixed> $response */\n\tprivate static function responseCode(")
