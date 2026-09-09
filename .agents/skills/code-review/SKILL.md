@@ -11,17 +11,24 @@ Use this skill for every pull request, patch, refactor, dependency change, or im
 
 Use Addy Osmani's `code-review-and-quality` skill from `addyosmani/agent-skills` as the review foundation. Keep the RAN wrapper and installed project skills in the portable `.agents/skills` directory.
 
-When refreshing the upstream skill, resolve the latest stable GitHub release, preview that exact revision, review it, and install that same revision:
+When refreshing the upstream skill, resolve the latest stable GitHub release tag once, immediately resolve that tag to its immutable commit SHA, verify the commit exists, and use only that SHA for both preview and install:
 
 ```sh
 UPSTREAM=addyosmani/agent-skills
 VERSION="$(gh release view --repo "$UPSTREAM" --json tagName --jq '.tagName')"
-gh skill preview "$UPSTREAM" "skills/code-review-and-quality@${VERSION}"
-# STOP: review the exact preview before installing it.
-gh skill install "$UPSTREAM" "skills/code-review-and-quality@${VERSION}" --dir .agents/skills --force
+COMMIT_SHA="$(gh api "repos/${UPSTREAM}/commits/${VERSION}" --jq '.sha')"
+case "$COMMIT_SHA" in
+  ""|*[!0-9a-f]*) echo "Could not resolve an immutable upstream commit." >&2; exit 1 ;;
+esac
+[ "${#COMMIT_SHA}" -eq 40 ] || { echo "Unexpected upstream commit SHA." >&2; exit 1; }
+[ "$(gh api "repos/${UPSTREAM}/commits/${COMMIT_SHA}" --jq '.sha')" = "$COMMIT_SHA" ] || exit 1
+printf 'Reviewing %s at immutable commit %s\n' "$VERSION" "$COMMIT_SHA"
+gh skill preview "$UPSTREAM" "skills/code-review-and-quality@${COMMIT_SHA}"
+# STOP: review this immutable preview before installing it.
+gh skill install "$UPSTREAM" "skills/code-review-and-quality@${COMMIT_SHA}" --dir .agents/skills --force
 ```
 
-Never preview one revision and install another. Do not use an unscoped `gh skill update --force`: it can scan and overwrite user-scoped or other agent-host installations. If an update command is used, constrain it to `.agents/skills` and preview the exact candidate revision first. Treat third-party skill refreshes as separate maintenance changes, not incidental edits in feature/fix PRs.
+Never use a movable tag or branch directly for the preview/install pair, and never preview one commit and install another. Once the release tag has been resolved to `COMMIT_SHA`, do not resolve it again after the review pause; the reviewed SHA is the only permitted installation source for that refresh. Do not use an unscoped `gh skill update --force`: it can scan and overwrite user-scoped or other agent-host installations. If an update command is used, constrain it to `.agents/skills` and preview the exact candidate commit first. Treat third-party skill refreshes as separate maintenance changes, not incidental edits in feature/fix PRs.
 
 If the upstream skill cannot be loaded, apply its core axes here: correctness, readability and simplicity, architecture, security, performance, tests, verification evidence, dependency discipline, dead-code hygiene, and sensible change sizing. Approve changes that improve or preserve code health and satisfy the task; do not block on personal style preferences.
 
