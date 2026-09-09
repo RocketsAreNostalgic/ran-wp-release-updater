@@ -66,22 +66,34 @@ final class RuntimeCopySelector {
 		);
 	}
 
+	/** @param array<string,mixed> $environment */
+	public function validEnvironment( array $environment ): bool {
+		if (
+			! $this->exactKeys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
+			|| 4 !== $environment['runtime_protocol']
+			|| ! is_string( $environment['php_version'] )
+			|| ! is_string( $environment['wordpress_version'] )
+		) {
+			return false;
+		}
+		try {
+			$this->version( $environment['php_version'] );
+			$this->wordpressVersion( $environment['wordpress_version'] );
+			return true;
+		} catch ( RuntimeException ) {
+			return false;
+		}
+	}
+
 	/**
 	 * @param list<array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string}> $candidates
 	 * @param array<string,mixed> $environment
 	 * @return array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string}
 	 */
 	public function select( array $candidates, array $environment ): array {
-		if (
-			array() === $candidates
-			|| ! $this->exactKeys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
-			|| 4 !== $environment['runtime_protocol']
-			|| ! is_string( $environment['php_version'] )
-			|| ! is_string( $environment['wordpress_version'] )
-		) {
+		if ( array() === $candidates || ! $this->validEnvironment( $environment ) ) {
 			throw new RuntimeException( 'Invalid runtime environment.' );
 		}
-		$this->version( $environment['php_version'] );
 		$wordpressVersion = $this->wordpressVersion( $environment['wordpress_version'] );
 		$compatible       = array_values(
 			array_filter(
@@ -232,7 +244,10 @@ final class RuntimeCopySelector {
 		return 0;
 	}
 
-	/** @param array<string,mixed> $value @param list<string> $keys */
+	/**
+	 * @param array<string,mixed> $value
+	 * @param list<string> $keys
+	 */
 	private function exactKeys( array $value, array $keys ): bool {
 		return array_keys( $value ) === $keys;
 	}
