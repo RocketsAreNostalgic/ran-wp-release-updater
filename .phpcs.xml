@@ -101,10 +101,10 @@
 		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 
-	<!-- Bootstrap and broker read local trusted runtime metadata, never remote URLs. -->
+	<!-- Bootstrap and the runtime-copy selector read local trusted runtime metadata, never remote URLs. -->
 	<rule ref="WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents">
 		<exclude-pattern>/bootstrap.php</exclude-pattern>
-		<exclude-pattern>/src/Runtime/RequestBroker.php</exclude-pattern>
+		<exclude-pattern>/src/Runtime/RuntimeCopySelector.php</exclude-pattern>
 	</rule>
 
 	<!--

@@ -401,7 +401,7 @@ PHP
 	private function copy( string $name, string $version, string $revision ): string {
 		$root = $this->parent . '/' . $name;
 		mkdir( $root . '/src/Runtime', 0700, true );
-		foreach ( array( 'bootstrap.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/SelectedRuntimeState.php' ) as $file ) {
+		foreach ( array( 'bootstrap.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' ) as $file ) {
 			copy( dirname( __DIR__, 2 ) . '/' . $file, $root . '/' . $file );
 		}
 		file_put_contents( $root . '/runtime.php', "<?php\n// " . $revision . "\nfile_put_contents('" . addslashes( $this->parent . '/selected.txt' ) . "', basename(__DIR__));\nreturn new class { public function boot(array \$environment,array \$submissions): array { unset( \$environment ); return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(static fn(array \$submission): array => array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null), \$submissions)); } public function registerTarget(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null); } public function releaseSource(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); } };\n" );

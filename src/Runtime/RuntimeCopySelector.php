@@ -21,7 +21,7 @@ final class RuntimeCopySelector {
 		'runtime_protocol',
 		'wordpress_floor',
 	);
-	private const SHA256 = '/\A[a-f0-9]{64}\z/D';
+	private const SHA256    = '/\A[a-f0-9]{64}\z/D';
 
 	/** @return array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string} */
 	public function candidate( string $copyFile ): array {
