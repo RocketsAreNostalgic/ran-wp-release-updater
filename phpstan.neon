@@ -11,6 +11,9 @@ parameters:
 		- src/WordPress/OwnedArchiveStore.php
 		- src/WordPress/StagedPackageManifest.php
 		- src/WordPress/PendingInstallState.php
+		- src/Provider/GitHub/GitHubApiClient.php
+		- src/Provider/GitHub/GitHubArtifactCustodyFailure.php
+		- src/Provider/GitHub/GitHubArtifactStore.php
 	scanDirectories:
 		- src
 	excludePaths:

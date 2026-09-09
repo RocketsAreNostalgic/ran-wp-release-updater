@@ -189,7 +189,7 @@ final class GitHubApiClient {
 		$values = array();
 		foreach ( explode( '&', $query ) as $pair ) {
 			list( $rawKey, $rawValue ) = array_pad( explode( '=', $pair, 2 ), 2, '' );
-			$key = strtolower( rawurldecode( $rawKey ) );
+			$key                       = strtolower( rawurldecode( $rawKey ) );
 			if ( ! in_array( $key, array( 'se', 'expires', 'x-amz-date', 'x-amz-expires' ), true ) ) {
 				continue;
 			}

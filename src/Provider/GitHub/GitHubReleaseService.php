@@ -17,20 +17,12 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 /** Shared, request-local GitHub release protocol for installed and prospective packages. */
 final class GitHubReleaseService {
 
-	private const API_HOST                 = 'api.github.com';
-	private const API_ORIGIN               = 'https://' . self::API_HOST;
 	private const MAX_CANDIDATES           = 8;
 	private const MAX_PAGES                = 2;
 	private const PAGE_SIZE                = 20;
 	private const RELEASE_LIST_BYTES_LIMIT = 524288;
 	private const RELEASE_RESPONSE_LIMIT   = 262144;
 	private const COMMIT_RESPONSE_LIMIT    = 16384;
-	private const HTTP_TIMEOUT             = 10;
-	private const RELEASE_ASSET_HOSTS      = array(
-		'github-releases.githubusercontent.com',
-		'objects.githubusercontent.com',
-		'release-assets.githubusercontent.com',
-	);
 	private const CONFIGURATION_KEYS       = array(
 		'canonical_repository_locator',
 		'canonical_update_uri',
@@ -45,6 +37,8 @@ final class GitHubReleaseService {
 	/** @var array<string, mixed> */
 	private array $binding;
 	private GitHubCredentialResolver $credentials;
+	private GitHubApiClient $client;
+	private GitHubArtifactStore $artifactStore;
 	/** @var null|callable():?string */
 	private $livenessGuard;
 
@@ -78,6 +72,12 @@ final class GitHubReleaseService {
 		$this->binding       = self::ordered( $configuration, self::CONFIGURATION_KEYS );
 		$this->credentials   = $credentials ?? new GitHubCredentialResolver();
 		$this->livenessGuard = $livenessGuard;
+		$this->client        = new GitHubApiClient(
+			function (): void {
+				$this->assertLive();
+			}
+		);
+		$this->artifactStore = new GitHubArtifactStore();
 	}
 
 	/** @internal Sealed-catalog composition for a prospective source. */
@@ -200,7 +200,7 @@ final class GitHubReleaseService {
 			for ( $page = 1; $page <= self::MAX_PAGES; ++$page ) {
 				$headers        = 1 === $page ? self::conditionalHeaders( $conditional ) : array();
 				$remainingBytes = self::RELEASE_LIST_BYTES_LIMIT - $responseBytes;
-				$response       = $this->request(
+				$response       = $this->client->request(
 					$this->repositoryApiUrl()
 					. '/releases?per_page=' . self::PAGE_SIZE . '&page=' . $page,
 					$token,
@@ -208,7 +208,7 @@ final class GitHubReleaseService {
 					min( self::RELEASE_RESPONSE_LIMIT, $remainingBytes )
 				);
 
-				$status = self::responseCode( $response );
+				$status = GitHubApiClient::responseCode( $response );
 				if ( 1 === $page ) {
 					$nextConditional = self::responseConditional( $response );
 				}
@@ -233,7 +233,7 @@ final class GitHubReleaseService {
 				}
 				self::requireSuccess( $response );
 
-				$body           = self::responseBody( $response, self::RELEASE_RESPONSE_LIMIT );
+				$body           = GitHubApiClient::responseBody( $response, self::RELEASE_RESPONSE_LIMIT );
 				$responseBytes += strlen( $body );
 				if ( $responseBytes > self::RELEASE_LIST_BYTES_LIMIT ) {
 					throw new RuntimeException( 'The GitHub release listing is too large.' );
@@ -343,11 +343,10 @@ final class GitHubReleaseService {
 		$this->repositoryIdentity( $token );
 		$path            = null;
 		$initialIdentity = null;
-		$allocationClean = null;
 
 		try {
-			list($path, $initialIdentity) = $this->temporaryFile( $facts['artifact_filename'], $allocationClean );
-			$response                     = $this->request(
+			list($path, $initialIdentity) = $this->artifactStore->allocate( $facts['artifact_filename'] );
+			$response                     = $this->client->request(
 				$this->repositoryApiUrl() . '/releases/assets/' . $artifactIdentity,
 				$token,
 				array( 'Accept' => 'application/octet-stream' ),
@@ -355,7 +354,7 @@ final class GitHubReleaseService {
 				$path
 			);
 			$this->requireAssetSuccess( $response );
-			$identity = self::fileIdentity( $path );
+			$identity = $this->artifactStore->identity( $path );
 			if (
 				null === $identity
 				|| 1 !== $identity['nlink']
@@ -375,9 +374,9 @@ final class GitHubReleaseService {
 			return new TemporaryArtifact( $path, $sha256, $identity, $this->livenessGuard );
 		} catch ( \Throwable $exception ) {
 			if ( is_string( $path ) && is_array( $initialIdentity ) ) {
-				$clean = self::removeOwnedFile( $path, $initialIdentity );
-			} elseif ( is_bool( $allocationClean ) ) {
-				$clean = $allocationClean;
+				$clean = $this->artifactStore->remove( $path, $initialIdentity );
+			} elseif ( $exception instanceof GitHubArtifactCustodyFailure ) {
+				$clean = $exception->cleanupComplete;
 			} else {
 				throw $exception;
 			}
@@ -533,7 +532,7 @@ final class GitHubReleaseService {
 	): array {
 		$repositoryIdentity = $this->repositoryIdentity( $token );
 		$release            = $this->jsonSuccess(
-			$this->request(
+			$this->client->request(
 				$this->repositoryApiUrl() . '/releases/' . $expectedRelease,
 				$token,
 				array(),
@@ -574,7 +573,7 @@ final class GitHubReleaseService {
 
 		$asset          = $this->zipAsset( $release['assets'] ?? null );
 		$commit         = $this->jsonSuccess(
-			$this->request(
+			$this->client->request(
 				$this->repositoryApiUrl() . '/commits/' . rawurlencode( $tag ),
 				$token,
 				array(),
@@ -740,7 +739,7 @@ final class GitHubReleaseService {
 	private function repositoryIdentity( ?string $token ): string {
 		$expected   = $this->binding['stable_repository_identity'];
 		$repository = $this->jsonSuccess(
-			$this->request(
+			$this->client->request(
 				$this->repositoryApiUrl(),
 				$token,
 				array(),
@@ -803,91 +802,6 @@ final class GitHubReleaseService {
 	}
 
 	/** @return array<string, mixed> */
-	private function request(
-		string $url,
-		?string $token,
-		array $headers,
-		int $limit,
-		?string $filename = null
-	): array {
-		$headers = array_merge(
-			array(
-				'Accept'               => 'application/vnd.github+json',
-				'User-Agent'           => 'ran-wp-release-updater',
-				'X-GitHub-Api-Version' => '2022-11-28',
-			),
-			$headers
-		);
-		if ( null !== $token ) {
-			$headers['Authorization'] = 'Bearer ' . $token;
-		}
-
-		$currentUrl       = $url;
-		$credentialsBound = true;
-		for ( $redirects = 0; ; ++$redirects ) {
-			$this->assertLive();
-			$response = self::send( $currentUrl, $headers, $limit, $filename );
-			$this->assertLive();
-			$status = self::responseCode( $response );
-			if ( ! in_array( $status, array( 301, 302, 303, 307, 308 ), true ) ) {
-				return $response;
-			}
-			if ( $redirects >= 1 ) {
-				throw new RuntimeException( 'The GitHub redirect limit was exceeded.' );
-			}
-
-			$nextUrl = self::validatedRedirectUrl(
-				self::responseHeader( $response, 'location' )
-			);
-			if ( null === $nextUrl ) {
-				throw new RuntimeException( 'The GitHub redirect is unsafe.' );
-			}
-			$nextHost = strtolower( (string) parse_url( $nextUrl, PHP_URL_HOST ) );
-			if ( self::API_HOST !== $nextHost ) {
-				$credentialsBound = false;
-			}
-			if ( ! $credentialsBound ) {
-				unset( $headers['Authorization'] );
-			}
-			$currentUrl = $nextUrl;
-		}
-	}
-
-	/** @return array<string, mixed> */
-	private static function send(
-		string $url,
-		array $headers,
-		int $limit,
-		?string $filename
-	): array {
-		if ( ! function_exists( 'wp_safe_remote_get' ) || ! function_exists( 'is_wp_error' ) ) {
-			throw new GitHubReleaseReadUnavailable( 'WordPress safe HTTP is unavailable.' );
-		}
-
-		$args = array(
-			'headers'             => $headers,
-			'limit_response_size' => PHP_INT_MAX === $limit ? PHP_INT_MAX : $limit + 1,
-			'redirection'         => 0,
-			'timeout'             => self::HTTP_TIMEOUT,
-		);
-		if ( null !== $filename ) {
-			$args['filename'] = $filename;
-			$args['stream']   = true;
-		}
-
-		$response = wp_safe_remote_get( $url, $args );
-		if ( is_wp_error( $response ) || ! is_array( $response ) ) {
-			throw new GitHubReleaseReadUnavailable( 'The GitHub request failed.' );
-		}
-		self::responseCode( $response );
-		if ( null === $filename ) {
-			self::responseBody( $response, $limit );
-		}
-
-		return $response;
-	}
-
-	/** @return array<string, mixed> */
 	private function jsonSuccess(
 		array $response,
 		int $limit,
@@ -899,7 +813,7 @@ final class GitHubReleaseService {
 		}
 		self::requireSuccess( $response, 'repository' === $context );
 		try {
-			return self::decodeObject( self::responseBody( $response, $limit ) );
+			return self::decodeObject( GitHubApiClient::responseBody( $response, $limit ) );
 		} catch ( \Throwable $exception ) {
 			throw new ReleaseFailure( 'operation_failed', null, 'not_applicable', $exception );
 		}
@@ -920,16 +834,13 @@ final class GitHubReleaseService {
 			$this->binding['canonical_repository_locator'],
 			2
 		);
-		return $this->api( '/repos/' . rawurlencode( $owner ) . '/' . rawurlencode( $repository ) );
+		return $this->client->api( '/repos/' . rawurlencode( $owner ) . '/' . rawurlencode( $repository ) );
 	}
 
-	private function api( string $path ): string {
-		return self::API_ORIGIN . $path;
-	}
 
 	/** @param array<string, mixed> $response */
 	private static function requireSuccess( array $response, bool $missingIsReadUnavailable = true ): void {
-		$status = self::responseCode( $response );
+		$status = GitHubApiClient::responseCode( $response );
 		if ( in_array( $status, array( 401, 403 ), true ) || ( $missingIsReadUnavailable && 404 === $status ) ) {
 			throw new ReleaseFailure( 'repository_access_unavailable' );
 		}
@@ -939,44 +850,6 @@ final class GitHubReleaseService {
 		if ( $status < 200 || $status > 299 ) {
 			throw new ReleaseFailure( 'operation_failed' );
 		}
-	}
-
-	/** @param array<string, mixed> $response */
-	private static function responseCode( array $response ): int {
-		if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
-			throw new GitHubReleaseReadUnavailable( 'The WordPress HTTP response API is unavailable.' );
-		}
-		$status = wp_remote_retrieve_response_code( $response );
-		if ( is_string( $status ) && 1 === preg_match( '/\A[1-5]\d{2}\z/D', $status ) ) {
-			$status = (int) $status;
-		}
-		if ( ! is_int( $status ) || $status < 100 || $status > 599 ) {
-			throw new RuntimeException( 'The GitHub response status is invalid.' );
-		}
-
-		return $status;
-	}
-
-	/** @param array<string, mixed> $response */
-	private static function responseHeader( array $response, string $name ): ?string {
-		if ( ! function_exists( 'wp_remote_retrieve_header' ) ) {
-			throw new GitHubReleaseReadUnavailable( 'The WordPress HTTP response API is unavailable.' );
-		}
-		$value = wp_remote_retrieve_header( $response, $name );
-		return is_string( $value ) || is_numeric( $value ) ? (string) $value : null;
-	}
-
-	/** @param array<string, mixed> $response */
-	private static function responseBody( array $response, int $limit ): string {
-		if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
-			throw new GitHubReleaseReadUnavailable( 'The WordPress HTTP response API is unavailable.' );
-		}
-		$body = wp_remote_retrieve_body( $response );
-		if ( ! is_string( $body ) || strlen( $body ) > $limit ) {
-			throw new RuntimeException( 'The GitHub response body is invalid.' );
-		}
-
-		return $body;
 	}
 
 	/** @return list<array<string, mixed>> */
@@ -1062,8 +935,8 @@ final class GitHubReleaseService {
 	 * @return array{etag:?string,last_modified:?string}
 	 */
 	private static function responseConditional( array $response ): array {
-		$etag         = self::responseHeader( $response, 'etag' );
-		$lastModified = self::responseHeader( $response, 'last-modified' );
+		$etag         = GitHubApiClient::responseHeader( $response, 'etag' );
+		$lastModified = GitHubApiClient::responseHeader( $response, 'last-modified' );
 		return array(
 			'etag'          => is_string( $etag ) && self::validEtag( $etag ) ? $etag : null,
 			'last_modified' => is_string( $lastModified )
@@ -1078,14 +951,14 @@ final class GitHubReleaseService {
 	 */
 	private static function rateLimit( array $response, ?int $now = null ): array {
 		$now      ??= time();
-		$status     = self::responseCode( $response );
+		$status     = GitHubApiClient::responseCode( $response );
 		$remaining  = self::nonNegativeHeader(
-			self::responseHeader( $response, 'x-ratelimit-remaining' )
+			GitHubApiClient::responseHeader( $response, 'x-ratelimit-remaining' )
 		);
-		$reset      = self::responseHeader( $response, 'x-ratelimit-reset' );
+		$reset      = GitHubApiClient::responseHeader( $response, 'x-ratelimit-reset' );
 		$resetAt    = self::nonNegativeHeader( $reset );
 		$retryAfter = in_array( $status, array( 403, 429 ), true )
-			? self::positiveDelayHeader( self::responseHeader( $response, 'retry-after' ) )
+			? self::positiveDelayHeader( GitHubApiClient::responseHeader( $response, 'retry-after' ) )
 			: null;
 		$limited    = 429 === $status
 			|| ( 403 === $status && ( null !== $retryAfter || 0 === $remaining ) );
@@ -1178,176 +1051,6 @@ final class GitHubReleaseService {
 		);
 	}
 
-	/** @param-out ?bool $allocationClean @return array{0:string,1:array<string,int>} */
-	private function temporaryFile( string $filename, ?bool &$allocationClean ): array {
-		$allocationClean = null;
-		if ( ! function_exists( 'wp_tempnam' ) ) {
-			throw new RuntimeException( 'WordPress temporary-file custody is unavailable.' );
-		}
-		$path = wp_tempnam( $filename );
-		if ( ! is_string( $path ) || '' === $path ) {
-			throw new RuntimeException( 'A private temporary file could not be created.' );
-		}
-		$createdIdentity = self::fileIdentity( $path );
-		if ( null === $createdIdentity || ! @chmod( $path, 0600 ) ) {
-			if ( is_array( $createdIdentity ) ) {
-				$allocationClean = self::removeOwnedFile( $path, $createdIdentity );
-			} else {
-				$allocationClean = ! file_exists( $path ) && ! is_link( $path );
-			}
-			throw new RuntimeException( 'A private temporary file could not be created.' );
-		}
-		$identity = self::fileIdentity( $path );
-		if ( null === $identity || 1 !== $identity['nlink'] ) {
-			$allocationClean = self::removeOwnedFile( $path, $createdIdentity );
-			throw new RuntimeException( 'The private temporary file is invalid.' );
-		}
-
-		return array( $path, $identity );
-	}
-
-	/** @return array<string, int>|null */
-	private static function fileIdentity( string $path ): ?array {
-		clearstatcache( true, $path );
-		$stat = @lstat( $path );
-		if (
-			! is_array( $stat )
-			|| is_link( $path )
-			|| 0100000 !== ( (int) $stat['mode'] & 0170000 )
-		) {
-			return null;
-		}
-
-		return array(
-			'dev'   => (int) $stat['dev'],
-			'ino'   => (int) $stat['ino'],
-			'mode'  => (int) $stat['mode'],
-			'nlink' => (int) $stat['nlink'],
-			'uid'   => (int) $stat['uid'],
-			'gid'   => (int) $stat['gid'],
-			'size'  => (int) $stat['size'],
-			'mtime' => (int) $stat['mtime'],
-			'ctime' => (int) $stat['ctime'],
-		);
-	}
-
-	/** @param array<string, int> $identity */
-	private static function removeOwnedFile( string $path, array $identity ): bool {
-		for ( $attempt = 0; $attempt < 2; ++$attempt ) {
-			$current = self::fileIdentity( $path );
-			if ( ! is_array( $current ) || $current['dev'] !== $identity['dev'] || $current['ino'] !== $identity['ino'] ) {
-				return ! file_exists( $path ) && ! is_link( $path );
-			}
-			@unlink( $path );
-			clearstatcache( true, $path );
-			if ( ! file_exists( $path ) && ! is_link( $path ) ) {
-				return true; }
-		}
-		return false;
-	}
-
-	private static function validatedRedirectUrl( ?string $url ): ?string {
-		if (
-			null === $url
-			|| '' === $url
-			|| strlen( $url ) > 4096
-			|| 1 === preg_match( '/[\x00-\x1f\x7f]/', $url )
-			|| ! function_exists( 'wp_http_validate_url' )
-			|| false === wp_http_validate_url( $url )
-		) {
-			return null;
-		}
-		$parts = parse_url( $url );
-		if (
-			! is_array( $parts )
-			|| 'https' !== strtolower( (string) ( $parts['scheme'] ?? '' ) )
-			|| ! is_string( $parts['host'] ?? null )
-			|| isset( $parts['user'] )
-			|| isset( $parts['pass'] )
-			|| ( isset( $parts['port'] ) && 443 !== $parts['port'] )
-			|| isset( $parts['fragment'] )
-		) {
-			return null;
-		}
-
-		$host = strtolower( $parts['host'] );
-		if (
-			false !== filter_var( $host, FILTER_VALIDATE_IP )
-			|| (
-				self::API_HOST !== $host
-				&& ! in_array( $host, self::RELEASE_ASSET_HOSTS, true )
-			)
-			|| self::signedUrlExpired( (string) ( $parts['query'] ?? '' ) )
-		) {
-			return null;
-		}
-
-		return $url;
-	}
-
-	private static function signedUrlExpired( string $query ): bool {
-		if ( '' === $query ) {
-			return false;
-		}
-		$values = array();
-		foreach ( explode( '&', $query ) as $pair ) {
-			list($rawKey, $rawValue) = array_pad( explode( '=', $pair, 2 ), 2, '' );
-			$key                     = strtolower( rawurldecode( $rawKey ) );
-			if ( ! in_array( $key, array( 'se', 'expires', 'x-amz-date', 'x-amz-expires' ), true ) ) {
-				continue;
-			}
-			if ( array_key_exists( $key, $values ) ) {
-				return true;
-			}
-			$values[ $key ] = rawurldecode( $rawValue );
-		}
-		if ( array() === $values ) {
-			return false;
-		}
-
-		$families = ( array_key_exists( 'se', $values ) ? 1 : 0 )
-			+ ( array_key_exists( 'expires', $values ) ? 1 : 0 )
-			+ (
-				array_key_exists( 'x-amz-date', $values )
-				|| array_key_exists( 'x-amz-expires', $values )
-					? 1
-					: 0
-			);
-		if ( 1 !== $families ) {
-			return true;
-		}
-
-		if ( array_key_exists( 'se', $values ) ) {
-			if (
-				1 !== preg_match(
-					'/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?Z\z/D',
-					$values['se']
-				)
-			) {
-				return true;
-			}
-			$base      = substr( $values['se'], 0, 19 ) . 'Z';
-			$expiresAt = self::exactUtcDate( '!Y-m-d\TH:i:s\Z', $base );
-			return null === $expiresAt || $expiresAt <= time();
-		}
-
-		if ( array_key_exists( 'expires', $values ) ) {
-			return 1 !== preg_match( '/\A\d{1,12}\z/D', $values['expires'] )
-				|| (int) $values['expires'] <= time();
-		}
-
-		if (
-			! isset( $values['x-amz-date'], $values['x-amz-expires'] )
-			|| 1 !== preg_match( '/\A\d{8}T\d{6}Z\z/D', $values['x-amz-date'] )
-			|| 1 !== preg_match( '/\A\d{1,7}\z/D', $values['x-amz-expires'] )
-		) {
-			return true;
-		}
-		$issuedAt = self::exactUtcDate( '!Ymd\THis\Z', $values['x-amz-date'] );
-		return null === $issuedAt
-			|| $issuedAt + (int) $values['x-amz-expires'] <= time();
-	}
-
 	private static function validLocator( mixed $value ): bool {
 		return is_string( $value )
 			&& 1 === preg_match(
@@ -1372,24 +1075,6 @@ final class GitHubReleaseService {
 
 	private static function providerPositiveInteger( mixed $value ): ?int {
 		return is_int( $value ) && $value > 0 ? $value : null;
-	}
-
-	private static function exactUtcDate( string $format, string $value ): ?int {
-		$date   = \DateTimeImmutable::createFromFormat(
-			$format,
-			$value,
-			new \DateTimeZone( 'UTC' )
-		);
-		$errors = \DateTimeImmutable::getLastErrors();
-		if (
-			false === $date
-			|| ( is_array( $errors ) && ( 0 !== $errors['warning_count'] || 0 !== $errors['error_count'] ) )
-			|| $date->format( substr( $format, 1 ) ) !== $value
-		) {
-			return null;
-		}
-
-		return $date->getTimestamp();
 	}
 
 	private static function nonNegativeHeader( ?string $value ): ?int {
