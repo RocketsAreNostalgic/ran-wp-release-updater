@@ -2,6 +2,7 @@ from pathlib import Path
 import hashlib
 import json
 import re
+import subprocess
 
 p = Path('src/WordPress/NativePluginUpdater.php')
 text = p.read_text()
@@ -71,7 +72,6 @@ for old, new in replacements.items():
 text = re.sub(r'\$this->pending(?![A-Za-z0-9_])', '$this->pendingInstall->active()', text)
 p.write_text(text)
 
-# Compatibility probes may inspect private state, but should follow the new state boundary rather than preserving removed fields.
 p = Path('tests/Runtime/P03PairedCompositionTest.php')
 text = p.read_text()
 old = """$receiptFacts = static function (object $native): array {
@@ -89,6 +89,8 @@ new = """$receiptFacts = static function (object $native): array {
 if old not in text:
     raise SystemExit('missing paired-composition receipt probe')
 p.write_text(text.replace(old, new, 1))
+# The CI commit step stages the production files explicitly; stage this compatibility-probe update here as well.
+subprocess.run(['git', 'add', 'tests/Runtime/P03PairedCompositionTest.php'], check=True)
 
 p = Path('runtime.php')
 text = p.read_text()
