@@ -117,7 +117,7 @@ final readonly class AcquisitionReceipt {
 
 	/** @return WeakMap<self, array{lease_deadline:int,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,owner_token:string}> */
 	private static function issued(): WeakMap {
-		static $issued = null;
+		static $issued   = null;
 		return $issued ??= new WeakMap();
 	}
 
