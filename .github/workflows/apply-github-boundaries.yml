@@ -1,0 +1,62 @@
+name: Apply GitHub boundary refactor
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/apply-github-boundaries.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'refactor/github-transport-acquisition'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Apply and verify GitHub boundary migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/apply-github-boundaries.py
+          set +e
+          composer format:php
+          phpcbf_status=$?
+          set -e
+          if [ "$phpcbf_status" -gt 1 ]; then
+            exit "$phpcbf_status"
+          fi
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
+          payload = b''.join(
+              path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n'
+              for path in files
+          )
+          manifest = Path('runtime-copy.json')
+          data = json.loads(manifest.read_text())
+          data['package_revision'] = hashlib.sha256(payload).hexdigest()
+          manifest.write_text(json.dumps(data, indent=2) + '\n')
+          PY
+          composer check
+      - name: Commit verified boundary refactor
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/apply-github-boundaries.py .github/workflows/apply-github-boundaries.yml
+          git add src/Provider/GitHub/GitHubReleaseService.php src/Provider/GitHub/GitHubApiClient.php src/Provider/GitHub/GitHubArtifactStore.php runtime.php runtime-copy.json .phpcs.xml phpstan.neon .github/apply-github-boundaries.py .github/workflows/apply-github-boundaries.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'refactor(github): isolate transport and artifact custody'
+          git push origin HEAD:${GITHUB_HEAD_REF}
