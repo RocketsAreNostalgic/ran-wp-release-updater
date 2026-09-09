@@ -68,9 +68,27 @@ replacements = {
 }
 for old, new in replacements.items():
     text = text.replace(old, new)
-# Replace only the former scalar property token; do not rewrite the new pendingInstall collaborator.
 text = re.sub(r'\$this->pending(?![A-Za-z0-9_])', '$this->pendingInstall->active()', text)
 p.write_text(text)
+
+# Compatibility probes may inspect private state, but should follow the new state boundary rather than preserving removed fields.
+p = Path('tests/Runtime/P03PairedCompositionTest.php')
+text = p.read_text()
+old = """$receiptFacts = static function (object $native): array {
+\t$receipt = (new ReflectionProperty($native, 'pendingReceipt'))->getValue($native);
+\treturn (new ReflectionProperty($receipt, 'facts'))->getValue($receipt);
+};"""
+new = """$receiptFacts = static function (object $native): array {
+\t$pending = (new ReflectionProperty($native, 'pendingInstall'))->getValue($native);
+\t$receipt = $pending->receipt();
+\tif (! $receipt instanceof \\RAN\\WPReleaseUpdater\\V1\\Contract\\AcquisitionReceipt) {
+\t\tthrow new RuntimeException('Pending receipt fixture failed.');
+\t}
+\treturn (new ReflectionProperty($receipt, 'facts'))->getValue($receipt);
+};"""
+if old not in text:
+    raise SystemExit('missing paired-composition receipt probe')
+p.write_text(text.replace(old, new, 1))
 
 p = Path('runtime.php')
 text = p.read_text()
