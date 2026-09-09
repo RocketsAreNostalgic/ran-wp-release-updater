@@ -25,16 +25,23 @@ final readonly class ArchiveScanResult {
 	}
 
 	public function isValid(): bool {
-		return null === $this->failureCode; }
+		return null === $this->failureCode;
+	}
+
 	public function failureCode(): ?string {
-		return $this->failureCode; }
+		return $this->failureCode;
+	}
+
 	public function root(): ?string {
-		return $this->root; }
+		return $this->root;
+	}
 
 	/** @return list<array{name:string,path:string,directory:bool,size:int,compressed_size:int}> */
 	public function entries(): array {
-		return $this->entries; }
+		return $this->entries;
+	}
 
 	public function expandedBytes(): int {
-		return $this->expandedBytes; }
+		return $this->expandedBytes;
+	}
 }

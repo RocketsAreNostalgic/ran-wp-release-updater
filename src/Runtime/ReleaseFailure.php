@@ -19,7 +19,10 @@ final class ReleaseFailure extends \RuntimeException {
 	}
 
 	public static function validCode( string $code ): bool {
-		return in_array( $code, self::CODES, true ); }
+		return in_array( $code, self::CODES, true );
+	}
+
 	public static function validCleanup( string $status ): bool {
-		return in_array( $status, self::CLEANUP, true ); }
+		return in_array( $status, self::CLEANUP, true );
+	}
 }
