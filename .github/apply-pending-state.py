@@ -1,6 +1,7 @@
 from pathlib import Path
 import hashlib
 import json
+import re
 
 p = Path('src/WordPress/NativePluginUpdater.php')
 text = p.read_text()
@@ -20,9 +21,21 @@ new = "\t\t$this->state = $verified['current'];\n\t\t$this->pendingInstall->begi
 if old not in text:
     raise SystemExit('missing pending begin block')
 text = text.replace(old, new, 1)
-text = text.replace("\t\t$this->state              = $verified['current'];\n\t\t$this->extractionAdmitted = true;", "\t\t$this->state = $verified['current'];\n\t\tif ( ! $this->pendingInstall->admitExtraction() ) {\n\t\t\t$this->clearPending();\n\t\t\treturn $this->failure( 'archive_changed_before_extraction' );\n\t\t}", 1)
-text = text.replace("\t\t$this->state          = $verified['current'];\n\t\t$this->stagedManifest = $manifest;", "\t\t$this->state = $verified['current'];\n\t\tif ( ! $this->pendingInstall->stageManifest( $manifest ) ) {\n\t\t\t$this->clearPending();\n\t\t\treturn $this->failure( 'staged_package_identity_invalid' );\n\t\t}", 1)
-text = text.replace("\t\t$this->installResultCaptured = true;\n\t\t$this->installResult         = $result;", "\t\tif ( ! $this->pendingInstall->captureInstallResult( $result ) ) {\n\t\t\t$this->clearPending();\n\t\t\treturn $this->failure( 'unverified_install_result' );\n\t\t}", 1)
+text = text.replace(
+    "\t\t$this->state              = $verified['current'];\n\t\t$this->extractionAdmitted = true;",
+    "\t\t$this->state = $verified['current'];\n\t\tif ( ! $this->pendingInstall->admitExtraction() ) {\n\t\t\t$this->clearPending();\n\t\t\treturn $this->failure( 'archive_changed_before_extraction' );\n\t\t}",
+    1,
+)
+text = text.replace(
+    "\t\t$this->state          = $verified['current'];\n\t\t$this->stagedManifest = $manifest;",
+    "\t\t$this->state = $verified['current'];\n\t\tif ( ! $this->pendingInstall->stageManifest( $manifest ) ) {\n\t\t\t$this->clearPending();\n\t\t\treturn $this->failure( 'staged_package_identity_invalid' );\n\t\t}",
+    1,
+)
+text = text.replace(
+    "\t\t$this->installResultCaptured = true;\n\t\t$this->installResult         = $result;",
+    "\t\tif ( ! $this->pendingInstall->captureInstallResult( $result ) ) {\n\t\t\t$this->clearPending();\n\t\t\treturn $this->failure( 'unverified_install_result' );\n\t\t}",
+    1,
+)
 text = text.replace("\t\t\t$this->completionObserved = true;", "\t\t\t$this->pendingInstall->observeCompletion();", 1)
 start = text.index("\tprivate function clearPending( bool $release = true ): void {")
 end = text.index("\tprivate function diagnose(", start)
@@ -52,10 +65,11 @@ replacements = {
     '$this->completionObserved': '$this->pendingInstall->completionObserved()',
     '$this->multiRun': '$this->pendingInstall->multiRun()',
     '$this->stagedManifest': '$this->pendingInstall->stagedManifest()',
-    '$this->pending': '$this->pendingInstall->active()',
 }
 for old, new in replacements.items():
     text = text.replace(old, new)
+# Replace only the former scalar property token; do not rewrite the new pendingInstall collaborator.
+text = re.sub(r'\$this->pending(?![A-Za-z0-9_])', '$this->pendingInstall->active()', text)
 p.write_text(text)
 
 p = Path('runtime.php')
