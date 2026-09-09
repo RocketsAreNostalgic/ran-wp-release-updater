@@ -87,3 +87,5 @@ jobs:
             runtime-copy.json
           git commit -m 'refactor(runtime): isolate request protocol validation'
           git push origin HEAD:refactor/phase4-architecture
+
+# verifier rerun after preserving reflected private validation seams
