@@ -1,0 +1,88 @@
+name: Apply final quality hygiene
+
+on:
+  push:
+    branches:
+      - chore/final-quality-hygiene
+    paths:
+      - .github/workflows/final-hygiene-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: chore/final-quality-hygiene
+          fetch-depth: 0
+      - name: Apply previously verified hygiene edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout aac3c3445e7ebf98d8cba2af83e4b220ac735628 -- \
+            .github/workflows/ci.yml \
+            composer.json \
+            tests/Archive/PackageIdentityValidatorTest.php \
+            tests/Contract/CanonicalUpdateUriTest.php \
+            tests/Contract/ReleaseVersionTest.php \
+            tests/Provider/GitHubReleaseAdapterTest.php \
+            tests/Runtime/P03NegativeCompositionTest.php \
+            tests/Runtime/P03PairedCompositionTest.php \
+            tests/Runtime/P04CompatibilityNetworkScaleTest.php \
+            tests/Runtime/SelectedRuntimeActivationBoundaryTest.php \
+            tests/WordPress/FakeAdapterLifecycleTest.php
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Verify PHP 8.2 quality and deprecation gate
+        run: composer check
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Verify PHP 8.5 compatibility
+        run: composer check
+      - name: Verify hygiene scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only HEAD | sort > /tmp/hygiene-files.txt
+          cat > /tmp/hygiene-expected.txt <<'EOF'
+          .github/workflows/ci.yml
+          composer.json
+          tests/Archive/PackageIdentityValidatorTest.php
+          tests/Contract/CanonicalUpdateUriTest.php
+          tests/Contract/ReleaseVersionTest.php
+          tests/Provider/GitHubReleaseAdapterTest.php
+          tests/Runtime/P03NegativeCompositionTest.php
+          tests/Runtime/P03PairedCompositionTest.php
+          tests/Runtime/P04CompatibilityNetworkScaleTest.php
+          tests/Runtime/SelectedRuntimeActivationBoundaryTest.php
+          tests/WordPress/FakeAdapterLifecycleTest.php
+          EOF
+          sort -o /tmp/hygiene-expected.txt /tmp/hygiene-expected.txt
+          diff -u /tmp/hygiene-expected.txt /tmp/hygiene-files.txt
+          if grep -R --line-number '@dataProvider' tests --include='*.php'; then
+            echo 'Legacy PHPUnit @dataProvider annotations remain.' >&2
+            exit 1
+          fi
+      - name: Commit verified hygiene tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/final-hygiene-apply.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          git commit -m 'chore(quality): enforce current PHP and deprecation baseline'
+          git push origin HEAD:chore/final-quality-hygiene
