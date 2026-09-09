@@ -7,7 +7,7 @@ parameters:
 	paths:
 		- src/Archive
 		- src/Contract
-		# Security-sensitive custody collaborators are required to remain level-8 clean.
+		# Security-sensitive custody and pending-state collaborators are required to remain level-8 clean.
 		- src/WordPress/OwnedArchiveStore.php
 		- src/WordPress/StagedPackageManifest.php
 		- src/WordPress/PendingInstallState.php
