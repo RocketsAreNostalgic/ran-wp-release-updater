@@ -60,23 +60,23 @@ def method_span(text: str, name: str) -> tuple[int, int, str]:
     raise RuntimeError(f'Unterminated method {name}')
 
 
-public_methods = [
+all_methods = [
     'ownedBy',
     'exactPublicMethods',
     'validStatus',
+    'validNativeStatus',
     'validDiagnostics',
+    'validDiagnosticCode',
     'declarationCode',
     'releaseDeclarationCode',
+    'opaque',
     'exactKeys',
 ]
-private_methods = ['validNativeStatus', 'validDiagnosticCode', 'opaque']
-all_methods = public_methods + private_methods
 
 blocks = {}
 for name in all_methods:
     _, _, block = method_span(broker, name)
-    visibility = 'public' if name in public_methods else 'private'
-    block = block.replace(f'\tprivate function {name}(', f'\t{visibility} static function {name}(', 1)
+    block = block.replace(f'\tprivate function {name}(', f'\tpublic static function {name}(', 1)
     block = block.replace('$this->', 'self::')
     blocks[name] = block
 
@@ -128,9 +128,9 @@ if "require_once __DIR__ . '/RequestProtocolValidator.php';" not in broker:
         1,
     )
 
-# Delegate validation calls from the broker to the internal helper. Preserve
-# declarationCode() as a thin private delegate because characterization tests
-# intentionally reflect that historical private seam.
+# Runtime call sites delegate directly. Thin private methods with the historical
+# names remain below so characterization tests that reflect those private seams
+# continue to exercise the same validation behavior.
 replacements = {
     '$this->ownedBy(': 'RequestProtocolValidator::ownedBy(',
     '$this->exactPublicMethods(': 'RequestProtocolValidator::exactPublicMethods(',
@@ -146,21 +146,30 @@ broker = broker.replace(
     "RequestProtocolValidator::isTerminalCode( $result['code'] )",
 )
 
-# Remove moved method bodies, except declarationCode which remains a compatibility
-# delegate for the focused characterization test.
-for name in ['ownedBy', 'exactPublicMethods', 'validStatus', 'validNativeStatus', 'validDiagnostics', 'validDiagnosticCode', 'releaseDeclarationCode', 'opaque', 'exactKeys']:
-    start, end, _ = method_span(broker, name)
-    broker = broker[:start] + broker[end:]
-
-start, end, _ = method_span(broker, 'declarationCode')
-broker = broker[:start] + "\tprivate function declarationCode( array $value ): ?string {\n\t\treturn RequestProtocolValidator::declarationCode( $value );\n\t}" + broker[end:]
+arguments = {
+    'ownedBy': '$value, $root',
+    'exactPublicMethods': '$value, $expected',
+    'validStatus': '$status',
+    'validNativeStatus': '$native',
+    'validDiagnostics': '$diagnostics, $state',
+    'validDiagnosticCode': '$code',
+    'declarationCode': '$value',
+    'releaseDeclarationCode': '$value',
+    'opaque': '$value, $limit',
+    'exactKeys': '$value, $keys',
+}
+for name in all_methods:
+    start, end, block = method_span(broker, name)
+    signature = block[:block.index('{')].rstrip()
+    wrapper = signature + " {\n\t\treturn RequestProtocolValidator::" + name + "( " + arguments[name] + " );\n\t}"
+    broker = broker[:start] + wrapper + broker[end:]
 
 # Sanity checks: no moved code-list constants remain in the broker and all stateful
-# public protocol methods remain present.
+# public protocol methods plus historical private validator seams remain present.
 for token in ('TERMINAL_CODES', 'CANDIDATE_VALIDATION_CODES', 'FAILURE_CODES', 'RELATIONSHIPS'):
     if token in broker:
         raise RuntimeError(f'Broker still contains moved protocol constant {token}')
-for method in ('protocolVersion', 'registerCandidate', 'activate', 'registerTarget', 'releaseSource', 'targetStatus', 'targetDiagnostics', 'refreshTarget', 'diagnostics'):
+for method in ('protocolVersion', 'registerCandidate', 'activate', 'registerTarget', 'releaseSource', 'targetStatus', 'targetDiagnostics', 'refreshTarget', 'diagnostics', *all_methods):
     if f'function {method}(' not in broker:
         raise RuntimeError(f'Broker lost required method {method}')
 
