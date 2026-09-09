@@ -24,10 +24,17 @@ jobs:
           extensions: zip, mysqli
           tools: composer:v2
       - run: composer install --no-interaction --prefer-dist
-      - name: Refresh sealed runtime identity and verify PHP gate
+      - name: Format, refresh sealed runtime identity and verify PHP gate
         shell: bash
         run: |
           set -euo pipefail
+          set +e
+          composer format:php
+          phpcbf_status=$?
+          set -e
+          if [ "$phpcbf_status" -gt 1 ]; then
+            exit "$phpcbf_status"
+          fi
           python3 <<'PY'
           from pathlib import Path
           import hashlib, json
@@ -48,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           rm .github/workflows/fix-review-formatting.yml
-          git add runtime-copy.json .github/workflows/fix-review-formatting.yml
+          git add src tests runtime-copy.json .github/workflows/fix-review-formatting.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'fix(style): finish reviewer formatting cleanup'
