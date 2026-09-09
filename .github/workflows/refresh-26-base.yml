@@ -1,0 +1,70 @@
+name: Refresh #26 baseline
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/refresh-26-base.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'refactor/native-archive-custody'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Merge reviewed baseline and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin chore/php-quality-baseline-v2
+          set +e
+          git merge --no-commit --no-ff origin/chore/php-quality-baseline-v2
+          merge_status=$?
+          set -e
+          if [ "$merge_status" -ne 0 ]; then
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            if [ "$conflicts" != 'runtime-copy.json' ]; then
+              printf 'Unexpected merge conflicts:\n%s\n' "$conflicts" >&2
+              exit 1
+            fi
+            git checkout --ours runtime-copy.json
+            git add runtime-copy.json
+          fi
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
+          payload = b''.join(
+              path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n'
+              for path in files
+          )
+          manifest = Path('runtime-copy.json')
+          data = json.loads(manifest.read_text())
+          data['package_revision'] = hashlib.sha256(payload).hexdigest()
+          manifest.write_text(json.dumps(data, indent=2) + '\n')
+          print(data['package_revision'])
+          PY
+          git add runtime-copy.json
+          composer check
+      - name: Commit refreshed stack base
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/refresh-26-base.yml
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(stack): refresh PHP quality baseline'
+          git push origin HEAD:${GITHUB_HEAD_REF}
