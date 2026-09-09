@@ -17,29 +17,19 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 
 /** The single native WordPress lifecycle owner for a sealed neutral release. */
 final class NativePluginUpdater {
-	private const MAX_DIAGNOSTICS           = 16;
-	private const CONFIGURATION_KEYS        = array( 'headers', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
-	private const HEADER_KEYS               = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
-	private bool $registered                = false;
-	private ?IdentityDescriptor $descriptor = null;
-	private ?BindingState $state            = null;
-	private mixed $claim                    = null;
-	private bool $leaseHeld                 = false;
-	private bool $pending                   = false;
-	private bool $extractionAdmitted        = false;
-	/** @var array<string,array{sha256:string,size:int}>|null */ private ?array $stagedManifest = null;
-	private ?string $pendingArchive        = null;
-	private ?string $ownedArchiveDirectory = null;
-	/** @var array<string,int>|null */ private ?array $pendingArchiveIdentity = null;
-	private bool $installResultCaptured                                       = false;
-	private mixed $installResult                        = null;
-	private bool $completionObserved                    = false;
-	private bool $multiRun                              = false;
+	private const MAX_DIAGNOSTICS                       = 16;
+	private const CONFIGURATION_KEYS                    = array( 'headers', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
+	private const HEADER_KEYS                           = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
+	private bool $registered                            = false;
+	private ?IdentityDescriptor $descriptor             = null;
+	private ?BindingState $state                        = null;
+	private mixed $claim                                = null;
+	private bool $leaseHeld                             = false;
 	private bool $queuedMultiRun                        = false;
 	private bool $shutdownScheduled                     = false;
 	/** @var list<string> */ private array $diagnostics = array();
 	/** @var array{candidate_header_version:string|null,candidate_tag:string|null,candidate_validation_code:string|null,candidate_version:string|null,failure_code:string|null,installed_version:string|null,last_check:int|null,offered_release_identity:string|null,offered_version:string|null,relationship:string|null} */
-	private array $status                       = array(
+	private array $status = array(
 		'candidate_header_version'  => null,
 		'candidate_tag'             => null,
 		'candidate_validation_code' => null,
@@ -51,12 +41,12 @@ final class NativePluginUpdater {
 		'offered_version'           => null,
 		'relationship'              => null,
 	);
-	private ?AcquisitionReceipt $pendingReceipt = null;
 	/** @var array{claim:array<string,mixed>,descriptor:IdentityDescriptor,installed:string}|null */
 	private ?array $discoverySnapshot = null;
 	private int $discoveryEpoch       = 0;
 	private OwnedArchiveStore $archiveStore;
 	private StagedPackageManifest $manifestBuilder;
+	private PendingInstallState $pendingInstall;
 
 	/** @param array<string,string> $headers @param array<string,mixed> $archivePolicy */
 	private function __construct(
@@ -75,6 +65,7 @@ final class NativePluginUpdater {
 	) {
 		$this->archiveStore    = new OwnedArchiveStore();
 		$this->manifestBuilder = new StagedPackageManifest();
+		$this->pendingInstall  = new PendingInstallState();
 	}
 
 	/** @param array<string,mixed> $configuration @param array<string,mixed> $archivePolicy */
@@ -318,13 +309,8 @@ final class NativePluginUpdater {
 			$this->archiveStore->remove( $owned['path'], $owned['directory'] );
 			return $this->failure( 'acquisition_identity_invalid' );
 		}
-		$this->state                  = $verified['current'];
-		$this->pendingReceipt         = $receipt;
-		$this->pending                = true;
-		$this->multiRun               = $queuedMultiRun;
-		$this->pendingArchive         = $owned['path'];
-		$this->ownedArchiveDirectory  = $owned['directory'];
-		$this->pendingArchiveIdentity = $identity;
+		$this->state = $verified['current'];
+		$this->pendingInstall->begin( $owned['path'], $owned['directory'], $identity, $receipt, $queuedMultiRun );
 		$this->scheduleFinalization();
 		return $owned['path'];
 	}
@@ -332,7 +318,7 @@ final class NativePluginUpdater {
 	/** @param list<string> $neededDirs */
 	public function filterPreUnzipFile( mixed $pre, string $file, string $destination, array $neededDirs, float $requiredSpace ): mixed {
 		unset( $destination, $neededDirs, $requiredSpace );
-		if ( ! $this->pending || ! is_string( $this->pendingArchive ) || ! hash_equals( $this->pendingArchive, $file ) ) {
+		if ( ! $this->pendingInstall->active() || ! is_string( $this->pendingInstall->archive() ) || ! hash_equals( $this->pendingInstall->archive(), $file ) ) {
 			return $pre;
 		}
 		if ( ! $this->live() ) {
@@ -343,21 +329,24 @@ final class NativePluginUpdater {
 		if (
 			! $this->directFilesystem()
 			|| null === $verified
-			|| ! is_array( $this->pendingArchiveIdentity )
-			|| ! $this->archiveStore->sameIdentity( $file, $this->descriptor, $this->pendingArchiveIdentity )
-			|| ! $this->pendingReceipt instanceof AcquisitionReceipt
+			|| ! is_array( $this->pendingInstall->archiveIdentity() )
+			|| ! $this->archiveStore->sameIdentity( $file, $this->descriptor, $this->pendingInstall->archiveIdentity() )
+			|| ! $this->pendingInstall->receipt() instanceof AcquisitionReceipt
 		) {
 			$this->clearPending();
 			return $this->failure( 'archive_changed_before_extraction' );
 		}
 		try {
-			AcquisitionReceipt::assertFresh( $this->pendingReceipt, $verified['current'], $this->descriptor, $verified['now'] );
+			AcquisitionReceipt::assertFresh( $this->pendingInstall->receipt(), $verified['current'], $this->descriptor, $verified['now'] );
 		} catch ( InvalidArgumentException ) {
 			$this->clearPending();
 			return $this->failure( 'archive_changed_before_extraction' );
 		}
-		$this->state              = $verified['current'];
-		$this->extractionAdmitted = true;
+		$this->state = $verified['current'];
+		if ( ! $this->pendingInstall->admitExtraction() ) {
+			$this->clearPending();
+			return $this->failure( 'archive_changed_before_extraction' );
+		}
 		return $pre;
 	}
 
@@ -368,7 +357,7 @@ final class NativePluginUpdater {
 			return $source;
 		}
 		if ( ! $this->live() ) {
-			if ( ! $this->pending ) {
+			if ( ! $this->pendingInstall->active() ) {
 				return $source;
 			}
 			$this->clearPending();
@@ -381,10 +370,10 @@ final class NativePluginUpdater {
 		$verified = $this->verifyCurrent();
 		if (
 			! $this->directFilesystem()
-			|| ! $this->pending
-			|| ! $this->extractionAdmitted
+			|| ! $this->pendingInstall->active()
+			|| ! $this->pendingInstall->extractionAdmitted()
 			|| null === $verified
-			|| ! $this->pendingReceipt instanceof AcquisitionReceipt
+			|| ! $this->pendingInstall->receipt() instanceof AcquisitionReceipt
 			|| ! is_string( $source )
 			|| ! is_array( $manifest )
 		) {
@@ -394,7 +383,7 @@ final class NativePluginUpdater {
 
 		try {
 			AcquisitionReceipt::assertArchiveManifest(
-				$this->pendingReceipt,
+				$this->pendingInstall->receipt(),
 				$verified['current'],
 				$this->descriptor,
 				$verified['now'],
@@ -407,8 +396,11 @@ final class NativePluginUpdater {
 			return $this->failure( 'staged_package_identity_invalid' );
 		}
 
-		$this->state          = $verified['current'];
-		$this->stagedManifest = $manifest;
+		$this->state = $verified['current'];
+		if ( ! $this->pendingInstall->stageManifest( $manifest ) ) {
+			$this->clearPending();
+			return $this->failure( 'staged_package_identity_invalid' );
+		}
 		return $source;
 	}
 	/** @param array<string,mixed> $hookExtra */
@@ -417,7 +409,7 @@ final class NativePluginUpdater {
 			return $response;
 		}
 		if ( ! $this->live() ) {
-			if ( ! $this->pending ) {
+			if ( ! $this->pendingInstall->active() ) {
 				return $response;
 			}
 			$this->clearPending();
@@ -426,17 +418,17 @@ final class NativePluginUpdater {
 		$verified = $this->verifyCurrent();
 		if (
 			! $this->directFilesystem()
-			|| ! $this->pending
-			|| ! $this->extractionAdmitted
+			|| ! $this->pendingInstall->active()
+			|| ! $this->pendingInstall->extractionAdmitted()
 			|| null === $verified
-			|| ! $this->pendingReceipt instanceof AcquisitionReceipt
+			|| ! $this->pendingInstall->receipt() instanceof AcquisitionReceipt
 			|| $response instanceof \WP_Error
 		) {
 			$this->clearPending();
 			return $this->failure( 'unverified_pre_install' );
 		}
 		try {
-			AcquisitionReceipt::assertFresh( $this->pendingReceipt, $verified['current'], $this->descriptor, $verified['now'] );
+			AcquisitionReceipt::assertFresh( $this->pendingInstall->receipt(), $verified['current'], $this->descriptor, $verified['now'] );
 		} catch ( InvalidArgumentException ) {
 			$this->clearPending();
 			return $this->failure( 'unverified_pre_install' );
@@ -450,18 +442,20 @@ final class NativePluginUpdater {
 			return $result;
 		}
 		if ( ! $this->live() ) {
-			if ( ! $this->pending ) {
+			if ( ! $this->pendingInstall->active() ) {
 				return $result;
 			}
 			$this->clearPending();
 			return $this->failure( 'runtime_liveness_lost' );
 		}
-		if ( ! $this->pending || $result instanceof \WP_Error || false === $result ) {
+		if ( ! $this->pendingInstall->active() || $result instanceof \WP_Error || false === $result ) {
 			$this->clearPending();
 			return $this->failure( 'unverified_install_result' );
 		}
-		$this->installResultCaptured = true;
-		$this->installResult         = $result;
+		if ( ! $this->pendingInstall->captureInstallResult( $result ) ) {
+			$this->clearPending();
+			return $this->failure( 'unverified_install_result' );
+		}
 		return $result;
 	}
 
@@ -470,38 +464,38 @@ final class NativePluginUpdater {
 		unset( $upgrader );
 		if ( $this->live() && $this->matchesCompletion( $hookExtra ) ) {
 			$this->clearDiscoverySnapshot();
-			$this->completionObserved = true;
+			$this->pendingInstall->observeCompletion();
 		}
 	}
 	/** Finalization is deliberately after Core rollback and backup cleanup. */
 	public function finalizePendingInstall(): void {
 		if ( ! $this->live() ) {
-			if ( $this->pending ) {
+			if ( $this->pendingInstall->active() ) {
 				$this->diagnose( 'runtime_liveness_lost', null );
 			}
 			$this->clearPending();
 			return;
 		}
-		if ( ! $this->pending ) {
+		if ( ! $this->pendingInstall->active() ) {
 			$this->clearPending();
 			return;
 		}
 
 		try {
-			$destination             = is_array( $this->installResult ) && is_string( $this->installResult['destination'] ?? null )
-				? $this->installResult['destination']
+			$destination             = is_array( $this->pendingInstall->installResult() ) && is_string( $this->pendingInstall->installResult()['destination'] ?? null )
+				? $this->pendingInstall->installResult()['destination']
 				: null;
 			$manifest                = is_string( $destination ) ? $this->manifestBuilder->build( $destination ) : null;
 			$verified                = $this->verifyCurrent();
 			$archiveManifestVerified = false;
 			if (
 				null !== $verified
-				&& $this->pendingReceipt instanceof AcquisitionReceipt
+				&& $this->pendingInstall->receipt() instanceof AcquisitionReceipt
 				&& is_array( $manifest )
 			) {
 				try {
 					AcquisitionReceipt::assertArchiveManifest(
-						$this->pendingReceipt,
+						$this->pendingInstall->receipt(),
 						$verified['current'],
 						$this->descriptor,
 						$verified['now'],
@@ -516,19 +510,19 @@ final class NativePluginUpdater {
 				}
 			}
 			if (
-				! $this->installResultCaptured
-				|| ( ! $this->completionObserved && ! $this->multiRun )
+				! $this->pendingInstall->installResultCaptured()
+				|| ( ! $this->pendingInstall->completionObserved() && ! $this->pendingInstall->multiRun() )
 				|| ! $archiveManifestVerified
 				|| ! is_string( $destination )
-				|| ! is_array( $this->stagedManifest )
+				|| ! is_array( $this->pendingInstall->stagedManifest() )
 				|| ! is_array( $manifest )
-				|| ! hash_equals( $this->manifestBuilder->hash( $this->stagedManifest ), $this->manifestBuilder->hash( $manifest ) )
+				|| ! hash_equals( $this->manifestBuilder->hash( $this->pendingInstall->stagedManifest() ), $this->manifestBuilder->hash( $manifest ) )
 				|| ! $this->matchesStagedMetadata( $destination )
 			) {
 				$this->diagnose( 'outcome_uncertain', null );
 				return;
 			}
-			$completed = ReleaseOperationCoordinator::completePersistentInstall( $this->wpdb, $this->state, $this->claim, $this->pendingReceipt, $this->descriptor );
+			$completed = ReleaseOperationCoordinator::completePersistentInstall( $this->wpdb, $this->state, $this->claim, $this->pendingInstall->receipt(), $this->descriptor );
 			$this->diagnose( 'completed' === $completed['result'] ? 'update_completed' : 'outcome_uncertain', null );
 		} finally {
 			$this->clearPending();
@@ -891,24 +885,17 @@ final class NativePluginUpdater {
 		) : null; }
 	private function clearPending( bool $release = true ): void {
 		$this->clearDiscoverySnapshot();
-		$this->archiveStore->remove( $this->pendingArchive, $this->ownedArchiveDirectory );
-		$this->pending                = false;
-		$this->extractionAdmitted     = false;
-		$this->stagedManifest         = null;
-		$this->pendingArchive         = null;
-		$this->ownedArchiveDirectory  = null;
-		$this->pendingArchiveIdentity = null;
-		$this->pendingReceipt         = null;
-		$this->installResultCaptured  = false;
-		$this->installResult          = null;
-		$this->completionObserved     = false;
-		$this->multiRun               = false;
+		$this->archiveStore->remove( $this->pendingInstall->archive(), $this->pendingInstall->archiveDirectory() );
+		$this->pendingInstall->clear();
 		if ( $release && $this->leaseHeld && $this->state instanceof BindingState ) {
 			ReleaseOperationCoordinator::releasePersistentBindingState( $this->wpdb, $this->state, $this->claim );
-		} if ( $release ) {
+		}
+		if ( $release ) {
 			$this->state     = null;
 			$this->claim     = null;
-			$this->leaseHeld = false; } }
+			$this->leaseHeld = false;
+		}
+	}
 	private function diagnose( string $code, mixed $return ): mixed {
 		if ( count( $this->diagnostics ) === self::MAX_DIAGNOSTICS ) {
 			array_shift( $this->diagnostics );
