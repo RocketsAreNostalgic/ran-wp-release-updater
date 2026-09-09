@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.5](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.4...v0.1.0-beta.5) (2026-09-09)
+
+
+### Bug Fixes
+
+* **review:** pin upstream skill refresh to commit ([323d55b](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/323d55b329c76036659dfd9fd7d85f864137a074))
+
 ## [0.1.0-beta.4](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.3...v0.1.0-beta.4) (2026-09-06)
 
 
