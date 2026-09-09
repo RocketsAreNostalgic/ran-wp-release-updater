@@ -10,6 +10,7 @@ parameters:
 		# Security-sensitive custody collaborators are required to remain level-8 clean.
 		- src/WordPress/OwnedArchiveStore.php
 		- src/WordPress/StagedPackageManifest.php
+		- src/WordPress/PendingInstallState.php
 	scanDirectories:
 		- src
 	excludePaths:

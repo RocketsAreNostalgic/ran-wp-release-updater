@@ -238,7 +238,11 @@ $conciseArchive = $concise->filterPreDownload(false, $conciseOffer['package'], n
 $explicitArchive = $explicit->filterPreDownload(false, $explicitOffer['package'], null, $extra);
 if (! is_string($conciseArchive) || ! is_string($explicitArchive)) throw new RuntimeException('Receipt fixture failed.');
 $receiptFacts = static function (object $native): array {
-	$receipt = (new ReflectionProperty($native, 'pendingReceipt'))->getValue($native);
+	$pending = (new ReflectionProperty($native, 'pendingInstall'))->getValue($native);
+	$receipt = $pending->receipt();
+	if (! $receipt instanceof \RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt) {
+		throw new RuntimeException('Pending receipt fixture failed.');
+	}
 	return (new ReflectionProperty($receipt, 'facts'))->getValue($receipt);
 };
 echo json_encode(array(
