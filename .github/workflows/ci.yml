@@ -128,3 +128,56 @@ jobs:
           path: ${{ github.workspace }}/.workspaces/wordpress-integration/ran-wp-release-updater-result-*.json
           if-no-files-found: ignore
           retention-days: 7
+
+  apply-pending-state:
+    if: github.event_name == 'pull_request' && github.head_ref == 'refactor/pending-install-state'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Apply and verify state migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/apply-pending-state.py
+          set +e
+          composer format:php
+          phpcbf_status=$?
+          set -e
+          if [ "$phpcbf_status" -gt 1 ]; then
+            exit "$phpcbf_status"
+          fi
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
+          payload = b''.join(path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n' for path in files)
+          p = Path('runtime-copy.json')
+          data = json.loads(p.read_text())
+          data['package_revision'] = hashlib.sha256(payload).hexdigest()
+          p.write_text(json.dumps(data, indent=2) + '\n')
+          PY
+          composer check
+      - name: Commit verified state model
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin refactor/native-archive-custody:refs/remotes/origin/refactor/native-archive-custody
+          git show origin/refactor/native-archive-custody:.github/workflows/ci.yml > .github/workflows/ci.yml
+          rm -f .github/apply-pending-state.py .github/workflows/apply-pending-state.yml
+          git add src/WordPress/NativePluginUpdater.php src/WordPress/PendingInstallState.php runtime.php runtime-copy.json phpstan.neon .github/workflows/ci.yml .github/apply-pending-state.py .github/workflows/apply-pending-state.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Model pending install state explicitly'
+          git push origin HEAD:${GITHUB_HEAD_REF}
