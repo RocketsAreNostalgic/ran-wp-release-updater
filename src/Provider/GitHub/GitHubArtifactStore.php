@@ -9,7 +9,9 @@ use RuntimeException;
 /** Owns private temporary-file allocation, identity checks and cleanup for GitHub artifacts. */
 final class GitHubArtifactStore {
 
-	/** @param-out ?bool $allocationClean @return array{0:string,1:array<string,int>} */
+	/**
+	 * @return array{0:string,1:array{dev:int,ino:int,mode:int,nlink:int,uid:int,gid:int,size:int,mtime:int,ctime:int}}
+	 */
 	public function allocate( string $filename, ?bool &$allocationClean ): array {
 		$allocationClean = null;
 		if ( ! function_exists( 'wp_tempnam' ) ) {
@@ -36,7 +38,7 @@ final class GitHubArtifactStore {
 		return array( $path, $identity );
 	}
 
-	/** @return array<string,int>|null */
+	/** @return array{dev:int,ino:int,mode:int,nlink:int,uid:int,gid:int,size:int,mtime:int,ctime:int}|null */
 	public function identity( string $path ): ?array {
 		clearstatcache( true, $path );
 		$stat = @lstat( $path );
@@ -56,7 +58,7 @@ final class GitHubArtifactStore {
 		);
 	}
 
-	/** @param array<string,int> $identity */
+	/** @param array{dev:int,ino:int,mode:int,nlink:int,uid:int,gid:int,size:int,mtime:int,ctime:int} $identity */
 	public function remove( string $path, array $identity ): bool {
 		for ( $attempt = 0; $attempt < 2; ++$attempt ) {
 			$current = $this->identity( $path );
