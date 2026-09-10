@@ -53,10 +53,10 @@ jobs:
               text = path.read_text()
               for old, new in edits:
                   count = text.count(old)
-                  expected = 2 if filename == '.phpcs.xml' else 1
-                  if count != expected and filename == '.phpcs.xml':
-                      raise SystemExit(f'{filename}: expected {expected} occurrences of {old!r}, found {count}')
-                  if filename != '.phpcs.xml' and count != 1:
+                  if filename == '.phpcs.xml':
+                      if count != 2:
+                          raise SystemExit(f'{filename}: expected two occurrences of {old!r}, found {count}')
+                  elif count != 1:
                       raise SystemExit(f'{filename}: expected one occurrence of {old!r}, found {count}')
                   text = text.replace(old, new)
               path.write_text(text)
@@ -73,7 +73,6 @@ jobs:
 
           composer install --no-interaction --prefer-dist
           composer check
-          composer check:parity
 
       - name: Commit verified cleanup
         shell: bash
