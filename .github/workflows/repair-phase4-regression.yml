@@ -1,0 +1,84 @@
+name: Verify Phase 4 regression repair
+
+on:
+  push:
+    branches: [refactor/phase4-architecture]
+    paths:
+      - '.github/workflows/repair-phase4-regression.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: refactor/phase4-architecture
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - name: Verify restored Phase 3 state and sealed runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin spike/shared-package-safety
+          base=origin/spike/shared-package-safety
+
+          for file in \
+            src/Provider/GitHub/GitHubReleaseAdapter.php \
+            src/Provider/GitHub/ProspectiveReleaseInspection.php \
+            src/Runtime/SelectedRuntimeState.php
+          do
+            git show "$base:$file" > /tmp/base-file
+            cmp "$file" /tmp/base-file
+          done
+
+          git show "$base:phpstan.neon" > /tmp/base-phpstan.neon
+          python3 <<'PY'
+          from pathlib import Path
+          current = Path('phpstan.neon').read_text()
+          line = '\t\t- src/Runtime/RequestProtocolValidator.php\n'
+          if current.count(line) != 1:
+              raise SystemExit('Expected exactly one RequestProtocolValidator PHPStan path')
+          Path('/tmp/current-without-validator.neon').write_text(current.replace(line, '', 1))
+          PY
+          cmp /tmp/current-without-validator.neon /tmp/base-phpstan.neon
+
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib, json
+          files = sorted(['bootstrap.php', 'runtime.php'] + [str(path) for path in Path('src').rglob('*.php')])
+          payload = b''.join(
+              path.encode() + b'\0' + hashlib.sha256(Path(path).read_bytes()).hexdigest().encode() + b'\n'
+              for path in files
+          )
+          manifest = Path('runtime-copy.json')
+          data = json.loads(manifest.read_text())
+          data['package_revision'] = hashlib.sha256(payload).hexdigest()
+          manifest.write_text(json.dumps(data, indent=2) + '\n')
+          print('REPAIRED_RUNTIME_REVISION=' + data['package_revision'])
+          PY
+
+          composer install --no-interaction --prefer-dist
+          composer check
+
+      - name: Commit repaired sealed identity and remove verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/repair-phase4-regression.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          if git diff --cached --quiet; then
+            echo 'No changes to commit.'
+            exit 1
+          fi
+          git commit -m 'fix: restore phase 3 quality state in phase 4'
+          git push origin HEAD:refactor/phase4-architecture
