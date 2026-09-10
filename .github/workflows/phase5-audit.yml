@@ -1,0 +1,101 @@
+name: Phase 5 hygiene audit
+
+on:
+  push:
+    branches: [chore/phase5-repository-hygiene]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - name: Audit repository hygiene and PHPCS suppressions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo '== tracked debris =='
+          if git ls-files | grep -E '(^|/)(vendor|node_modules|\.workspaces)(/|$)|(^|/).*(marker|refresh-[0-9]+|repair-phase|phase[0-9]+-audit).*'; then
+            echo 'Unexpected tracked rollout/dependency debris found.' >&2
+            exit 1
+          fi
+
+          echo '== stale phase script references =='
+          git grep -n 'check:phase3' || true
+
+          echo '== stale gitattributes paths =='
+          test ! -e .dex
+          test ! -e fixtures
+          grep -nE '^/(\.dex|fixtures) export-ignore$' .gitattributes || true
+
+          echo '== PHPCS file-level exclusion probes =='
+          python3 <<'PY'
+          from pathlib import Path
+          import subprocess
+          import xml.etree.ElementTree as ET
+
+          candidates = [
+              'src/Provider/GitHub/GitHubReleaseService.php',
+              'src/Provider/GitHub/GitHubApiClient.php',
+              'src/Provider/GitHub/GitHubArtifactStore.php',
+              'src/WordPress/InstalledPackageResolver.php',
+              'src/WordPress/OwnedArchiveStore.php',
+              'src/WordPress/StagedPackageManifest.php',
+              'src/WordPress/NativePluginUpdater.php',
+          ]
+          rules = {
+              'WordPress.WP.AlternativeFunctions',
+              'WordPress.PHP.NoSilencedErrors',
+          }
+
+          for target in candidates:
+              tree = ET.parse('.phpcs.xml')
+              root = tree.getroot()
+              removed = []
+              for rule in root.findall('rule'):
+                  if rule.get('ref') not in rules:
+                      continue
+                  for child in list(rule):
+                      if child.tag == 'exclude-pattern' and (child.text or '').strip() == '/' + target:
+                          removed.append(rule.get('ref'))
+                          rule.remove(child)
+              if not removed:
+                  print(f'NO_FILE_EXCLUSION {target}')
+                  continue
+              path = Path('/tmp') / ('phase5-' + target.replace('/', '-') + '.xml')
+              tree.write(path, encoding='unicode')
+              result = subprocess.run(
+                  ['vendor/bin/phpcs', f'--standard={path}', '--report=summary', target],
+                  text=True,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT,
+              )
+              status = 'PASS_WITHOUT_EXCLUSIONS' if result.returncode == 0 else 'NEEDS_EXCLUSION'
+              print(f'{status} {target} removed={",".join(removed)}')
+              if result.stdout.strip():
+                  print(result.stdout.strip())
+          PY
+
+          echo '== configured PHPStan paths exist =='
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+          text = Path('phpstan.neon').read_text()
+          paths = re.findall(r'^\s*-\s+(src/\S+)\s*$', text, flags=re.M)
+          missing = [p for p in paths if not Path(p).exists()]
+          if missing:
+              raise SystemExit('Missing PHPStan paths: ' + ', '.join(missing))
+          print(f'PHPStan configured paths present: {len(paths)}')
+          PY
+
+          composer check
