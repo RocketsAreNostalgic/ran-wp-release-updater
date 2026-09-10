@@ -25,7 +25,7 @@ jobs:
           set -euo pipefail
 
           echo '== tracked debris =='
-          if git ls-files | grep -E '(^|/)(vendor|node_modules|\.workspaces)(/|$)|(^|/).*(marker|refresh-[0-9]+|repair-phase|phase[0-9]+-audit).*'; then
+          if git ls-files | grep -v '^\.github/workflows/phase5-audit\.yml$' | grep -E '(^|/)(vendor|node_modules|\.workspaces)(/|$)|(^|/).*(marker|refresh-[0-9]+|repair-phase|phase[0-9]+-audit).*'; then
             echo 'Unexpected tracked rollout/dependency debris found.' >&2
             exit 1
           fi
