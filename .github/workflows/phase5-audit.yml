@@ -1,101 +1,87 @@
-name: Phase 5 hygiene audit
+name: Finalize Phase 5 hygiene
 
 on:
   push:
     branches: [chore/phase5-repository-hygiene]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  audit:
+  finalize:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: chore/phase5-repository-hygiene
+          fetch-depth: 0
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240
         with:
           php-version: '8.2'
           coverage: none
           extensions: zip, mysqli
           tools: composer:v2
-      - run: composer install --no-interaction --prefer-dist
-      - name: Audit repository hygiene and PHPCS suppressions
+      - name: Apply verified hygiene cleanup
         shell: bash
         run: |
           set -euo pipefail
-
-          echo '== tracked debris =='
-          if git ls-files | grep -v '^\.github/workflows/phase5-audit\.yml$' | grep -E '(^|/)(vendor|node_modules|\.workspaces)(/|$)|(^|/).*(marker|refresh-[0-9]+|repair-phase|phase[0-9]+-audit).*'; then
-            echo 'Unexpected tracked rollout/dependency debris found.' >&2
-            exit 1
-          fi
-
-          echo '== stale phase script references =='
-          git grep -n 'check:phase3' || true
-
-          echo '== stale gitattributes paths =='
-          test ! -e .dex
-          test ! -e fixtures
-          grep -nE '^/(\.dex|fixtures) export-ignore$' .gitattributes || true
-
-          echo '== PHPCS file-level exclusion probes =='
           python3 <<'PY'
           from pathlib import Path
-          import subprocess
-          import xml.etree.ElementTree as ET
 
-          candidates = [
-              'src/Provider/GitHub/GitHubReleaseService.php',
-              'src/Provider/GitHub/GitHubApiClient.php',
-              'src/Provider/GitHub/GitHubArtifactStore.php',
-              'src/WordPress/InstalledPackageResolver.php',
-              'src/WordPress/OwnedArchiveStore.php',
-              'src/WordPress/StagedPackageManifest.php',
-              'src/WordPress/NativePluginUpdater.php',
-          ]
-          rules = {
-              'WordPress.WP.AlternativeFunctions',
-              'WordPress.PHP.NoSilencedErrors',
+          replacements = {
+              '.gitattributes': [
+                  ('/fixtures export-ignore\n', ''),
+                  ('/.dex export-ignore\n', ''),
+              ],
+              'composer.json': [
+                  ('"check:phase3": [', '"check:parity": ['),
+              ],
+              'tests/Provider/github-semantic-parity.json': [
+                  ('"executable_gate": "composer check:phase3"', '"executable_gate": "composer check:parity"'),
+              ],
+              'tests/Provider/GitHubSemanticParityMatrixTest.php': [
+                  ("self::assertSame( 'composer check:phase3', $matrix['executable_gate'] );", "self::assertSame( 'composer check:parity', $matrix['executable_gate'] );"),
+              ],
+              '.phpcs.xml': [
+                  ('\t\t<exclude-pattern>/src/Provider/GitHub/GitHubApiClient.php</exclude-pattern>\n', ''),
+                  ('\t\t<exclude-pattern>/src/Provider/GitHub/GitHubReleaseService.php</exclude-pattern>\n', ''),
+              ],
           }
 
-          for target in candidates:
-              tree = ET.parse('.phpcs.xml')
-              root = tree.getroot()
-              removed = []
-              for rule in root.findall('rule'):
-                  if rule.get('ref') not in rules:
-                      continue
-                  for child in list(rule):
-                      if child.tag == 'exclude-pattern' and (child.text or '').strip() == '/' + target:
-                          removed.append(rule.get('ref'))
-                          rule.remove(child)
-              if not removed:
-                  print(f'NO_FILE_EXCLUSION {target}')
-                  continue
-              path = Path('/tmp') / ('phase5-' + target.replace('/', '-') + '.xml')
-              tree.write(path, encoding='unicode')
-              result = subprocess.run(
-                  ['vendor/bin/phpcs', f'--standard={path}', '--report=summary', target],
-                  text=True,
-                  stdout=subprocess.PIPE,
-                  stderr=subprocess.STDOUT,
-              )
-              status = 'PASS_WITHOUT_EXCLUSIONS' if result.returncode == 0 else 'NEEDS_EXCLUSION'
-              print(f'{status} {target} removed={",".join(removed)}')
-              if result.stdout.strip():
-                  print(result.stdout.strip())
+          for filename, edits in replacements.items():
+              path = Path(filename)
+              text = path.read_text()
+              for old, new in edits:
+                  count = text.count(old)
+                  expected = 2 if filename == '.phpcs.xml' else 1
+                  if count != expected and filename == '.phpcs.xml':
+                      raise SystemExit(f'{filename}: expected {expected} occurrences of {old!r}, found {count}')
+                  if filename != '.phpcs.xml' and count != 1:
+                      raise SystemExit(f'{filename}: expected one occurrence of {old!r}, found {count}')
+                  text = text.replace(old, new)
+              path.write_text(text)
           PY
 
-          echo '== configured PHPStan paths exist =='
-          python3 <<'PY'
-          from pathlib import Path
-          import re
-          text = Path('phpstan.neon').read_text()
-          paths = re.findall(r'^\s*-\s+(src/\S+)\s*$', text, flags=re.M)
-          missing = [p for p in paths if not Path(p).exists()]
-          if missing:
-              raise SystemExit('Missing PHPStan paths: ' + ', '.join(missing))
-          print(f'PHPStan configured paths present: {len(paths)}')
-          PY
+          rm -f .github/workflows/phase5-audit.yml
 
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = ".gitattributes .github/workflows/phase5-audit.yml .phpcs.xml composer.json tests/Provider/GitHubSemanticParityMatrixTest.php tests/Provider/github-semantic-parity.json "
+          ! git grep -n 'check:phase3' -- ':!.github/workflows/phase5-audit.yml'
+          ! grep -qE '^/(\.dex|fixtures) export-ignore$' .gitattributes
+          test "$(grep -c 'GitHubArtifactStore.php' .phpcs.xml)" -eq 2
+          test "$(grep -c 'GitHubApiClient.php' .phpcs.xml || true)" -eq 0
+          test "$(grep -c 'GitHubReleaseService.php' .phpcs.xml || true)" -eq 0
+
+          composer install --no-interaction --prefer-dist
           composer check
+          composer check:parity
+
+      - name: Commit verified cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u .gitattributes .phpcs.xml composer.json tests/Provider/GitHubSemanticParityMatrixTest.php tests/Provider/github-semantic-parity.json .github/workflows/phase5-audit.yml
+          git diff --cached --check
+          git commit -m 'chore: finish repository hygiene'
+          git push origin HEAD:chore/phase5-repository-hygiene
