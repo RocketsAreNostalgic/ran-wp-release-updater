@@ -50,7 +50,7 @@ final class GitHubSemanticParityMatrixTest extends TestCase {
 			'tests/Integration/paired-github-provider-proof.php',
 			$matrix['executable_proof']
 		);
-		self::assertSame( 'composer check:phase3', $matrix['executable_gate'] );
+		self::assertSame( 'composer check:parity', $matrix['executable_gate'] );
 		self::assertFileExists(
 			dirname( __DIR__ ) . '/Integration/paired-github-provider-proof.php'
 		);

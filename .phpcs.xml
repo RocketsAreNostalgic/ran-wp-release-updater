@@ -78,9 +78,7 @@
 	<!-- Security-sensitive filesystem code intentionally uses native primitives for custody, identity and atomicity. -->
 	<rule ref="WordPress.WP.AlternativeFunctions">
 		<exclude-pattern>/src/Archive/</exclude-pattern>
-		<exclude-pattern>/src/Provider/GitHub/GitHubApiClient.php</exclude-pattern>
 		<exclude-pattern>/src/Provider/GitHub/GitHubArtifactStore.php</exclude-pattern>
-		<exclude-pattern>/src/Provider/GitHub/GitHubReleaseService.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/InstalledPackageResolver.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/OwnedArchiveStore.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/StagedPackageManifest.php</exclude-pattern>
@@ -90,9 +88,7 @@
 	</rule>
 	<rule ref="WordPress.PHP.NoSilencedErrors">
 		<exclude-pattern>/src/Archive/</exclude-pattern>
-		<exclude-pattern>/src/Provider/GitHub/GitHubApiClient.php</exclude-pattern>
 		<exclude-pattern>/src/Provider/GitHub/GitHubArtifactStore.php</exclude-pattern>
-		<exclude-pattern>/src/Provider/GitHub/GitHubReleaseService.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/InstalledPackageResolver.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/OwnedArchiveStore.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/StagedPackageManifest.php</exclude-pattern>
