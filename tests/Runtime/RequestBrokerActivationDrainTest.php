@@ -367,6 +367,7 @@ PHP;
 		copy( dirname( __DIR__, 2 ) . '/bootstrap.php', $root . '/bootstrap.php' );
 		copy( dirname( __DIR__, 2 ) . '/src/Runtime/RequestBroker.php', $root . '/src/Runtime/RequestBroker.php' );
 		copy( dirname( __DIR__, 2 ) . '/src/Runtime/RuntimeCopySelector.php', $root . '/src/Runtime/RuntimeCopySelector.php' );
+		copy( dirname( __DIR__, 2 ) . '/src/Runtime/RequestProtocolValidator.php', $root . '/src/Runtime/RequestProtocolValidator.php' );
 		copy( dirname( __DIR__, 2 ) . '/src/Runtime/SelectedRuntimeState.php', $root . '/src/Runtime/SelectedRuntimeState.php' );
 		file_put_contents( $root . '/runtime.php', $runtime );
 		file_put_contents(
@@ -396,7 +397,7 @@ PHP;
 	}
 
 	private function identity( string $root ): string {
-		$files = array( 'bootstrap.php', 'runtime.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' );
+		$files = array( 'bootstrap.php', 'runtime.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RequestProtocolValidator.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' );
 		sort( $files, SORT_STRING );
 		$payload = '';
 		foreach ( $files as $file ) {
