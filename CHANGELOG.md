@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.6](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.5...v0.1.0-beta.6) (2026-09-10)
+
+
+### Features
+
+* harden updater safety, runtime architecture, and quality ([cc4673c](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/cc4673c09da1b8a12bf15cc3c1893e7de86e1b08))
+
 ## [0.1.0-beta.5](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.4...v0.1.0-beta.5) (2026-09-09)
 
 
