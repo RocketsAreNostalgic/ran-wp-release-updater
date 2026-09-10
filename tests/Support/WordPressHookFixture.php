@@ -9,41 +9,36 @@ declare(strict_types=1);
  * tests: priority ordering, callbacks added during a hook run, current
  * priority, and action/filter bookkeeping.
  */
-final class WP_Hook
-{
+final class WP_Hook {
+
 	/** @var array<int,list<array{function:callable,accepted_args:int}>> */
 	public array $callbacks = array();
-	private ?int $priority = null;
+	private ?int $priority  = null;
 
-	public function add_filter( string $hook, callable $callback, int $priority, int $acceptedArgs ): void
-	{
+	public function add_filter( string $hook, callable $callback, int $priority, int $acceptedArgs ): void {
 		unset( $hook );
 		$this->callbacks[ $priority ][] = array(
-			'function' => $callback,
+			'function'      => $callback,
 			'accepted_args' => $acceptedArgs,
 		);
 	}
 
-	public function current_priority(): ?int
-	{
+	public function current_priority(): ?int {
 		return $this->priority;
 	}
 
 	/** @param list<mixed> $arguments */
-	public function do_action( array $arguments ): void
-	{
+	public function do_action( array $arguments ): void {
 		$this->run( $arguments, false );
 	}
 
 	/** @param list<mixed> $arguments */
-	public function apply_filters( mixed $value, array $arguments ): mixed
-	{
+	public function apply_filters( mixed $value, array $arguments ): mixed {
 		return $this->run( array_merge( array( $value ), $arguments ), true );
 	}
 
 	/** @param list<mixed> $arguments */
-	private function run( array $arguments, bool $filter ): mixed
-	{
+	private function run( array $arguments, bool $filter ): mixed {
 		$last = null;
 		try {
 			while ( true ) {
@@ -76,20 +71,17 @@ final class WP_Hook
 	}
 }
 
-function add_filter( string $hook, callable $callback, int $priority = 10, int $acceptedArgs = 1 ): bool
-{
+function add_filter( string $hook, callable $callback, int $priority = 10, int $acceptedArgs = 1 ): bool {
 	$GLOBALS['wp_filter'][ $hook ] ??= new WP_Hook();
 	$GLOBALS['wp_filter'][ $hook ]->add_filter( $hook, $callback, $priority, $acceptedArgs );
 	return true;
 }
 
-function add_action( string $hook, callable $callback, int $priority = 10, int $acceptedArgs = 1 ): bool
-{
+function add_action( string $hook, callable $callback, int $priority = 10, int $acceptedArgs = 1 ): bool {
 	return add_filter( $hook, $callback, $priority, $acceptedArgs );
 }
 
-function do_action( string $hook, mixed ...$arguments ): void
-{
+function do_action( string $hook, mixed ...$arguments ): void {
 	$GLOBALS['wp_actions'][ $hook ] = ( $GLOBALS['wp_actions'][ $hook ] ?? 0 ) + 1;
 	$GLOBALS['wp_current_filter'][] = $hook;
 	try {
@@ -101,8 +93,7 @@ function do_action( string $hook, mixed ...$arguments ): void
 	}
 }
 
-function apply_filters( string $hook, mixed $value, mixed ...$arguments ): mixed
-{
+function apply_filters( string $hook, mixed $value, mixed ...$arguments ): mixed {
 	$GLOBALS['wp_current_filter'][] = $hook;
 	try {
 		return isset( $GLOBALS['wp_filter'][ $hook ] )
@@ -113,14 +104,12 @@ function apply_filters( string $hook, mixed $value, mixed ...$arguments ): mixed
 	}
 }
 
-function doing_action( ?string $hook = null ): bool
-{
+function doing_action( ?string $hook = null ): bool {
 	return null === $hook
 		? array() !== ( $GLOBALS['wp_current_filter'] ?? array() )
 		: in_array( $hook, $GLOBALS['wp_current_filter'] ?? array(), true );
 }
 
-function did_action( string $hook ): int
-{
+function did_action( string $hook ): int {
 	return $GLOBALS['wp_actions'][ $hook ] ?? 0;
 }

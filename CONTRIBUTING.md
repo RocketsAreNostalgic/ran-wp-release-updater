@@ -4,16 +4,18 @@ The package is in a fresh, pre-release development line. Keep every commit safe
 for public review and use Conventional Commits (`feat:`, `fix:`, `docs:`,
 `test:`, or `chore:`).
 
-Before proposing a change, validate the Composer package metadata:
+Before proposing a change, run the default Composer quality gate:
 
 ```sh
 composer check
 ```
 
-Run the applicable PHPUnit suites for the changed boundary. Maintainers may
-also run environment-specific integration and parity gates when their fixtures
-are available. Report any unavailable or skipped gate instead of treating
-`composer check` as a complete test run.
+The default gate validates package metadata and the generated updater-support
+copy, audits the locked dependencies, checks PHP syntax and PHPCS, runs the
+configured PHPStan analysis, executes PHPUnit, and proves the no-dev consumer
+installation path. Run the applicable additional environment-specific suites
+for the changed boundary rather than treating `composer check` as the entire
+verification matrix.
 
 The installed WordPress integration suite is separate from `composer check`.
 It verifies installed-distribution operation and that main-site and subsite

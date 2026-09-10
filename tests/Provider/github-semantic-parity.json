@@ -1,5 +1,5 @@
 {
-  "executable_gate": "composer check:phase3",
+  "executable_gate": "composer check:parity",
   "executable_proof": "tests/Integration/paired-github-provider-proof.php",
   "legacy_source_sha": "4586ffe4105565cf19f8b2e842fb78bd2e96d304",
   "neutral_source_sha": "38f29a32ca182c7acde496ecf3e2c60f3f66d906",

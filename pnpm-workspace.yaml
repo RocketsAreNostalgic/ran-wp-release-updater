@@ -1,0 +1,8 @@
+packages:
+  - '.'
+
+# pnpm 11 fails closed when a dependency has an undeclared install/build script.
+# These transitive scripts are not required by this repository's lint/format tasks.
+allowBuilds:
+  core-js: false
+  unrs-resolver: false

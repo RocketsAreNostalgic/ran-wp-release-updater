@@ -1,7 +1,5 @@
 <?php
 
-declare(strict_types=1);
-
 /**
  * Selected-root production kernel.
  *
@@ -10,27 +8,39 @@ declare(strict_types=1);
  * every lifecycle symbol from that root or fails closed if a loser already
  * defined one.
  */
+
+declare(strict_types=1);
 $ran_wp_release_updater_runtime_files = array(
+	'RAN\\WPReleaseUpdater\\V1\\Dependency\\ArchiveSafety' => 'src/Dependency/ArchiveSafety.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\CanonicalUpdateUri' => 'src/Contract/CanonicalUpdateUri.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\IdentityDescriptor' => 'src/Contract/IdentityDescriptor.php',
-	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseVersion' => 'src/Contract/ReleaseVersion.php',
-	'RAN\\WPReleaseUpdater\\V1\\Contract\\BindingRecord' => 'src/Contract/BindingRecord.php',
+	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseVersion'  => 'src/Contract/ReleaseVersion.php',
+	'RAN\\WPReleaseUpdater\\V1\\Contract\\BindingRecord'   => 'src/Contract/BindingRecord.php',
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\ValidatedPackage' => 'src/Archive/ValidatedPackage.php',
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact' => 'src/Archive/TemporaryArtifact.php',
+	'RAN\\WPReleaseUpdater\\V1\\Archive\\ArchiveScanResult' => 'src/Archive/ArchiveScanResult.php',
+	'RAN\\WPReleaseUpdater\\V1\\Archive\\ArchiveScanner'   => 'src/Archive/ArchiveScanner.php',
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\PackageIdentityValidator' => 'src/Archive/PackageIdentityValidator.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\InstalledPackageResolver' => 'src/WordPress/InstalledPackageResolver.php',
-	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseAdapter' => 'src/Contract/ReleaseAdapter.php',
+	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseAdapter'  => 'src/Contract/ReleaseAdapter.php',
+	'RAN\\WPReleaseUpdater\\V1\\WordPress\\BindingState'   => 'src/WordPress/BindingState.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\ReleaseOperationCoordinator' => 'src/WordPress/ReleaseOperationCoordinator.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\AcquisitionReceipt' => 'src/Contract/AcquisitionReceipt.php',
+	'RAN\\WPReleaseUpdater\\V1\\WordPress\\OwnedArchiveStore' => 'src/WordPress/OwnedArchiveStore.php',
+	'RAN\\WPReleaseUpdater\\V1\\WordPress\\StagedPackageManifest' => 'src/WordPress/StagedPackageManifest.php',
+	'RAN\\WPReleaseUpdater\\V1\\WordPress\\PendingInstallState' => 'src/WordPress/PendingInstallState.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePluginUpdater' => 'src/WordPress/NativePluginUpdater.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseReadUnavailable' => 'src/Provider/GitHub/GitHubReleaseReadUnavailable.php',
+	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubApiClient' => 'src/Provider/GitHub/GitHubApiClient.php',
+	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubArtifactCustodyFailure' => 'src/Provider/GitHub/GitHubArtifactCustodyFailure.php',
+	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubArtifactStore' => 'src/Provider/GitHub/GitHubArtifactStore.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubCredentialResolver' => 'src/Provider/GitHub/GitHubCredentialResolver.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\ProspectiveReleaseInspection' => 'src/Provider/GitHub/ProspectiveReleaseInspection.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\ProspectiveReleaseArtifact' => 'src/Provider/GitHub/ProspectiveReleaseArtifact.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseService' => 'src/Provider/GitHub/GitHubReleaseService.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseAdapter' => 'src/Provider/GitHub/GitHubReleaseAdapter.php',
-	'RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseFailure' => 'src/Runtime/ReleaseFailure.php',
-	'RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseSource' => 'src/Runtime/ReleaseSource.php',
+	'RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseFailure'   => 'src/Runtime/ReleaseFailure.php',
+	'RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseSource'    => 'src/Runtime/ReleaseSource.php',
 );
 
 foreach ( $ran_wp_release_updater_runtime_files as $ran_wp_release_updater_runtime_class => $ran_wp_release_updater_runtime_relative ) {
@@ -56,7 +66,7 @@ unset(
 	$ran_wp_release_updater_runtime_relative
 );
 
-$ran_wp_release_updater_broker_origin = static function( mixed $broker, mixed $provenance ): bool {
+$ran_wp_release_updater_broker_origin = static function ( mixed $broker, mixed $provenance ): bool {
 	if ( ! is_object( $broker ) || ! is_array( $provenance ) || ( $provenance['broker'] ?? null ) !== $broker || ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $broker ) {
 		return false;
 	}
@@ -76,10 +86,10 @@ $ran_wp_release_updater_broker_origin = static function( mixed $broker, mixed $p
 /* The sealed catalog is deliberately local to this selected runtime. */
 $ran_wp_release_updater_provider_catalog = array(
 	'github' => array(
-		'native' => static function( array $d, array $resolved, array $headers, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
+		'native'  => static function ( array $d, array $resolved, array $headers, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
 			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::composeFromDeclaration( $d, $resolved, $headers, $identity, $networkId, $selectedRuntimeState );
 		},
-		'release' => static function( array $d, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
+		'release' => static function ( array $d, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
 			$service = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::fromReleaseDeclaration( $d, $state );
 			return new \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource( $service, $state );
 		},
@@ -98,12 +108,10 @@ return new class(
 	private ?int $networkId;
 
 	/** @param array<string,array{native:Closure,release:Closure}> $providerCatalog */
-	public function __construct( private mixed $broker, private mixed $brokerProvenance, private mixed $selectedRuntimeState, private array $providerCatalog, private Closure $brokerOrigin )
-	{
+	public function __construct( private mixed $broker, private mixed $brokerProvenance, private mixed $selectedRuntimeState, private array $providerCatalog, private Closure $brokerOrigin ) {
 		$this->networkId = $this->networkId();
 	}
-	private function live(): bool
-	{
+	private function live(): bool {
 		if (
 			! ( $this->brokerOrigin )( $this->broker, $this->brokerProvenance )
 			||
@@ -121,8 +129,7 @@ return new class(
 		return is_array( $diagnostics ) && in_array( $diagnostics['state'] ?? null, array( 'activating', 'active' ), true );
 	}
 	/** @param list<array<string,mixed>> $submissions @return array<string,mixed> */
-	public function boot( array $environment, array $submissions ): array
-	{
+	public function boot( array $environment, array $submissions ): array {
 		if ( ! $this->live() ) {
 			throw new RuntimeException( 'Inactive runtime handoff.' );
 		}
@@ -130,16 +137,19 @@ return new class(
 		foreach ( $submissions as $submission ) {
 			$results[] = $this->registerTarget( $submission );
 		}
-		return array( 'accepted' => true, 'code' => 'runtime_active', 'results' => $results );
+		return array(
+			'accepted' => true,
+			'code'     => 'runtime_active',
+			'results'  => $results,
+		);
 	}
 	/** @param array<string,mixed> $submission @return array<string,mixed> */
-	public function registerTarget( array $submission ): array
-	{
+	public function registerTarget( array $submission ): array {
 		if ( ! $this->live() ) {
 			throw new RuntimeException( 'Inactive runtime handoff.' );
 		}
 		$id = $submission['submission_id'] ?? 0;
-		$d = $submission['declaration'] ?? null;
+		$d  = $submission['declaration'] ?? null;
 		if ( ! is_int( $id ) || 0 >= $id || ! is_array( $d ) ) {
 			throw new RuntimeException( 'Invalid target submission.' );
 		}
@@ -151,18 +161,20 @@ return new class(
 			is_array( $GLOBALS['wp_plugin_paths'] ?? null ) ? $GLOBALS['wp_plugin_paths'] : array(),
 			is_array( $GLOBALS['wp_theme_directories'] ?? null ) ? $GLOBALS['wp_theme_directories'] : array(),
 		);
-		$resolved = $installed->resolve( $d );
+		$resolved  = $installed->resolve( $d );
 		if ( 'installed_identity_verified' !== ( $resolved['code'] ?? null ) ) {
 			return $this->failure( $id, is_string( $resolved['code'] ?? null ) ? $resolved['code'] : 'installed_file_invalid' );
 		}
-		$type = $d['target_type'];
-		$headers = $resolved['headers'];
+		$type     = $d['target_type'];
+		$headers  = $resolved['headers'];
 		$identity = $resolved['installed_package_identity'];
-		$key = \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::targetFenceKey( array(
-			'network_id' => $this->networkId,
-			'target_type' => $type,
-			'installed_package_identity' => $identity,
-		) );
+		$key      = \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::targetFenceKey(
+			array(
+				'network_id'                 => $this->networkId,
+				'target_type'                => $type,
+				'installed_package_identity' => $identity,
+			)
+		);
 		if ( isset( $this->targets[ $key ] ) ) {
 			$target = $this->targets[ $key ];
 			if ( $this->sameDeclaration( $target['declaration'], $d ) ) {
@@ -179,21 +191,22 @@ return new class(
 			&& is_callable( array( $this->selectedRuntimeState, 'operationStarted' ) )
 			&& true === $this->selectedRuntimeState->operationStarted( $type )
 		) {
-			$handle = $this->deferredHandle();
-			$this->targets[ $key ] = array( 'declaration' => $d, 'handle' => $handle );
+			$handle                = $this->deferredHandle();
+			$this->targets[ $key ] = array(
+				'declaration' => $d,
+				'handle'      => $handle,
+			);
 			return $this->accepted( $id, 'declaration_deferred_operation_started', $key, $handle );
 		}
 		$composition = $provider( $d, $resolved, $headers, $identity, $this->networkId, $this->selectedRuntimeState );
-		$native = is_array( $composition ) ? ( $composition['native'] ?? null ) : null;
+		$native      = is_array( $composition ) ? ( $composition['native'] ?? null ) : null;
 		if ( ! $native instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater ) {
 			return $this->failure( $id, is_string( $composition['code'] ?? null ) ? $composition['code'] : 'target_composition_failed' );
 		}
-		$handle = new class( $native, $this->broker, $this->brokerProvenance, $this->selectedRuntimeState, $this->brokerOrigin ) {
-			public function __construct( private object $native, private mixed $broker, private mixed $brokerProvenance, private mixed $selectedRuntimeState, private Closure $brokerOrigin )
-			{
+		$handle                = new class( $native, $this->broker, $this->brokerProvenance, $this->selectedRuntimeState, $this->brokerOrigin ) {
+			public function __construct( private object $native, private mixed $broker, private mixed $brokerProvenance, private mixed $selectedRuntimeState, private Closure $brokerOrigin ) {
 			}
-			private function live(): bool
-			{
+			private function live(): bool {
 				if (
 					! ( $this->brokerOrigin )( $this->broker, $this->brokerProvenance )
 					||
@@ -210,44 +223,43 @@ return new class(
 				$diagnostics = $this->broker->diagnostics();
 				return is_array( $diagnostics ) && in_array( $diagnostics['state'] ?? null, array( 'activating', 'active' ), true );
 			}
-			public function status(): array
-			{
+			public function status(): array {
 				if ( $this->live() ) {
 					return array(
-						'state' => 'active',
+						'state'                => 'active',
 						'declaration_accepted' => true,
-						'hooks_registered' => true,
-						'code' => 'target_active',
-						'native' => $this->native->status(),
+						'hooks_registered'     => true,
+						'code'                 => 'target_active',
+						'native'               => $this->native->status(),
 					);
 				}
 				return array(
-					'state' => 'inactive',
+					'state'                => 'inactive',
 					'declaration_accepted' => true,
-					'hooks_registered' => true,
-					'code' => $this->livenessCode(),
-					'native' => $this->native->status(),
+					'hooks_registered'     => true,
+					'code'                 => $this->livenessCode(),
+					'native'               => $this->native->status(),
 				);
 			}
-			public function diagnostics(): array
-			{
+			public function diagnostics(): array {
 				if ( ! $this->live() ) {
-					return array( 'state' => 'inactive', 'diagnostics' => array( array( 'code' => $this->livenessCode() ) ) );
+					return array(
+						'state'       => 'inactive',
+						'diagnostics' => array( array( 'code' => $this->livenessCode() ) ),
+					);
 				}
 				return array(
-					'state' => 'active',
+					'state'       => 'active',
 					'diagnostics' => array_map( static fn( string $code ): array => array( 'code' => $code ), $this->native->diagnostics() ),
 				);
 			}
-			public function refresh(): bool
-			{
+			public function refresh(): bool {
 				if ( ! $this->live() ) {
 					return false;
 				}
 				return $this->native->refresh();
 			}
-			private function livenessCode(): string
-			{
+			private function livenessCode(): string {
 				if ( is_object( $this->selectedRuntimeState ) && is_callable( array( $this->selectedRuntimeState, 'livenessCode' ) ) ) {
 					$code = $this->selectedRuntimeState->livenessCode();
 					if ( is_string( $code ) ) {
@@ -257,19 +269,29 @@ return new class(
 				return 'runtime_handoff_invalid';
 			}
 		};
-		$this->targets[ $key ] = array( 'declaration' => $d, 'handle' => $handle );
+		$this->targets[ $key ] = array(
+			'declaration' => $d,
+			'handle'      => $handle,
+		);
 		return $this->accepted( $id, 'target_active', $key, $handle );
 	}
 	/** @param array<string,mixed> $declaration @return array{accepted:bool,code:string,source_handle:object|null} */
-	public function releaseSource( array $declaration ): array
-	{
-		if ( ! $this->live() ) return $this->releaseFailure( 'runtime_unavailable' );
+	public function releaseSource( array $declaration ): array {
+		if ( ! $this->live() ) {
+			return $this->releaseFailure( 'runtime_unavailable' );
+		}
 		$state = $this->selectedRuntimeState;
-		if ( ! $state instanceof \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState ) return $this->releaseFailure( 'runtime_unavailable' );
+		if ( ! $state instanceof \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState ) {
+			return $this->releaseFailure( 'runtime_unavailable' );
+		}
 		$readiness = $state->releaseReadinessCode();
-		if ( null !== $readiness ) return $this->releaseFailure( $readiness );
+		if ( null !== $readiness ) {
+			return $this->releaseFailure( $readiness );
+		}
 		$compose = $this->providerCatalog[ $declaration['provider_code'] ?? '' ]['release'] ?? null;
-		if ( ! $compose instanceof Closure ) return $this->releaseFailure( 'provider_unavailable' );
+		if ( ! $compose instanceof Closure ) {
+			return $this->releaseFailure( 'provider_unavailable' );
+		}
 		try {
 			$source = $compose( $declaration, $state );
 		} catch ( \InvalidArgumentException ) {
@@ -278,13 +300,21 @@ return new class(
 			return $this->releaseFailure( 'runtime_unavailable' );
 		}
 		return $source instanceof \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource
-			? array( 'accepted' => true, 'code' => 'release_source_ready', 'source_handle' => $source )
+			? array(
+				'accepted'      => true,
+				'code'          => 'release_source_ready',
+				'source_handle' => $source,
+			)
 			: $this->releaseFailure( 'runtime_unavailable' );
 	}
 	/** @return array{accepted:false,code:string,source_handle:null} */
-	private function releaseFailure( string $code ): array { return array( 'accepted' => false, 'code' => $code, 'source_handle' => null ); }
-	private function networkId(): ?int
-	{
+	private function releaseFailure( string $code ): array {
+		return array(
+			'accepted'      => false,
+			'code'          => $code,
+			'source_handle' => null,
+		); }
+	private function networkId(): ?int {
 		try {
 			$networkId = function_exists( 'get_current_network_id' ) ? get_current_network_id() : 1;
 		} catch ( Throwable ) {
@@ -292,8 +322,7 @@ return new class(
 		}
 		return is_int( $networkId ) && 0 < $networkId ? $networkId : null;
 	}
-	private function sameDeclaration( array $first, array $next ): bool
-	{
+	private function sameDeclaration( array $first, array $next ): bool {
 		foreach ( array( 'target_type', 'provider_code', 'repository_locator', 'repository_identity', 'channel', 'update_policy', 'credential_resolver', 'maximum_artifact_bytes' ) as $fact ) {
 			if ( $first[ $fact ] !== $next[ $fact ] ) {
 				return false;
@@ -301,53 +330,47 @@ return new class(
 		}
 		return true;
 	}
-	private function deferredHandle(): object
-	{
-		return new class {
-			public function status(): array
-			{
+	private function deferredHandle(): object {
+		return new class() {
+			public function status(): array {
 				return array(
-					'state' => 'deferred',
+					'state'                => 'deferred',
 					'declaration_accepted' => true,
-					'hooks_registered' => false,
-					'code' => 'declaration_deferred_operation_started',
-					'native' => null,
+					'hooks_registered'     => false,
+					'code'                 => 'declaration_deferred_operation_started',
+					'native'               => null,
 				);
 			}
 
-			public function diagnostics(): array
-			{
+			public function diagnostics(): array {
 				return array(
-					'state' => 'deferred',
+					'state'       => 'deferred',
 					'diagnostics' => array( array( 'code' => 'declaration_deferred_operation_started' ) ),
 				);
 			}
 
-			public function refresh(): bool
-			{
+			public function refresh(): bool {
 				return false;
 			}
 		};
 	}
 	/** @return array<string,mixed> */
-	private function accepted( int $id, string $code, string $key, object $handle ): array
-	{
+	private function accepted( int $id, string $code, string $key, object $handle ): array {
 		return array(
 			'submission_id' => $id,
-			'accepted' => true,
-			'code' => $code,
-			'target_key' => $key,
+			'accepted'      => true,
+			'code'          => $code,
+			'target_key'    => $key,
 			'target_handle' => $handle,
 		);
 	}
 	/** @return array<string,mixed> */
-	private function failure( int $id, string $code ): array
-	{
+	private function failure( int $id, string $code ): array {
 		return array(
 			'submission_id' => $id,
-			'accepted' => false,
-			'code' => $code,
-			'target_key' => null,
+			'accepted'      => false,
+			'code'          => $code,
+			'target_key'    => null,
 			'target_handle' => null,
 		);
 	}

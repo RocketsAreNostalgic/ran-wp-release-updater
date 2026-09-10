@@ -1,12 +1,13 @@
 <?php
 declare(strict_types=1);
 namespace Tests\Support;
+
 use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 /** Observable request-local provider double for native lifecycle tests. */
 final class ControllableReleaseAdapter implements ReleaseAdapter {
-	public int $listCalls = 0;
+	public int $listCalls    = 0;
 	public int $inspectCalls = 0;
 	public int $acquireCalls = 0;
 	/** @var list<string> */
