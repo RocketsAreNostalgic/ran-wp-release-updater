@@ -9,7 +9,7 @@ use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 
-final class ReleaseOperationCoordinator {
+final class BindingFenceCoordinator {
 	private const PREFIX   = 'ran_wp_release_updater_target_v1_';
 	private const CLAIM    = array( 'binding_generation', 'binding_hash', 'lease_deadline', 'owner_token' );
 	private const MAX_JSON = 16384;

@@ -33,7 +33,7 @@ namespace Tests\WordPress {
 	use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 	use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
-	use RAN\WPReleaseUpdater\V1\WordPress\ReleaseOperationCoordinator;
+	use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
 	use Tests\Support\FakeOptionDatabase;
 
 	/** Exercises updater seams only; Core backup, rollback, and activation remain out of scope. */
@@ -150,7 +150,7 @@ namespace Tests\WordPress {
 
 			$binding     = $this->binding( $targetType, $uri, $channel );
 			$database    = new FakeOptionDatabase( 100 );
-			$claimResult = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 );
+			$claimResult = BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 );
 			self::assertSame( 'claimed', $claimResult['result'] );
 			$state             = $claimResult['current'];
 			$claim             = $this->claim( $state );

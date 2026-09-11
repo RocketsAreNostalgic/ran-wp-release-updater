@@ -277,7 +277,7 @@ final class NativePackageUpdater {
 			return $this->failure( 'remote_release_changed' );
 		}
 		$this->descriptor = $fresh;
-		$renewed          = ReleaseOperationCoordinator::renewPersistentBindingState( $this->wpdb, $this->state, $this->claim, 3600 );
+		$renewed          = BindingFenceCoordinator::renewPersistentBindingState( $this->wpdb, $this->state, $this->claim, 3600 );
 		if ( 'renewed' !== $renewed['result'] || ! $renewed['current'] instanceof BindingState ) {
 			return $this->failure( 'binding_fence_lost' );
 		}
@@ -522,7 +522,7 @@ final class NativePackageUpdater {
 				$this->diagnose( 'outcome_uncertain', null );
 				return;
 			}
-			$completed = ReleaseOperationCoordinator::completePersistentInstall( $this->wpdb, $this->state, $this->claim, $this->pendingInstall->receipt(), $this->descriptor );
+			$completed = BindingFenceCoordinator::completePersistentInstall( $this->wpdb, $this->state, $this->claim, $this->pendingInstall->receipt(), $this->descriptor );
 			$this->diagnose( 'completed' === $completed['result'] ? 'update_completed' : 'outcome_uncertain', null );
 		} finally {
 			$this->clearPending();
@@ -685,7 +685,7 @@ final class NativePackageUpdater {
 			$owner = bin2hex( random_bytes( 32 ) );
 		} catch ( \Throwable ) {
 			return false; }
-		$claimed = ReleaseOperationCoordinator::claimPersistentBindingState( $this->wpdb, $this->binding, $owner, 600 );
+		$claimed = BindingFenceCoordinator::claimPersistentBindingState( $this->wpdb, $this->binding, $owner, 600 );
 		if ( 'claimed' !== $claimed['result'] || ! $claimed['current'] instanceof BindingState ) {
 			return false;
 		}
@@ -878,7 +878,7 @@ final class NativePackageUpdater {
 	/** @return array{current:BindingState,now:int}|null */ private function verifyCurrent(): ?array {
 		if ( ! $this->state instanceof BindingState ) {
 			return null;
-		} $verified = ReleaseOperationCoordinator::verifyPersistentBindingState( $this->wpdb, $this->state, $this->claim );
+		} $verified = BindingFenceCoordinator::verifyPersistentBindingState( $this->wpdb, $this->state, $this->claim );
 		return 'verified' === $verified['result'] && $verified['current'] instanceof BindingState && is_int( $verified['now'] ?? null ) ? array(
 			'current' => $verified['current'],
 			'now'     => $verified['now'],
@@ -888,7 +888,7 @@ final class NativePackageUpdater {
 		$this->archiveStore->remove( $this->pendingInstall->archive(), $this->pendingInstall->archiveDirectory() );
 		$this->pendingInstall->clear();
 		if ( $release && $this->leaseHeld && $this->state instanceof BindingState ) {
-			ReleaseOperationCoordinator::releasePersistentBindingState( $this->wpdb, $this->state, $this->claim );
+			BindingFenceCoordinator::releasePersistentBindingState( $this->wpdb, $this->state, $this->claim );
 		}
 		if ( $release ) {
 			$this->state     = null;

@@ -104,16 +104,16 @@
 	</rule>
 
 	<!--
-		ReleaseOperationCoordinator validates the options-table identifier before use
+		BindingFenceCoordinator validates the options-table identifier before use
 		and prepares every data value. WPCS cannot follow that closed identifier/CAS
 		construction through the local SQL variable, so suppress only those parser
 		false positives for this single persistence boundary.
 	-->
 	<rule ref="WordPress.DB.PreparedSQL.InterpolatedNotPrepared">
-		<exclude-pattern>/src/WordPress/ReleaseOperationCoordinator.php</exclude-pattern>
+		<exclude-pattern>/src/WordPress/BindingFenceCoordinator.php</exclude-pattern>
 	</rule>
 	<rule ref="WordPress.DB.PreparedSQL.NotPrepared">
-		<exclude-pattern>/src/WordPress/ReleaseOperationCoordinator.php</exclude-pattern>
+		<exclude-pattern>/src/WordPress/BindingFenceCoordinator.php</exclude-pattern>
 	</rule>
 
 	<!-- NativePackageUpdater uses URL-safe base64 solely as a bounded opaque operation token, never to conceal executable code. -->

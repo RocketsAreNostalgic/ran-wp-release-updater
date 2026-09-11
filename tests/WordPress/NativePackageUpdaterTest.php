@@ -35,7 +35,7 @@ namespace Tests\WordPress {
 	use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 	use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
-	use RAN\WPReleaseUpdater\V1\WordPress\ReleaseOperationCoordinator;
+	use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
 	use Tests\Support\ControllableReleaseAdapter;
 	use Tests\Support\FakeOptionDatabase;
 	final class NativePackageUpdaterTest extends TestCase {
@@ -778,7 +778,7 @@ namespace Tests\WordPress {
 			$database->setTime( 650 );
 			self::assertIsString( $updater->filterPreDownload( false, $offer['package'], null, $this->extra() ) );
 			$database->setTime( 701 );
-			self::assertSame( 'binding_fence_lost', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'c', 64 ), 1 )['result'] );
+			self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'c', 64 ), 1 )['result'] );
 			$updater->refresh();
 		}
 		public function testCompetingOwnerAfterUnzipRejectsStaleReceipt(): void {
@@ -806,12 +806,12 @@ namespace Tests\WordPress {
 		public function testCompletionAndRollbackReleaseClaims(): void {
 			list( $completedUpdater, , $database, , $binding ) = $this->subject();
 			$this->complete( $completedUpdater );
-			self::assertSame( 'claimed', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
+			self::assertSame( 'claimed', BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
 			list( $rollbackUpdater, , $database, , $binding ) = $this->subject();
 			$offer = $this->offer( $rollbackUpdater );
 			self::assertIsString( $rollbackUpdater->filterPreDownload( false, $offer['package'], null, $this->extra() ) );
 			self::assertInstanceOf( \WP_Error::class, $rollbackUpdater->captureInstallPackageResult( new \WP_Error( 'rollback', 'rollback' ), $this->extra() ) );
-			self::assertSame( 'claimed', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'e', 64 ), 1 )['result'] );
+			self::assertSame( 'claimed', BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'e', 64 ), 1 )['result'] );
 		}
 		public function testPassiveSeamsDoNotAcquireAndDiagnosticsNeverExposeCallerInput(): void {
 			list( $updater, $adapter ) = $this->subject();
@@ -911,7 +911,7 @@ namespace Tests\WordPress {
 				$GLOBALS['ran_wp_release_updater_v1_broker'] = new \stdClass();
 				self::assertInstanceOf( \WP_Error::class, $updater->filterPreUnzipFile( null, $ownedArchive, '/tmp', array(), 0.0 ) );
 				self::assertFileDoesNotExist( $ownedArchive );
-				self::assertSame( 'claimed', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'f', 64 ), 1 )['result'] );
+				self::assertSame( 'claimed', BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'f', 64 ), 1 )['result'] );
 			} finally {
 				unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
 			}
@@ -939,7 +939,7 @@ namespace Tests\WordPress {
 				};
 				self::assertInstanceOf( \WP_Error::class, $result );
 				self::assertFileDoesNotExist( $ownedArchive );
-				self::assertSame( 'claimed', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
+				self::assertSame( 'claimed', BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
 			} finally {
 				unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
 			}
@@ -976,7 +976,7 @@ namespace Tests\WordPress {
 						self::assertSame( $status, $updater->status() );
 					}
 					self::assertFileDoesNotExist( $ownedArchive );
-					self::assertSame( 'claimed', ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'e', 64 ), 1 )['result'] );
+					self::assertSame( 'claimed', BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'e', 64 ), 1 )['result'] );
 				} finally {
 					unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
 				}
