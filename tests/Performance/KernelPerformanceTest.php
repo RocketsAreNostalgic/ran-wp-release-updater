@@ -11,7 +11,7 @@ use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
-use RAN\WPReleaseUpdater\V1\WordPress\ReleaseOperationCoordinator;
+use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
 use Tests\Support\FakeOptionDatabase;
 
 /**
@@ -23,20 +23,20 @@ final class KernelPerformanceTest extends TestCase {
 	public function testWarmNeutralKernelTupleHasGenerousLocalResourceBudgets(): void {
 		$binding  = BindingRecord::create( $this->bindingFacts() );
 		$database = new FakeOptionDatabase( 100 );
-		$claimed  = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 600 );
+		$claimed  = BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 600 );
 		self::assertSame( 'claimed', $claimed['result'] );
 		$state = $claimed['current'];
 		$claim = $this->claim( $state );
 		for ( $index = 0; $index < 100; ++$index ) {
 			CanonicalUpdateUri::canonicalizeBoundaries( $this->boundaries() );
-			ReleaseOperationCoordinator::verifyPersistentBindingState( $database, $state, $claim );
+			BindingFenceCoordinator::verifyPersistentBindingState( $database, $state, $claim );
 		}
 		$memoryBefore = memory_get_usage( true );
 		$cpuBefore    = $this->cpuNanoseconds();
 		$started      = hrtime( true );
 		for ( $index = 0; $index < 1000; ++$index ) {
 			$uri          = CanonicalUpdateUri::canonicalizeBoundaries( $this->boundaries() );
-			$verifyResult = ReleaseOperationCoordinator::verifyPersistentBindingState( $database, $state, $claim );
+			$verifyResult = BindingFenceCoordinator::verifyPersistentBindingState( $database, $state, $claim );
 		}
 		$elapsedNanoseconds    = hrtime( true ) - $started;
 		$cpuElapsedNanoseconds = $this->cpuNanoseconds() - $cpuBefore;

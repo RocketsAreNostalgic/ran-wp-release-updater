@@ -6,7 +6,7 @@ use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
-use RAN\WPReleaseUpdater\V1\WordPress\ReleaseOperationCoordinator;
+use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 use Tests\Support\MysqliOptionDatabase;
 
@@ -81,8 +81,8 @@ try {
 		throw new RuntimeException( 'Takeover did not install a new owner and target fence epoch.' );
 	}
 	$database   = new MysqliOptionDatabase( connectProof(), 'options' );
-	$stale      = ReleaseOperationCoordinator::verifyPersistentBindingState( $database, $winnerState, claim( $winner['state'] ) );
-	$completion = ReleaseOperationCoordinator::completePersistentInstall( $database, $winnerState, claim( $winner['state'] ), $receipt, $descriptor );
+	$stale      = BindingFenceCoordinator::verifyPersistentBindingState( $database, $winnerState, claim( $winner['state'] ) );
+	$completion = BindingFenceCoordinator::completePersistentInstall( $database, $winnerState, claim( $winner['state'] ), $receipt, $descriptor );
 	if ( 'binding_fence_lost' !== $stale['result'] || 'binding_fence_lost' !== $completion['result'] ) {
 		throw new RuntimeException( 'Stale writer or completion was not fenced.' );
 	}
@@ -120,7 +120,7 @@ function worker( array $argv ): void {
 	$database = new MysqliOptionDatabase( connectProof(), 'options' );
 	$binding  = BindingRecord::create( bindingFacts() );
 	$owner    = $argv[2];
-	$result   = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $binding, $owner, 30 );
+	$result   = BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, $owner, 30 );
 	$epoch    = 0;
 	$target   = $database->get_var( $database->prepare( "SELECT option_value FROM {$database->options} WHERE option_name = %s LIMIT 1", targetName( $binding ) ) );
 	if ( is_string( $target ) ) {

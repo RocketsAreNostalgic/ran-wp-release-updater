@@ -10,7 +10,7 @@ require_once dirname( __DIR__, 2 ) . '/src/Contract/BindingRecord.php';
 require_once dirname( __DIR__, 2 ) . '/src/Archive/ValidatedPackage.php';
 require_once dirname( __DIR__, 2 ) . '/src/Archive/PackageIdentityValidator.php';
 require_once dirname( __DIR__, 2 ) . '/src/Contract/AcquisitionReceipt.php';
-require_once dirname( __DIR__, 2 ) . '/src/WordPress/ReleaseOperationCoordinator.php';
+require_once dirname( __DIR__, 2 ) . '/src/WordPress/BindingFenceCoordinator.php';
 require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 
 use InvalidArgumentException;
@@ -21,7 +21,7 @@ use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
-use RAN\WPReleaseUpdater\V1\WordPress\ReleaseOperationCoordinator;
+use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
 use Tests\Support\FakeOptionDatabase;
 
 final class AcquisitionReceiptTest extends TestCase {
@@ -100,7 +100,7 @@ final class AcquisitionReceiptTest extends TestCase {
 	public function testCompletionRechecksAConcurrentCompetingOwnerAfterConsumingTheReceipt(): void {
 		list( $validator, $descriptor, $prototype, $package ) = $this->ready();
 		$database = new FakeOptionDatabase( 10 );
-		$claimed  = ReleaseOperationCoordinator::claimPersistentBindingState( $database, $prototype->binding(), str_repeat( 'a', 64 ), 10 );
+		$claimed  = BindingFenceCoordinator::claimPersistentBindingState( $database, $prototype->binding(), str_repeat( 'a', 64 ), 10 );
 		self::assertSame( 'claimed', $claimed['result'] );
 		$state     = $claimed['current'];
 		$claim     = $this->claim( $state );
@@ -121,7 +121,7 @@ final class AcquisitionReceiptTest extends TestCase {
 			}
 		);
 
-		$completed = ReleaseOperationCoordinator::completePersistentInstall( $database, $state, $claim, $receipt, $descriptor );
+		$completed = BindingFenceCoordinator::completePersistentInstall( $database, $state, $claim, $receipt, $descriptor );
 		self::assertSame( 'binding_fence_lost', $completed['result'] );
 		try {
 			AcquisitionReceipt::acceptFresh( $receipt, $state, $descriptor, 10 );
