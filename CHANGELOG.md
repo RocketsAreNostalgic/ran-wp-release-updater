@@ -91,8 +91,6 @@
 * refresh runtime content identity ([4bf99b4](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/4bf99b4e161bbf9ae2d673bd63c98f451e269d55))
 * reject stale release tokens ([c70f3f9](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/c70f3f9ea02f6626772f7a5e1ddc9151b77d4c16))
 * **release:** address exact publisher review ([17b238a](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/17b238ad27ab2a83b104205027bcdc2d37c22649))
-* **release:** admit exact legacy bootstrap parent ([66f9d5f](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/66f9d5f1db344f1f8c447dc536b09e95c370d464))
-* **release:** admit exact legacy bootstrap parent ([a69da5c](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/a69da5c223c952711b9f4e9079a10d340498119c))
 * **test:** harden disposable WordPress proof inputs ([6f36b54](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/6f36b5497ab0219a59637eaf385fcd54a1b69872))
 * verify runtime copy content identity ([d2f00ff](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/d2f00ffe647dc78e910b26281e97190ba7f0d7d8))
 
