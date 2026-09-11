@@ -29,7 +29,7 @@ $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\OwnedArchiveStore' => 'src/WordPress/OwnedArchiveStore.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\StagedPackageManifest' => 'src/WordPress/StagedPackageManifest.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\PendingInstallState' => 'src/WordPress/PendingInstallState.php',
-	'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePluginUpdater' => 'src/WordPress/NativePluginUpdater.php',
+	'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePackageUpdater' => 'src/WordPress/NativePackageUpdater.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseReadUnavailable' => 'src/Provider/GitHub/GitHubReleaseReadUnavailable.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubApiClient' => 'src/Provider/GitHub/GitHubApiClient.php',
 	'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubArtifactCustodyFailure' => 'src/Provider/GitHub/GitHubArtifactCustodyFailure.php',
@@ -200,7 +200,7 @@ return new class(
 		}
 		$composition = $provider( $d, $resolved, $headers, $identity, $this->networkId, $this->selectedRuntimeState );
 		$native      = is_array( $composition ) ? ( $composition['native'] ?? null ) : null;
-		if ( ! $native instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater ) {
+		if ( ! $native instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater ) {
 			return $this->failure( $id, is_string( $composition['code'] ?? null ) ? $composition['code'] : 'target_composition_failed' );
 		}
 		$handle                = new class( $native, $this->broker, $this->brokerProvenance, $this->selectedRuntimeState, $this->brokerOrigin ) {

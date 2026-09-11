@@ -95,7 +95,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			'RAN\\WPReleaseUpdater\\V1\\Archive\\PackageIdentityValidator',
 			'RAN\\WPReleaseUpdater\\V1\\WordPress\\ReleaseOperationCoordinator',
 			'RAN\\WPReleaseUpdater\\V1\\Contract\\AcquisitionReceipt',
-			'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePluginUpdater',
+			'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePackageUpdater',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubCredentialResolver',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\ProspectiveReleaseInspection',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\ProspectiveReleaseArtifact',

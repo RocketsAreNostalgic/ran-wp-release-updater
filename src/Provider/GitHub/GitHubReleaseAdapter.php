@@ -11,7 +11,7 @@ use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
-use RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater;
+use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
 
 /** Installed-package wrapper around the shared GitHub release service. */
 final class GitHubReleaseAdapter implements ReleaseAdapter {
@@ -23,7 +23,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 	 * @param array<string,mixed> $declaration
 	 * @param array<string,mixed> $resolved
 	 * @param array<string,mixed> $headers
-	 * @return array{native:?NativePluginUpdater,code:string}
+	 * @return array{native:?NativePackageUpdater,code:string}
 	 */
 	public static function composeFromDeclaration(
 		array $declaration,
@@ -155,14 +155,14 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		?PackageIdentityValidator $validator = null,
 		?SelectedRuntimeState $selectedRuntimeState = null,
 		bool $nativeDiscoveryReuse = false
-	): ?NativePluginUpdater {
+	): ?NativePackageUpdater {
 		try {
 			$adapter = new self( $binding, $credentials );
 		} catch ( InvalidArgumentException ) {
 			return null;
 		}
-		$updater = NativePluginUpdater::fromConfiguration( $configuration, $binding, $adapter, $wpdb, $archivePolicy, $validator, $selectedRuntimeState, $nativeDiscoveryReuse );
-		if ( $updater instanceof NativePluginUpdater ) {
+		$updater = NativePackageUpdater::fromConfiguration( $configuration, $binding, $adapter, $wpdb, $archivePolicy, $validator, $selectedRuntimeState, $nativeDiscoveryReuse );
+		if ( $updater instanceof NativePackageUpdater ) {
 			$updater->register();
 		}
 		return $updater;

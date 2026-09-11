@@ -63,9 +63,9 @@ rate-limit responses in its
 ## Provider-neutral lifecycle seam
 
 `ReleaseAdapter` defines the provider-neutral discovery, inspection, and
-acquisition contract. `NativePluginUpdater::fromConfiguration()` accepts that
+acquisition contract. `NativePackageUpdater::fromConfiguration()` accepts that
 interface together with a provider-neutral `BindingRecord`, exact native
-configuration, and archive policy. `NativePluginUpdater` then owns the WordPress
+configuration, and archive policy. `NativePackageUpdater` then owns the WordPress
 hooks and update lifecycle. Archive identity, package validation, operation
 fencing, installation checks, and diagnostics remain shared.
 

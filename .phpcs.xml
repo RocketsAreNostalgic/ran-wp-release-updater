@@ -82,7 +82,7 @@
 		<exclude-pattern>/src/WordPress/InstalledPackageResolver.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/OwnedArchiveStore.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/StagedPackageManifest.php</exclude-pattern>
-		<exclude-pattern>/src/WordPress/NativePluginUpdater.php</exclude-pattern>
+		<exclude-pattern>/src/WordPress/NativePackageUpdater.php</exclude-pattern>
 		<exclude-pattern>/scripts/</exclude-pattern>
 		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
@@ -92,7 +92,7 @@
 		<exclude-pattern>/src/WordPress/InstalledPackageResolver.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/OwnedArchiveStore.php</exclude-pattern>
 		<exclude-pattern>/src/WordPress/StagedPackageManifest.php</exclude-pattern>
-		<exclude-pattern>/src/WordPress/NativePluginUpdater.php</exclude-pattern>
+		<exclude-pattern>/src/WordPress/NativePackageUpdater.php</exclude-pattern>
 		<exclude-pattern>/scripts/</exclude-pattern>
 		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
@@ -116,13 +116,13 @@
 		<exclude-pattern>/src/WordPress/ReleaseOperationCoordinator.php</exclude-pattern>
 	</rule>
 
-	<!-- NativePluginUpdater uses URL-safe base64 solely as a bounded opaque operation token, never to conceal executable code. -->
+	<!-- NativePackageUpdater uses URL-safe base64 solely as a bounded opaque operation token, never to conceal executable code. -->
 	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode">
-		<exclude-pattern>/src/WordPress/NativePluginUpdater.php</exclude-pattern>
+		<exclude-pattern>/src/WordPress/NativePackageUpdater.php</exclude-pattern>
 		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode">
-		<exclude-pattern>/src/WordPress/NativePluginUpdater.php</exclude-pattern>
+		<exclude-pattern>/src/WordPress/NativePackageUpdater.php</exclude-pattern>
 		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 

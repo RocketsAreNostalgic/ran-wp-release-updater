@@ -32,7 +32,7 @@ namespace Tests\WordPress {
 	use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 	use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
-	use RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater;
+	use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
 	use RAN\WPReleaseUpdater\V1\WordPress\ReleaseOperationCoordinator;
 	use Tests\Support\FakeOptionDatabase;
 
@@ -97,8 +97,8 @@ namespace Tests\WordPress {
 					$archive,
 					$this->policy( $targetType, $uri )
 				);
-				self::assertInstanceOf( NativePluginUpdater::class, $updater );
-				$matches = new \ReflectionMethod( NativePluginUpdater::class, 'matchesStagedMetadata' );
+				self::assertInstanceOf( NativePackageUpdater::class, $updater );
+				$matches = new \ReflectionMethod( NativePackageUpdater::class, 'matchesStagedMetadata' );
 				$staged  = $this->tree( $targetType, $uri, 'optional', '2.0.0' );
 				self::assertTrue( $matches->invoke( $updater, $staged, '2.0.0' ) );
 
@@ -113,10 +113,10 @@ namespace Tests\WordPress {
 			$archive    = $this->archive( 'theme', $uri, '2.0.0' );
 			$descriptor = $this->descriptor( 'theme', $archive, $uri, 'stable', '2.0.0', 'v2.0.0', false );
 			$updater    = $this->updater( $this->configuration( 'theme', $uri ), $this->binding( 'theme', $uri, 'stable' ), new FakeOptionDatabase( 100 ), $descriptor, $archive, $this->policy( 'theme', $uri ) );
-			self::assertInstanceOf( NativePluginUpdater::class, $updater );
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$staged = $this->tree( 'theme', $uri, 'template-added', '2.0.0' );
 			file_put_contents( $staged . '/style.css', "\nTemplate: parent-theme", FILE_APPEND );
-			$matches = new \ReflectionMethod( NativePluginUpdater::class, 'matchesStagedMetadata' );
+			$matches = new \ReflectionMethod( NativePackageUpdater::class, 'matchesStagedMetadata' );
 			self::assertFalse( $matches->invoke( $updater, $staged, '2.0.0' ) );
 		}
 
@@ -167,7 +167,7 @@ namespace Tests\WordPress {
 
 			$database->setTime( 121 );
 			$updater = $this->updater( $this->configuration( $targetType, $uri ), $binding, $database, $descriptor, $archive, $policy );
-			self::assertInstanceOf( NativePluginUpdater::class, $updater );
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
 			$updater->register();
 			self::assertSame( $this->expectedTargetHooks( $targetType ), array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ) );
@@ -243,7 +243,7 @@ namespace Tests\WordPress {
 		private function assertStagedHeaderMismatchDoesNotCreateDestination( string $targetType, string $uri, string $version, IdentityDescriptor $descriptor, BindingRecord $binding, FakeOptionDatabase $database, BindingState $state, array $claim, PackageIdentityValidator $validator, array $policy, string $archive, string $destinationParent ): void {
 			$database->setTime( 121 );
 			$updater = $this->updater( $this->configuration( $targetType, $uri ), $binding, $database, $descriptor, $archive, $policy );
-			self::assertInstanceOf( NativePluginUpdater::class, $updater );
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$identity = 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release';
 			$extra    = array( 'plugin' === $targetType ? 'plugin' : 'theme' => $identity );
 			$offer    = $updater->filterUpdate(
@@ -265,7 +265,7 @@ namespace Tests\WordPress {
 			self::assertDirectoryDoesNotExist( $destinationParent );
 		}
 
-		private function updater( array $configuration, BindingRecord $binding, FakeOptionDatabase $database, IdentityDescriptor $descriptor, string $archive, array $policy ): ?NativePluginUpdater {
+		private function updater( array $configuration, BindingRecord $binding, FakeOptionDatabase $database, IdentityDescriptor $descriptor, string $archive, array $policy ): ?NativePackageUpdater {
 			$adapter = new class( $descriptor, $archive ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter { public function __construct( private IdentityDescriptor $descriptor, private string $archive ) {} public function listReleases( array $conditional = array() ): array {
 					$facts = $this->descriptor->toArray();
 					return array(
@@ -300,7 +300,7 @@ namespace Tests\WordPress {
 					)
 				);
 			} };
-			return NativePluginUpdater::fromConfiguration( $configuration, $binding, $adapter, $database, $policy ); }
+			return NativePackageUpdater::fromConfiguration( $configuration, $binding, $adapter, $database, $policy ); }
 
 		/** @return list<string> */
 		private function expectedTargetHooks( string $targetType ): array {

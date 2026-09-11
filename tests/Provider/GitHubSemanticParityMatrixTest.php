@@ -112,8 +112,8 @@ final class GitHubSemanticParityMatrixTest extends TestCase {
 				. '/GitHubReleaseAdapterTest.php',
 			'Tests\\Runtime\\RequestBrokerTest'            => dirname( __DIR__ )
 				. '/Runtime/RequestBrokerTest.php',
-			'Tests\\WordPress\\NativePluginUpdaterTest'    => dirname( __DIR__ )
-				. '/WordPress/NativePluginUpdaterTest.php',
+			'Tests\\WordPress\\NativePackageUpdaterTest'   => dirname( __DIR__ )
+				. '/WordPress/NativePackageUpdaterTest.php',
 			'Tests\\WordPress\\ReleaseOperationCoordinatorTest' => dirname( __DIR__ )
 				. '/WordPress/ReleaseOperationCoordinatorTest.php',
 		);

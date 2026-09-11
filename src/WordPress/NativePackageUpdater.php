@@ -16,7 +16,7 @@ use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 
 /** The single native WordPress lifecycle owner for a sealed neutral release. */
-final class NativePluginUpdater {
+final class NativePackageUpdater {
 	private const MAX_DIAGNOSTICS                       = 16;
 	private const CONFIGURATION_KEYS                    = array( 'headers', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
 	private const HEADER_KEYS                           = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );

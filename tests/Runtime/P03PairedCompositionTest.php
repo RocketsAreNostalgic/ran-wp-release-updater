@@ -149,7 +149,7 @@ $explicit = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::regis
 	$explicitDatabase,
 	$policy,
 );
-if (! $explicit instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater) {
+if (! $explicit instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater) {
 	throw new RuntimeException('Explicit GitHub composition failed.');
 }
 $conciseBinding = (new ReflectionProperty($concise, 'binding'))->getValue($concise)->toArray();
