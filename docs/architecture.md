@@ -24,14 +24,21 @@ A plugin/theme declaration records configuration without performing provider wor
 
 The important boundaries are behavioural rather than inheritance/class-taxonomy rules:
 
-- **Declaration**: immutable configured/admitted facts for a target.
+- **Declaration**: immutable configured or admitted facts for a target.
 - **Provider**: source-specific remote access and source authority.
-- **Adapter**: translation from provider-specific behaviour into the provider-neutral release contract.
+- **Adapter**: translation from provider-specific behaviour into a neutral lifecycle contract.
 - **Artifact**: acquired bytes held under controlled custody.
-- **Coordinator**: state/authority that must survive separate callbacks or processes.
-- **State / Store**: bounded lifecycle data and its durable persistence.
-- **Archive**: ZIP path/layout/identity/custody checks.
+- **Runner**: one synchronous ordered execution. The release updater's native lifecycle is distributed across WordPress callbacks, so this term does not imply that the release package needs a native-lifecycle runner class.
+- **Coordinator**: state or authority that must span otherwise separate callbacks, events, or processes.
+- **Journal**: durable transition or history semantics. The term does not imply that the release updater needs the branch updater's deployment journal model.
+- **Store**: durable object persistence.
+- **State**: bounded lifecycle data.
+- **Archive**: ZIP path, layout, identity, and custody concerns.
+- **Contract**: stable interfaces and value contracts between architectural boundaries.
+- **Runtime**: package lifecycle/orchestration and selected-runtime ownership.
 - **WordPress**: WordPress-specific hooks and Core mutation integration.
+
+These are house terms for responsibilities, not a requirement that every updater contain a class or namespace corresponding to every term. Parallel names are appropriate only where responsibilities genuinely match.
 
 The package does not introduce a generic updater base class, public provider registry, or artificial common runner hierarchy merely to resemble another updater domain.
 
