@@ -239,7 +239,7 @@ namespace Tests\Provider {
 			);
 
 			self::assertNotNull( $updater );
-			foreach ( array( BindingRecord::class, GitHubCredentialResolver::class, GitHubReleaseAdapter::class, '\\RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePluginUpdater' ) as $class ) {
+			foreach ( array( BindingRecord::class, GitHubCredentialResolver::class, GitHubReleaseAdapter::class, '\\RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePackageUpdater' ) as $class ) {
 				self::assertSame( $root, dirname( ( new \ReflectionClass( $class ) )->getFileName(), str_contains( $class, 'Provider\\GitHub' ) ? 4 : 3 ), $class );
 			}
 			self::assertSame( 0, $calls );

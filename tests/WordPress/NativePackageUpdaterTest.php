@@ -34,16 +34,16 @@ namespace Tests\WordPress {
 	use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 	use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
-	use RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater;
+	use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
 	use RAN\WPReleaseUpdater\V1\WordPress\ReleaseOperationCoordinator;
 	use Tests\Support\ControllableReleaseAdapter;
 	use Tests\Support\FakeOptionDatabase;
-	final class NativePluginUpdaterTest extends TestCase {
+	final class NativePackageUpdaterTest extends TestCase {
 		/** @var list<string> */
 		private array $paths = array();
 		private string $temporaryDirectory;
 		protected function setUp(): void {
-			$this->temporaryDirectory = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/native-plugin-updater-' . bin2hex( random_bytes( 6 ) );
+			$this->temporaryDirectory = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/native-package-updater-' . bin2hex( random_bytes( 6 ) );
 			mkdir( $this->temporaryDirectory, 0700, true );
 			$GLOBALS['ran_wp_release_updater_test_hooks']            = array();
 			$GLOBALS['ran_wp_release_updater_test_filter_callbacks'] = array();
@@ -372,9 +372,9 @@ namespace Tests\WordPress {
 			$policy['header_file']                       = 'style.css';
 			$policy['installed_package_identity']        = 'package';
 			$policy['target_type']                       = 'theme';
-			$updater                                     = NativePluginUpdater::fromConfiguration( $configuration, $binding, $adapter, new FakeOptionDatabase( 100 ), $policy );
+			$updater                                     = NativePackageUpdater::fromConfiguration( $configuration, $binding, $adapter, new FakeOptionDatabase( 100 ), $policy );
 
-			self::assertInstanceOf( NativePluginUpdater::class, $updater );
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			self::assertFalse(
 				$updater->filterUpdate(
 					false,
@@ -1018,15 +1018,15 @@ namespace Tests\WordPress {
 			list( $updater, $adapter, $database, , $binding ) = $this->subject();
 			$configuration                                    = $this->config( 'manual' );
 			$configuration['target_type']                     = 'theme';
-			self::assertNull( NativePluginUpdater::fromConfiguration( $configuration, $binding, $adapter, $database, $this->policy() ) );
+			self::assertNull( NativePackageUpdater::fromConfiguration( $configuration, $binding, $adapter, $database, $this->policy() ) );
 		}
 		public function testArchivePolicyMustCarryTheExactBindingTemplate(): void {
 			list( , $adapter, $database, , $binding ) = $this->subject();
 			$policy                                   = $this->policy();
 			$policy['theme_template']                 = 'parent-theme';
-			self::assertNull( NativePluginUpdater::fromConfiguration( $this->config( 'manual' ), $binding, $adapter, $database, $policy ) );
+			self::assertNull( NativePackageUpdater::fromConfiguration( $this->config( 'manual' ), $binding, $adapter, $database, $policy ) );
 			unset( $policy['theme_template'] );
-			self::assertNull( NativePluginUpdater::fromConfiguration( $this->config( 'manual' ), $binding, $adapter, $database, $policy ) );
+			self::assertNull( NativePackageUpdater::fromConfiguration( $this->config( 'manual' ), $binding, $adapter, $database, $policy ) );
 		}
 		public function testNonFalsePreDownloadResultCannotBypassReleaseValidation(): void {
 			list( $updater, $adapter, $database ) = $this->subject();
@@ -1048,19 +1048,19 @@ namespace Tests\WordPress {
 			self::assertSame( array(), $database->rows() );
 			self::assertContains( 'unverified_pre_download_result', $updater->diagnostics() );
 		}
-		/** @return array{NativePluginUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
+		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
 		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selectedRuntimeState = null, bool $nativeDiscoveryReuse = false, ?PackageIdentityValidator $validator = null ): array {
 			$archivePath = $this->archive();
 			$descriptor  = $this->descriptor( $archivePath, $channel, $prerelease );
 			$binding     = $this->binding( $mode, $channel );
 			$adapter     = new ControllableReleaseAdapter( $descriptor, $archivePath, $this->temporaryDirectory );
 			$database  ??= new FakeOptionDatabase( 100 );
-			$updater     = NativePluginUpdater::fromConfiguration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selectedRuntimeState, $nativeDiscoveryReuse );
-			self::assertInstanceOf( NativePluginUpdater::class, $updater );
+			$updater     = NativePackageUpdater::fromConfiguration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selectedRuntimeState, $nativeDiscoveryReuse );
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			return array( $updater, $adapter, $database, $descriptor, $binding );
 		}
 		/** @return array<string,mixed> */
-		private function offer( NativePluginUpdater $updater ): array {
+		private function offer( NativePackageUpdater $updater ): array {
 			$offer = $updater->filterUpdate(
 				false,
 				array(
@@ -1073,7 +1073,7 @@ namespace Tests\WordPress {
 			self::assertIsArray( $offer );
 			return $offer;
 		}
-		private function complete( NativePluginUpdater $updater ): void {
+		private function complete( NativePackageUpdater $updater ): void {
 			$offer        = $this->offer( $updater );
 			$ownedArchive = $updater->filterPreDownload( false, $offer['package'], null, $this->extra() );
 			self::assertIsString( $ownedArchive );

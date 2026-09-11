@@ -332,7 +332,7 @@ PHP;
 				throw new \RuntimeException( 'Synthetic acquisition must not run.' );
 			}
 		};
-		$native = \RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater::fromConfiguration(
+		$native = \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater::fromConfiguration(
 			$config,
 			$binding,
 			$adapter,
@@ -341,7 +341,7 @@ PHP;
 			null,
 			$selectedRuntimeState
 		);
-		if ( $native instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater ) {
+		if ( $native instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater ) {
 			$native->register();
 		}
 		return array( 'native' => $native, 'code' => 'target_composition_failed' );

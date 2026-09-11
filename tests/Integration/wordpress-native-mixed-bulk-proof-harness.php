@@ -4,7 +4,7 @@ use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
-use RAN\WPReleaseUpdater\V1\WordPress\NativePluginUpdater;
+use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
 $sourceRoot         = getenv( 'RAN_WP_RELEASE_UPDATER_SOURCE_ROOT' );
 $markerFile         = getenv( 'RAN_WP_RELEASE_UPDATER_MARKER_FILE' );
 $markerRoot         = is_string( $markerFile ) ? realpath( dirname( $markerFile ) ) : false;
@@ -268,7 +268,7 @@ add_action(
 	},
 	PHP_INT_MAX
 );
-/** @return array{identity:string,offer:array<string,mixed>,adapter:MixedBulkFixtureAdapter,updater:NativePluginUpdater} */
+/** @return array{identity:string,offer:array<string,mixed>,adapter:MixedBulkFixtureAdapter,updater:NativePackageUpdater} */
 function build_mixed_bulk_target( string $type, string $slug, string $name, string $archive ): array {
 	global $wpdb;
 	$identity           = 'plugin' === $type ? $slug . '/' . $slug . '.php' : $slug;
@@ -333,7 +333,7 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 		'UpdateURI'   => $uri,
 		'Version'     => '1.0.0',
 	);
-	$updater            = NativePluginUpdater::fromConfiguration(
+	$updater            = NativePackageUpdater::fromConfiguration(
 		array(
 			'headers'                    => $headers,
 			'installed_package_identity' => $identity,
@@ -362,7 +362,7 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 			'wordpress_runtime_version'  => '6.8',
 		)
 	);
-	if ( ! $updater instanceof NativePluginUpdater ) {
+	if ( ! $updater instanceof NativePackageUpdater ) {
 		throw new RuntimeException( 'The managed mixed-bulk target could not be constructed.' );
 	}
 	$updater->register();
