@@ -42,7 +42,11 @@ function is_wp_error( mixed $value ): bool {
 	return $value instanceof WP_Error; }
 function wp_http_validate_url( string $url ): string {
 	return $url; }
-define( 'FS_METHOD', 'direct' );
+final class WP_Filesystem_Direct {}
+function WP_Filesystem(): bool {
+	$GLOBALS['wp_filesystem'] = new WP_Filesystem_Direct();
+	return true;
+}
 function add_action( string $hook, callable $callback, int $priority = 10, int $arguments = 1 ): void {
 	$GLOBALS['rs_hooks'][] = compact( 'hook', 'callback', 'priority' ); }
 function add_filter( string $hook, callable $callback, int $priority = 10, int $arguments = 1 ): void {
@@ -188,6 +192,9 @@ $before = $source->list();
 rs_assert( 'runtime_not_ready' === $before['code'], 'Source did not fail before readiness.' );
 rs_activate();
 rs_assert( 1 === count( $GLOBALS['rs_hooks'] ) && 'after_setup_theme' === $GLOBALS['rs_hooks'][0]['hook'], 'Release source added hooks during activation.' );
+if ( 'fence-list' !== $scenario ) {
+	rs_assert( WP_Filesystem() && $GLOBALS['wp_filesystem'] instanceof WP_Filesystem_Direct, 'Fixture could not initialize direct filesystem state.' );
+}
 $fence = $argv[3] ?? null;
 if ( str_starts_with( $scenario, 'fence-' ) ) {
 	rs_assert( is_string( $fence ) && '' !== $fence && false !== base64_decode( $fence, true ), 'Fence source is required.' );

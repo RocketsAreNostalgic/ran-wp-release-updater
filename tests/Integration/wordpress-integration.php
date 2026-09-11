@@ -478,7 +478,7 @@ function verifyRuntime( string $source ): array {
 function copyRuntime( string $source, string $destination ): void {
 	global $runtime;
 	makeDirectory( $destination );
-	foreach ( array_merge( runtimeFiles( $source ), array( 'LICENSE', 'NOTICE.md', 'composer.json', 'runtime-copy.json' ) ) as $file ) {
+	foreach ( array_merge( runtimeFiles( $source ), array( 'LICENSE', 'composer.json', 'runtime-copy.json' ) ) as $file ) {
 		$target = $destination . '/' . $file;
 		if ( ! is_dir( dirname( $target ) ) ) {
 			makeDirectory( dirname( $target ) );

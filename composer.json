@@ -15,9 +15,6 @@
     "ext-json": "*",
     "ext-zip": "*"
   },
-  "conflict": {
-    "ran/wp-github-release-updater": "*"
-  },
   "require-dev": {
     "dealerdirect/phpcodesniffer-composer-installer": "^1.2.1",
     "phpcompatibility/php-compatibility": "^10.0@dev",
@@ -52,10 +49,6 @@
       "@test:unit",
       "@test:no-dev-consumer"
     ],
-    "check:parity": [
-      "@check",
-      "@test:parity"
-    ],
     "check:php-style": "@lint:php",
     "analyze": "phpstan analyse --configuration=phpstan.neon --no-progress --memory-limit=1G",
     "audit:composer": "composer audit --locked --no-interaction",
@@ -64,7 +57,6 @@
     "lint:syntax": "php scripts/lint-php.php",
     "test:unit": "phpunit --configuration phpunit.xml --fail-on-deprecation --fail-on-phpunit-deprecation",
     "test:no-dev-consumer": "php tests/Integration/no-dev-consumer.php",
-    "test:parity": "php tests/Integration/paired-github-provider-proof.php",
     "test:wordpress-integration": "@php tests/Integration/wordpress-integration.php",
     "test:wordpress-bulk": "php tests/Integration/wordpress-native-mixed-bulk-proof.php",
     "test:release-publisher": "node --test tests/release-publisher.test.mjs",

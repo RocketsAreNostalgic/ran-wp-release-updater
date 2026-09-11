@@ -16,12 +16,10 @@ final class ReadmeExamplesTest extends TestCase {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.5/php-tmp/readme-examples-' . bin2hex( random_bytes( 6 ) );
 		mkdir( $this->root . '/plugins/example-plugin/vendor/ran', 0700, true );
 		mkdir( $this->root . '/themes/example-theme/vendor/ran', 0700, true );
-		mkdir( $this->root . '/themes/managed-theme', 0700, true );
 		symlink( dirname( __DIR__, 2 ), $this->root . '/plugins/example-plugin/vendor/ran/wp-release-updater' );
 		symlink( dirname( __DIR__, 2 ), $this->root . '/themes/example-theme/vendor/ran/wp-release-updater' );
 		file_put_contents( $this->root . '/plugins/example-plugin/example-plugin.php', "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.2.3\nRequires at least: 6.5\nRequires PHP: 8.2\nUpdate URI: https://github.com/acme/example-plugin\n*/\n" );
 		file_put_contents( $this->root . '/themes/example-theme/style.css', "/*\nTheme Name: Example Theme\nVersion: 1.2.3\nRequires at least: 6.5\nRequires PHP: 8.2\nUpdate URI: https://github.com/acme/example-theme\n*/\n" );
-		file_put_contents( $this->root . '/themes/managed-theme/style.css', "/*\nTheme Name: Managed Theme\nVersion: 1.2.3\nRequires at least: 6.5\nRequires PHP: 8.2\nUpdate URI: https://github.com/acme/managed-theme\n*/\n" );
 	}
 
 	protected function tearDown(): void {
@@ -36,41 +34,62 @@ final class ReadmeExamplesTest extends TestCase {
 		rmdir( $this->root );
 	}
 
-	public function testEveryReadmePhpFenceIsSyntaxValidAndItsRegistrationContractExecutes(): void {
+	public function testPublicDocumentationPhpExamplesExecute(): void {
 		$examples = $this->phpExamples();
-		self::assertCount( 8, $examples, 'Update this proof when adding, removing, or materially changing a README PHP example.' );
+		self::assertCount( 5, $examples, 'Update this proof when materially changing the README public examples.' );
 		self::assertStringContainsString( 'Plugin Name: Example Plugin', $examples[0] );
 		self::assertStringContainsString( '$registrar->plugin(', $examples[1] );
 		self::assertStringContainsString( '$releaseUpdater->diagnostics()', $examples[2] );
 		self::assertStringContainsString( 'EXAMPLE_PLUGIN_GITHUB_TOKEN', $examples[3] );
-		self::assertStringContainsString( '$registrar->theme(', $examples[6] );
-		self::assertStringContainsString( 'get_theme_root( $stylesheet )', $examples[7] );
+		self::assertStringContainsString( '$registrar->releases(', $examples[4] );
+		self::assertStringContainsString( 'instanceof \\WP_Filesystem_Direct', $examples[4] );
 
 		$this->assertScript( 'header.php', $examples[0], 'echo json_encode(["header" => true]);', array( 'header' => true ) );
 		$this->assertPlugin( $examples[1], false );
 		$this->assertStatusMethods( $examples[1], $examples[2] );
 		$this->assertPlugin( $examples[3], true );
-		$this->assertTheme( $examples[6] );
-		$this->assertManagedTheme( $examples[7] );
-		self::assertStringContainsString( '$registrar->releases(', $examples[4] );
-		self::assertStringContainsString( '$registrar->releases(', $examples[5] );
 		$this->assertReleaseSourceFence( 'plugin', 'fence-list', $examples[4] );
-		$this->assertReleaseSourceFence( 'theme', 'fence-inspect', $examples[5] );
+
+		$integration = $this->phpFences( dirname( __DIR__, 2 ) . '/docs/integration.md' );
+		self::assertCount( 4, $integration, 'Integration guide examples changed without updating their executable proof.' );
+		self::assertStringContainsString( '$registrar->plugin(', $integration[0] );
+		self::assertStringContainsString( '$registrar->theme(', $integration[1] );
+		self::assertStringContainsString( 'EXAMPLE_PLUGIN_GITHUB_TOKEN', $integration[2] );
+		self::assertStringContainsString( '$releaseUpdater->status()', $integration[3] );
+		$this->assertPlugin( $integration[0], false );
+		$this->assertTheme( $integration[1] );
+		$this->assertPlugin( $integration[2], true );
+		$this->assertStatusMethods( $integration[0], $integration[3] );
 	}
 
-	public function testPublicGuidesStayForwardLookingAndLinkTheProviderArchitecture(): void {
-		$readme               = file_get_contents( dirname( __DIR__, 2 ) . '/README.md' );
-		$contributing         = file_get_contents( dirname( __DIR__, 2 ) . '/CONTRIBUTING.md' );
-		$providerArchitecture = file_get_contents( dirname( __DIR__, 2 ) . '/docs/provider-architecture.md' );
+	public function testPublicGuidesStayForwardLookingAndLinkTheDurableDocumentationSet(): void {
+		$root         = dirname( __DIR__, 2 );
+		$readme       = file_get_contents( $root . '/README.md' );
+		$contributing = file_get_contents( $root . '/CONTRIBUTING.md' );
+		$guides       = array(
+			'architecture'    => file_get_contents( $root . '/docs/architecture.md' ),
+			'integration'     => file_get_contents( $root . '/docs/integration.md' ),
+			'release-sources' => file_get_contents( $root . '/docs/release-sources.md' ),
+			'testing'         => file_get_contents( $root . '/docs/testing.md' ),
+		);
 		self::assertIsString( $readme );
 		self::assertIsString( $contributing );
-		self::assertIsString( $providerArchitecture );
+		foreach ( $guides as $guide ) {
+			self::assertIsString( $guide );
+		}
 		self::assertDoesNotMatchRegularExpression( '/\\bProtocol\\s+\\d+\\b|ran\\/wp-github-release-updater|\\blegacy\\b/i', $readme );
 		self::assertDoesNotMatchRegularExpression( '/ran\\/wp-github-release-updater|\\blegacy\\b|adjacent worktree/i', $contributing );
-		self::assertDoesNotMatchRegularExpression( '/\\bProtocol\\s+\\d+\\b|ran\\/wp-github-release-updater|\\blegacy\\b/i', $providerArchitecture );
-		self::assertStringContainsString( '[Provider architecture](docs/provider-architecture.md)', $readme );
-		self::assertFileExists( dirname( __DIR__, 2 ) . '/docs/provider-architecture.md' );
-		$registrar = require dirname( __DIR__, 2 ) . '/bootstrap.php';
+		foreach ( $guides as $guide ) {
+			self::assertDoesNotMatchRegularExpression( '/\\bProtocol\\s+\\d+\\b|ran\\/wp-github-release-updater|adjacent worktree/i', $guide );
+		}
+		foreach ( array( 'integration', 'release-sources', 'architecture', 'testing' ) as $name ) {
+			self::assertStringContainsString( 'docs/' . $name . '.md', $readme );
+			self::assertFileExists( $root . '/docs/' . $name . '.md' );
+		}
+		foreach ( array( 'provider-architecture.md', 'release-management.md', 'runtime-compatibility.md', 'wordpress-integration.md', 'updater-family-architecture.md' ) as $obsolete ) {
+			self::assertFileDoesNotExist( $root . '/docs/' . $obsolete );
+		}
+		$registrar = require $root . '/bootstrap.php';
 		foreach ( array( 'plugin', 'theme' ) as $method ) {
 			$parameter = ( new \ReflectionMethod( $registrar, $method ) )->getParameters()[7];
 			self::assertSame( 'maximumArtifactBytes', $parameter->getName(), $method );
@@ -78,7 +97,7 @@ final class ReadmeExamplesTest extends TestCase {
 			self::assertSame( 52_428_800, $parameter->getDefaultValue(), $method );
 		}
 		self::assertStringContainsString( 'maximumArtifactBytes', $readme );
-		self::assertStringContainsString( '52,428,800-byte', $readme );
+		self::assertStringContainsString( '52,428,800 bytes', $readme );
 	}
 
 	public function testReleaseSourceExamplesExecuteThroughThePublicBootstrap(): void {
@@ -119,11 +138,18 @@ final class ReadmeExamplesTest extends TestCase {
 		}
 	}
 
-	public function testReleaseManagementAcquisitionFenceExecutesAgainstThePublicSource(): void {
-		$fences = $this->phpFences( dirname( __DIR__, 2 ) . '/docs/release-management.md' );
-		self::assertCount( 1, $fences );
-		self::assertStringContainsString( '$source->acquire(', $fences[0] );
-		$this->assertReleaseSourceFence( 'plugin', 'fence-acquire', $fences[0] );
+	public function testReleaseSourceAcquisitionGuideExecutesAgainstThePublicSource(): void {
+		$fences  = $this->phpFences( dirname( __DIR__, 2 ) . '/docs/release-sources.md' );
+		$matches = array_values(
+			array_filter(
+				$fences,
+				static fn( string $fence ): bool => str_contains( $fence, '$source->acquire(' )
+			)
+		);
+		self::assertCount( 1, $matches, 'The release-source guide must have one executable acquisition example.' );
+		self::assertStringContainsString( 'new \\RuntimeException', $matches[0] );
+		self::assertStringContainsString( 'catch (\\Throwable', $matches[0] );
+		$this->assertReleaseSourceFence( 'plugin', 'fence-acquire', $matches[0] );
 	}
 
 	public function testReleaseFenceCannotPassWhenItsCallbackDoesNoOperation(): void {
@@ -173,12 +199,16 @@ final class ReadmeExamplesTest extends TestCase {
 
 	private function assertPlugin( string $example, bool $private ): void {
 		if ( $private ) {
-			$example = str_replace(
-				"static fn (): ?string => getenv( 'EXAMPLE_PLUGIN_GITHUB_TOKEN' ) ?: null",
+			$needle           = "static fn (): ?string => getenv('EXAMPLE_PLUGIN_GITHUB_TOKEN') ?: null";
+			$replacementCount = 0;
+			$instrumented     = str_replace(
+				$needle,
 				'static function (): ?string { ++$GLOBALS[\'readme_credential_calls\']; return \'secret\'; }',
-				$example
+				$example,
+				$replacementCount
 			);
-			$example = '$registrar = require __DIR__ . \'/vendor/ran/wp-release-updater/bootstrap.php\';' . "\n\n" . $example;
+			self::assertSame( 1, $replacementCount, 'Credential example instrumentation must match exactly once.' );
+			$example = '$registrar = require __DIR__ . \'/vendor/ran/wp-release-updater/bootstrap.php\';' . "\n\n" . $instrumented;
 		}
 		$body   = $this->pluginHeader() . "\n" . $example . "\n"
 			. '$before=readmeSnapshot($registrar);$status=$releaseUpdater->status();$diagnostics=$releaseUpdater->diagnostics();$refresh=$releaseUpdater->refresh();'
@@ -212,16 +242,6 @@ final class ReadmeExamplesTest extends TestCase {
 		$this->assertActivationOrdering( $result, 'plugin', 'example-plugin.php', 'acme/example-plugin' );
 	}
 
-	private function assertManagedTheme( string $example ): void {
-		$bootstrap = var_export( $this->root . '/plugins/example-plugin/vendor/ran/wp-release-updater/bootstrap.php', true );
-		$body      = '$registrar=require ' . $bootstrap . ';' . "\n" . $example . "\n"
-			. '$before=readmeSnapshot($registrar);runAfterSetupTheme();echo json_encode(["before"=>$before,"registered"=>$managedThemeUpdater->register(),"status"=>$managedThemeUpdater->status(),"diagnostics"=>$managedThemeUpdater->diagnostics()]);';
-		$result    = $this->executeExample( 'managed-theme.php', $body, $this->root . '/plugins/example-plugin' );
-		self::assertTrue( $result['registered'] );
-		self::assertSame( 'target_active', $result['status']['code'] );
-		self::assertSame( 'active', $result['diagnostics']['state'] );
-		$this->assertActivationOrdering( $result, 'theme', 'managed-theme/style.css', 'acme/managed-theme' );
-	}
 
 	/** @param array<string,mixed> $expected */
 	private function assertScript( string $name, string $example, string $tail, array $expected ): void {

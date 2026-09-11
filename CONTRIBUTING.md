@@ -21,7 +21,8 @@ The installed WordPress integration suite is separate from `composer check`.
 It verifies installed-distribution operation and that main-site and subsite
 discovery share one operation fence. It has no Booster checkout or live
 site/provider dependency; unavailable prerequisites and failed scenarios are
-failures, never silent skips. See [the integration setup](docs/wordpress-integration.md).
+failures, never silent skips. See [Testing and verification](docs/testing.md)
+for the maintained matrix, local prerequisites, and the limits of those proofs.
 
 Changes to provider protocols, archive custody, WordPress lifecycle hooks,
 release automation, package identity, or compatibility boundaries need focused
