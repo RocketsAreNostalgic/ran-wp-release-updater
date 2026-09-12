@@ -38,13 +38,22 @@ final class ReleaseSourceContractDocumentationTest extends TestCase {
 			$integration
 		);
 		self::assertStringContainsString(
-			'storage/CAS/database-time failures',
+			'competing ownership and storage/CAS/database-time failures',
 			$integration
 		);
 
-		foreach ( array( '`channel`', '`credentials`', '`maximumArtifactBytes`' ) as $argument ) {
-			self::assertStringContainsString( $argument, $releaseSources );
-		}
+		self::assertStringContainsString(
+			'`channel` accepts `stable` or `prerelease` and defaults to `stable`',
+			$releaseSources
+		);
+		self::assertStringContainsString(
+			'`credentials` is an optional request-local callable returning a token string or `null` and defaults to anonymous access',
+			$releaseSources
+		);
+		self::assertStringContainsString(
+			'`maximumArtifactBytes` is a positive compressed-ZIP byte ceiling and defaults to 52,428,800 bytes',
+			$releaseSources
+		);
 		self::assertStringContainsString(
 			'`release_identity` and `tag`',
 			$releaseSources
@@ -55,6 +64,10 @@ final class ReleaseSourceContractDocumentationTest extends TestCase {
 		);
 		self::assertStringContainsString(
 			'downloads and validates the full ZIP',
+			$releaseSources
+		);
+		self::assertStringContainsString(
+			'discards those inspection bytes synchronously',
 			$releaseSources
 		);
 		self::assertStringContainsString(
