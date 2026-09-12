@@ -15,13 +15,12 @@ permissions:
 
 jobs:
   baseline:
-    uses: RocketsAreNostalgic/.github/.github/workflows/quality-php-library-v2.yml@d62beee5d27bd086317cea2446081144fedb5938
+    uses: RocketsAreNostalgic/.github/.github/workflows/quality-php-library-v2.yml@b54fd661e66264d4ead1028144c24ce6b085e82f
     with:
       php-floor: '8.2'
       php-current: '8.5'
       php-extensions: zip, mysqli
       node-version: '24.11.0'
-      runner: blacksmith-2vcpu-ubuntu-2404
 
   javascript:
     name: JavaScript quality
@@ -170,7 +169,7 @@ jobs:
           printf 'sys_temp_dir = "%s"\n' "$php_tmp" > "$php_ini/99-ran-updater-integration.ini"
           php_scan_dir="$(php --ini | sed -n 's/^Scan for additional .ini files in: //p')"
           export PHP_INI_SCAN_DIR="$php_ini:$php_scan_dir"
-          export WP_CLI_CACHE_DIR="$wp_cache"
+          export WP_CLI_CACHE_DIR="$wp_cache" # Download-only; the suite creates and removes its own per-run cache.
           export TMPDIR="$php_tmp" TMP="$php_tmp" TEMP="$php_tmp"
 
           cp "$system_mysqld" "$mysqld_binary"
