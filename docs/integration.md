@@ -135,7 +135,7 @@ Do not include credentials, query strings, fragments, release paths, or a traili
 A usable release must satisfy all of the following:
 
 - it is a non-draft GitHub Release;
-- its tag uses the supported three-part SemVer subset: `vMAJOR.MINOR.PATCH`, optionally with a prerelease suffix such as `v1.2.3-beta.1`; build metadata (`+...`) is not supported;
+- its tag uses the supported three-part SemVer subset in either `MAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH` form, optionally with the same prerelease suffix subset such as `1.2.3-beta.1` or `v1.2.3-beta.1`; build metadata (`+...`) is not supported;
 - stable-channel releases are not marked prerelease and do not use a prerelease SemVer suffix;
 - it contains exactly one fully uploaded `.zip` release asset;
 - GitHub exposes a `sha256:` digest for that uploaded asset;
@@ -209,7 +209,7 @@ Important native failure codes include:
 | Code | Meaning |
 | --- | --- |
 | `runtime_package_identity_invalid` | Installed package/version/Update URI no longer matches the admitted target |
-| `binding_fence_lost` | Another valid operation owns or replaced the persistent target fence |
+| `binding_fence_lost` | The updater could not establish, retain, or verify the persistent target fence; this includes competing ownership and storage/CAS/database-time failures that make fence authority unprovable |
 | `acquisition_failed` | The provider release/archive could not be freshly inspected or acquired |
 | `remote_release_changed` | The release no longer matches the exact release previously offered |
 | `acquisition_identity_invalid` | Acquired bytes failed the expected archive/provider identity checks |

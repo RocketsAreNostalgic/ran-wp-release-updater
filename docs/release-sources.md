@@ -37,6 +37,8 @@ add_action('init', static function () use ($source): void {
 
 The source adds no native update hooks, does not schedule retries, and never installs the acquired archive.
 
+The optional `releases()` arguments are the same release-read policies used by native targets, without an update policy: `channel` accepts `stable` or `prerelease` and defaults to `stable`; `credentials` is an optional request-local callable returning a token string or `null` and defaults to anonymous access; `maximumArtifactBytes` is a positive compressed-ZIP byte ceiling and defaults to 52,428,800 bytes.
+
 Release-source operations require WordPress's `direct` filesystem implementation. On a normal request where `FS_METHOD` is not explicitly configured, initialize the WordPress Filesystem API before the operation as shown above and continue only when `$GLOBALS['wp_filesystem']` is a `WP_Filesystem_Direct`. If the host resolves to FTP/SSH or initialization fails, do not force `FS_METHOD` from plugin code; the source returns `filesystem_unsupported` and does not prompt for filesystem credentials or perform provider work. A site that explicitly configures `FS_METHOD` as `direct` already satisfies the source's direct-method gate.
 
 ## Result envelope
@@ -60,6 +62,10 @@ A failure has `value: null`. Only rate-limited results carry a non-null retry de
 | `list($conditional = array())` | `releases_listed` or `releases_not_modified` | Lists bounded candidate metadata, optionally using caller-supplied conditional metadata |
 | `inspect($releaseId, $expectedTag)` | `release_inspected` | Freshly verifies the selected provider release and returns an opaque fingerprint plus release facts |
 | `acquire($releaseId, $expectedTag, $expectedFingerprint)` | `release_acquired` | Re-inspects the release, requires the same fingerprint, and returns a controlled temporary artifact |
+
+The public value path is deliberate. `list()` returns candidate entries carrying the provider `release_identity` and `tag` that identify the release to inspect. Pass those values to `inspect()`. A successful inspection returns the opaque `fingerprint` for that exact inspected release; pass the same release identity/tag together with that fingerprint to `acquire()`.
+
+`inspect()` is not a metadata-only call: it downloads and validates the full ZIP, then discards those inspection bytes synchronously before returning. A later `acquire()` performs a fresh download and validation rather than reusing the inspection ZIP. Callers should therefore budget one full ZIP transfer for inspection and another for acquisition.
 
 The fingerprint is opaque. Store and replay it unchanged; do not parse it or build your own equivalent token.
 
@@ -87,7 +93,6 @@ Provider-specific HTTP details are intentionally mapped into these neutral codes
 ## Conditional listing and caller-owned cache
 
 A caller may retain the conditional metadata returned by `list()` in application-owned storage and pass it to a later listing. A successful conditional `304` appears as `releases_not_modified` and creates no new candidate work.
-
 A caller may also retain an inspection fingerprint alongside the exact release facts it selected. Scope retained data to the provider, repository identity, package type and other facts that make that selection meaningful. Do not reuse it for another repository/target merely because a tag or version is the same.
 
 The library itself keeps source credentials request-local. It does not provide an application persistence layer or retry scheduler.
