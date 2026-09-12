@@ -2,7 +2,7 @@
 <ruleset name="RAN WP Release Updater Coding Standards">
 	<description>WordPress, PHP compatibility, and project coding standards for the release updater.</description>
 
-	<config name="minimum_supported_wp_version" value="6.5"/>
+	<config name="minimum_wp_version" value="6.5"/>
 	<config name="testVersion" value="8.2-"/>
 
 	<file>.</file>
