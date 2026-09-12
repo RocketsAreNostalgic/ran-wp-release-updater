@@ -27,6 +27,36 @@ final class ReleaseWorkflowContractTest extends TestCase {
 		self::assertSame( '$.package_version', $config['packages']['.']['extra-files'][0]['jsonpath'] );
 	}
 
+	public function testQualityFanInRequiresEveryVerificationLane(): void {
+		$ci = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/ci.yml' );
+
+		$required_needs = <<<'YAML'
+  quality:
+    if: ${{ always() }}
+    needs:
+      - baseline
+      - javascript
+      - mysql-cas
+      - windows-portability
+      - wordpress-installed-integration
+YAML;
+
+		self::assertStringContainsString( $required_needs, $ci );
+
+		foreach (
+			array(
+				'BASELINE_RESULT: ${{ needs.baseline.result }}' => 'test "$BASELINE_RESULT" = success',
+				'JAVASCRIPT_RESULT: ${{ needs.javascript.result }}' => 'test "$JAVASCRIPT_RESULT" = success',
+				'MYSQL_CAS_RESULT: ${{ needs.mysql-cas.result }}' => 'test "$MYSQL_CAS_RESULT" = success',
+				'WINDOWS_RESULT: ${{ needs.windows-portability.result }}' => 'test "$WINDOWS_RESULT" = success',
+				'WORDPRESS_RESULT: ${{ needs.wordpress-installed-integration.result }}' => 'test "$WORDPRESS_RESULT" = success',
+			) as $result_binding => $success_guard
+		) {
+			self::assertStringContainsString( $result_binding, $ci );
+			self::assertStringContainsString( $success_guard, $ci );
+		}
+	}
+
 	public function testBootstrapAndArchiveContractsRemainReleaseSafe(): void {
 		$config     = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/release-please-config.json' ), true, 512, JSON_THROW_ON_ERROR );
 		$manifest   = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/.release-please-manifest.json' ), true, 512, JSON_THROW_ON_ERROR );
