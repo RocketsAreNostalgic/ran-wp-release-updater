@@ -11,20 +11,28 @@ final class ReleaseSourceContractDocumentationTest extends TestCase {
 
 	public function testIssue44PublicContractClarificationsRemainDocumented(): void {
 		$root           = dirname( __DIR__, 2 );
+		$readme         = file_get_contents( $root . '/README.md' );
 		$integration    = file_get_contents( $root . '/docs/integration.md' );
 		$releaseSources = file_get_contents( $root . '/docs/release-sources.md' );
 
+		self::assertIsString( $readme );
 		self::assertIsString( $integration );
 		self::assertIsString( $releaseSources );
 
-		self::assertStringContainsString(
-			'`MAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH`',
-			$integration
-		);
-		self::assertStringContainsString(
-			'build metadata (`+...`) is not supported',
-			$integration
-		);
+		foreach ( array( $readme, $integration ) as $releaseGuide ) {
+			self::assertStringContainsString(
+				'`MAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH` form',
+				$releaseGuide
+			);
+			self::assertStringContainsString(
+				'prerelease suffix subset such as `1.2.3-beta.1` or `v1.2.3-beta.1`',
+				$releaseGuide
+			);
+			self::assertStringContainsString(
+				'build metadata (`+...`) is not supported',
+				$releaseGuide
+			);
+		}
 		self::assertStringContainsString(
 			'could not establish, retain, or verify the persistent target fence',
 			$integration
