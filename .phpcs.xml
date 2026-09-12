@@ -2,7 +2,7 @@
 <ruleset name="RAN WP Release Updater Coding Standards">
 	<description>WordPress, PHP compatibility, and project coding standards for the release updater.</description>
 
-	<config name="minimum_supported_wp_version" value="6.5"/>
+	<config name="minimum_wp_version" value="6.5"/>
 	<config name="testVersion" value="8.2-"/>
 
 	<file>.</file>
@@ -22,16 +22,18 @@
 	<arg name="parallel" value="4"/>
 	<arg value="sp"/>
 
-	<rule ref="PHPCompatibilityWP"/>
-	<rule ref="WordPress-Extra">
-		<!-- Classes are PSR-style runtime symbols and retain class-case filenames. -->
-		<exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
-		<exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
-		<!-- Public and internal OOP APIs intentionally use camelCase. -->
-		<exclude name="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid"/>
-		<exclude name="WordPress.NamingConventions.ValidVariableName"/>
-		<!-- Yoda rewrites would create broad semantic diffs without improving this sealed runtime. -->
-		<exclude name="WordPress.PHP.YodaConditions"/>
+	<rule ref="RANWordPressLibrary"/>
+
+	<!-- Public and internal OOP APIs intentionally retain their established camelCase contract. -->
+	<rule ref="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid">
+		<severity>0</severity>
+	</rule>
+	<rule ref="WordPress.NamingConventions.ValidVariableName">
+		<severity>0</severity>
+	</rule>
+	<!-- Yoda rewrites would create broad semantic diffs without improving this sealed runtime. -->
+	<rule ref="WordPress.PHP.YodaConditions">
+		<severity>0</severity>
 	</rule>
 
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
@@ -40,14 +42,9 @@
 		<properties>
 			<property name="prefixes" type="array">
 				<element value="ran_wp_release_updater"/>
-				<element value="RAN\"/>
+				<element value="RAN\WPReleaseUpdater\V1\"/>
 			</property>
 		</properties>
-	</rule>
-
-	<!-- WPCS hard-codes a four-character minimum; the project namespace is RAN. -->
-	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound">
-		<severity>0</severity>
 	</rule>
 
 	<!-- WordPress hooks and compatibility contracts retain required parameter names. -->
