@@ -23,12 +23,17 @@
 	<arg value="sp"/>
 
 	<rule ref="RANWordPressLibrary"/>
-	<rule ref="WordPress-Extra">
-		<!-- Public and internal OOP APIs intentionally use camelCase. -->
-		<exclude name="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid"/>
-		<exclude name="WordPress.NamingConventions.ValidVariableName"/>
-		<!-- Yoda rewrites would create broad semantic diffs without improving this sealed runtime. -->
-		<exclude name="WordPress.PHP.YodaConditions"/>
+
+	<!-- Public and internal OOP APIs intentionally retain their established camelCase contract. -->
+	<rule ref="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid">
+		<severity>0</severity>
+	</rule>
+	<rule ref="WordPress.NamingConventions.ValidVariableName">
+		<severity>0</severity>
+	</rule>
+	<!-- Yoda rewrites would create broad semantic diffs without improving this sealed runtime. -->
+	<rule ref="WordPress.PHP.YodaConditions">
+		<severity>0</severity>
 	</rule>
 
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
