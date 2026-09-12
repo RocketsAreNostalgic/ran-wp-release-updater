@@ -22,11 +22,8 @@
 	<arg name="parallel" value="4"/>
 	<arg value="sp"/>
 
-	<rule ref="PHPCompatibilityWP"/>
+	<rule ref="RANWordPressLibrary"/>
 	<rule ref="WordPress-Extra">
-		<!-- Classes are PSR-style runtime symbols and retain class-case filenames. -->
-		<exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
-		<exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
 		<!-- Public and internal OOP APIs intentionally use camelCase. -->
 		<exclude name="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid"/>
 		<exclude name="WordPress.NamingConventions.ValidVariableName"/>
