@@ -1,0 +1,49 @@
+name: Updater support sync evidence
+
+on:
+  push:
+    branches: [deps/pin-updater-support-beta2]
+    paths:
+      - .github/workflows/refresh-updater-support-evidence.yml
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact branch revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP floor and Composer
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: zip
+          tools: composer:v2
+
+      - name: Resolve the published updater-support prerelease
+        run: composer update ran/updater-support --with-dependencies --no-interaction --prefer-dist --no-progress --no-scripts --no-plugins
+
+      - name: Refresh the generated runtime copy
+        run: php scripts/sync-updater-support.php
+
+      - name: Verify exact resolved version, source, and generated copy
+        run: |
+          php -r '$lock=json_decode(file_get_contents("composer.lock"), true, 512, JSON_THROW_ON_ERROR); $all=array_merge($lock["packages"],$lock["packages-dev"]); $p=array_values(array_filter($all, fn($p)=>$p["name"]==="ran/updater-support")); if(count($p)!==1 || $p[0]["version"]!=="0.1.0-beta.2" || $p[0]["source"]["reference"]!=="83384bb6f4652d8988374867f4103fde63878451") { fwrite(STDERR, "Unexpected updater-support resolution\n"); exit(1); }'
+          php scripts/sync-updater-support.php --check
+          composer validate --strict --no-check-publish
+
+      - name: Upload generated dependency evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-updater-support-sync
+          path: |
+            composer.lock
+            src/Dependency/ArchiveSafety.php
+          if-no-files-found: error
