@@ -51,7 +51,7 @@ final class ArchiveSafety {
 			if ( ! in_array( $type, array( 0, 0040000, 0100000 ), true ) ) {
 				return 'entry_type_unsupported';
 			}
-			return 0 === $type || $directory === ( 0040000 === $type ) ? null : 'entry_metadata_invalid';
+			return 0 === $type || ( 0040000 === $type ) === $directory ? null : 'entry_metadata_invalid';
 		}
 		if ( 0 !== $originOs ) {
 			return 'entry_type_unsupported';
@@ -60,7 +60,7 @@ final class ArchiveSafety {
 		if ( 0 !== ( $flags & 0x08 ) ) {
 			return 'entry_type_unsupported';
 		}
-		return 0 === $flags || $directory === ( 0 !== ( $flags & 0x10 ) ) ? null : 'entry_metadata_invalid';
+		return 0 === $flags || ( 0 !== ( $flags & 0x10 ) ) === $directory ? null : 'entry_metadata_invalid';
 	}
 
 	/** @param list<array{path:string,directory:bool}> $entries */
