@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5f2fd4190e878f377f89a8d6885a4fb7",
+    "content-hash": "7824341e35808f6b1d4b1439ed7ad2df",
     "packages": [],
     "packages-dev": [
         {
@@ -1354,22 +1354,28 @@
         },
         {
             "name": "ran/updater-support",
-            "version": "dev-main",
+            "version": "v0.1.0-beta.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/RocketsAreNostalgic/ran-updater-support.git",
-                "reference": "98d3677334c62e27e206f3b7cd2f2e715ea30f1c"
+                "reference": "83384bb6f4652d8988374867f4103fde63878451"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RocketsAreNostalgic/ran-updater-support/zipball/98d3677334c62e27e206f3b7cd2f2e715ea30f1c",
-                "reference": "98d3677334c62e27e206f3b7cd2f2e715ea30f1c",
+                "url": "https://api.github.com/repos/RocketsAreNostalgic/ran-updater-support/zipball/83384bb6f4652d8988374867f4103fde63878451",
+                "reference": "83384bb6f4652d8988374867f4103fde63878451",
                 "shasum": ""
             },
             "require": {
                 "php": "^8.2"
             },
-            "default-branch": true,
+            "require-dev": {
+                "phpcompatibility/php-compatibility": "10.0.0-alpha2",
+                "phpcompatibility/phpcompatibility-paragonie": "2.0.0-alpha2",
+                "phpcompatibility/phpcompatibility-wp": "3.0.0-alpha2",
+                "phpstan/phpstan": "^2.1",
+                "ran/coding-standards": "dev-main"
+            },
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -1379,9 +1385,11 @@
             "scripts": {
                 "check": [
                     "@validate:strict",
+                    "@lint:php",
+                    "@standards",
+                    "@analyze",
                     "@test:contract",
-                    "@test:release-publisher",
-                    "@lint:php"
+                    "@test:release-publisher"
                 ],
                 "validate:strict": [
                     "composer validate --strict --no-check-publish"
@@ -1392,8 +1400,17 @@
                 "lint:php": [
                     "find src tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l"
                 ],
+                "standards": [
+                    "phpcs --standard=.phpcs.xml"
+                ],
+                "standards:fix": [
+                    "phpcbf --standard=.phpcs.xml --report=summary"
+                ],
+                "analyze": [
+                    "phpstan analyse --configuration=phpstan.neon --no-progress --memory-limit=512M"
+                ],
                 "test:release-publisher": [
-                    "node --test tests/release-publisher.test.mjs tests/release-publisher-decision.test.mjs"
+                    "node --test tests/release-publisher.test.mjs tests/release-publisher-decision.test.mjs tests/release-publisher-recovery-retirement.test.mjs"
                 ]
             },
             "license": [
@@ -1405,7 +1422,7 @@
                 "security": "https://github.com/RocketsAreNostalgic/ran-updater-support/security/advisories/new",
                 "source": "https://github.com/RocketsAreNostalgic/ran-updater-support"
             },
-            "time": "2026-09-08T22:08:59+00:00"
+            "time": "2026-09-14T16:25:11+00:00"
         },
         {
             "name": "sebastian/cli-parser",
@@ -2711,7 +2728,7 @@
         "phpcompatibility/phpcompatibility-paragonie": 15,
         "phpcompatibility/phpcompatibility-wp": 15,
         "ran/coding-standards": 20,
-        "ran/updater-support": 20
+        "ran/updater-support": 10
     },
     "prefer-stable": false,
     "prefer-lowest": false,
