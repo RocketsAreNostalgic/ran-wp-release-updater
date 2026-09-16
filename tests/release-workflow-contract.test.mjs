@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const workflow = readFileSync(
 	new URL('../.github/workflows/release-please.yml', import.meta.url),
-	'utf8'
+	'utf8',
 );
 
 test('release job requires the canonical CI workflow path', () => {
