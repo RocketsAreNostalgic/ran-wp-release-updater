@@ -60,7 +60,7 @@
     "test:no-dev-consumer": "php tests/Integration/no-dev-consumer.php",
     "test:wordpress-integration": "@php tests/Integration/wordpress-integration.php",
     "test:wordpress-bulk": "php tests/Integration/wordpress-native-mixed-bulk-proof.php",
-    "test:release-publisher": "node --test tests/release-publisher.test.mjs",
+    "test:release-publisher": "node --test tests/release-workflow-contract.test.mjs tests/release-publisher.test.mjs",
     "validate:strict": "composer validate --strict --no-check-publish",
     "sync:updater-support": "php scripts/sync-updater-support.php",
     "check:updater-support": "php scripts/sync-updater-support.php --check"
