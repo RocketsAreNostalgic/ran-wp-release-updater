@@ -24,6 +24,11 @@ test('release job requires the canonical CI workflow path', () => {
 	assert.ok(allLinesActive);
 
 	const condition = conditionLines.map((line) => line.trim()).join(' ');
+	const terms = condition
+		.replace('${{', '')
+		.replace('}}', '')
+		.split('&&')
+		.map((term) => term.trim());
 	const pathGuard = "github.event.workflow_run.path == '.github/workflows/ci.yml'";
-	assert.ok(condition.includes(`&& ${pathGuard} &&`));
+	assert.ok(terms.includes(pathGuard));
 });
