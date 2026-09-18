@@ -246,6 +246,7 @@ test('canonical Release Please pull title must exactly match manifest version', 
 		() =>
 			assertCanonicalReleasePull({
 				author: 'github-actions[bot]',
+				baseManifest,
 				baseRuntimeCopy,
 				headRef:
 					'release-please--branches--main--components--ran/wp-release-updater',
@@ -350,6 +351,7 @@ test('release version metadata is bypassed only for an exact generated Release P
 		() =>
 			assertReleaseClassification({
 				baseComposer,
+				baseManifest,
 				headComposer: baseComposer,
 				baseRuntimeCopy,
 				headRuntimeCopy: {
