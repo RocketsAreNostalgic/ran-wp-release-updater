@@ -181,6 +181,10 @@ export function assertCanonicalReleasePull({
 	const isCanonical =
 		author === 'github-actions[bot]' &&
 		headRef === RELEASE_BRANCH &&
+		typeof repository === 'string' &&
+		repository.length > 0 &&
+		typeof repositoryId === 'string' &&
+		/^[0-9]+$/.test(repositoryId) &&
 		headRepository === repository &&
 		headRepositoryId === repositoryId;
 	if (!isCanonical) {
@@ -430,19 +434,11 @@ export function runCli(root = process.cwd(), env = process.env) {
 		typeof title !== 'string' ||
 		typeof prHeadRef !== 'string' ||
 		typeof prAuthor !== 'string' ||
-		typeof headRefRepository !== 'string' ||
-		typeof headRefRepositoryId !== 'string' ||
-		typeof repository !== 'string' ||
-		typeof repositoryId !== 'string' ||
 		prHeadRef.length === 0 ||
-		prAuthor.length === 0 ||
-		headRefRepository.length === 0 ||
-		headRefRepositoryId.length === 0 ||
-		repository.length === 0 ||
-		repositoryId.length === 0
+		prAuthor.length === 0
 	) {
 		throw new Error(
-			'live pull request title, head ref, author, and repository identity are required'
+			'live pull request title, head ref, and author are required'
 		);
 	}
 
@@ -461,6 +457,10 @@ export function runCli(root = process.cwd(), env = process.env) {
 	if (
 		prAuthor === 'github-actions[bot]' &&
 		prHeadRef === RELEASE_BRANCH &&
+		typeof repository === 'string' &&
+		repository.length > 0 &&
+		typeof repositoryId === 'string' &&
+		/^[0-9]+$/.test(repositoryId) &&
 		headRefRepository === repository &&
 		headRefRepositoryId === repositoryId
 	) {
