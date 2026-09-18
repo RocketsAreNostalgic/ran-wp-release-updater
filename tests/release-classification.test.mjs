@@ -94,18 +94,16 @@ const repository = 'RocketsAreNostalgic/ran-wp-release-updater';
 const repositoryId = '1342292184';
 const releaseBaseSha = 'a'.repeat(40);
 const releaseTreeEntries = Object.fromEntries(
-	[
-		'.release-please-manifest.json',
-		'CHANGELOG.md',
-		'runtime-copy.json',
-	].map((path, index) => [
-		path,
-		{
-			mode: '100644',
-			type: 'blob',
-			sha: String(index + 1).repeat(40),
-		},
-	])
+	['.release-please-manifest.json', 'CHANGELOG.md', 'runtime-copy.json'].map(
+		(path, index) => [
+			path,
+			{
+				mode: '100644',
+				type: 'blob',
+				sha: String(index + 1).repeat(40),
+			},
+		]
+	)
 );
 
 function canonicalReleaseInput(overrides = {}) {
