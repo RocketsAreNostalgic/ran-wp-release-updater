@@ -103,14 +103,8 @@ test('trusted release classification workflow stays on protected base', () => {
 		classificationWorkflow,
 		/RAN_RELEASE_TAGGED_LABEL: \$\{\{ steps\.pr\.outputs\.tagged_label \}\}/
 	);
-	assert.match(
-		classificationWorkflow,
-		/autorelease: pending/
-	);
-	assert.match(
-		classificationWorkflow,
-		/autorelease: tagged/
-	);
+	assert.match(classificationWorkflow, /autorelease: pending/);
+	assert.match(classificationWorkflow, /autorelease: tagged/);
 	assert.match(
 		classificationWorkflow,
 		/run: node scripts\/release-classification\.mjs/
