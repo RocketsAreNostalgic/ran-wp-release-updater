@@ -62,6 +62,7 @@ const baseRuntimeCopy = {
 	wordpress_floor: '6.5.0',
 };
 
+const baseManifest = { '.': '0.1.0-beta.6' };
 const manifest = { '.': '0.1.0-beta.7' };
 
 function git(root, args) {
@@ -173,6 +174,7 @@ test('shipped source, runtime metadata and production Composer metadata are rele
 		'bootstrap.php',
 		'runtime.php',
 		'.gitattributes',
+		'LICENSE',
 		'.release-please-manifest.json',
 	]) {
 		assert.equal(
@@ -222,6 +224,7 @@ test('canonical Release Please pull title must exactly match manifest version', 
 	assert.equal(
 		assertCanonicalReleasePull({
 			author: 'github-actions[bot]',
+			baseManifest,
 			baseRuntimeCopy,
 			headRef:
 				'release-please--branches--main--components--ran/wp-release-updater',
@@ -262,10 +265,66 @@ test('canonical Release Please pull title must exactly match manifest version', 
 	);
 });
 
+test('canonical Release Please bypass requires the exact branch', () => {
+	assert.equal(
+		assertCanonicalReleasePull({
+			author: 'github-actions[bot]',
+			baseManifest,
+			baseRuntimeCopy,
+			headRef:
+				'release-please--branches--main--components--unexpected',
+			headRuntimeCopy: {
+				...baseRuntimeCopy,
+				package_version: '0.1.0-beta.7',
+			},
+			manifest,
+			paths: [
+				'.release-please-manifest.json',
+				'CHANGELOG.md',
+				'runtime-copy.json',
+			],
+			title: 'chore(main): release 0.1.0-beta.7',
+		}),
+		false
+	);
+});
+
+test('canonical Release Please version stays on and advances the beta line', () => {
+	for (const [headVersion, expected] of [
+		['1.0.0', /independent beta version line/],
+		['0.1.0-beta.6', /version must advance/],
+		['0.1.0-beta.5', /version must advance/],
+	]) {
+		assert.throws(
+			() =>
+				assertCanonicalReleasePull({
+					author: 'github-actions[bot]',
+					baseManifest,
+					baseRuntimeCopy,
+					headRef:
+						'release-please--branches--main--components--ran/wp-release-updater',
+					headRuntimeCopy: {
+						...baseRuntimeCopy,
+						package_version: headVersion,
+					},
+					manifest: { '.': headVersion },
+					paths: [
+						'.release-please-manifest.json',
+						'CHANGELOG.md',
+						'runtime-copy.json',
+					],
+					title: `chore(main): release ${headVersion}`,
+				}),
+			expected
+		);
+	}
+});
+
 test('release version metadata is bypassed only for an exact generated Release Please delta', () => {
 	assert.deepEqual(
 		assertReleaseClassification({
 			baseComposer,
+			baseManifest,
 			headComposer: baseComposer,
 			baseRuntimeCopy,
 			headRuntimeCopy: {
