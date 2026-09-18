@@ -30,8 +30,6 @@ final class SelectedRuntimeState {
 		if (
 			! $this->broker instanceof RequestBroker
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
-			|| isset( $GLOBALS['ran_wp_github_release_updater_v1_broker'] )
-			|| function_exists( 'ran_wp_github_release_updater_v1_has_registered_target' )
 		) {
 			return 'protocol_conflict_inactive';
 		}
