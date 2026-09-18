@@ -58,12 +58,20 @@ test('required quality cannot be manufactured without PR classification', () => 
 		ciWorkflow,
 		/pull_request:\n\s+types: \[opened, synchronize, reopened, edited\]/
 	);
-	assert.match(
+	assert.doesNotMatch(
 		ciWorkflow,
 		/RAN_RELEASE_PR_TITLE: \$\{\{ github\.event\.pull_request\.title \}\}/
 	);
 	assert.match(
 		ciWorkflow,
-		/quality:\\n\\s+if: \\$\\{\\{ always\\(\\) \\}\\}[\\s\\S]*needs:[\\s\\S]*- release-classification/
+		/RAN_RELEASE_PR_NUMBER: \$\{\{ github\.event\.pull_request\.number \}\}/
+	);
+	assert.match(
+		ciWorkflow,
+		/gh api "repos\/\$\{GITHUB_REPOSITORY\}\/pulls\/\$\{RAN_RELEASE_PR_NUMBER\}" --jq '\.title'/
+	);
+	assert.match(
+		ciWorkflow,
+		/quality:\n\s+if: \$\{\{ always\(\) \}\}[\s\S]*needs:[\s\S]*- release-classification/
 	);
 });
