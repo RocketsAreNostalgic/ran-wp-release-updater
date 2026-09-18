@@ -174,39 +174,6 @@ PHP
 		self::assertSame( 0, $result['filesystem_gate_calls'] );
 	}
 
-	#[Test]
-	public function standaloneProtocolTwoAndProtocolThreeRejectTheSecondRegistrarBeforeProviderWorkInEitherLoadOrder(): void {
-		$protocolTwo = $this->protocolTwoFixture();
-		$plugin      = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/protocol-two-plugin-' . bin2hex( random_bytes( 6 ) ) . '.php';
-		file_put_contents( $plugin, "<?php\n/*\nPlugin Name: Protocol fixture\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n*/\n" );
-		foreach ( array( array( 'two', 'three' ), array( 'three', 'two' ) ) as $order ) {
-			$result = $this->probe(
-				<<<'PHP'
-$registrars = array();
-foreach ($data['order'] as $entry) $registrars[$entry] = require $data[$entry];
-$second = $registrars[$data['order'][1]];
-$credentials = 0;
-$handle = $second->plugin('github', $data['plugin'], 'acme/example', '123456789', 'stable', 'manual', static function () use (&$credentials): string { ++$credentials; return 'secret'; });
-$registered = $handle->register();
-echo json_encode(array('diagnostics' => $second->diagnostics(), 'registered' => $registered, 'status' => $handle->status(), 'credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']));
-PHP,
-				array(
-					'two'    => $protocolTwo . '/bootstrap.php',
-					'three'  => dirname( __DIR__, 2 ) . '/bootstrap.php',
-					'order'  => $order,
-					'plugin' => $plugin,
-				)
-			);
-
-			self::assertSame( 'conflict', $result['diagnostics']['state'], implode( ',', $order ) );
-			self::assertContains( 'protocol_conflict_inactive', array_column( $result['diagnostics']['diagnostics'], 'code' ), implode( ',', $order ) );
-			self::assertFalse( $result['registered'], implode( ',', $order ) );
-			self::assertSame( 'protocol_conflict_inactive', $result['status']['code'], implode( ',', $order ) );
-			self::assertSame( 0, $result['credentials'], implode( ',', $order ) );
-			self::assertSame( 0, $result['http_calls'], implode( ',', $order ) );
-		}
-	}
-
 	/** @return array<string,mixed> */
 	private function probe( string $body, array $data = array() ): array {
 		$file                 = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/release-source-' . bin2hex( random_bytes( 6 ) ) . '.php';
@@ -219,58 +186,11 @@ PHP,
 			. 'function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["release_source_hooks"][]=$hook;} '
 			. 'function add_filter(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["release_source_hooks"][]=$hook;} '
 			. 'function wp_safe_remote_get():mixed{++$GLOBALS["release_source_http_calls"];return false;} function is_wp_error():bool{return false;} '
-			. '$GLOBALS["release_source_filesystem_gate_calls"]=0;$GLOBALS["release_source_http_calls"]=0;$GLOBALS["release_source_p2_boots"]=0;$GLOBALS["release_source_p2_handoffs"]=0;$GLOBALS["wp_version"]="6.8.0";' . $filesystemDefinition
+			. '$GLOBALS["release_source_filesystem_gate_calls"]=0;$GLOBALS["release_source_http_calls"]=0;$GLOBALS["wp_version"]="6.8.0";' . $filesystemDefinition
 			. '$data=' . var_export( array_merge( array( 'bootstrap' => dirname( __DIR__, 2 ) . '/bootstrap.php' ), $data ), true ) . '; ';
 		file_put_contents( $file, $prefix . $body );
 		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp' ) . ' ' . escapeshellarg( $file ), $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
-	}
-
-	private function protocolTwoFixture(): string {
-		$root = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/protocol-two-' . bin2hex( random_bytes( 6 ) );
-		$this->copyDirectory( dirname( __DIR__, 2 ) . '/tests/Fixtures/protocol2', $root );
-		file_put_contents(
-			$root . '/runtime-copy.json',
-			json_encode(
-				array(
-					'package_revision' => $this->fixtureIdentity( $root ),
-					'package_version'  => '0.1.0-beta.2',
-					'php_floor'        => '8.2.0',
-					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 2,
-					'wordpress_floor'  => '6.5.0',
-				),
-				JSON_THROW_ON_ERROR
-			)
-		);
-		return $root;
-	}
-
-	private function copyDirectory( string $source, string $destination ): void {
-		mkdir( $destination, 0700, true );
-		foreach ( scandir( $source ) ?: array() as $name ) {
-			if ( '.' === $name || '..' === $name ) {
-				continue;
-			}
-			$from = $source . '/' . $name;
-			is_dir( $from ) ? $this->copyDirectory( $from, $destination . '/' . $name ) : copy( $from, $destination . '/' . $name );
-		}
-	}
-
-	private function fixtureIdentity( string $root ): string {
-		$files    = array( 'bootstrap.php', 'runtime.php' );
-		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/src', \FilesystemIterator::SKIP_DOTS ) );
-		foreach ( $iterator as $file ) {
-			if ( $file->isFile() && 'php' === $file->getExtension() ) {
-				$files[] = str_replace( '\\', '/', substr( $file->getPathname(), strlen( $root ) + 1 ) );
-			}
-		}
-		sort( $files, SORT_STRING );
-		$payload = '';
-		foreach ( $files as $file ) {
-			$payload .= $file . "\0" . hash_file( 'sha256', $root . '/' . $file ) . "\n";
-		}
-		return hash( 'sha256', $payload );
 	}
 }

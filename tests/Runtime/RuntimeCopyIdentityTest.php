@@ -203,7 +203,7 @@ PHP,
 			'invalid JSON'      => array( '{' ),
 			'list'              => array( '[]' ),
 			'missing fields'    => array( '{"package_revision":"' . str_repeat( 'a', 64 ) . '"}' ),
-			'wrong field types' => array( '{"package_revision":"' . str_repeat( 'a', 64 ) . '","package_version":"0.1.0-beta.1","php_floor":"8.2.0","runtime_file":"runtime.php","runtime_protocol":"2","wordpress_floor":"6.5.0"}' ),
+			'wrong field types' => array( '{"package_revision":"' . str_repeat( 'a', 64 ) . '","package_version":"0.1.0-beta.1","php_floor":"8.2.0","runtime_file":"runtime.php","runtime_protocol":"4","wordpress_floor":"6.5.0"}' ),
 		);
 	}
 

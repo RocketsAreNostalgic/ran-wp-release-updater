@@ -312,14 +312,12 @@ PHP
 	}
 
 	public function testEveryNativeCallbackAndFinalizerArePassiveAfterEachProtocolConflict(): void {
-		foreach ( array( 'stale_global', 'wrong_protocol', 'legacy_broker', 'legacy_marker' ) as $fault ) {
+		foreach ( array( 'stale_global', 'wrong_protocol' ) as $fault ) {
 			$result = $this->probe(
 				<<<'PHP'
 $calls=0;$resolver=static function()use(&$calls){++$calls;return 'secret';};$registrar=require $data['bootstrap'];$handle=$registrar->plugin('github',$data['plugin'],'acme/example','123456789','stable','manual',$resolver);$handle->register();$broker=$GLOBALS['ran_wp_release_updater_v1_broker'];$broker->activate(['php_version'=>PHP_VERSION,'runtime_protocol' => 4,'wordpress_version'=>'6.8.0']);
 if ('stale_global' === $data['fault']) {$GLOBALS['ran_wp_release_updater_v1_broker']=new stdClass();}
 if ('wrong_protocol' === $data['fault']) {$GLOBALS['ran_wp_release_updater_v1_broker']=new class { public function protocolVersion(): int { return 1; } };}
-if ('legacy_broker' === $data['fault']) {$GLOBALS['ran_wp_github_release_updater_v1_broker']=new stdClass();}
-if ('legacy_marker' === $data['fault']) {function ran_wp_github_release_updater_v1_has_registered_target(): bool { return true; }}
 $answers=[];$native=null;foreach($GLOBALS['p0_1_hooks'] as $registered){$hook=$registered['hook'];$callback=$registered['callback'];$native=$callback[0];if('update_plugins_github.com'===$hook)$answers[$hook]=$callback(false,['Version'=>'1.0.0','UpdateURI'=>'https://github.com/acme/example'],'plugin/plugin.php',[]);if('plugins_api'===$hook)$answers[$hook]=$callback('info','plugin_information',(object)['slug'=>'ran-wp-release-updater-'.substr(hash('sha256',"plugin\0plugin/plugin.php"),0,24)]);if('auto_update_plugin'===$hook)$answers[$hook]=$callback(true,(object)['plugin'=>'plugin/plugin.php','package'=>'sentinel']);if('upgrader_package_options'===$hook)$answers[$hook]=$callback(['hook_extra'=>['plugin'=>'plugin/plugin.php','action'=>'update','type'=>'plugin']]);if('upgrader_pre_download'===$hook)$answers[$hook]=$callback('reply','sentinel',null,['plugin'=>'plugin/plugin.php','action'=>'update','type'=>'plugin']);if('upgrader_pre_install'===$hook)$answers[$hook]=$callback('install',['plugin'=>'plugin/plugin.php','action'=>'update','type'=>'plugin']);if('pre_unzip_file'===$hook)$answers[$hook]=$callback('unzip','sentinel','destination',[],0.0);if('upgrader_source_selection'===$hook)$answers[$hook]=$callback('source','remote',null,['plugin'=>'plugin/plugin.php','action'=>'update','type'=>'plugin']);if('upgrader_install_package_result'===$hook)$answers[$hook]=$callback('result',['plugin'=>'plugin/plugin.php','action'=>'update','type'=>'plugin']);if('upgrader_process_complete'===$hook)$callback(null,['action'=>'update','type'=>'plugin','plugins'=>['plugin/plugin.php']]);}$native->finalizePendingInstall();echo json_encode(['answers'=>$answers,'calls'=>$calls,'status'=>$handle->status(),'diagnostics'=>$handle->diagnostics(),'hooks'=>count($GLOBALS['p0_1_hooks'])]);
 PHP,
 				array( 'fault' => $fault )

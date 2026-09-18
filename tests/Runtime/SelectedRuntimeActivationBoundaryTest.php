@@ -34,14 +34,13 @@ PHP
 $registrar = require $data['bootstrap'];
 do_action('after_setup_theme');
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-echo json_encode(array('protocol' => $broker->protocolVersion(), 'state' => $registrar->diagnostics()['state'], 'candidates' => $broker->diagnostics()['candidate_count'], 'legacy' => isset($GLOBALS['ran_wp_github_release_updater_v1_broker'])));
+echo json_encode(array('protocol' => $broker->protocolVersion(), 'state' => $registrar->diagnostics()['state'], 'candidates' => $broker->diagnostics()['candidate_count']));
 PHP
 		);
 
 		self::assertSame( 4, $result['protocol'] );
 		self::assertSame( 'active', $result['state'] );
 		self::assertSame( 1, $result['candidates'] );
-		self::assertFalse( $result['legacy'] );
 	}
 
 	public function testBootstrapDuringALowerPrioritySchedulesForThisHookRun(): void {
@@ -263,7 +262,7 @@ PHP
 		self::assertSame( 'target_active', $result['status']['code'] );
 	}
 
-	public function testRequestBrokerPublicAbiHasTheProtocolThreeMethods(): void {
+	public function testRequestBrokerPublicAbiHasCurrentMethods(): void {
 		$result = $this->probe(
 			<<<'PHP'
 require_once dirname($data['bootstrap']) . '/src/Runtime/RequestBroker.php';

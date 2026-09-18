@@ -10,7 +10,7 @@ use RAN\WPReleaseUpdater\V1\Provider\GitHub\ProspectiveReleaseInspection;
 
 final class ReleaseSourceSchemaTest extends TestCase {
 
-	public function testPublicHandleFailsClosedForMalformedSameProtocolThreeResults(): void {
+	public function testPublicHandleFailsClosedForMalformedSameProtocolResults(): void {
 		foreach ( $this->malformedResults() as $name => [$operation, $result] ) {
 			$projection = $this->projection( $operation, $result );
 			self::assertSame( 'runtime_unavailable', $projection['code'], $name );
