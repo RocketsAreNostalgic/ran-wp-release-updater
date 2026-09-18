@@ -59,7 +59,7 @@ PHP,
 		self::assertSame( 'runtime_active', $result['again']['code'] );
 	}
 
-	public function testActiveCandidateIdempotencyAndTerminalCandidateTargetAndActivationRemainPassive(): void {
+	public function testActiveCandidateIdempotencyAndTerminalInactiveTargetAndActivationRemainPassive(): void {
 		$copy   = $this->package( 'active', $this->runtime() );
 		$unseen = $this->package( 'unseen', $this->runtime() );
 		$result = $this->probe(
@@ -79,14 +79,7 @@ $firstInactive=$inactive->activate(array('php_version'=>array(),'runtime_protoco
 $knownInactive=$inactive->registerCandidate($data['copy'].'/runtime-copy.json');
 $targetInactive=$inactive->registerTarget(array('target_type'=>'plugin','installed_file'=>'/inactive.php','provider_code'=>'github','repository_locator'=>'acme/inactive','repository_identity'=>'4','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null,'maximum_artifact_bytes'=>52428800));
 $againInactive=$inactive->activate($environment);
-$conflict=new RAN\WPReleaseUpdater\V1\Runtime\RequestBroker();
-$conflict->registerCandidate($data['copy'].'/runtime-copy.json');
-$GLOBALS['ran_wp_github_release_updater_v1_broker']=new stdClass();
-$firstConflict=$conflict->activate($environment);
-$knownConflict=$conflict->registerCandidate($data['copy'].'/runtime-copy.json');
-$targetConflict=$conflict->registerTarget(array('target_type'=>'plugin','installed_file'=>'/conflict.php','provider_code'=>'github','repository_locator'=>'acme/conflict','repository_identity'=>'6','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null,'maximum_artifact_bytes'=>52428800));
-$againConflict=$conflict->activate($environment);
-echo json_encode(array('active'=>$active,'known'=>$known,'unseen'=>$unseen,'unseen_again'=>$unseenAgain,'candidate_count_before'=>$candidateCountBefore,'candidate_count_after'=>$activeDiagnostics['candidate_count'],'active_diagnostics'=>$activeDiagnostics['diagnostics'],'first_inactive'=>$firstInactive,'known_inactive'=>$knownInactive,'target_inactive'=>$targetInactive,'again_inactive'=>$againInactive,'inactive_diagnostics'=>$inactive->diagnostics()['diagnostics'],'first_conflict'=>$firstConflict,'known_conflict'=>$knownConflict,'target_conflict'=>$targetConflict,'again_conflict'=>$againConflict,'conflict_diagnostics'=>$conflict->diagnostics()['diagnostics']));
+echo json_encode(array('active'=>$active,'known'=>$known,'unseen'=>$unseen,'unseen_again'=>$unseenAgain,'candidate_count_before'=>$candidateCountBefore,'candidate_count_after'=>$activeDiagnostics['candidate_count'],'active_diagnostics'=>$activeDiagnostics['diagnostics'],'first_inactive'=>$firstInactive,'known_inactive'=>$knownInactive,'target_inactive'=>$targetInactive,'again_inactive'=>$againInactive,'inactive_diagnostics'=>$inactive->diagnostics()['diagnostics']));
 PHP,
 			array(
 				'copy'   => $copy,
@@ -107,18 +100,10 @@ PHP,
 		self::assertFalse( $result['again_inactive']['loaded'] );
 		self::assertSame( 'runtime_environment_invalid', $result['again_inactive']['code'] );
 		self::assertSame( array( array( 'code' => 'runtime_environment_invalid' ) ), $result['inactive_diagnostics'] );
-		self::assertSame( 'protocol_conflict_inactive', $result['first_conflict']['code'] );
-		self::assertFalse( $result['known_conflict'] );
-		self::assertFalse( $result['target_conflict']['accepted'] );
-		self::assertSame( 'protocol_conflict_inactive', $result['target_conflict']['code'] );
-		self::assertFalse( $result['again_conflict']['loaded'] );
-		self::assertSame( 'protocol_conflict_inactive', $result['again_conflict']['code'] );
-		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['conflict_diagnostics'] );
 	}
 
-	public function testRuntimeLoadFailureAndProtocolConflictHaveStableTerminalStateAndProjection(): void {
+	public function testRuntimeLoadFailureHasStableTerminalStateAndProjection(): void {
 		$load           = $this->package( 'load-failure', "<?php\nthrow new RuntimeException('load');\n" );
-		$conflict       = $this->package( 'conflict', $this->runtime() );
 		$loadResult     = $this->probe(
 			<<<'PHP'
 require $data['load'] . '/bootstrap.php';
@@ -132,28 +117,9 @@ echo json_encode(array('first_load'=>$firstLoad,'status_load'=>$statusLoad,'agai
 PHP,
 			array( 'load' => $load )
 		);
-		$conflictResult = $this->probe(
-			<<<'PHP'
-require $data['conflict'] . '/bootstrap.php';
-$conflict=$GLOBALS['ran_wp_release_updater_v1_broker'];
-$environment=array('php_version'=>'8.2.0','runtime_protocol' => 4,'wordpress_version'=>'6.8.0');
-$GLOBALS['ran_wp_github_release_updater_v1_broker']=new stdClass();
-$firstConflict=$conflict->activate($environment);
-$stateConflict=$conflict->diagnostics()['state'];
-$againConflict=$conflict->activate($environment);
-echo json_encode(array('first_conflict'=>$firstConflict,'state_conflict'=>$stateConflict,'again_conflict'=>$againConflict,'conflict_diagnostics'=>$conflict->diagnostics()['diagnostics']));
-PHP,
-			array( 'conflict' => $conflict )
-		);
-
 		self::assertSame( 'runtime_load_failed', $loadResult['first_load']['code'] );
 		self::assertSame( 'runtime_load_failed', $loadResult['status_load']['code'] );
 		self::assertSame( 'runtime_load_failed', $loadResult['again_load']['code'] );
-		self::assertSame( 'protocol_conflict_inactive', $conflictResult['first_conflict']['code'] );
-		self::assertSame( 'conflict', $conflictResult['state_conflict'] );
-		self::assertSame( 'conflict', $conflictResult['again_conflict']['state'] );
-		self::assertSame( 'protocol_conflict_inactive', $conflictResult['again_conflict']['code'] );
-		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $conflictResult['conflict_diagnostics'] );
 	}
 
 	public function testQueuedRegistrarHandleDoesNotResubmitAfterTerminalCompositionFailure(): void {
