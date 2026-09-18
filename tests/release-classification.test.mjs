@@ -90,17 +90,44 @@ const headReleaseContents = {
 	changelog: headChangelog,
 };
 
+const repository = 'RocketsAreNostalgic/ran-wp-release-updater';
+const repositoryId = '1342292184';
+const releaseBaseSha = 'a'.repeat(40);
+const releaseHeadSha = 'b'.repeat(40);
+const releaseTreeEntries = Object.fromEntries(
+	[
+		'.release-please-manifest.json',
+		'CHANGELOG.md',
+		'runtime-copy.json',
+	].map((path, index) => [
+		path,
+		{
+			mode: '100644',
+			type: 'blob',
+			sha: String(index + 1).repeat(40),
+		},
+	])
+);
+
 function canonicalReleaseInput(overrides = {}) {
 	return {
 		author: 'github-actions[bot]',
 		baseContents: baseReleaseContents,
 		baseManifest,
 		baseRuntimeCopy,
+		baseSha: releaseBaseSha,
+		baseTreeEntries: releaseTreeEntries,
 		headContents: headReleaseContents,
 		headRef:
 			'release-please--branches--main--components--ran/wp-release-updater',
+		headRepository: repository,
+		headRepositoryId: repositoryId,
 		headRuntimeCopy,
+		headTreeEntries: releaseTreeEntries,
 		manifest,
+		mergeBaseSha: releaseBaseSha,
+		repository,
+		repositoryId,
 		paths: [
 			'.release-please-manifest.json',
 			'CHANGELOG.md',
@@ -291,6 +318,55 @@ test('canonical Release Please bypass requires the exact branch', () => {
 	);
 });
 
+test('canonical Release Please bypass requires the upstream repository identity', () => {
+	assert.equal(
+		assertCanonicalReleasePull(
+			canonicalReleaseInput({
+				headRepository: 'example/fork',
+			})
+		),
+		false
+	);
+	assert.equal(
+		assertCanonicalReleasePull(
+			canonicalReleaseInput({
+				headRepositoryId: '999999',
+			})
+		),
+		false
+	);
+});
+
+test('canonical Release Please bypass requires the live base as merge base', () => {
+	assert.throws(
+		() =>
+			assertCanonicalReleasePull(
+				canonicalReleaseInput({
+					mergeBaseSha: 'c'.repeat(40),
+				})
+			),
+		/must contain the live protected base/
+	);
+});
+
+test('canonical Release Please bypass requires ordinary generated-file blobs', () => {
+	assert.throws(
+		() =>
+			assertCanonicalReleasePull(
+				canonicalReleaseInput({
+					headTreeEntries: {
+						...releaseTreeEntries,
+						'CHANGELOG.md': {
+							...releaseTreeEntries['CHANGELOG.md'],
+							mode: '100755',
+						},
+					},
+				})
+			),
+		/ordinary non-executable Git blob/
+	);
+});
+
 test('canonical Release Please version stays on and advances the beta line', () => {
 	for (const [headVersion, expected] of [
 		['1.0.0', /independent beta version line/],
@@ -338,10 +414,18 @@ test('release version metadata is bypassed only for an exact generated Release P
 			baseComposer,
 			baseContents: baseReleaseContents,
 			baseManifest,
-			headComposer: baseComposer,
 			baseRuntimeCopy,
+			baseSha: releaseBaseSha,
+			baseTreeEntries: releaseTreeEntries,
+			headComposer: baseComposer,
 			headContents: headReleaseContents,
+			headRefRepository: repository,
+			headRefRepositoryId: repositoryId,
 			headRuntimeCopy,
+			headTreeEntries: releaseTreeEntries,
+			mergeBaseSha: releaseBaseSha,
+			repository,
+			repositoryId,
 			releaseConfig,
 			paths: [
 				'.release-please-manifest.json',
@@ -363,10 +447,18 @@ test('release version metadata is bypassed only for an exact generated Release P
 				baseComposer,
 				baseContents: baseReleaseContents,
 				baseManifest,
-				headComposer: baseComposer,
 				baseRuntimeCopy,
+				baseSha: releaseBaseSha,
+				baseTreeEntries: releaseTreeEntries,
+				headComposer: baseComposer,
 				headContents: headReleaseContents,
+				headRefRepository: repository,
+				headRefRepositoryId: repositoryId,
 				headRuntimeCopy,
+				headTreeEntries: releaseTreeEntries,
+				mergeBaseSha: releaseBaseSha,
+				repository,
+				repositoryId,
 				releaseConfig,
 				paths: [
 					'.release-please-manifest.json',
