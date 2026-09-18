@@ -32,20 +32,22 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Verify exact source revision
         env:
-          RAN_EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          RAN_EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: test "$(git rev-parse HEAD)" = "$RAN_EXPECTED_SHA"
 
       - name: Set up Node for release classification
+        if: ${{ github.event_name == 'pull_request' }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '24.11.0'
           check-latest: false
 
       - name: Require release-driving squash title for release-significant changes
+        if: ${{ github.event_name == 'pull_request' }}
         env:
           RAN_RELEASE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           RAN_RELEASE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
