@@ -15,7 +15,6 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		foreach ( $files as $file ) {
 			$source = file_get_contents( $file );
 			self::assertIsString( $source, $file );
-			$source = str_replace( array( 'ran_wp_github_release_updater_v1_broker', 'ran_wp_github_release_updater_v1_has_registered_target' ), 'legacy_release_updater_marker', $source );
 			self::assertDoesNotMatchRegularExpression(
 				'/api\.github|github\.com|bitbucket|gitlab|downloads|authorization|bearer|private-token|job-token|wp_remote_|curl_|Requests::|sha-?1/i',
 				$source,
