@@ -163,15 +163,26 @@ export function assertCanonicalReleasePull({
 	baseContents,
 	baseManifest,
 	baseRuntimeCopy,
+	baseSha,
+	baseTreeEntries,
 	headContents,
 	headRef,
+	headRepository,
+	headRepositoryId,
 	headRuntimeCopy,
+	headTreeEntries,
 	manifest,
+	mergeBaseSha,
 	paths,
+	repository,
+	repositoryId,
 	title,
 }) {
 	const isCanonical =
-		author === 'github-actions[bot]' && headRef === RELEASE_BRANCH;
+		author === 'github-actions[bot]' &&
+		headRef === RELEASE_BRANCH &&
+		headRepository === repository &&
+		headRepositoryId === repositoryId;
 	if (!isCanonical) {
 		return false;
 	}
@@ -183,6 +194,25 @@ export function assertCanonicalReleasePull({
 		throw new Error(
 			'canonical Release Please pull request changed non-generated files'
 		);
+	}
+
+	if (mergeBaseSha !== baseSha) {
+		throw new Error(
+			'canonical Release Please pull request head must contain the live protected base'
+		);
+	}
+	for (const [label, entries] of [
+		['base', baseTreeEntries],
+		['head', headTreeEntries],
+	]) {
+		for (const path of RELEASE_PULL_PATHS) {
+			const entry = entries?.[path];
+			if (entry?.mode !== '100644' || entry?.type !== 'blob') {
+				throw new Error(
+					`canonical Release Please pull request ${label} ${path} must be an ordinary non-executable Git blob`
+				);
+			}
+		}
 	}
 
 	if (
@@ -261,10 +291,18 @@ export function assertReleaseClassification({
 	baseComposer,
 	baseContents,
 	baseManifest,
-	headComposer,
 	baseRuntimeCopy,
+	baseSha,
+	baseTreeEntries,
+	headComposer,
 	headContents,
+	headRefRepository,
+	headRefRepositoryId,
 	headRuntimeCopy,
+	headTreeEntries,
+	mergeBaseSha,
+	repository,
+	repositoryId,
 	releaseConfig,
 	paths,
 	title,
@@ -278,11 +316,19 @@ export function assertReleaseClassification({
 			baseContents,
 			baseManifest,
 			baseRuntimeCopy,
+			baseSha,
+			baseTreeEntries,
 			headContents,
 			headRef: prHeadRef,
+			headRepository: headRefRepository,
+			headRepositoryId: headRefRepositoryId,
 			headRuntimeCopy,
+			headTreeEntries,
 			manifest,
+			mergeBaseSha,
 			paths,
+			repository,
+			repositoryId,
 			title,
 		})
 	) {
@@ -327,6 +373,19 @@ function readTextAt(root, sha, path) {
 	return git(root, ['show', `${sha}:${path}`]);
 }
 
+function treeEntryAt(root, sha, path) {
+	const match = /^(\d+) (\w+) ([a-f0-9]{40})\t/.exec(
+		git(root, ['ls-tree', sha, '--', path]).trim()
+	);
+	return match ? { mode: match[1], type: match[2], sha: match[3] } : null;
+}
+
+function releaseTreeEntries(root, sha) {
+	return Object.fromEntries(
+		RELEASE_PULL_PATHS.map((path) => [path, treeEntryAt(root, sha, path)])
+	);
+}
+
 function mergeBase(root, baseSha, headSha) {
 	const sha = git(root, ['merge-base', baseSha, headSha]).trim();
 	if (!FULL_SHA.test(sha)) {
@@ -357,6 +416,10 @@ export function runCli(root = process.cwd(), env = process.env) {
 	const title = env.RAN_RELEASE_PR_TITLE;
 	const prHeadRef = env.RAN_RELEASE_PR_HEAD_REF;
 	const prAuthor = env.RAN_RELEASE_PR_AUTHOR;
+	const headRefRepository = env.RAN_RELEASE_PR_HEAD_REPOSITORY;
+	const headRefRepositoryId = env.RAN_RELEASE_PR_HEAD_REPOSITORY_ID;
+	const repository = env.RAN_RELEASE_REPOSITORY;
+	const repositoryId = env.RAN_RELEASE_REPOSITORY_ID;
 
 	if (!FULL_SHA.test(baseSha ?? '') || !FULL_SHA.test(headSha ?? '')) {
 		throw new Error(
@@ -367,11 +430,19 @@ export function runCli(root = process.cwd(), env = process.env) {
 		typeof title !== 'string' ||
 		typeof prHeadRef !== 'string' ||
 		typeof prAuthor !== 'string' ||
+		typeof headRefRepository !== 'string' ||
+		typeof headRefRepositoryId !== 'string' ||
+		typeof repository !== 'string' ||
+		typeof repositoryId !== 'string' ||
 		prHeadRef.length === 0 ||
-		prAuthor.length === 0
+		prAuthor.length === 0 ||
+		headRefRepository.length === 0 ||
+		headRefRepositoryId.length === 0 ||
+		repository.length === 0 ||
+		repositoryId.length === 0
 	) {
 		throw new Error(
-			'live pull request title, head ref, and author are required'
+			'live pull request title, head ref, author, and repository identity are required'
 		);
 	}
 
@@ -384,8 +455,22 @@ export function runCli(root = process.cwd(), env = process.env) {
 
 	const classificationBaseSha = mergeBase(root, baseSha, headSha);
 	let baseContents;
+	let baseTreeEntries;
 	let headContents;
-	if (prAuthor === 'github-actions[bot]' && prHeadRef === RELEASE_BRANCH) {
+	let headTreeEntries;
+	if (
+		prAuthor === 'github-actions[bot]' &&
+		prHeadRef === RELEASE_BRANCH &&
+		headRefRepository === repository &&
+		headRefRepositoryId === repositoryId
+	) {
+		if (classificationBaseSha !== baseSha) {
+			throw new Error(
+				'canonical Release Please pull request head must contain the live protected base'
+			);
+		}
+		baseTreeEntries = releaseTreeEntries(root, classificationBaseSha);
+		headTreeEntries = releaseTreeEntries(root, headSha);
 		baseContents = {
 			manifest: readTextAt(
 				root,
@@ -417,6 +502,8 @@ export function runCli(root = process.cwd(), env = process.env) {
 			classificationBaseSha,
 			'.release-please-manifest.json'
 		),
+		baseSha,
+		baseTreeEntries,
 		headComposer: readJsonAt(root, headSha, 'composer.json'),
 		baseRuntimeCopy: readJsonAt(
 			root,
@@ -425,6 +512,12 @@ export function runCli(root = process.cwd(), env = process.env) {
 		),
 		headRuntimeCopy: readJsonAt(root, headSha, 'runtime-copy.json'),
 		headContents,
+		headRefRepository,
+		headRefRepositoryId,
+		headTreeEntries,
+		mergeBaseSha: classificationBaseSha,
+		repository,
+		repositoryId,
 		releaseConfig: readJsonAt(root, baseSha, 'release-please-config.json'),
 		paths: changedPaths(root, classificationBaseSha, headSha),
 		title,
