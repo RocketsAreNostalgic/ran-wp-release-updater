@@ -400,7 +400,11 @@ export function runCli(root = process.cwd(), env = process.env) {
 			changelog: readTextAt(root, classificationBaseSha, 'CHANGELOG.md'),
 		};
 		headContents = {
-			manifest: readTextAt(root, headSha, '.release-please-manifest.json'),
+			manifest: readTextAt(
+				root,
+				headSha,
+				'.release-please-manifest.json'
+			),
 			runtimeCopy: readTextAt(root, headSha, 'runtime-copy.json'),
 			changelog: readTextAt(root, headSha, 'CHANGELOG.md'),
 		};

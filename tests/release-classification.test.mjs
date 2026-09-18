@@ -267,10 +267,7 @@ test('shipped source, runtime metadata and production Composer metadata are rele
 });
 
 test('canonical Release Please pull title must exactly match manifest version', () => {
-	assert.equal(
-		assertCanonicalReleasePull(canonicalReleaseInput()),
-		true
-	);
+	assert.equal(assertCanonicalReleasePull(canonicalReleaseInput()), true);
 	assert.throws(
 		() =>
 			assertCanonicalReleasePull(
@@ -286,7 +283,8 @@ test('canonical Release Please bypass requires the exact branch', () => {
 	assert.equal(
 		assertCanonicalReleasePull(
 			canonicalReleaseInput({
-				headRef: 'release-please--branches--main--components--unexpected',
+				headRef:
+					'release-please--branches--main--components--unexpected',
 			})
 		),
 		false
