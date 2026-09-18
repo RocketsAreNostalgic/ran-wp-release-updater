@@ -154,7 +154,6 @@ final class RequestBrokerTest extends TestCase {
 		self::assertFalse( $invalid['first']['loaded'] );
 		self::assertContains( 'runtime_selection_inactive', array_column( $invalid['first']['diagnostics'], 'code' ) );
 		self::assertContains( 'runtime_selection_inactive', array_column( $invalid['second']['diagnostics'], 'code' ) );
-
 	}
 
 	public function testDiagnosticsAreBoundedForRepeatedInvalidAndLateRegistrations(): void {
