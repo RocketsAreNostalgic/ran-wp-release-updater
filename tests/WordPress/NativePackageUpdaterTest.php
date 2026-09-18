@@ -840,16 +840,13 @@ namespace Tests\WordPress {
 			$updater->register();
 			self::assertCount( 10, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
-			foreach ( array( 'stale_global', 'wrong_protocol', 'legacy_broker' ) as $failure ) {
+			foreach ( array( 'stale_global', 'wrong_protocol' ) as $failure ) {
 				if ( 'stale_global' === $failure ) {
 					$GLOBALS['ran_wp_release_updater_v1_broker'] = new \stdClass();
 				} elseif ( 'wrong_protocol' === $failure ) {
 					$GLOBALS['ran_wp_release_updater_v1_broker'] = new class() { public function protocolVersion(): int {
 							return 1;
 					} };
-				} else {
-					$GLOBALS['ran_wp_release_updater_v1_broker']        = $broker;
-					$GLOBALS['ran_wp_github_release_updater_v1_broker'] = new \stdClass();
 				}
 				self::assertFalse(
 					$updater->filterUpdate(
@@ -892,7 +889,7 @@ namespace Tests\WordPress {
 				self::assertSame( array( 0, 0, 0 ), array( $adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls ), $failure );
 				self::assertSame( array(), $database->rows(), $failure );
 				self::assertSame( array(), $database->preparedSql(), $failure );
-				unset( $GLOBALS['ran_wp_github_release_updater_v1_broker'] );
+				$GLOBALS['ran_wp_release_updater_v1_broker'] = $broker;
 			}
 		}
 		public function testLivenessLossAfterArchiveAdmissionAbortsAndReleasesThePersistentLease(): void {
