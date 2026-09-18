@@ -105,7 +105,9 @@ test('parses scoped and breaking Conventional Commit titles', () => {
 	});
 });
 
-test('production Composer comparison is recursive and ignores require-dev', () => {
+test(
+	'production Composer comparison is recursive and ignores require-dev',
+	() => {
 	assert.equal(
 		productionComposerMetadataChanged(baseComposer, {
 			...baseComposer,
@@ -135,9 +137,12 @@ test('production Composer comparison is recursive and ignores require-dev', () =
 		}),
 		true
 	);
-});
+	}
+);
 
-test('Release Please package_version-only runtime metadata is not release-significant', () => {
+test(
+	'Release Please package_version-only runtime metadata is not release-significant',
+	() => {
 	assert.equal(
 		runtimeMetadataChanged(baseRuntimeCopy, {
 			...baseRuntimeCopy,
@@ -152,9 +157,12 @@ test('Release Please package_version-only runtime metadata is not release-signif
 		}),
 		true
 	);
-});
+	}
+);
 
-test('shipped source, runtime metadata and production Composer metadata are release-significant', () => {
+test(
+	'shipped source, runtime metadata and production Composer metadata are release-significant',
+	() => {
 	for (const path of [
 		'src/Runtime/RequestBroker.php',
 		'bootstrap.php',
@@ -176,7 +184,10 @@ test('shipped source, runtime metadata and production Composer metadata are rele
 			baseComposer,
 			headComposer: baseComposer,
 			baseRuntimeCopy,
-			headRuntimeCopy: { ...baseRuntimeCopy, wordpress_floor: '6.6.0' },
+			headRuntimeCopy: {
+				...baseRuntimeCopy,
+				wordpress_floor: '6.6.0',
+			},
 			paths: ['runtime-copy.json'],
 		}),
 		true
@@ -198,9 +209,12 @@ test('shipped source, runtime metadata and production Composer metadata are rele
 		}),
 		true
 	);
-});
+	}
+);
 
-test('canonical Release Please pull title must exactly match manifest version', () => {
+test(
+	'canonical Release Please pull title must exactly match manifest version',
+	() => {
 	assert.equal(
 		assertCanonicalReleasePull({
 			author: 'github-actions[bot]',
@@ -222,9 +236,12 @@ test('canonical Release Please pull title must exactly match manifest version', 
 			}),
 		/must be exactly/
 	);
-});
+	}
+);
 
-test('release version metadata alone remains admissible with the exact generated title', () => {
+test(
+	'release version metadata alone remains admissible with the exact generated title',
+	() => {
 	assert.deepEqual(
 		assertReleaseClassification({
 			baseComposer,
@@ -248,7 +265,8 @@ test('release version metadata alone remains admissible with the exact generated
 		}),
 		{ required: true, classification: null, releasePull: true }
 	);
-});
+	}
+);
 
 test('release-significant changes reject non-driving classifications', () => {
 	assert.throws(
@@ -267,7 +285,9 @@ test('release-significant changes reject non-driving classifications', () => {
 	);
 });
 
-test('visible and explicit breaking classifications admit release-significant changes', () => {
+test(
+	'visible and explicit breaking classifications admit release-significant changes',
+	() => {
 	assert.equal(
 		assertReleaseClassification({
 			baseComposer,
@@ -294,9 +314,12 @@ test('visible and explicit breaking classifications admit release-significant ch
 		}).classification.breaking,
 		true
 	);
-});
+	}
+);
 
-test('CLI executes from protected base and ignores head release-config weakening', () => {
+test(
+	'CLI executes from protected base and ignores head release-config weakening',
+	() => {
 	const { root, baseSha } = initializeRepository();
 	try {
 		mkdirSync(join(root, 'src'));
@@ -329,7 +352,8 @@ test('CLI executes from protected base and ignores head release-config weakening
 	} finally {
 		rmSync(root, { recursive: true, force: true });
 	}
-});
+	}
+);
 
 test('CLI treats newline-containing source paths as release-significant', () => {
 	const { root, baseSha } = initializeRepository();
