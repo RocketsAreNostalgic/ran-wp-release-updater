@@ -6,18 +6,18 @@ import { fileURLToPath } from 'node:url';
 const FULL_SHA = /^[a-f0-9]{40}$/;
 const TITLE = /^([a-z][a-z0-9-]*)(?:\([^)]+\))?(!)?:\s+\S/;
 const RELEASE_BRANCH_PREFIX = 'release-please--branches--main--components--';
-const PRODUCTION_COMPOSER_KEYS = [
-	'name',
-	'type',
-	'require',
-	'autoload',
-	'conflict',
-	'replace',
-	'provide',
-	'bin',
-	'extra',
-	'include-path',
-	'target-dir',
+const DEVELOPMENT_ONLY_COMPOSER_KEYS = new Set([
+	'require-dev',
+	'autoload-dev',
+	'scripts',
+	'scripts-descriptions',
+	'repositories',
+	'config',
+]);
+const RELEASE_PULL_PATHS = [
+	'.release-please-manifest.json',
+	'CHANGELOG.md',
+	'runtime-copy.json',
 ];
 
 function objectRecord(value, label) {
@@ -43,16 +43,20 @@ function canonicalValue(value) {
 
 export function productionComposerMetadata(composer) {
 	const document = objectRecord(composer, 'composer.json');
-	const metadata = {};
-	for (const key of PRODUCTION_COMPOSER_KEYS) {
-		if (Object.hasOwn(document, key)) {
-			metadata[key] = document[key];
-		}
-	}
-	return canonicalValue(metadata);
+	return canonicalValue(
+		Object.fromEntries(
+			Object.entries(document).filter(
+				([key]) => !DEVELOPMENT_ONLY_COMPOSER_KEYS.has(key)
+			)
+		)
+	);
 }
 
 export function runtimeMetadata(runtimeCopy) {
+	return canonicalValue(objectRecord(runtimeCopy, 'runtime-copy.json'));
+}
+
+export function runtimeMetadataWithoutPackageVersion(runtimeCopy) {
 	const document = objectRecord(runtimeCopy, 'runtime-copy.json');
 	const { package_version: _packageVersion, ...metadata } = document;
 	return canonicalValue(metadata);
@@ -141,15 +145,20 @@ export function releaseSignificantChange({
 				typeof path === 'string' &&
 				(path.startsWith('src/') ||
 					path === 'bootstrap.php' ||
-					path === 'runtime.php')
+					path === 'runtime.php' ||
+					path === '.gitattributes' ||
+					path === '.release-please-manifest.json')
 		)
 	);
 }
 
 export function assertCanonicalReleasePull({
 	author,
+	baseRuntimeCopy,
 	headRef,
+	headRuntimeCopy,
 	manifest,
+	paths,
 	title,
 }) {
 	const isCanonical =
@@ -159,11 +168,42 @@ export function assertCanonicalReleasePull({
 	if (!isCanonical) {
 		return false;
 	}
+
+	const normalizedPaths = [...paths].sort();
+	if (
+		JSON.stringify(normalizedPaths) !==
+		JSON.stringify(RELEASE_PULL_PATHS)
+	) {
+		throw new Error(
+			'canonical Release Please pull request changed non-generated files'
+		);
+	}
+
+	if (
+		JSON.stringify(
+			runtimeMetadataWithoutPackageVersion(baseRuntimeCopy)
+		) !==
+		JSON.stringify(
+			runtimeMetadataWithoutPackageVersion(headRuntimeCopy)
+		)
+	) {
+		throw new Error(
+			'canonical Release Please pull request changed runtime metadata beyond package_version'
+		);
+	}
+
 	const document = objectRecord(manifest, '.release-please-manifest.json');
 	const version = document['.'];
 	if (typeof version !== 'string' || version.length === 0) {
 		throw new Error('release manifest root version is required');
 	}
+	const headRuntime = objectRecord(headRuntimeCopy, 'runtime-copy.json');
+	if (headRuntime.package_version !== version) {
+		throw new Error(
+			'canonical Release Please pull request package_version must match manifest'
+		);
+	}
+
 	const expected = `chore(main): release ${version}`;
 	if (title !== expected) {
 		throw new Error(
@@ -188,8 +228,11 @@ export function assertReleaseClassification({
 	if (
 		assertCanonicalReleasePull({
 			author: prAuthor,
+			baseRuntimeCopy,
 			headRef: prHeadRef,
+			headRuntimeCopy,
 			manifest,
+			paths,
 			title,
 		})
 	) {
@@ -241,7 +284,14 @@ function mergeBase(root, baseSha, headSha) {
 }
 
 function changedPaths(root, baseSha, headSha) {
-	return git(root, ['diff', '--name-only', '-z', baseSha, headSha])
+	return git(root, [
+		'diff',
+		'--name-only',
+		'--no-renames',
+		'-z',
+		baseSha,
+		headSha,
+	])
 		.split('\0')
 		.filter(Boolean)
 		.sort();
