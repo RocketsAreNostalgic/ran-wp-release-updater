@@ -268,3 +268,39 @@ test('CLI classifies only merge-base-to-head changes and verifies exact checkout
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+test('CLI treats newline-containing source paths as release-significant', () => {
+	const root = mkdtempSync(
+		join(tmpdir(), 'release-updater-classification-newline-')
+	);
+	try {
+		git(root, ['init', '--initial-branch=main']);
+		git(root, ['config', 'user.name', 'Release Test']);
+		git(root, ['config', 'user.email', 'release@example.invalid']);
+		writeJson(join(root, 'composer.json'), baseComposer);
+		writeJson(join(root, 'runtime-copy.json'), baseRuntimeCopy);
+		writeJson(join(root, 'release-please-config.json'), releaseConfig);
+		git(root, ['add', '.']);
+		git(root, ['commit', '-m', 'chore: base']);
+		const baseSha = git(root, ['rev-parse', 'HEAD']);
+
+		mkdirSync(join(root, 'src'));
+		const path = join(root, 'src', 'Line\nBreak.php');
+		writeFileSync(path, '<?php\n');
+		git(root, ['add', 'src']);
+		git(root, ['commit', '-m', 'refactor: source path']);
+		const headSha = git(root, ['rev-parse', 'HEAD']);
+
+		assert.throws(
+			() =>
+				runCli(root, {
+					RAN_RELEASE_BASE_SHA: baseSha,
+					RAN_RELEASE_HEAD_SHA: headSha,
+					RAN_RELEASE_PR_TITLE: 'refactor: source path',
+				}),
+			/release-significant release-updater changes require/
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
