@@ -205,8 +205,8 @@ export function assertCanonicalReleasePull({
 	if (
 		Object.keys(baseDocument).length !== 1 ||
 		Object.keys(headDocument).length !== 1 ||
-		(typeof baseVersion !== 'string' ||
-			(baseVersion !== UNRELEASED && !BETA.test(baseVersion))) ||
+		typeof baseVersion !== 'string' ||
+		(baseVersion !== UNRELEASED && !BETA.test(baseVersion)) ||
 		typeof version !== 'string' ||
 		!BETA.test(version)
 	) {

@@ -272,8 +272,7 @@ test('canonical Release Please bypass requires the exact branch', () => {
 			author: 'github-actions[bot]',
 			baseManifest,
 			baseRuntimeCopy,
-			headRef:
-				'release-please--branches--main--components--unexpected',
+			headRef: 'release-please--branches--main--components--unexpected',
 			headRuntimeCopy: {
 				...baseRuntimeCopy,
 				package_version: '0.1.0-beta.7',
