@@ -93,7 +93,6 @@ const headReleaseContents = {
 const repository = 'RocketsAreNostalgic/ran-wp-release-updater';
 const repositoryId = '1342292184';
 const releaseBaseSha = 'a'.repeat(40);
-const releaseHeadSha = 'b'.repeat(40);
 const releaseTreeEntries = Object.fromEntries(
 	[
 		'.release-please-manifest.json',
