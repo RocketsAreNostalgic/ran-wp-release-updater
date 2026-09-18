@@ -365,8 +365,6 @@ final class RequestBroker {
 		}
 		$conflict = null !== $this->selectedRuntimeState
 			&& ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this;
-		$conflict = $conflict || isset( $GLOBALS['ran_wp_github_release_updater_v1_broker'] )
-			|| function_exists( 'ran_wp_github_release_updater_v1_has_registered_target' );
 		if ( $conflict && 'protocol_conflict_inactive' !== $this->terminalCode ) {
 			$this->disable( 'protocol_conflict_inactive' );
 		}
