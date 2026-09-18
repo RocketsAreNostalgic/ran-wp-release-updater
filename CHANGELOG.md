@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.0-beta.7](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.6...v0.1.0-beta.7) (2026-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* retire pre-protocol-4 compatibility ([#55](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/55))
+
+### Code Refactoring
+
+* retire pre-protocol-4 compatibility ([#55](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/55)) ([639df03](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/639df0352b3598ca7fadfd4035aeab10986e42d6))
+
 ## [0.1.0-beta.6](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.5...v0.1.0-beta.6) (2026-09-10)
 
 
