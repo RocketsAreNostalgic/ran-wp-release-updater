@@ -13,6 +13,7 @@ import {
 	releaseSignificantChange,
 	runCli,
 	runtimeMetadataChanged,
+	runtimeMetadataWithoutPackageVersion,
 	visibleReleaseTypes,
 } from '../scripts/release-classification.mjs';
 
@@ -107,7 +108,7 @@ test('parses scoped and breaking Conventional Commit titles', () => {
 	});
 });
 
-test('production Composer comparison is recursive and ignores require-dev', () => {
+test('production Composer comparison includes public metadata and ignores dev-only keys', () => {
 	assert.equal(
 		productionComposerMetadataChanged(baseComposer, {
 			...baseComposer,
@@ -137,22 +138,32 @@ test('production Composer comparison is recursive and ignores require-dev', () =
 		}),
 		true
 	);
+	assert.equal(
+		productionComposerMetadataChanged(baseComposer, {
+			...baseComposer,
+			license: 'MIT',
+			support: {
+				security: 'https://example.invalid/security',
+			},
+		}),
+		true
+	);
 });
 
-test('Release Please package_version-only runtime metadata is not release-significant', () => {
+test('ordinary package_version changes remain release-significant', () => {
 	assert.equal(
 		runtimeMetadataChanged(baseRuntimeCopy, {
 			...baseRuntimeCopy,
 			package_version: '0.1.0-beta.7',
 		}),
-		false
-	);
-	assert.equal(
-		runtimeMetadataChanged(baseRuntimeCopy, {
-			...baseRuntimeCopy,
-			runtime_protocol: 5,
-		}),
 		true
+	);
+	assert.deepEqual(
+		runtimeMetadataWithoutPackageVersion(baseRuntimeCopy),
+		runtimeMetadataWithoutPackageVersion({
+			...baseRuntimeCopy,
+			package_version: '0.1.0-beta.7',
+		})
 	);
 });
 
@@ -161,6 +172,8 @@ test('shipped source, runtime metadata and production Composer metadata are rele
 		'src/Runtime/RequestBroker.php',
 		'bootstrap.php',
 		'runtime.php',
+		'.gitattributes',
+		'.release-please-manifest.json',
 	]) {
 		assert.equal(
 			releaseSignificantChange({
@@ -209,9 +222,19 @@ test('canonical Release Please pull title must exactly match manifest version', 
 	assert.equal(
 		assertCanonicalReleasePull({
 			author: 'github-actions[bot]',
+			baseRuntimeCopy,
 			headRef:
 				'release-please--branches--main--components--ran/wp-release-updater',
+			headRuntimeCopy: {
+				...baseRuntimeCopy,
+				package_version: '0.1.0-beta.7',
+			},
 			manifest,
+			paths: [
+				'.release-please-manifest.json',
+				'CHANGELOG.md',
+				'runtime-copy.json',
+			],
 			title: 'chore(main): release 0.1.0-beta.7',
 		}),
 		true
@@ -220,16 +243,26 @@ test('canonical Release Please pull title must exactly match manifest version', 
 		() =>
 			assertCanonicalReleasePull({
 				author: 'github-actions[bot]',
+				baseRuntimeCopy,
 				headRef:
 					'release-please--branches--main--components--ran/wp-release-updater',
+				headRuntimeCopy: {
+					...baseRuntimeCopy,
+					package_version: '0.1.0-beta.7',
+				},
 				manifest,
+				paths: [
+					'.release-please-manifest.json',
+					'CHANGELOG.md',
+					'runtime-copy.json',
+				],
 				title: 'chore: release 0.1.0-beta.7',
 			}),
 		/must be exactly/
 	);
 });
 
-test('release version metadata alone remains admissible with the exact generated title', () => {
+test('release version metadata is bypassed only for an exact generated Release Please delta', () => {
 	assert.deepEqual(
 		assertReleaseClassification({
 			baseComposer,
@@ -252,6 +285,32 @@ test('release version metadata alone remains admissible with the exact generated
 			manifest,
 		}),
 		{ required: true, classification: null, releasePull: true }
+	);
+
+	assert.throws(
+		() =>
+			assertReleaseClassification({
+				baseComposer,
+				headComposer: baseComposer,
+				baseRuntimeCopy,
+				headRuntimeCopy: {
+					...baseRuntimeCopy,
+					package_version: '0.1.0-beta.7',
+				},
+				releaseConfig,
+				paths: [
+					'.release-please-manifest.json',
+					'CHANGELOG.md',
+					'runtime-copy.json',
+					'src/Runtime/Injected.php',
+				],
+				title: 'chore(main): release 0.1.0-beta.7',
+				prAuthor: 'github-actions[bot]',
+				prHeadRef:
+					'release-please--branches--main--components--ran/wp-release-updater',
+				manifest,
+			}),
+		/non-generated files/
 	);
 });
 
@@ -352,6 +411,36 @@ test('CLI treats newline-containing source paths as release-significant', () => 
 					RAN_RELEASE_BASE_SHA: baseSha,
 					RAN_RELEASE_HEAD_SHA: headSha,
 					RAN_RELEASE_PR_TITLE: 'refactor: source path',
+					RAN_RELEASE_PR_HEAD_REF: 'feature',
+					RAN_RELEASE_PR_AUTHOR: 'contributor',
+				}),
+			/release-significant release-updater changes require/
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test('CLI treats source renamed out of src as release-significant', () => {
+	const { root, baseSha } = initializeRepository();
+	try {
+		mkdirSync(join(root, 'src'));
+		writeFileSync(join(root, 'src', 'Api.php'), '<?php\n');
+		git(root, ['add', 'src']);
+		git(root, ['commit', '-m', 'feat: add api']);
+		const sourceBase = git(root, ['rev-parse', 'HEAD']);
+
+		git(root, ['mv', 'src/Api.php', 'Api.php']);
+		git(root, ['commit', '-m', 'refactor: move api']);
+		const headSha = git(root, ['rev-parse', 'HEAD']);
+		git(root, ['checkout', sourceBase]);
+
+		assert.throws(
+			() =>
+				runCli(root, {
+					RAN_RELEASE_BASE_SHA: sourceBase,
+					RAN_RELEASE_HEAD_SHA: headSha,
+					RAN_RELEASE_PR_TITLE: 'refactor: move api',
 					RAN_RELEASE_PR_HEAD_REF: 'feature',
 					RAN_RELEASE_PR_AUTHOR: 'contributor',
 				}),
