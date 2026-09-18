@@ -50,6 +50,10 @@ test('trusted release classification workflow stays on protected base', () => {
 		classificationWorkflow,
 		/pull_request_target:\n\s+branches: \[main\]/
 	);
+	assert.match(
+		classificationWorkflow,
+		/types: \[opened, synchronize, reopened, edited, labeled, unlabeled\]/
+	);
 	assert.match(classificationWorkflow, /test "\$base_ref" = main/);
 	assert.match(
 		classificationWorkflow,
@@ -90,6 +94,22 @@ test('trusted release classification workflow stays on protected base', () => {
 	assert.match(
 		classificationWorkflow,
 		/RAN_RELEASE_REPOSITORY_ID: \$\{\{ steps\.pr\.outputs\.base_repo_id \}\}/
+	);
+	assert.match(
+		classificationWorkflow,
+		/RAN_RELEASE_PENDING_LABEL: \$\{\{ steps\.pr\.outputs\.pending_label \}\}/
+	);
+	assert.match(
+		classificationWorkflow,
+		/RAN_RELEASE_TAGGED_LABEL: \$\{\{ steps\.pr\.outputs\.tagged_label \}\}/
+	);
+	assert.match(
+		classificationWorkflow,
+		/autorelease: pending/
+	);
+	assert.match(
+		classificationWorkflow,
+		/autorelease: tagged/
 	);
 	assert.match(
 		classificationWorkflow,
