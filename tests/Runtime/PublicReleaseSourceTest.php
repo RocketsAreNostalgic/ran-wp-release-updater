@@ -193,5 +193,4 @@ PHP
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
 	}
-
 }
