@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 const FULL_SHA = /^[a-f0-9]{40}$/;
 const TITLE = /^([a-z][a-z0-9-]*)(?:\([^)]+\))?(!)?:\s+\S/;
-const RELEASE_BRANCH_PREFIX = 'release-please--branches--main--components--';
+const BETA = /^0\.1\.0-beta\.(0|[1-9][0-9]*)$/;
+const UNRELEASED = '0.0.0';
+const RELEASE_BRANCH =
+	'release-please--branches--main--components--ran/wp-release-updater';
 const DEVELOPMENT_ONLY_COMPOSER_KEYS = new Set([
 	'require-dev',
 	'autoload-dev',
@@ -147,6 +150,7 @@ export function releaseSignificantChange({
 					path === 'bootstrap.php' ||
 					path === 'runtime.php' ||
 					path === '.gitattributes' ||
+					path === 'LICENSE' ||
 					path === '.release-please-manifest.json')
 		)
 	);
@@ -154,6 +158,7 @@ export function releaseSignificantChange({
 
 export function assertCanonicalReleasePull({
 	author,
+	baseManifest,
 	baseRuntimeCopy,
 	headRef,
 	headRuntimeCopy,
@@ -162,9 +167,7 @@ export function assertCanonicalReleasePull({
 	title,
 }) {
 	const isCanonical =
-		author === 'github-actions[bot]' &&
-		typeof headRef === 'string' &&
-		headRef.startsWith(RELEASE_BRANCH_PREFIX);
+		author === 'github-actions[bot]' && headRef === RELEASE_BRANCH;
 	if (!isCanonical) {
 		return false;
 	}
@@ -189,13 +192,43 @@ export function assertCanonicalReleasePull({
 		);
 	}
 
-	const document = objectRecord(manifest, '.release-please-manifest.json');
-	const version = document['.'];
-	if (typeof version !== 'string' || version.length === 0) {
-		throw new Error('release manifest root version is required');
+	const baseDocument = objectRecord(
+		baseManifest,
+		'base .release-please-manifest.json'
+	);
+	const headDocument = objectRecord(
+		manifest,
+		'.release-please-manifest.json'
+	);
+	const baseVersion = baseDocument['.'];
+	const version = headDocument['.'];
+	if (
+		Object.keys(baseDocument).length !== 1 ||
+		Object.keys(headDocument).length !== 1 ||
+		(typeof baseVersion !== 'string' ||
+			(baseVersion !== UNRELEASED && !BETA.test(baseVersion))) ||
+		typeof version !== 'string' ||
+		!BETA.test(version)
+	) {
+		throw new Error(
+			'canonical Release Please pull request must use the independent beta version line'
+		);
 	}
+	if (baseVersion !== UNRELEASED) {
+		const baseNumber = Number(baseVersion.match(BETA)[1]);
+		const headNumber = Number(version.match(BETA)[1]);
+		if (headNumber <= baseNumber) {
+			throw new Error(
+				'canonical Release Please pull request version must advance'
+			);
+		}
+	}
+	const baseRuntime = objectRecord(baseRuntimeCopy, 'base runtime-copy.json');
 	const headRuntime = objectRecord(headRuntimeCopy, 'runtime-copy.json');
-	if (headRuntime.package_version !== version) {
+	if (
+		baseRuntime.package_version !== baseVersion ||
+		headRuntime.package_version !== version
+	) {
 		throw new Error(
 			'canonical Release Please pull request package_version must match manifest'
 		);
@@ -212,6 +245,7 @@ export function assertCanonicalReleasePull({
 
 export function assertReleaseClassification({
 	baseComposer,
+	baseManifest,
 	headComposer,
 	baseRuntimeCopy,
 	headRuntimeCopy,
@@ -225,6 +259,7 @@ export function assertReleaseClassification({
 	if (
 		assertCanonicalReleasePull({
 			author: prAuthor,
+			baseManifest,
 			baseRuntimeCopy,
 			headRef: prHeadRef,
 			headRuntimeCopy,
@@ -328,6 +363,11 @@ export function runCli(root = process.cwd(), env = process.env) {
 	const classificationBaseSha = mergeBase(root, baseSha, headSha);
 	const result = assertReleaseClassification({
 		baseComposer: readJsonAt(root, classificationBaseSha, 'composer.json'),
+		baseManifest: readJsonAt(
+			root,
+			classificationBaseSha,
+			'.release-please-manifest.json'
+		),
 		headComposer: readJsonAt(root, headSha, 'composer.json'),
 		baseRuntimeCopy: readJsonAt(
 			root,
