@@ -28,16 +28,19 @@ jobs:
           set -euo pipefail
           pr="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${RAN_PR_NUMBER}")"
           base_ref="$(jq -er '.base.ref' <<<"$pr")"
+          base_repo="$(jq -er '.base.repo.full_name' <<<"$pr")"
           base_sha="$(jq -er '.base.sha' <<<"$pr")"
           head_sha="$(jq -er '.head.sha' <<<"$pr")"
           head_ref="$(jq -er '.head.ref' <<<"$pr")"
           author="$(jq -er '.user.login' <<<"$pr")"
           title="$(jq -er '.title' <<<"$pr")"
           test "$base_ref" = main
+          test "$base_repo" = "$GITHUB_REPOSITORY"
           [[ "$base_sha" =~ ^[a-f0-9]{40}$ ]]
           [[ "$head_sha" =~ ^[a-f0-9]{40}$ ]]
           {
             echo "base_ref=$base_ref"
+            echo "base_repo=$base_repo"
             echo "base_sha=$base_sha"
             echo "head_sha=$head_sha"
             echo "head_ref=$head_ref"
@@ -66,6 +69,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RAN_PR_NUMBER: ${{ github.event.pull_request.number }}
           RAN_BASE_REF: ${{ steps.pr.outputs.base_ref }}
+          RAN_BASE_REPO: ${{ steps.pr.outputs.base_repo }}
           RAN_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
           RAN_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           RAN_HEAD_REF: ${{ steps.pr.outputs.head_ref }}
@@ -76,6 +80,8 @@ jobs:
           pr="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${RAN_PR_NUMBER}")"
           test "$(jq -er '.base.ref' <<<"$pr")" = "$RAN_BASE_REF"
           test "$RAN_BASE_REF" = main
+          test "$(jq -er '.base.repo.full_name' <<<"$pr")" = "$RAN_BASE_REPO"
+          test "$RAN_BASE_REPO" = "$GITHUB_REPOSITORY"
           test "$(jq -er '.base.sha' <<<"$pr")" = "$RAN_BASE_SHA"
           test "$(jq -er '.head.sha' <<<"$pr")" = "$RAN_HEAD_SHA"
           test "$(jq -er '.head.ref' <<<"$pr")" = "$RAN_HEAD_REF"
