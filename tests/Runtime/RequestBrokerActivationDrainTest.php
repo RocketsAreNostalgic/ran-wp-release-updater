@@ -103,8 +103,8 @@ PHP,
 	}
 
 	public function testRuntimeLoadFailureHasStableTerminalStateAndProjection(): void {
-		$load           = $this->package( 'load-failure', "<?php\nthrow new RuntimeException('load');\n" );
-		$loadResult     = $this->probe(
+		$load       = $this->package( 'load-failure', "<?php\nthrow new RuntimeException('load');\n" );
+		$loadResult = $this->probe(
 			<<<'PHP'
 require $data['load'] . '/bootstrap.php';
 $load=$GLOBALS['ran_wp_release_updater_v1_broker'];
