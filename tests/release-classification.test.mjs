@@ -87,12 +87,14 @@ const baseReleaseContents = {
 const headReleaseContents = {
 	manifest: `${JSON.stringify(manifest, null, 2)}\n`,
 	runtimeCopy: `${JSON.stringify(headRuntimeCopy, null, 2)}\n`,
+	composer: `${JSON.stringify(baseComposer, null, 2)}\n`,
 	changelog: headChangelog,
 };
 
 const repository = 'RocketsAreNostalgic/ran-wp-release-updater';
 const repositoryId = '1342292184';
 const releaseBaseSha = 'a'.repeat(40);
+const releaseHeadSha = 'b'.repeat(40);
 const releaseTreeEntries = Object.fromEntries(
 	['.release-please-manifest.json', 'CHANGELOG.md', 'runtime-copy.json'].map(
 		(path, index) => [
@@ -120,11 +122,14 @@ function canonicalReleaseInput(overrides = {}) {
 		headRepository: repository,
 		headRepositoryId: repositoryId,
 		headRuntimeCopy,
+		headSha: releaseHeadSha,
 		headTreeEntries: releaseTreeEntries,
 		manifest,
 		mergeBaseSha: releaseBaseSha,
+		pendingLabel: true,
 		repository,
 		repositoryId,
+		taggedLabel: false,
 		paths: [
 			'.release-please-manifest.json',
 			'CHANGELOG.md',
@@ -364,6 +369,48 @@ test('canonical Release Please bypass requires ordinary generated-file blobs', (
 	);
 });
 
+test('canonical Release Please bypass requires publisher lifecycle labels', () => {
+	assert.equal(
+		assertCanonicalReleasePull(
+			canonicalReleaseInput({
+				pendingLabel: false,
+			})
+		),
+		false
+	);
+	assert.equal(
+		assertCanonicalReleasePull(
+			canonicalReleaseInput({
+				taggedLabel: true,
+			})
+		),
+		false
+	);
+});
+
+test('canonical Release Please bypass enforces publisher release-note bounds', () => {
+	const oversizedChangelog =
+		'# Changelog\n\n' +
+		'## [0.1.0-beta.7](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.6...v0.1.0-beta.7) (2026-09-18)\n\n' +
+		'### Bug Fixes\n\n' +
+		'x'.repeat(125001) +
+		'\n\n' +
+		baseChangelog.slice('# Changelog\n\n'.length);
+
+	assert.throws(
+		() =>
+			assertCanonicalReleasePull(
+				canonicalReleaseInput({
+					headContents: {
+						...headReleaseContents,
+						changelog: oversizedChangelog,
+					},
+				})
+			),
+		/release_notes_invalid/
+	);
+});
+
 test('canonical Release Please version stays on and advances the beta line', () => {
 	for (const [headVersion, expected] of [
 		['1.0.0', /independent beta version line/],
@@ -419,11 +466,14 @@ test('release version metadata is bypassed only for an exact generated Release P
 			headRefRepository: repository,
 			headRefRepositoryId: repositoryId,
 			headRuntimeCopy,
+			headSha: releaseHeadSha,
 			headTreeEntries: releaseTreeEntries,
 			mergeBaseSha: releaseBaseSha,
+			pendingLabel: true,
 			repository,
 			repositoryId,
 			releaseConfig,
+			taggedLabel: false,
 			paths: [
 				'.release-please-manifest.json',
 				'CHANGELOG.md',
@@ -452,11 +502,14 @@ test('release version metadata is bypassed only for an exact generated Release P
 				headRefRepository: repository,
 				headRefRepositoryId: repositoryId,
 				headRuntimeCopy,
+				headSha: releaseHeadSha,
 				headTreeEntries: releaseTreeEntries,
 				mergeBaseSha: releaseBaseSha,
+				pendingLabel: true,
 				repository,
 				repositoryId,
 				releaseConfig,
+				taggedLabel: false,
 				paths: [
 					'.release-please-manifest.json',
 					'CHANGELOG.md',
