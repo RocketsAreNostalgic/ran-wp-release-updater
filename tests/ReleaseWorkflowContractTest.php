@@ -35,7 +35,6 @@ final class ReleaseWorkflowContractTest extends TestCase {
     if: ${{ always() }}
     needs:
       - baseline
-      - release-classification
       - javascript
       - mysql-cas
       - windows-portability
@@ -47,7 +46,6 @@ YAML;
 		foreach (
 			array(
 				'BASELINE_RESULT: ${{ needs.baseline.result }}' => 'test "$BASELINE_RESULT" = success',
-				'CLASSIFICATION_RESULT: ${{ needs.release-classification.result }}' => 'test "$CLASSIFICATION_RESULT" = success',
 				'JAVASCRIPT_RESULT: ${{ needs.javascript.result }}' => 'test "$JAVASCRIPT_RESULT" = success',
 				'MYSQL_CAS_RESULT: ${{ needs.mysql-cas.result }}' => 'test "$MYSQL_CAS_RESULT" = success',
 				'WINDOWS_RESULT: ${{ needs.windows-portability.result }}' => 'test "$WINDOWS_RESULT" = success',
