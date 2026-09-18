@@ -64,6 +64,52 @@ const baseRuntimeCopy = {
 
 const baseManifest = { '.': '0.1.0-beta.6' };
 const manifest = { '.': '0.1.0-beta.7' };
+const headRuntimeCopy = {
+	...baseRuntimeCopy,
+	package_version: '0.1.0-beta.7',
+};
+const baseChangelog =
+	'# Changelog\n\n' +
+	'## [0.1.0-beta.6](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.5...v0.1.0-beta.6) (2026-09-17)\n\n' +
+	'### Bug Fixes\n\n' +
+	'- previous fix\n';
+const headChangelog =
+	'# Changelog\n\n' +
+	'## [0.1.0-beta.7](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.6...v0.1.0-beta.7) (2026-09-18)\n\n' +
+	'### Bug Fixes\n\n' +
+	'- next fix\n\n' +
+	baseChangelog.slice('# Changelog\n\n'.length);
+const baseReleaseContents = {
+	manifest: `${JSON.stringify(baseManifest, null, 2)}\n`,
+	runtimeCopy: `${JSON.stringify(baseRuntimeCopy, null, 2)}\n`,
+	changelog: baseChangelog,
+};
+const headReleaseContents = {
+	manifest: `${JSON.stringify(manifest, null, 2)}\n`,
+	runtimeCopy: `${JSON.stringify(headRuntimeCopy, null, 2)}\n`,
+	changelog: headChangelog,
+};
+
+function canonicalReleaseInput(overrides = {}) {
+	return {
+		author: 'github-actions[bot]',
+		baseContents: baseReleaseContents,
+		baseManifest,
+		baseRuntimeCopy,
+		headContents: headReleaseContents,
+		headRef:
+			'release-please--branches--main--components--ran/wp-release-updater',
+		headRuntimeCopy,
+		manifest,
+		paths: [
+			'.release-please-manifest.json',
+			'CHANGELOG.md',
+			'runtime-copy.json',
+		],
+		title: 'chore(main): release 0.1.0-beta.7',
+		...overrides,
+	};
+}
 
 function git(root, args) {
 	return execFileSync('git', args, {
@@ -222,69 +268,27 @@ test('shipped source, runtime metadata and production Composer metadata are rele
 
 test('canonical Release Please pull title must exactly match manifest version', () => {
 	assert.equal(
-		assertCanonicalReleasePull({
-			author: 'github-actions[bot]',
-			baseManifest,
-			baseRuntimeCopy,
-			headRef:
-				'release-please--branches--main--components--ran/wp-release-updater',
-			headRuntimeCopy: {
-				...baseRuntimeCopy,
-				package_version: '0.1.0-beta.7',
-			},
-			manifest,
-			paths: [
-				'.release-please-manifest.json',
-				'CHANGELOG.md',
-				'runtime-copy.json',
-			],
-			title: 'chore(main): release 0.1.0-beta.7',
-		}),
+		assertCanonicalReleasePull(canonicalReleaseInput()),
 		true
 	);
 	assert.throws(
 		() =>
-			assertCanonicalReleasePull({
-				author: 'github-actions[bot]',
-				baseManifest,
-				baseRuntimeCopy,
-				headRef:
-					'release-please--branches--main--components--ran/wp-release-updater',
-				headRuntimeCopy: {
-					...baseRuntimeCopy,
-					package_version: '0.1.0-beta.7',
-				},
-				manifest,
-				paths: [
-					'.release-please-manifest.json',
-					'CHANGELOG.md',
-					'runtime-copy.json',
-				],
-				title: 'chore: release 0.1.0-beta.7',
-			}),
+			assertCanonicalReleasePull(
+				canonicalReleaseInput({
+					title: 'chore: release 0.1.0-beta.7',
+				})
+			),
 		/must be exactly/
 	);
 });
 
 test('canonical Release Please bypass requires the exact branch', () => {
 	assert.equal(
-		assertCanonicalReleasePull({
-			author: 'github-actions[bot]',
-			baseManifest,
-			baseRuntimeCopy,
-			headRef: 'release-please--branches--main--components--unexpected',
-			headRuntimeCopy: {
-				...baseRuntimeCopy,
-				package_version: '0.1.0-beta.7',
-			},
-			manifest,
-			paths: [
-				'.release-please-manifest.json',
-				'CHANGELOG.md',
-				'runtime-copy.json',
-			],
-			title: 'chore(main): release 0.1.0-beta.7',
-		}),
+		assertCanonicalReleasePull(
+			canonicalReleaseInput({
+				headRef: 'release-please--branches--main--components--unexpected',
+			})
+		),
 		false
 	);
 });
@@ -297,40 +301,49 @@ test('canonical Release Please version stays on and advances the beta line', () 
 	]) {
 		assert.throws(
 			() =>
-				assertCanonicalReleasePull({
-					author: 'github-actions[bot]',
-					baseManifest,
-					baseRuntimeCopy,
-					headRef:
-						'release-please--branches--main--components--ran/wp-release-updater',
-					headRuntimeCopy: {
-						...baseRuntimeCopy,
-						package_version: headVersion,
-					},
-					manifest: { '.': headVersion },
-					paths: [
-						'.release-please-manifest.json',
-						'CHANGELOG.md',
-						'runtime-copy.json',
-					],
-					title: `chore(main): release ${headVersion}`,
-				}),
+				assertCanonicalReleasePull(
+					canonicalReleaseInput({
+						headRuntimeCopy: {
+							...baseRuntimeCopy,
+							package_version: headVersion,
+						},
+						manifest: { '.': headVersion },
+						title: `chore(main): release ${headVersion}`,
+					})
+				),
 			expected
 		);
 	}
+});
+
+test('canonical Release Please bypass rejects byte drift in prior changelog history', () => {
+	assert.throws(
+		() =>
+			assertCanonicalReleasePull(
+				canonicalReleaseInput({
+					headContents: {
+						...headReleaseContents,
+						changelog: headChangelog.replace(
+							'- previous fix',
+							'- edited previous fix'
+						),
+					},
+				})
+			),
+		/release_content_drift/
+	);
 });
 
 test('release version metadata is bypassed only for an exact generated Release Please delta', () => {
 	assert.deepEqual(
 		assertReleaseClassification({
 			baseComposer,
+			baseContents: baseReleaseContents,
 			baseManifest,
 			headComposer: baseComposer,
 			baseRuntimeCopy,
-			headRuntimeCopy: {
-				...baseRuntimeCopy,
-				package_version: '0.1.0-beta.7',
-			},
+			headContents: headReleaseContents,
+			headRuntimeCopy,
 			releaseConfig,
 			paths: [
 				'.release-please-manifest.json',
@@ -350,13 +363,12 @@ test('release version metadata is bypassed only for an exact generated Release P
 		() =>
 			assertReleaseClassification({
 				baseComposer,
+				baseContents: baseReleaseContents,
 				baseManifest,
 				headComposer: baseComposer,
 				baseRuntimeCopy,
-				headRuntimeCopy: {
-					...baseRuntimeCopy,
-					package_version: '0.1.0-beta.7',
-				},
+				headContents: headReleaseContents,
+				headRuntimeCopy,
 				releaseConfig,
 				paths: [
 					'.release-please-manifest.json',
