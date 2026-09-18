@@ -3,6 +3,8 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+import { verifyReleaseDelta } from './release-publisher-content.mjs';
+
 const FULL_SHA = /^[a-f0-9]{40}$/;
 const TITLE = /^([a-z][a-z0-9-]*)(?:\([^)]+\))?(!)?:\s+\S/;
 const BETA = /^0\.1\.0-beta\.(0|[1-9][0-9]*)$/;
@@ -134,6 +136,7 @@ export function releaseSignificantChange({
 	baseComposer,
 	headComposer,
 	baseRuntimeCopy,
+	headContents,
 	headRuntimeCopy,
 	paths,
 }) {
@@ -158,8 +161,10 @@ export function releaseSignificantChange({
 
 export function assertCanonicalReleasePull({
 	author,
+	baseContents,
 	baseManifest,
 	baseRuntimeCopy,
+	headContents,
 	headRef,
 	headRuntimeCopy,
 	manifest,
@@ -234,6 +239,16 @@ export function assertCanonicalReleasePull({
 		);
 	}
 
+	const delta = verifyReleaseDelta(baseContents, headContents);
+	if (
+		delta.parentVersion !== baseVersion ||
+		delta.candidateVersion !== version
+	) {
+		throw new Error(
+			'canonical Release Please pull request raw release delta does not match parsed release identity'
+		);
+	}
+
 	const expected = `chore(main): release ${version}`;
 	if (title !== expected) {
 		throw new Error(
@@ -245,6 +260,7 @@ export function assertCanonicalReleasePull({
 
 export function assertReleaseClassification({
 	baseComposer,
+	baseContents,
 	baseManifest,
 	headComposer,
 	baseRuntimeCopy,
@@ -259,8 +275,10 @@ export function assertReleaseClassification({
 	if (
 		assertCanonicalReleasePull({
 			author: prAuthor,
+			baseContents,
 			baseManifest,
 			baseRuntimeCopy,
+			headContents,
 			headRef: prHeadRef,
 			headRuntimeCopy,
 			manifest,
@@ -303,6 +321,10 @@ function git(root, args) {
 
 function readJsonAt(root, sha, path) {
 	return JSON.parse(git(root, ['show', `${sha}:${path}`]).trim());
+}
+
+function readTextAt(root, sha, path) {
+	return git(root, ['show', `${sha}:${path}`]);
 }
 
 function mergeBase(root, baseSha, headSha) {
@@ -361,8 +383,27 @@ export function runCli(root = process.cwd(), env = process.env) {
 	}
 
 	const classificationBaseSha = mergeBase(root, baseSha, headSha);
+	const baseContents = {
+		manifest: readTextAt(
+			root,
+			classificationBaseSha,
+			'.release-please-manifest.json'
+		),
+		runtimeCopy: readTextAt(
+			root,
+			classificationBaseSha,
+			'runtime-copy.json'
+		),
+		changelog: readTextAt(root, classificationBaseSha, 'CHANGELOG.md'),
+	};
+	const headContents = {
+		manifest: readTextAt(root, headSha, '.release-please-manifest.json'),
+		runtimeCopy: readTextAt(root, headSha, 'runtime-copy.json'),
+		changelog: readTextAt(root, headSha, 'CHANGELOG.md'),
+	};
 	const result = assertReleaseClassification({
 		baseComposer: readJsonAt(root, classificationBaseSha, 'composer.json'),
+		baseContents,
 		baseManifest: readJsonAt(
 			root,
 			classificationBaseSha,
@@ -375,6 +416,7 @@ export function runCli(root = process.cwd(), env = process.env) {
 			'runtime-copy.json'
 		),
 		headRuntimeCopy: readJsonAt(root, headSha, 'runtime-copy.json'),
+		headContents,
 		releaseConfig: readJsonAt(root, baseSha, 'release-please-config.json'),
 		paths: changedPaths(root, classificationBaseSha, headSha),
 		title,
