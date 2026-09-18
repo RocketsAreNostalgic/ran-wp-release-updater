@@ -71,7 +71,9 @@ export function visibleReleaseTypes(config) {
 	);
 	const sections = root['changelog-sections'];
 	if (!Array.isArray(sections) || sections.length === 0) {
-		throw new Error('release-please-config.json must declare changelog-sections');
+		throw new Error(
+			'release-please-config.json must declare changelog-sections'
+		);
 	}
 
 	const types = new Set();
@@ -104,7 +106,10 @@ export function classifyTitle(title) {
 	return { type: match[1], breaking: match[2] === '!' };
 }
 
-export function productionComposerMetadataChanged(baseComposer, headComposer) {
+export function productionComposerMetadataChanged(
+	baseComposer,
+	headComposer
+) {
 	return (
 		JSON.stringify(productionComposerMetadata(baseComposer)) !==
 		JSON.stringify(productionComposerMetadata(headComposer))
@@ -141,12 +146,7 @@ export function releaseSignificantChange({
 	);
 }
 
-export function assertCanonicalReleasePull({
-	author,
-	headRef,
-	manifest,
-	title,
-}) {
+export function assertCanonicalReleasePull({ author, headRef, manifest, title }) {
 	const isCanonical =
 		author === 'github-actions[bot]' &&
 		typeof headRef === 'string' &&
@@ -259,7 +259,9 @@ export function runCli(root = process.cwd(), env = process.env) {
 		prHeadRef.length === 0 ||
 		prAuthor.length === 0
 	) {
-		throw new Error('live pull request title, head ref, and author are required');
+		throw new Error(
+			'live pull request title, head ref, and author are required'
+		);
 	}
 
 	const checkoutSha = git(root, ['rev-parse', 'HEAD']).trim();
@@ -271,7 +273,11 @@ export function runCli(root = process.cwd(), env = process.env) {
 
 	const classificationBaseSha = mergeBase(root, baseSha, headSha);
 	const result = assertReleaseClassification({
-		baseComposer: readJsonAt(root, classificationBaseSha, 'composer.json'),
+		baseComposer: readJsonAt(
+			root,
+			classificationBaseSha,
+			'composer.json'
+		),
 		headComposer: readJsonAt(root, headSha, 'composer.json'),
 		baseRuntimeCopy: readJsonAt(
 			root,
