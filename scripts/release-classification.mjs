@@ -171,8 +171,7 @@ export function assertCanonicalReleasePull({
 
 	const normalizedPaths = [...paths].sort();
 	if (
-		JSON.stringify(normalizedPaths) !==
-		JSON.stringify(RELEASE_PULL_PATHS)
+		JSON.stringify(normalizedPaths) !== JSON.stringify(RELEASE_PULL_PATHS)
 	) {
 		throw new Error(
 			'canonical Release Please pull request changed non-generated files'
@@ -183,9 +182,7 @@ export function assertCanonicalReleasePull({
 		JSON.stringify(
 			runtimeMetadataWithoutPackageVersion(baseRuntimeCopy)
 		) !==
-		JSON.stringify(
-			runtimeMetadataWithoutPackageVersion(headRuntimeCopy)
-		)
+		JSON.stringify(runtimeMetadataWithoutPackageVersion(headRuntimeCopy))
 	) {
 		throw new Error(
 			'canonical Release Please pull request changed runtime metadata beyond package_version'
@@ -347,7 +344,9 @@ export function runCli(root = process.cwd(), env = process.env) {
 	});
 
 	if (result.releasePull) {
-		process.stdout.write('canonical Release Please pull request title is exact\n');
+		process.stdout.write(
+			'canonical Release Please pull request title is exact\n'
+		);
 	} else if (result.required) {
 		process.stdout.write(
 			`release-significant release-updater change; classification ${result.classification.type}${result.classification.breaking ? '!' : ''} is release-driving\n`
@@ -364,7 +363,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	try {
 		runCli();
 	} catch (error) {
-		process.stderr.write(`${error instanceof Error ? error.message : error}\n`);
+		process.stderr.write(
+			`${error instanceof Error ? error.message : error}\n`
+		);
 		process.exitCode = 1;
 	}
 }
