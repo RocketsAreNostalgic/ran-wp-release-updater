@@ -140,7 +140,7 @@ export function assertReleaseClassification({
 	const visible = visibleReleaseTypes(releaseConfig);
 	if (!classification.breaking && !visible.has(classification.type)) {
 		throw new Error(
-			`release-significant release-updater changes require one of ${[...visible].join(', ')} or an explicit breaking ! classification; ${classification.type}: is hidden`
+			`release-significant release-updater changes require one of ${[...visible].join(', ')} or an explicit breaking ! classification; classification \"${classification.type}\" is hidden`
 		);
 	}
 	return { required: true, classification };
@@ -211,7 +211,7 @@ export function runCli(root = process.cwd(), env = process.env) {
 
 	if (result.required) {
 		console.log(
-			`release-significant release-updater change; ${result.classification.type}${result.classification.breaking ? '!' : ''}: is release-driving`
+			`release-significant release-updater change; classification ${result.classification.type}${result.classification.breaking ? '!' : ''} is release-driving`
 		);
 	} else {
 		console.log(
