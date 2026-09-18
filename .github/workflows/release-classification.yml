@@ -1,0 +1,91 @@
+name: Trusted Release Classification
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: trusted-release-classification-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  release-classification:
+    name: Release classification (trusted)
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - name: Read live pull request identity
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAN_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${RAN_PR_NUMBER}")"
+          base_sha="$(jq -er '.base.sha' <<<"$pr")"
+          head_sha="$(jq -er '.head.sha' <<<"$pr")"
+          head_ref="$(jq -er '.head.ref' <<<"$pr")"
+          author="$(jq -er '.user.login' <<<"$pr")"
+          title="$(jq -er '.title' <<<"$pr")"
+          [[ "$base_sha" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$head_sha" =~ ^[a-f0-9]{40}$ ]]
+          {
+            echo "base_sha=$base_sha"
+            echo "head_sha=$head_sha"
+            echo "head_ref=$head_ref"
+            echo "author=$author"
+            echo "title=$title"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out exact protected base revision
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ steps.pr.outputs.base_sha }}
+
+      - name: Fetch exact pull request head as data
+        env:
+          RAN_PR_NUMBER: ${{ github.event.pull_request.number }}
+          RAN_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/pull/${RAN_PR_NUMBER}/head:refs/remotes/origin/pr-head"
+          test "$(git rev-parse refs/remotes/origin/pr-head)" = "$RAN_HEAD_SHA"
+
+      - name: Re-read live pull request identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAN_PR_NUMBER: ${{ github.event.pull_request.number }}
+          RAN_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          RAN_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          RAN_HEAD_REF: ${{ steps.pr.outputs.head_ref }}
+          RAN_PR_AUTHOR: ${{ steps.pr.outputs.author }}
+          RAN_PR_TITLE: ${{ steps.pr.outputs.title }}
+        run: |
+          set -euo pipefail
+          pr="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${RAN_PR_NUMBER}")"
+          test "$(jq -er '.base.sha' <<<"$pr")" = "$RAN_BASE_SHA"
+          test "$(jq -er '.head.sha' <<<"$pr")" = "$RAN_HEAD_SHA"
+          test "$(jq -er '.head.ref' <<<"$pr")" = "$RAN_HEAD_REF"
+          test "$(jq -er '.user.login' <<<"$pr")" = "$RAN_PR_AUTHOR"
+          test "$(jq -er '.title' <<<"$pr")" = "$RAN_PR_TITLE"
+
+      - name: Set up Node for trusted classifier
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24.11.0'
+          check-latest: false
+
+      - name: Classify exact live pull request
+        env:
+          RAN_RELEASE_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          RAN_RELEASE_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          RAN_RELEASE_PR_TITLE: ${{ steps.pr.outputs.title }}
+          RAN_RELEASE_PR_HEAD_REF: ${{ steps.pr.outputs.head_ref }}
+          RAN_RELEASE_PR_AUTHOR: ${{ steps.pr.outputs.author }}
+        run: node scripts/release-classification.mjs
