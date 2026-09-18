@@ -3,7 +3,10 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { verifyReleaseDelta } from './release-publisher-content.mjs';
+import {
+	candidateIdentity,
+	verifyReleaseDelta,
+} from './release-publisher-content.mjs';
 
 const FULL_SHA = /^[a-f0-9]{40}$/;
 const TITLE = /^([a-z][a-z0-9-]*)(?:\([^)]+\))?(!)?:\s+\S/;
@@ -170,12 +173,15 @@ export function assertCanonicalReleasePull({
 	headRepository,
 	headRepositoryId,
 	headRuntimeCopy,
+	headSha,
 	headTreeEntries,
 	manifest,
+	pendingLabel,
 	mergeBaseSha,
 	paths,
 	repository,
 	repositoryId,
+	taggedLabel,
 	title,
 }) {
 	const isCanonical =
@@ -186,7 +192,9 @@ export function assertCanonicalReleasePull({
 		typeof repositoryId === 'string' &&
 		/^[0-9]+$/.test(repositoryId) &&
 		headRepository === repository &&
-		headRepositoryId === repositoryId;
+		headRepositoryId === repositoryId &&
+		pendingLabel === true &&
+		taggedLabel === false;
 	if (!isCanonical) {
 		return false;
 	}
@@ -282,6 +290,13 @@ export function assertCanonicalReleasePull({
 		);
 	}
 
+	const identity = candidateIdentity(headContents, headSha);
+	if (identity.version !== version) {
+		throw new Error(
+			'canonical Release Please pull request candidate identity does not match manifest'
+		);
+	}
+
 	const expected = `chore(main): release ${version}`;
 	if (title !== expected) {
 		throw new Error(
@@ -303,11 +318,14 @@ export function assertReleaseClassification({
 	headRefRepository,
 	headRefRepositoryId,
 	headRuntimeCopy,
+	headSha,
 	headTreeEntries,
 	mergeBaseSha,
+	pendingLabel,
 	repository,
 	repositoryId,
 	releaseConfig,
+	taggedLabel,
 	paths,
 	title,
 	prAuthor = '',
@@ -327,12 +345,15 @@ export function assertReleaseClassification({
 			headRepository: headRefRepository,
 			headRepositoryId: headRefRepositoryId,
 			headRuntimeCopy,
+			headSha,
 			headTreeEntries,
 			manifest,
 			mergeBaseSha,
+			pendingLabel,
 			paths,
 			repository,
 			repositoryId,
+			taggedLabel,
 			title,
 		})
 	) {
@@ -424,6 +445,8 @@ export function runCli(root = process.cwd(), env = process.env) {
 	const headRefRepositoryId = env.RAN_RELEASE_PR_HEAD_REPOSITORY_ID;
 	const repository = env.RAN_RELEASE_REPOSITORY;
 	const repositoryId = env.RAN_RELEASE_REPOSITORY_ID;
+	const pendingLabel = env.RAN_RELEASE_PENDING_LABEL === 'true';
+	const taggedLabel = env.RAN_RELEASE_TAGGED_LABEL === 'true';
 
 	if (!FULL_SHA.test(baseSha ?? '') || !FULL_SHA.test(headSha ?? '')) {
 		throw new Error(
@@ -462,7 +485,9 @@ export function runCli(root = process.cwd(), env = process.env) {
 		typeof repositoryId === 'string' &&
 		/^[0-9]+$/.test(repositoryId) &&
 		headRefRepository === repository &&
-		headRefRepositoryId === repositoryId
+		headRefRepositoryId === repositoryId &&
+		pendingLabel &&
+		!taggedLabel
 	) {
 		if (classificationBaseSha !== baseSha) {
 			throw new Error(
@@ -491,6 +516,7 @@ export function runCli(root = process.cwd(), env = process.env) {
 				'.release-please-manifest.json'
 			),
 			runtimeCopy: readTextAt(root, headSha, 'runtime-copy.json'),
+			composer: readTextAt(root, headSha, 'composer.json'),
 			changelog: readTextAt(root, headSha, 'CHANGELOG.md'),
 		};
 	}
@@ -514,11 +540,14 @@ export function runCli(root = process.cwd(), env = process.env) {
 		headContents,
 		headRefRepository,
 		headRefRepositoryId,
+		headSha,
 		headTreeEntries,
 		mergeBaseSha: classificationBaseSha,
+		pendingLabel,
 		repository,
 		repositoryId,
 		releaseConfig: readJsonAt(root, baseSha, 'release-please-config.json'),
+		taggedLabel,
 		paths: changedPaths(root, classificationBaseSha, headSha),
 		title,
 		prAuthor,
