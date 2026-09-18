@@ -136,7 +136,6 @@ export function releaseSignificantChange({
 	baseComposer,
 	headComposer,
 	baseRuntimeCopy,
-	headContents,
 	headRuntimeCopy,
 	paths,
 }) {
@@ -264,6 +263,7 @@ export function assertReleaseClassification({
 	baseManifest,
 	headComposer,
 	baseRuntimeCopy,
+	headContents,
 	headRuntimeCopy,
 	releaseConfig,
 	paths,
@@ -383,24 +383,28 @@ export function runCli(root = process.cwd(), env = process.env) {
 	}
 
 	const classificationBaseSha = mergeBase(root, baseSha, headSha);
-	const baseContents = {
-		manifest: readTextAt(
-			root,
-			classificationBaseSha,
-			'.release-please-manifest.json'
-		),
-		runtimeCopy: readTextAt(
-			root,
-			classificationBaseSha,
-			'runtime-copy.json'
-		),
-		changelog: readTextAt(root, classificationBaseSha, 'CHANGELOG.md'),
-	};
-	const headContents = {
-		manifest: readTextAt(root, headSha, '.release-please-manifest.json'),
-		runtimeCopy: readTextAt(root, headSha, 'runtime-copy.json'),
-		changelog: readTextAt(root, headSha, 'CHANGELOG.md'),
-	};
+	let baseContents;
+	let headContents;
+	if (prAuthor === 'github-actions[bot]' && prHeadRef === RELEASE_BRANCH) {
+		baseContents = {
+			manifest: readTextAt(
+				root,
+				classificationBaseSha,
+				'.release-please-manifest.json'
+			),
+			runtimeCopy: readTextAt(
+				root,
+				classificationBaseSha,
+				'runtime-copy.json'
+			),
+			changelog: readTextAt(root, classificationBaseSha, 'CHANGELOG.md'),
+		};
+		headContents = {
+			manifest: readTextAt(root, headSha, '.release-please-manifest.json'),
+			runtimeCopy: readTextAt(root, headSha, 'runtime-copy.json'),
+			changelog: readTextAt(root, headSha, 'CHANGELOG.md'),
+		};
+	}
 	const result = assertReleaseClassification({
 		baseComposer: readJsonAt(root, classificationBaseSha, 'composer.json'),
 		baseContents,
