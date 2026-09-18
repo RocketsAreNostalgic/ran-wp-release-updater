@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0-beta.6](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.6...v1.0.0-beta.6) (2026-09-18)
+## [0.1.0-beta.7](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.6...v0.1.0-beta.7) (2026-09-18)
 
 
 ### ⚠ BREAKING CHANGES
