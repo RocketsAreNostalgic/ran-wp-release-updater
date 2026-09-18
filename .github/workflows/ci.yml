@@ -24,6 +24,9 @@ jobs:
 
   release-classification:
     name: Release classification
+    permissions:
+      contents: read
+      pull-requests: read
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
@@ -49,10 +52,15 @@ jobs:
       - name: Require release-driving squash title for release-significant changes
         if: ${{ github.event_name == 'pull_request' }}
         env:
+          GH_TOKEN: ${{ github.token }}
           RAN_RELEASE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           RAN_RELEASE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RAN_RELEASE_PR_TITLE: ${{ github.event.pull_request.title }}
-        run: node scripts/release-classification.mjs
+          RAN_RELEASE_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          RAN_RELEASE_PR_TITLE="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${RAN_RELEASE_PR_NUMBER}" --jq '.title')"
+          export RAN_RELEASE_PR_TITLE
+          node scripts/release-classification.mjs
 
   javascript:
     name: JavaScript quality
