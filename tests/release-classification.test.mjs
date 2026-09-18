@@ -6,9 +6,10 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import {
+	assertCanonicalReleasePull,
 	assertReleaseClassification,
 	classifyTitle,
-	productionRequirementsChanged,
+	productionComposerMetadataChanged,
 	releaseSignificantChange,
 	runCli,
 	runtimeMetadataChanged,
@@ -31,11 +32,18 @@ const releaseConfig = {
 };
 
 const baseComposer = {
+	name: 'ran/wp-release-updater',
+	type: 'library',
 	require: {
 		php: '^8.2',
 		'ext-hash': '*',
 		'ext-json': '*',
 		'ext-zip': '*',
+	},
+	autoload: {
+		'psr-4': {
+			'RAN\\WPReleaseUpdater\\V1\\': 'src/',
+		},
 	},
 	'require-dev': { 'phpstan/phpstan': '^2.1' },
 };
@@ -49,6 +57,8 @@ const baseRuntimeCopy = {
 	wordpress_floor: '6.5.0',
 };
 
+const manifest = { '.': '0.1.0-beta.7' };
+
 function git(root, args) {
 	return execFileSync('git', args, {
 		cwd: root,
@@ -59,6 +69,20 @@ function git(root, args) {
 
 function writeJson(path, value) {
 	writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+function initializeRepository() {
+	const root = mkdtempSync(join(tmpdir(), 'release-updater-classification-'));
+	git(root, ['init', '--initial-branch=main']);
+	git(root, ['config', 'user.name', 'Release Test']);
+	git(root, ['config', 'user.email', 'release@example.invalid']);
+	writeJson(join(root, 'composer.json'), baseComposer);
+	writeJson(join(root, 'runtime-copy.json'), baseRuntimeCopy);
+	writeJson(join(root, 'release-please-config.json'), releaseConfig);
+	writeJson(join(root, '.release-please-manifest.json'), manifest);
+	git(root, ['add', '.']);
+	git(root, ['commit', '-m', 'chore: base']);
+	return { root, baseSha: git(root, ['rev-parse', 'HEAD']) };
 }
 
 test('derives release-updater visible release-driving types', () => {
@@ -81,24 +105,39 @@ test('parses scoped and breaking Conventional Commit titles', () => {
 	});
 });
 
-test('production requirement comparison ignores require-dev', () => {
+test('production Composer comparison is recursive and ignores require-dev', () => {
 	assert.equal(
-		productionRequirementsChanged(baseComposer, {
+		productionComposerMetadataChanged(baseComposer, {
 			...baseComposer,
+			require: {
+				'ext-zip': '*',
+				'ext-json': '*',
+				'ext-hash': '*',
+				php: '^8.2',
+			},
+			autoload: {
+				'psr-4': {
+					'RAN\\WPReleaseUpdater\\V1\\': 'src/',
+				},
+			},
 			'require-dev': { 'phpstan/phpstan': '^3.0' },
 		}),
 		false
 	);
 	assert.equal(
-		productionRequirementsChanged(baseComposer, {
+		productionComposerMetadataChanged(baseComposer, {
 			...baseComposer,
-			require: { ...baseComposer.require, php: '^8.3' },
+			autoload: {
+				'psr-4': {
+					'RAN\\WPReleaseUpdater\\V1\\': 'lib/',
+				},
+			},
 		}),
 		true
 	);
 });
 
-test('Release Please package_version-only metadata changes are not release-significant', () => {
+test('Release Please package_version-only runtime metadata is not release-significant', () => {
 	assert.equal(
 		runtimeMetadataChanged(baseRuntimeCopy, {
 			...baseRuntimeCopy,
@@ -115,7 +154,7 @@ test('Release Please package_version-only metadata changes are not release-signi
 	);
 });
 
-test('shipped source, bootstrap, runtime, metadata and production requirements are release-significant', () => {
+test('shipped source, runtime metadata and production Composer metadata are release-significant', () => {
 	for (const path of [
 		'src/Runtime/RequestBroker.php',
 		'bootstrap.php',
@@ -145,7 +184,14 @@ test('shipped source, bootstrap, runtime, metadata and production requirements a
 	assert.equal(
 		releaseSignificantChange({
 			baseComposer,
-			headComposer: { ...baseComposer, require: { ...baseComposer.require, php: '^8.3' } },
+			headComposer: {
+				...baseComposer,
+				autoload: {
+					'psr-4': {
+						'RAN\\WPReleaseUpdater\\V1\\': 'lib/',
+					},
+				},
+			},
 			baseRuntimeCopy,
 			headRuntimeCopy: baseRuntimeCopy,
 			paths: ['composer.json'],
@@ -154,7 +200,31 @@ test('shipped source, bootstrap, runtime, metadata and production requirements a
 	);
 });
 
-test('release version PR metadata alone does not force a release-driving title', () => {
+test('canonical Release Please pull title must exactly match manifest version', () => {
+	assert.equal(
+		assertCanonicalReleasePull({
+			author: 'github-actions[bot]',
+			headRef:
+				'release-please--branches--main--components--ran/wp-release-updater',
+			manifest,
+			title: 'chore(main): release 0.1.0-beta.7',
+		}),
+		true
+	);
+	assert.throws(
+		() =>
+			assertCanonicalReleasePull({
+				author: 'github-actions[bot]',
+				headRef:
+					'release-please--branches--main--components--ran/wp-release-updater',
+				manifest,
+				title: 'chore: release 0.1.0-beta.7',
+			}),
+		/must be exactly/
+	);
+});
+
+test('release version metadata alone remains admissible with the exact generated title', () => {
 	assert.deepEqual(
 		assertReleaseClassification({
 			baseComposer,
@@ -171,12 +241,16 @@ test('release version PR metadata alone does not force a release-driving title',
 				'runtime-copy.json',
 			],
 			title: 'chore(main): release 0.1.0-beta.7',
+			prAuthor: 'github-actions[bot]',
+			prHeadRef:
+				'release-please--branches--main--components--ran/wp-release-updater',
+			manifest,
 		}),
-		{ required: false, classification: null }
+		{ required: true, classification: null, releasePull: true }
 	);
 });
 
-test('release-significant changes reject hidden squash classifications', () => {
+test('release-significant changes reject non-driving classifications', () => {
 	assert.throws(
 		() =>
 			assertReleaseClassification({
@@ -187,6 +261,7 @@ test('release-significant changes reject hidden squash classifications', () => {
 				releaseConfig,
 				paths: ['runtime.php'],
 				title: 'refactor: reorganize runtime',
+				manifest,
 			}),
 		/release-significant release-updater changes require/
 	);
@@ -202,6 +277,7 @@ test('visible and explicit breaking classifications admit release-significant ch
 			releaseConfig,
 			paths: ['src/Runtime/RequestBroker.php'],
 			title: 'fix(runtime): preserve broker selection',
+			manifest,
 		}).classification.type,
 		'fix'
 	);
@@ -214,55 +290,41 @@ test('visible and explicit breaking classifications admit release-significant ch
 			releaseConfig,
 			paths: ['bootstrap.php'],
 			title: 'refactor!: replace bootstrap contract',
+			manifest,
 		}).classification.breaking,
 		true
 	);
 });
 
-test('CLI classifies only merge-base-to-head changes and verifies exact checkout', () => {
-	const root = mkdtempSync(join(tmpdir(), 'release-updater-classification-'));
+test('CLI executes from protected base and ignores head release-config weakening', () => {
+	const { root, baseSha } = initializeRepository();
 	try {
-		git(root, ['init', '--initial-branch=main']);
-		git(root, ['config', 'user.name', 'Release Test']);
-		git(root, ['config', 'user.email', 'release@example.invalid']);
-		writeJson(join(root, 'composer.json'), baseComposer);
-		writeJson(join(root, 'runtime-copy.json'), baseRuntimeCopy);
-		writeJson(join(root, 'release-please-config.json'), releaseConfig);
-		writeFileSync(join(root, 'README.md'), 'base\n');
-		git(root, ['add', '.']);
-		git(root, ['commit', '-m', 'chore: base']);
-		const baseSha = git(root, ['rev-parse', 'HEAD']);
-		git(root, ['branch', 'feature']);
-
 		mkdirSync(join(root, 'src'));
-		writeFileSync(join(root, 'src', 'BaseOnly.php'), '<?php\n');
-		git(root, ['add', 'src/BaseOnly.php']);
-		git(root, ['commit', '-m', 'feat: advance main']);
-		const advancedBaseSha = git(root, ['rev-parse', 'HEAD']);
-
-		git(root, ['checkout', 'feature']);
-		writeFileSync(join(root, 'README.md'), 'feature docs\n');
-		git(root, ['add', 'README.md']);
-		git(root, ['commit', '-m', 'docs: update docs']);
+		writeFileSync(join(root, 'src', 'Runtime.php'), '<?php\n');
+		writeJson(join(root, 'release-please-config.json'), {
+			packages: {
+				'.': {
+					'changelog-sections': [
+						{ type: 'refactor', section: 'Refactors' },
+					],
+				},
+			},
+		});
+		git(root, ['add', '.']);
+		git(root, ['commit', '-m', 'refactor: weaken release config']);
 		const headSha = git(root, ['rev-parse', 'HEAD']);
-
-		assert.deepEqual(
-			runCli(root, {
-				RAN_RELEASE_BASE_SHA: advancedBaseSha,
-				RAN_RELEASE_HEAD_SHA: headSha,
-				RAN_RELEASE_PR_TITLE: 'Update docs',
-			}),
-			{ required: false, classification: null }
-		);
+		git(root, ['checkout', baseSha]);
 
 		assert.throws(
 			() =>
 				runCli(root, {
 					RAN_RELEASE_BASE_SHA: baseSha,
-					RAN_RELEASE_HEAD_SHA: baseSha,
-					RAN_RELEASE_PR_TITLE: 'fix: wrong checkout',
+					RAN_RELEASE_HEAD_SHA: headSha,
+					RAN_RELEASE_PR_TITLE: 'refactor: weaken release config',
+					RAN_RELEASE_PR_HEAD_REF: 'feature',
+					RAN_RELEASE_PR_AUTHOR: 'contributor',
 				}),
-			/does not match pull request head/
+			/release-significant release-updater changes require/
 		);
 	} finally {
 		rmSync(root, { recursive: true, force: true });
@@ -270,26 +332,14 @@ test('CLI classifies only merge-base-to-head changes and verifies exact checkout
 });
 
 test('CLI treats newline-containing source paths as release-significant', () => {
-	const root = mkdtempSync(
-		join(tmpdir(), 'release-updater-classification-newline-')
-	);
+	const { root, baseSha } = initializeRepository();
 	try {
-		git(root, ['init', '--initial-branch=main']);
-		git(root, ['config', 'user.name', 'Release Test']);
-		git(root, ['config', 'user.email', 'release@example.invalid']);
-		writeJson(join(root, 'composer.json'), baseComposer);
-		writeJson(join(root, 'runtime-copy.json'), baseRuntimeCopy);
-		writeJson(join(root, 'release-please-config.json'), releaseConfig);
-		git(root, ['add', '.']);
-		git(root, ['commit', '-m', 'chore: base']);
-		const baseSha = git(root, ['rev-parse', 'HEAD']);
-
 		mkdirSync(join(root, 'src'));
-		const path = join(root, 'src', 'Line\nBreak.php');
-		writeFileSync(path, '<?php\n');
+		writeFileSync(join(root, 'src', 'Line\nBreak.php'), '<?php\n');
 		git(root, ['add', 'src']);
 		git(root, ['commit', '-m', 'refactor: source path']);
 		const headSha = git(root, ['rev-parse', 'HEAD']);
+		git(root, ['checkout', baseSha]);
 
 		assert.throws(
 			() =>
@@ -297,6 +347,8 @@ test('CLI treats newline-containing source paths as release-significant', () => 
 					RAN_RELEASE_BASE_SHA: baseSha,
 					RAN_RELEASE_HEAD_SHA: headSha,
 					RAN_RELEASE_PR_TITLE: 'refactor: source path',
+					RAN_RELEASE_PR_HEAD_REF: 'feature',
+					RAN_RELEASE_PR_AUTHOR: 'contributor',
 				}),
 			/release-significant release-updater changes require/
 		);
