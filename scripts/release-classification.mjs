@@ -173,8 +173,16 @@ function readJsonAt(root, sha, path) {
 }
 
 function changedPaths(root, baseSha, headSha) {
-	return git(root, ['diff', '--name-only', baseSha, headSha])
-		.split('\n')
+	return execFileSync(
+		'git',
+		['diff', '--name-only', '-z', baseSha, headSha],
+		{
+			cwd: root,
+			encoding: 'utf8',
+			stdio: ['ignore', 'pipe', 'pipe'],
+		}
+	)
+		.split('\0')
 		.filter(Boolean)
 		.sort();
 }
