@@ -57,6 +57,18 @@ test('trusted release classification workflow stays on protected base', () => {
 	);
 	assert.match(
 		classificationWorkflow,
+		/base_repo_id="\$\(jq -er '\.base\.repo\.id'/
+	);
+	assert.match(
+		classificationWorkflow,
+		/head_repo="\$\(jq -er '\.head\.repo\.full_name'/
+	);
+	assert.match(
+		classificationWorkflow,
+		/head_repo_id="\$\(jq -er '\.head\.repo\.id'/
+	);
+	assert.match(
+		classificationWorkflow,
 		/ref: \$\{\{ steps\.pr\.outputs\.base_sha \}\}/
 	);
 	assert.match(
@@ -66,6 +78,18 @@ test('trusted release classification workflow stays on protected base', () => {
 	assert.match(
 		classificationWorkflow,
 		/test "\$\(git rev-parse refs\/remotes\/origin\/pr-head\)" = "\$RAN_HEAD_SHA"/
+	);
+	assert.match(
+		classificationWorkflow,
+		/RAN_RELEASE_PR_HEAD_REPOSITORY: \$\{\{ steps\.pr\.outputs\.head_repo \}\}/
+	);
+	assert.match(
+		classificationWorkflow,
+		/RAN_RELEASE_PR_HEAD_REPOSITORY_ID: \$\{\{ steps\.pr\.outputs\.head_repo_id \}\}/
+	);
+	assert.match(
+		classificationWorkflow,
+		/RAN_RELEASE_REPOSITORY_ID: \$\{\{ steps\.pr\.outputs\.base_repo_id \}\}/
 	);
 	assert.match(
 		classificationWorkflow,
