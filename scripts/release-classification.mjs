@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const FULL_SHA = /^[a-f0-9]{40}$/;
@@ -79,7 +78,9 @@ export function visibleReleaseTypes(config) {
 	const types = new Set();
 	for (const section of sections) {
 		const entry = objectRecord(section, 'release-please changelog section');
-		if (entry.hidden === true) continue;
+		if (entry.hidden === true) {
+			continue;
+		}
 		if (typeof entry.type !== 'string' || entry.type.length === 0) {
 			throw new Error(
 				'visible release-please changelog sections must declare a type'
@@ -101,15 +102,14 @@ export function classifyTitle(title) {
 	}
 	const match = title.match(TITLE);
 	if (!match) {
-		throw new Error('pull request title must use Conventional Commit syntax');
+		throw new Error(
+			'pull request title must use Conventional Commit syntax'
+		);
 	}
 	return { type: match[1], breaking: match[2] === '!' };
 }
 
-export function productionComposerMetadataChanged(
-	baseComposer,
-	headComposer
-) {
+export function productionComposerMetadataChanged(baseComposer, headComposer) {
 	return (
 		JSON.stringify(productionComposerMetadata(baseComposer)) !==
 		JSON.stringify(productionComposerMetadata(headComposer))
@@ -146,7 +146,12 @@ export function releaseSignificantChange({
 	);
 }
 
-export function assertCanonicalReleasePull({ author, headRef, manifest, title }) {
+export function assertCanonicalReleasePull({
+	author,
+	headRef,
+	manifest,
+	title,
+}) {
 	const isCanonical =
 		author === 'github-actions[bot]' &&
 		typeof headRef === 'string' &&
@@ -250,7 +255,9 @@ export function runCli(root = process.cwd(), env = process.env) {
 	const prAuthor = env.RAN_RELEASE_PR_AUTHOR;
 
 	if (!FULL_SHA.test(baseSha ?? '') || !FULL_SHA.test(headSha ?? '')) {
-		throw new Error('exact live pull request base and head SHAs are required');
+		throw new Error(
+			'exact live pull request base and head SHAs are required'
+		);
 	}
 	if (
 		typeof title !== 'string' ||
@@ -273,11 +280,7 @@ export function runCli(root = process.cwd(), env = process.env) {
 
 	const classificationBaseSha = mergeBase(root, baseSha, headSha);
 	const result = assertReleaseClassification({
-		baseComposer: readJsonAt(
-			root,
-			classificationBaseSha,
-			'composer.json'
-		),
+		baseComposer: readJsonAt(root, classificationBaseSha, 'composer.json'),
 		headComposer: readJsonAt(root, headSha, 'composer.json'),
 		baseRuntimeCopy: readJsonAt(
 			root,
@@ -294,14 +297,14 @@ export function runCli(root = process.cwd(), env = process.env) {
 	});
 
 	if (result.releasePull) {
-		console.log('canonical Release Please pull request title is exact');
+		process.stdout.write('canonical Release Please pull request title is exact\n');
 	} else if (result.required) {
-		console.log(
-			`release-significant release-updater change; classification ${result.classification.type}${result.classification.breaking ? '!' : ''} is release-driving`
+		process.stdout.write(
+			`release-significant release-updater change; classification ${result.classification.type}${result.classification.breaking ? '!' : ''} is release-driving\n`
 		);
 	} else {
-		console.log(
-			'no release-significant release-updater source, runtime metadata, or production Composer metadata change'
+		process.stdout.write(
+			'no release-significant release-updater source, runtime metadata, or production Composer metadata change\n'
 		);
 	}
 	return result;
@@ -311,7 +314,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 	try {
 		runCli();
 	} catch (error) {
-		console.error(error instanceof Error ? error.message : error);
+		process.stderr.write(`${error instanceof Error ? error.message : error}\n`);
 		process.exitCode = 1;
 	}
 }
