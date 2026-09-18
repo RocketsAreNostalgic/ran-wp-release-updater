@@ -422,7 +422,7 @@ test('CLI treats newline-containing source paths as release-significant', () => 
 });
 
 test('CLI treats source renamed out of src as release-significant', () => {
-	const { root, baseSha } = initializeRepository();
+	const { root } = initializeRepository();
 	try {
 		mkdirSync(join(root, 'src'));
 		writeFileSync(join(root, 'src', 'Api.php'), '<?php\n');
