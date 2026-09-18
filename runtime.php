@@ -120,8 +120,6 @@ return new class(
 			|| ! is_callable( array( $this->broker, 'protocolVersion' ) )
 			|| ! is_callable( array( $this->broker, 'diagnostics' ) )
 			|| 4 !== $this->broker->protocolVersion()
-			|| isset( $GLOBALS['ran_wp_github_release_updater_v1_broker'] )
-			|| function_exists( 'ran_wp_github_release_updater_v1_has_registered_target' )
 		) {
 			return false;
 		}
@@ -215,8 +213,6 @@ return new class(
 					|| ! is_callable( array( $this->broker, 'protocolVersion' ) )
 					|| ! is_callable( array( $this->broker, 'diagnostics' ) )
 					|| 4 !== $this->broker->protocolVersion()
-					|| isset( $GLOBALS['ran_wp_github_release_updater_v1_broker'] )
-					|| function_exists( 'ran_wp_github_release_updater_v1_has_registered_target' )
 				) {
 					return false;
 				}
