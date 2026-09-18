@@ -53,6 +53,10 @@ test('trusted release classification workflow stays on protected base', () => {
 	assert.match(classificationWorkflow, /test "\$base_ref" = main/);
 	assert.match(
 		classificationWorkflow,
+		/test "\$base_repo" = "\$GITHUB_REPOSITORY"/
+	);
+	assert.match(
+		classificationWorkflow,
 		/ref: \$\{\{ steps\.pr\.outputs\.base_sha \}\}/
 	);
 	assert.match(
