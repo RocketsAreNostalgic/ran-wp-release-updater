@@ -607,6 +607,30 @@ test('CLI rejects deletion of CHANGELOG.md before hidden classification can pass
 	}
 });
 
+test('CLI rejects executable publisher identity blobs before hidden classification can pass', () => {
+	const { root, baseSha } = initializeRepository();
+	try {
+		git(root, ['update-index', '--chmod=+x', 'composer.json']);
+		git(root, ['commit', '-m', 'chore: change composer mode']);
+		const headSha = git(root, ['rev-parse', 'HEAD']);
+		git(root, ['checkout', baseSha]);
+
+		assert.throws(
+			() =>
+				runCli(root, {
+					RAN_RELEASE_BASE_SHA: baseSha,
+					RAN_RELEASE_HEAD_SHA: headSha,
+					RAN_RELEASE_PR_TITLE: 'chore: change composer mode',
+					RAN_RELEASE_PR_HEAD_REF: 'chore/composer-mode',
+					RAN_RELEASE_PR_AUTHOR: 'contributor',
+				}),
+			/composer\.json must remain an ordinary non-executable Git blob/
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
 test('release-significant changes reject non-driving classifications', () => {
 	assert.throws(
 		() =>
