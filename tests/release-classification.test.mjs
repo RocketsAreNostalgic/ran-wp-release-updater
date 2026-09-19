@@ -612,6 +612,7 @@ test('CLI rejects executable publisher identity blobs before hidden classificati
 	try {
 		git(root, ['update-index', '--chmod=+x', 'composer.json']);
 		git(root, ['commit', '-m', 'chore: change composer mode']);
+		git(root, ['checkout', '--', 'composer.json']);
 		const headSha = git(root, ['rev-parse', 'HEAD']);
 		git(root, ['checkout', baseSha]);
 
