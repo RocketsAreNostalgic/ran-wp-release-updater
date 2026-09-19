@@ -27,6 +27,12 @@ const RELEASE_PULL_PATHS = [
 	'CHANGELOG.md',
 	'runtime-copy.json',
 ];
+const PUBLISHER_IDENTITY_PATHS = [
+	'.release-please-manifest.json',
+	'CHANGELOG.md',
+	'composer.json',
+	'runtime-copy.json',
+];
 
 function objectRecord(value, label) {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -360,10 +366,10 @@ export function assertReleaseClassification({
 		return { required: true, classification: null, releasePull: true };
 	}
 
-	if (paths.includes('CHANGELOG.md')) {
+	if (paths.some((path) => PUBLISHER_IDENTITY_PATHS.includes(path))) {
 		if (headContents === undefined) {
 			throw new Error(
-				'CHANGELOG.md changes require exact publisher candidate contents'
+				'publisher identity changes require exact candidate contents'
 			);
 		}
 		candidateIdentity(headContents, headSha);
@@ -414,10 +420,18 @@ function treeEntryAt(root, sha, path) {
 	return match ? { mode: match[1], type: match[2], sha: match[3] } : null;
 }
 
-function releaseTreeEntries(root, sha) {
+function treeEntries(root, sha, paths) {
 	return Object.fromEntries(
-		RELEASE_PULL_PATHS.map((path) => [path, treeEntryAt(root, sha, path)])
+		paths.map((path) => [path, treeEntryAt(root, sha, path)])
 	);
+}
+
+function releaseTreeEntries(root, sha) {
+	return treeEntries(root, sha, RELEASE_PULL_PATHS);
+}
+
+function publisherIdentityTreeEntries(root, sha) {
+	return treeEntries(root, sha, PUBLISHER_IDENTITY_PATHS);
 }
 
 function mergeBase(root, baseSha, headSha) {
@@ -494,7 +508,9 @@ export function runCli(root = process.cwd(), env = process.env) {
 		headRefRepositoryId === repositoryId &&
 		pendingLabel &&
 		!taggedLabel;
-	const changelogChanged = paths.includes('CHANGELOG.md');
+	const publisherIdentityChanged = paths.some((path) =>
+		PUBLISHER_IDENTITY_PATHS.includes(path)
+	);
 	let baseContents;
 	let baseTreeEntries;
 	let headContents;
@@ -521,15 +537,13 @@ export function runCli(root = process.cwd(), env = process.env) {
 			changelog: readTextAt(root, classificationBaseSha, 'CHANGELOG.md'),
 		};
 	}
-	if (canonicalReleaseShape || changelogChanged) {
-		if (changelogChanged) {
-			const changelogEntry = treeEntryAt(root, headSha, 'CHANGELOG.md');
-			if (
-				changelogEntry?.mode !== '100644' ||
-				changelogEntry?.type !== 'blob'
-			) {
+	if (canonicalReleaseShape || publisherIdentityChanged) {
+		const identityEntries = publisherIdentityTreeEntries(root, headSha);
+		for (const path of PUBLISHER_IDENTITY_PATHS) {
+			const entry = identityEntries[path];
+			if (entry?.mode !== '100644' || entry?.type !== 'blob') {
 				throw new Error(
-					'CHANGELOG.md must remain an ordinary non-executable Git blob'
+					`${path} must remain an ordinary non-executable Git blob`
 				);
 			}
 		}
