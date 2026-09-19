@@ -160,7 +160,8 @@ function initializeRepository() {
 	writeJson(join(root, 'composer.json'), baseComposer);
 	writeJson(join(root, 'runtime-copy.json'), baseRuntimeCopy);
 	writeJson(join(root, 'release-please-config.json'), releaseConfig);
-	writeJson(join(root, '.release-please-manifest.json'), manifest);
+	writeJson(join(root, '.release-please-manifest.json'), baseManifest);
+	writeFileSync(join(root, 'CHANGELOG.md'), baseChangelog, 'utf8');
 	git(root, ['add', '.']);
 	git(root, ['commit', '-m', 'chore: base']);
 	return { root, baseSha: git(root, ['rev-parse', 'HEAD']) };
@@ -524,6 +525,111 @@ test('release version metadata is bypassed only for an exact generated Release P
 			}),
 		/non-generated files/
 	);
+});
+
+test('ordinary changelog-only edits must remain publisher-readable', () => {
+	const common = {
+		baseComposer,
+		headComposer: baseComposer,
+		baseRuntimeCopy: headRuntimeCopy,
+		headRuntimeCopy,
+		headSha: releaseHeadSha,
+		releaseConfig,
+		paths: ['CHANGELOG.md'],
+		title: 'docs: clarify current release notes',
+	};
+
+	assert.deepEqual(
+		assertReleaseClassification({
+			...common,
+			headContents: {
+				...headReleaseContents,
+				changelog: headChangelog.replace(
+					'- next fix',
+					'- clarified next fix'
+				),
+			},
+		}),
+		{ required: false, classification: null, releasePull: false }
+	);
+
+	assert.throws(
+		() =>
+			assertReleaseClassification({
+				...common,
+				headContents: {
+					...headReleaseContents,
+					changelog:
+						'# Changelog\n\n### Notes\n\n- malformed current section\n',
+				},
+			}),
+		/release_notes_missing/
+	);
+
+	assert.throws(
+		() =>
+			assertReleaseClassification({
+				...common,
+				headContents: {
+					...headReleaseContents,
+					changelog: headChangelog.replace(
+						'- next fix',
+						`- ${'x'.repeat(125001)}`
+					),
+				},
+			}),
+		/release_notes_invalid/
+	);
+});
+
+test('CLI rejects deletion of CHANGELOG.md before hidden classification can pass', () => {
+	const { root, baseSha } = initializeRepository();
+	try {
+		rmSync(join(root, 'CHANGELOG.md'));
+		git(root, ['add', '-A']);
+		git(root, ['commit', '-m', 'docs: remove changelog']);
+		const headSha = git(root, ['rev-parse', 'HEAD']);
+		git(root, ['checkout', baseSha]);
+
+		assert.throws(
+			() =>
+				runCli(root, {
+					RAN_RELEASE_BASE_SHA: baseSha,
+					RAN_RELEASE_HEAD_SHA: headSha,
+					RAN_RELEASE_PR_TITLE: 'docs: remove changelog',
+					RAN_RELEASE_PR_HEAD_REF: 'docs/changelog',
+					RAN_RELEASE_PR_AUTHOR: 'contributor',
+				}),
+			/CHANGELOG\.md must remain an ordinary non-executable Git blob/
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test('CLI rejects executable publisher identity blobs before hidden classification can pass', () => {
+	const { root, baseSha } = initializeRepository();
+	try {
+		git(root, ['update-index', '--chmod=+x', 'composer.json']);
+		git(root, ['commit', '-m', 'chore: change composer mode']);
+		git(root, ['checkout', '--', 'composer.json']);
+		const headSha = git(root, ['rev-parse', 'HEAD']);
+		git(root, ['checkout', baseSha]);
+
+		assert.throws(
+			() =>
+				runCli(root, {
+					RAN_RELEASE_BASE_SHA: baseSha,
+					RAN_RELEASE_HEAD_SHA: headSha,
+					RAN_RELEASE_PR_TITLE: 'chore: change composer mode',
+					RAN_RELEASE_PR_HEAD_REF: 'chore/composer-mode',
+					RAN_RELEASE_PR_AUTHOR: 'contributor',
+				}),
+			/composer\.json must remain an ordinary non-executable Git blob/
+		);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
 });
 
 test('release-significant changes reject non-driving classifications', () => {

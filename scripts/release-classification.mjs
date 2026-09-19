@@ -27,6 +27,12 @@ const RELEASE_PULL_PATHS = [
 	'CHANGELOG.md',
 	'runtime-copy.json',
 ];
+const PUBLISHER_IDENTITY_PATHS = [
+	'.release-please-manifest.json',
+	'CHANGELOG.md',
+	'composer.json',
+	'runtime-copy.json',
+];
 
 function objectRecord(value, label) {
 	if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -360,6 +366,15 @@ export function assertReleaseClassification({
 		return { required: true, classification: null, releasePull: true };
 	}
 
+	if (paths.some((path) => PUBLISHER_IDENTITY_PATHS.includes(path))) {
+		if (headContents === undefined) {
+			throw new Error(
+				'publisher identity changes require exact candidate contents'
+			);
+		}
+		candidateIdentity(headContents, headSha);
+	}
+
 	if (
 		!releaseSignificantChange({
 			baseComposer,
@@ -405,10 +420,18 @@ function treeEntryAt(root, sha, path) {
 	return match ? { mode: match[1], type: match[2], sha: match[3] } : null;
 }
 
-function releaseTreeEntries(root, sha) {
+function treeEntries(root, sha, paths) {
 	return Object.fromEntries(
-		RELEASE_PULL_PATHS.map((path) => [path, treeEntryAt(root, sha, path)])
+		paths.map((path) => [path, treeEntryAt(root, sha, path)])
 	);
+}
+
+function releaseTreeEntries(root, sha) {
+	return treeEntries(root, sha, RELEASE_PULL_PATHS);
+}
+
+function publisherIdentityTreeEntries(root, sha) {
+	return treeEntries(root, sha, PUBLISHER_IDENTITY_PATHS);
 }
 
 function mergeBase(root, baseSha, headSha) {
@@ -473,11 +496,8 @@ export function runCli(root = process.cwd(), env = process.env) {
 	}
 
 	const classificationBaseSha = mergeBase(root, baseSha, headSha);
-	let baseContents;
-	let baseTreeEntries;
-	let headContents;
-	let headTreeEntries;
-	if (
+	const paths = changedPaths(root, classificationBaseSha, headSha);
+	const canonicalReleaseShape =
 		prAuthor === 'github-actions[bot]' &&
 		prHeadRef === RELEASE_BRANCH &&
 		typeof repository === 'string' &&
@@ -487,8 +507,15 @@ export function runCli(root = process.cwd(), env = process.env) {
 		headRefRepository === repository &&
 		headRefRepositoryId === repositoryId &&
 		pendingLabel &&
-		!taggedLabel
-	) {
+		!taggedLabel;
+	const publisherIdentityChanged = paths.some((path) =>
+		PUBLISHER_IDENTITY_PATHS.includes(path)
+	);
+	let baseContents;
+	let baseTreeEntries;
+	let headContents;
+	let headTreeEntries;
+	if (canonicalReleaseShape) {
 		if (classificationBaseSha !== baseSha) {
 			throw new Error(
 				'canonical Release Please pull request head must contain the live protected base'
@@ -509,6 +536,17 @@ export function runCli(root = process.cwd(), env = process.env) {
 			),
 			changelog: readTextAt(root, classificationBaseSha, 'CHANGELOG.md'),
 		};
+	}
+	if (canonicalReleaseShape || publisherIdentityChanged) {
+		const identityEntries = publisherIdentityTreeEntries(root, headSha);
+		for (const path of PUBLISHER_IDENTITY_PATHS) {
+			const entry = identityEntries[path];
+			if (entry?.mode !== '100644' || entry?.type !== 'blob') {
+				throw new Error(
+					`${path} must remain an ordinary non-executable Git blob`
+				);
+			}
+		}
 		headContents = {
 			manifest: readTextAt(
 				root,
@@ -548,7 +586,7 @@ export function runCli(root = process.cwd(), env = process.env) {
 		repositoryId,
 		releaseConfig: readJsonAt(root, baseSha, 'release-please-config.json'),
 		taggedLabel,
-		paths: changedPaths(root, classificationBaseSha, headSha),
+		paths,
 		title,
 		prAuthor,
 		prHeadRef,
