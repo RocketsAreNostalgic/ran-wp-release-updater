@@ -360,6 +360,15 @@ export function assertReleaseClassification({
 		return { required: true, classification: null, releasePull: true };
 	}
 
+	if (paths.includes('CHANGELOG.md')) {
+		if (headContents === undefined) {
+			throw new Error(
+				'CHANGELOG.md changes require exact publisher candidate contents'
+			);
+		}
+		candidateIdentity(headContents, headSha);
+	}
+
 	if (
 		!releaseSignificantChange({
 			baseComposer,
@@ -473,11 +482,8 @@ export function runCli(root = process.cwd(), env = process.env) {
 	}
 
 	const classificationBaseSha = mergeBase(root, baseSha, headSha);
-	let baseContents;
-	let baseTreeEntries;
-	let headContents;
-	let headTreeEntries;
-	if (
+	const paths = changedPaths(root, classificationBaseSha, headSha);
+	const canonicalReleaseShape =
 		prAuthor === 'github-actions[bot]' &&
 		prHeadRef === RELEASE_BRANCH &&
 		typeof repository === 'string' &&
@@ -487,8 +493,13 @@ export function runCli(root = process.cwd(), env = process.env) {
 		headRefRepository === repository &&
 		headRefRepositoryId === repositoryId &&
 		pendingLabel &&
-		!taggedLabel
-	) {
+		!taggedLabel;
+	const changelogChanged = paths.includes('CHANGELOG.md');
+	let baseContents;
+	let baseTreeEntries;
+	let headContents;
+	let headTreeEntries;
+	if (canonicalReleaseShape) {
 		if (classificationBaseSha !== baseSha) {
 			throw new Error(
 				'canonical Release Please pull request head must contain the live protected base'
@@ -509,6 +520,19 @@ export function runCli(root = process.cwd(), env = process.env) {
 			),
 			changelog: readTextAt(root, classificationBaseSha, 'CHANGELOG.md'),
 		};
+	}
+	if (canonicalReleaseShape || changelogChanged) {
+		if (changelogChanged) {
+			const changelogEntry = treeEntryAt(root, headSha, 'CHANGELOG.md');
+			if (
+				changelogEntry?.mode !== '100644' ||
+				changelogEntry?.type !== 'blob'
+			) {
+				throw new Error(
+					'CHANGELOG.md must remain an ordinary non-executable Git blob'
+				);
+			}
+		}
 		headContents = {
 			manifest: readTextAt(
 				root,
@@ -548,7 +572,7 @@ export function runCli(root = process.cwd(), env = process.env) {
 		repositoryId,
 		releaseConfig: readJsonAt(root, baseSha, 'release-please-config.json'),
 		taggedLabel,
-		paths: changedPaths(root, classificationBaseSha, headSha),
+		paths,
 		title,
 		prAuthor,
 		prHeadRef,
