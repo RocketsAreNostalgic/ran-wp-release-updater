@@ -559,7 +559,8 @@ test('ordinary changelog-only edits must remain publisher-readable', () => {
 				...common,
 				headContents: {
 					...headReleaseContents,
-					changelog: '# Changelog\n\n### Notes\n\n- malformed current section\n',
+					changelog:
+						'# Changelog\n\n### Notes\n\n- malformed current section\n',
 				},
 			}),
 		/release_notes_missing/
