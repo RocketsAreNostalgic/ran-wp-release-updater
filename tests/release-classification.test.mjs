@@ -544,7 +544,10 @@ test('ordinary changelog-only edits must remain publisher-readable', () => {
 			...common,
 			headContents: {
 				...headReleaseContents,
-				changelog: headChangelog.replace('- next fix', '- clarified next fix'),
+				changelog: headChangelog.replace(
+					'- next fix',
+					'- clarified next fix'
+				),
 			},
 		}),
 		{ required: false, classification: null, releasePull: false }
