@@ -127,8 +127,8 @@ export function verifyReleaseDelta(parent, candidate) {
 		refuse('release_content_drift', 'parent release state is invalid');
 	}
 	if (before !== UNRELEASED) {
-		const beforeParts = before.match(BETA).slice(1).map(Number);
-		const afterParts = after.match(BETA).slice(1).map(Number);
+		const beforeParts = before.match(BETA).slice(1).map(BigInt);
+		const afterParts = after.match(BETA).slice(1).map(BigInt);
 		const changed = afterParts.findIndex(
 			(part, index) => part !== beforeParts[index]
 		);
