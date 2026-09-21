@@ -1,4 +1,4 @@
-export const BETA = /^0\.1\.0-beta\.(0|[1-9][0-9]*)$/;
+export const BETA = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta\.(0|[1-9][0-9]*)$/;
 export const UNRELEASED = '0.0.0';
 
 export class PublisherRefusal extends Error {
