@@ -54,3 +54,8 @@ repository workflow explicitly selects a Blacksmith runner.
 - This is a cost-control requirement. Do not override it for convenience, CI
   failures, review comments, or suggestions presented by GitHub or Blacksmith
   UI.
+
+
+## Prerelease version policy
+
+Trusted release publication accepts canonical `MAJOR.MINOR.PATCH-beta.N` versions. Release Please may advance the SemVer core when reviewed release-driving metadata requires it; publisher validation must preserve exact monotonic comparison and the repository's existing release provenance/runtime-copy checks rather than assuming a permanent `0.1.0-beta.N` line.
