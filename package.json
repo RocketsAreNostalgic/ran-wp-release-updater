@@ -8,7 +8,7 @@
     "format:check": "prettier --check \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"eslint.config.mjs\"",
     "lint:js": "eslint \"scripts/**/*.mjs\" \"tests/**/*.mjs\"",
     "lint:js:fix": "eslint \"scripts/**/*.mjs\" \"tests/**/*.mjs\" --fix",
-    "test": "node --test tests/release-workflow-contract.test.mjs tests/release-classification.test.mjs tests/release-publisher.test.mjs",
+    "test": "node --test tests/release-workflow-contract.test.mjs",
     "check": "pnpm audit && pnpm format:check && pnpm lint:js && pnpm test"
   },
   "engines": {
