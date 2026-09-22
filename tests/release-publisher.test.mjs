@@ -99,7 +99,12 @@ test('candidate accepts canonical SemVer beta versions', () => {
 	for (const version of ['0.2.0-beta.1', '1.0.0-beta.1']) {
 		assert.equal(candidateIdentity(contents(version), SHA).version, version);
 	}
-	for (const version of ['01.0.0-beta.1', '1.0.0-beta.01', '1.0.0', 'v1.0.0-beta.1']) {
+	for (const version of [
+		'01.0.0-beta.1',
+		'1.0.0-beta.01',
+		'1.0.0',
+		'v1.0.0-beta.1',
+	]) {
 		refusal('release_manifest_invalid', () => candidateIdentity(contents(version), SHA));
 	}
 });
@@ -151,7 +156,10 @@ test('release delta permits only manifest/runtime-copy version and a changelog p
 		candidateVersion: breaking,
 	});
 	refusal('release_version_not_advanced', () =>
-		verifyReleaseDelta(contents('9007199254740993.0.0-beta.1'), contents('9007199254740992.1.0-beta.1'))
+		verifyReleaseDelta(
+			contents('9007199254740993.0.0-beta.1'),
+			contents('9007199254740992.1.0-beta.1')
+		)
 	);
 });
 
@@ -212,7 +220,12 @@ test('only exact green CI normal merge and changed paths can publish', () => {
 			decidePublication({
 				...input,
 				identity: { ...identity, version },
-				pulls: [{ ...releasePull, title: `chore(main): release ${version}` }],
+				pulls: [
+					{
+						...releasePull,
+						title: `chore(main): release ${version}`,
+					},
+				],
 				commit: { ...input.commit, parentVersion },
 			}),
 			{ action: 'create_release', pullNumber: 7 }
