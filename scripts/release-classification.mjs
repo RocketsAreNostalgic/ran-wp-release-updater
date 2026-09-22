@@ -269,7 +269,9 @@ export function assertCanonicalReleasePull({
 	if (baseVersion !== UNRELEASED) {
 		const baseParts = baseVersion.match(BETA).slice(1).map(BigInt);
 		const headParts = version.match(BETA).slice(1).map(BigInt);
-		const changed = headParts.findIndex((part, index) => part !== baseParts[index]);
+		const changed = headParts.findIndex(
+			(part, index) => part !== baseParts[index]
+		);
 		if (changed < 0 || headParts[changed] < baseParts[changed]) {
 			throw new Error(
 				'canonical Release Please pull request version must advance'
