@@ -64,7 +64,6 @@ Set the following paths before running the suite:
 export RAN_UPDATER_WP_CLI=/path/to/wp
 export RAN_UPDATER_MYSQLD_BIN=/path/to/mysqld
 export RAN_UPDATER_WP_ROOT=/path/to/pristine-wordpress
-export RAN_UPDATER_WP_CLI=/path/to/wp
 export RAN_UPDATER_INTEGRATION_ROOT=/path/to/durable/integration-root
 export RAN_UPDATER_SOCKET_ROOT=/path/to/short/durable/socket-root
 composer test:wordpress-integration
