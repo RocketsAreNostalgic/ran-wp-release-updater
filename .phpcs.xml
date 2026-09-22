@@ -46,8 +46,13 @@
 	</rule>
 
 	<!-- WordPress hooks and compatibility contracts retain required parameter names. -->
-	<rule ref="Generic.CodeAnalysis.UnusedFunctionParameter"><severity>0</severity></rule>
-	<rule ref="Generic.CodeAnalysis.UselessOverridingMethod"><severity>0</severity></rule>
+	<rule ref="Generic.CodeAnalysis.UnusedFunctionParameter">
+		<!-- Test doubles preserve the hook and compatibility signatures they replace. -->
+		<exclude-pattern>/tests/Integration/phase-2.4-wordpress-core-proof.php</exclude-pattern>
+		<exclude-pattern>/tests/Integration/phase-2.4-wordpress-core-proof-harness.php</exclude-pattern>
+		<exclude-pattern>/tests/Integration/release-source-consumer-proof.php</exclude-pattern>
+		<exclude-pattern>/tests/Performance/native-discovery-measure.php</exclude-pattern>
+	</rule>
 	<rule ref="Universal.NamingConventions.NoReservedKeywordParameterNames"><severity>0</severity></rule>
 
 	<!--
