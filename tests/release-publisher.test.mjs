@@ -89,7 +89,7 @@ test('candidate binds manifest, runtime-copy and release notes', () => {
 	);
 });
 
-test('candidate accepts dated linked headings only on the independent beta line', () => {
+test('candidate accepts canonical SemVer beta versions', () => {
 	const next = '0.1.0-beta.2';
 	const linked = {
 		...contents(next),
@@ -97,6 +97,17 @@ test('candidate accepts dated linked headings only on the independent beta line'
 	};
 	assert.equal(candidateIdentity(linked, SHA).version, next);
 	for (const version of ['0.2.0-beta.1', '1.0.0-beta.1']) {
+		assert.equal(
+			candidateIdentity(contents(version), SHA).version,
+			version
+		);
+	}
+	for (const version of [
+		'01.0.0-beta.1',
+		'1.0.0-beta.01',
+		'1.0.0',
+		'v1.0.0-beta.1',
+	]) {
 		refusal('release_manifest_invalid', () =>
 			candidateIdentity(contents(version), SHA)
 		);
@@ -139,6 +150,21 @@ test('release delta permits only manifest/runtime-copy version and a changelog p
 			...candidate,
 			manifest: JSON.stringify({ '.': VERSION }, null, 2),
 		})
+	);
+	const breaking = '1.0.0-beta.1';
+	const breakingCandidate = {
+		...contents(breaking),
+		changelog: `# Changelog\n\n## [${breaking}](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v${VERSION}...v${breaking}) (2026-09-03)\n\n### Breaking Changes\n\n* advance contract\n\n${contents().changelog.slice('# Changelog\n\n'.length)}`,
+	};
+	assert.deepEqual(verifyReleaseDelta(contents(), breakingCandidate), {
+		parentVersion: VERSION,
+		candidateVersion: breaking,
+	});
+	refusal('release_version_not_advanced', () =>
+		verifyReleaseDelta(
+			contents('9007199254740993.0.0-beta.1'),
+			contents('9007199254740992.1.0-beta.1')
+		)
 	);
 });
 
@@ -194,11 +220,20 @@ test('only exact green CI normal merge and changed paths can publish', () => {
 		decidePublication({ ...input, mainSha: undefined })
 	);
 	for (const parentVersion of ['0.2.0-beta.1', '1.0.0-beta.1']) {
-		refusal('release_parent_version_invalid', () =>
+		const version = '2.0.0-beta.1';
+		assert.deepEqual(
 			decidePublication({
 				...input,
+				identity: { ...identity, version },
+				pulls: [
+					{
+						...releasePull,
+						title: `chore(main): release ${version}`,
+					},
+				],
 				commit: { ...input.commit, parentVersion },
-			})
+			}),
+			{ action: 'create_release', pullNumber: 7 }
 		);
 	}
 });

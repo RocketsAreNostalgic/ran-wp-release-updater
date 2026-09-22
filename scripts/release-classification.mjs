@@ -4,13 +4,13 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import {
+	BETA,
 	candidateIdentity,
 	verifyReleaseDelta,
 } from './release-publisher-content.mjs';
 
 const FULL_SHA = /^[a-f0-9]{40}$/;
 const TITLE = /^([a-z][a-z0-9-]*)(?:\([^)]+\))?(!)?:\s+\S/;
-const BETA = /^0\.1\.0-beta\.(0|[1-9][0-9]*)$/;
 const UNRELEASED = '0.0.0';
 const RELEASE_BRANCH =
 	'release-please--branches--main--components--ran/wp-release-updater';
@@ -267,9 +267,12 @@ export function assertCanonicalReleasePull({
 		);
 	}
 	if (baseVersion !== UNRELEASED) {
-		const baseNumber = Number(baseVersion.match(BETA)[1]);
-		const headNumber = Number(version.match(BETA)[1]);
-		if (headNumber <= baseNumber) {
+		const baseParts = baseVersion.match(BETA).slice(1).map(BigInt);
+		const headParts = version.match(BETA).slice(1).map(BigInt);
+		const changed = headParts.findIndex(
+			(part, index) => part !== baseParts[index]
+		);
+		if (changed < 0 || headParts[changed] < baseParts[changed]) {
 			throw new Error(
 				'canonical Release Please pull request version must advance'
 			);
