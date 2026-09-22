@@ -25,7 +25,7 @@ shared PHPCS/PHPCompatibility checks, PHPStan, unit tests, and the no-dev
 consumer proof.
 
 - Preserve the package coordinate, `RAN\WPReleaseUpdater\V1` namespace, and
-  independent `v0.1.0-beta.*` prerelease line.
+  canonical `MAJOR.MINOR.PATCH-beta.N` prerelease line, with SemVer-core advancement permitted when reviewed release-driving metadata requires it.
 - Keep the built-in provider catalog sealed inside the selected runtime. Add
   no public adapter loader, compatibility facade, second broker, `replace`, or
   `provide` declaration.
