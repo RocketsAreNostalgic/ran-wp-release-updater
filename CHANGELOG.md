@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0-beta.8](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.7...v0.1.0-beta.8) (2026-09-22)
+
+
+### Bug Fixes
+
+* **release:** accept SemVer prerelease transitions ([#58](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/58)) ([cc514d8](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/cc514d8da00c96732c8b479f48e0b1c73badeeb3))
+
 ## [0.1.0-beta.7](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.6...v0.1.0-beta.7) (2026-09-18)
 
 
