@@ -105,7 +105,9 @@ test('candidate accepts canonical SemVer beta versions', () => {
 		'1.0.0',
 		'v1.0.0-beta.1',
 	]) {
-		refusal('release_manifest_invalid', () => candidateIdentity(contents(version), SHA));
+		refusal('release_manifest_invalid', () =>
+			candidateIdentity(contents(version), SHA)
+		);
 	}
 });
 
