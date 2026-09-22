@@ -12,7 +12,6 @@
       "package-name": "ran/wp-release-updater",
       "changelog-path": "CHANGELOG.md",
       "initial-version": "0.1.0-beta.1",
-      "skip-github-release": true,
       "changelog-sections": [
         { "type": "feat", "section": "Features" },
         { "type": "fix", "section": "Bug Fixes" },

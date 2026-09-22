@@ -2,115 +2,72 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const workflowUrl = new URL(
-	'../.github/workflows/release-please.yml',
-	import.meta.url
-);
-const workflow = readFileSync(workflowUrl, 'utf8');
-const classificationWorkflow = readFileSync(
-	new URL('../.github/workflows/release-classification.yml', import.meta.url),
+const workflow = readFileSync(
+	new URL('../.github/workflows/release-please.yml', import.meta.url),
 	'utf8'
 );
+const ci = readFileSync(
+	new URL('../.github/workflows/ci.yml', import.meta.url),
+	'utf8'
+);
+const config = JSON.parse(
+	readFileSync(
+		new URL('../release-please-config.json', import.meta.url),
+		'utf8'
+	)
+);
+const packageConfig = config.packages['.'];
 
-test('release job requires the canonical CI workflow path', () => {
-	const jobStart = workflow.indexOf('jobs:\n  release:');
-	const ifMarker = '    if: >-\n';
-	const ifStart = workflow.indexOf(ifMarker, jobStart);
-	const runsOn = workflow.indexOf('\n    runs-on:', ifStart);
-
-	assert.ok(jobStart >= 0);
-	assert.ok(ifStart > jobStart);
-	assert.ok(runsOn > ifStart);
-
-	const conditionLines = workflow
-		.slice(ifStart + ifMarker.length, runsOn)
-		.trimEnd()
-		.split('\n');
-	const allLinesActive = conditionLines.every((line) => {
-		const isIndented = line.startsWith('      ');
-		const isComment = line.trimStart().startsWith('#');
-		return isIndented && !isComment;
-	});
-	assert.ok(allLinesActive);
-
-	const condition = conditionLines.map((line) => line.trim()).join(' ');
-	const terms = condition
-		.replace('${{', '')
-		.replace('}}', '')
-		.split('&&')
-		.map((term) => term.trim());
-	const pathGuard =
-		"github.event.workflow_run.path == '.github/workflows/ci.yml'";
-	assert.ok(terms.includes(pathGuard));
+test('source releases use the pinned thin Profile A caller', () => {
+	assert.match(
+		workflow,
+		/^on:\n  workflow_run:\n    workflows: \[CI\]\n    types: \[completed\]\n    branches: \[main\]$/m
+	);
+	assert.match(workflow, /^permissions: \{\}$/m);
+	assert.match(
+		workflow,
+		/^jobs:\n  release:\n    permissions:\n      actions: write\n      contents: write\n      issues: write\n      pull-requests: write\n    uses: /m
+	);
+	assert.match(
+		workflow,
+		/^    uses: RocketsAreNostalgic\/\.github\/\.github\/workflows\/release-profile-a\.yml@289352e08cdf10b15d07c4e1c890f385afc3d3f5$/m
+	);
+	assert.match(
+		workflow,
+		/^      expected-workflow-path: \.github\/workflows\/ci\.yml$/m
+	);
+	assert.match(
+		workflow,
+		/^      release-pr-head: release-please--branches--main--components--ran\/wp-release-updater$/m
+	);
+	assert.doesNotMatch(workflow, /^\s+(?:steps|runs-on):/m);
 });
 
-test('trusted release classification workflow stays on protected base', () => {
-	assert.match(classificationWorkflow, /^\s*pull_request_target:/m);
+test('Release Please owns native tag and GitHub Release publication', () => {
+	assert.equal(config['release-type'], 'php');
+	assert.equal(Object.hasOwn(config, 'skip-github-release'), false);
+	assert.equal(Object.hasOwn(packageConfig, 'skip-github-release'), false);
+});
+
+test('runtime-copy version remains a narrow Release Please extra-file', () => {
+	assert.deepEqual(packageConfig['extra-files'], [
+		{
+			type: 'json',
+			path: 'runtime-copy.json',
+			jsonpath: '$.package_version',
+		},
+	]);
+});
+
+test('candidate dispatch runs the normal input-free read-only CI', () => {
 	assert.match(
-		classificationWorkflow,
-		/pull_request_target:\n\s+branches: \[main\]/
+		ci,
+		/^on:\n  workflow_dispatch:\n  pull_request:\n  push:\n    branches: \[main\]$/m
 	);
-	assert.match(
-		classificationWorkflow,
-		/types: \[opened, synchronize, reopened, edited, labeled, unlabeled\]/
-	);
-	assert.match(classificationWorkflow, /test "\$base_ref" = main/);
-	assert.match(
-		classificationWorkflow,
-		/test "\$base_repo" = "\$GITHUB_REPOSITORY"/
-	);
-	assert.match(
-		classificationWorkflow,
-		/base_repo_id="\$\(jq -er '\.base\.repo\.id'/
-	);
-	assert.match(
-		classificationWorkflow,
-		/head_repo="\$\(jq -er '\.head\.repo\.full_name'/
-	);
-	assert.match(
-		classificationWorkflow,
-		/head_repo_id="\$\(jq -er '\.head\.repo\.id'/
-	);
-	assert.match(
-		classificationWorkflow,
-		/ref: \$\{\{ steps\.pr\.outputs\.base_sha \}\}/
-	);
-	assert.match(
-		classificationWorkflow,
-		/git fetch --no-tags origin "\+refs\/pull\/\$\{RAN_PR_NUMBER\}\/head:refs\/remotes\/origin\/pr-head"/
-	);
-	assert.match(
-		classificationWorkflow,
-		/test "\$\(git rev-parse refs\/remotes\/origin\/pr-head\)" = "\$RAN_HEAD_SHA"/
-	);
-	assert.match(
-		classificationWorkflow,
-		/RAN_RELEASE_PR_HEAD_REPOSITORY: \$\{\{ steps\.pr\.outputs\.head_repo \}\}/
-	);
-	assert.match(
-		classificationWorkflow,
-		/RAN_RELEASE_PR_HEAD_REPOSITORY_ID: \$\{\{ steps\.pr\.outputs\.head_repo_id \}\}/
-	);
-	assert.match(
-		classificationWorkflow,
-		/RAN_RELEASE_REPOSITORY_ID: \$\{\{ steps\.pr\.outputs\.base_repo_id \}\}/
-	);
-	assert.match(
-		classificationWorkflow,
-		/RAN_RELEASE_PENDING_LABEL: \$\{\{ steps\.pr\.outputs\.pending_label \}\}/
-	);
-	assert.match(
-		classificationWorkflow,
-		/RAN_RELEASE_TAGGED_LABEL: \$\{\{ steps\.pr\.outputs\.tagged_label \}\}/
-	);
-	assert.match(classificationWorkflow, /autorelease: pending/);
-	assert.match(classificationWorkflow, /autorelease: tagged/);
-	assert.match(
-		classificationWorkflow,
-		/run: node scripts\/release-classification\.mjs/
-	);
+	assert.match(ci, /^permissions:\n  contents: read$/m);
+	assert.doesNotMatch(ci, /^\s+inputs:/m);
 	assert.doesNotMatch(
-		classificationWorkflow,
-		/ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/
+		ci,
+		/^\s+(?:actions|contents|issues|pull-requests): write$/m
 	);
 });

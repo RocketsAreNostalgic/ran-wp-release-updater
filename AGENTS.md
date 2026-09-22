@@ -58,4 +58,16 @@ repository workflow explicitly selects a Blacksmith runner.
 
 ## Prerelease version policy
 
-Trusted release publication accepts canonical `MAJOR.MINOR.PATCH-beta.N` versions. Release Please may advance the SemVer core when reviewed release-driving metadata requires it; publisher validation must preserve exact monotonic comparison and the repository's existing release provenance/runtime-copy checks rather than assuming a permanent `0.1.0-beta.N` line.
+Release Please owns version semantics, including the beta prerelease line and
+SemVer-core advancement configured in `release-please-config.json`. It owns the
+changelog, release PR, tag, and GitHub Release lifecycle. The pinned shared
+Profile A workflow supplies exact successful-main CI admission and bounded
+exact-candidate Quality dispatch; do not duplicate those controls locally.
+
+Ordinary Quality owns the runtime-copy product contract:
+`runtime-copy.json.package_version` must match the Release Please manifest and
+remain managed through its `extra-files` adapter, while `package_revision` must
+match the exact content identity of `bootstrap.php`, `runtime.php`, and
+production PHP under `src/`. Preserve the existing runtime-copy provenance and
+fail-closed tests. Do not recreate a generic version engine, release classifier,
+local publisher, lifecycle-label reconciliation, or historical recovery system.

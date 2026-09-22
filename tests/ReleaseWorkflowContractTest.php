@@ -8,18 +8,24 @@ use PHPUnit\Framework\TestCase;
 
 final class ReleaseWorkflowContractTest extends TestCase {
 
-	public function testReleaseWorkflowAndJsonVersionUpdaterAreExact(): void {
+	public function testSharedProfileAAndJsonVersionUpdaterAreExact(): void {
 		$workflow = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/release-please.yml' );
 		$ci       = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/ci.yml' );
 		$config   = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/release-please-config.json' ), true, 512, JSON_THROW_ON_ERROR );
 
 		self::assertStringContainsString( 'workflow_run:', $workflow );
-		self::assertStringContainsString( "workflow_run.event == 'push'", $workflow );
-		self::assertStringContainsString( 'workflow_run.head_repository.id == github.repository_id', $workflow );
+		self::assertStringContainsString( 'workflows: [CI]', $workflow );
+		self::assertStringContainsString( 'types: [completed]', $workflow );
+		self::assertStringContainsString( 'branches: [main]', $workflow );
 		self::assertStringContainsString( 'permissions: {}', $workflow );
-		self::assertStringContainsString( 'group: updater-exact-release-publisher', $workflow );
-		self::assertStringContainsString( 'timeout-minutes: 15', $workflow );
-		self::assertStringContainsString( 'RAN_RELEASE_PUBLISHER_MUTATE: \'1\'', $workflow );
+		self::assertStringContainsString( 'uses: RocketsAreNostalgic/.github/.github/workflows/release-profile-a.yml@289352e08cdf10b15d07c4e1c890f385afc3d3f5', $workflow );
+		self::assertStringContainsString( 'expected-workflow-path: .github/workflows/ci.yml', $workflow );
+		self::assertStringContainsString( 'release-pr-head: release-please--branches--main--components--ran/wp-release-updater', $workflow );
+		foreach ( array( 'actions: write', 'contents: write', 'issues: write', 'pull-requests: write' ) as $permission ) {
+			self::assertStringContainsString( $permission, $workflow );
+		}
+		self::assertArrayNotHasKey( 'skip-github-release', $config );
+		self::assertArrayNotHasKey( 'skip-github-release', $config['packages']['.'] );
 		self::assertStringContainsString( 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0', $ci );
 		self::assertStringContainsString( "node-version: '24.11.0'", $ci );
 		self::assertSame( 'json', $config['packages']['.']['extra-files'][0]['type'] );

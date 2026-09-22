@@ -17,7 +17,7 @@ composer check
 
 It is the baseline repository gate, not the complete environment matrix.
 
-The CI quality job additionally runs JavaScript/release-publisher checks and the isolated MySQL CAS lifecycle proof. CI also has separate PHP 8.5, Windows portability, and installed-WordPress jobs.
+The CI quality job additionally requires JavaScript quality/workflow-contract checks and the isolated MySQL CAS lifecycle proof. CI also has separate PHP 8.5, Windows portability, and installed-WordPress jobs.
 
 ## Maintained CI environment
 
@@ -81,8 +81,11 @@ The Composer scripts expose narrower proofs for specific boundaries:
 
 ```sh
 composer test:wordpress-bulk
-composer test:release-publisher
 ```
+
+For the source-release workflow contract, run `pnpm test`; run `pnpm check` for the full JavaScript audit, formatting, lint, and test aggregate after `pnpm install --frozen-lockfile` with the repository's pinned Node/pnpm toolchain.
+
+Release Please owns this Composer package's version, changelog, release PR, tag, and GitHub Release lifecycle through the pinned shared Profile A caller. The JavaScript contract verifies that caller and normal input-free, read-only candidate CI. The PHP suite retains `runtime-copy.json` version/manifest consistency, the Release Please `extra-files` version adapter, canonical runtime content identity, provenance/fail-closed behaviour, archive exports, and the full Quality fan-in. These are product and caller contracts, not a repository-local publisher or version engine.
 
 Use the focused suite when changing its boundary, but do not substitute it for `composer check` or the relevant CI matrix.
 

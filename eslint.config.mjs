@@ -7,7 +7,7 @@ export default [
 	},
 	...wordpress.configs.recommended,
 	{
-		files: ['scripts/**/*.mjs', 'tests/**/*.mjs'],
+		files: ['tests/**/*.mjs'],
 		languageOptions: {
 			globals: globals.node,
 		},
