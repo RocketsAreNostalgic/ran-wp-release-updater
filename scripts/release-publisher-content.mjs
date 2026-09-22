@@ -123,6 +123,9 @@ export function candidateIdentity(contents, candidateSha) {
 export function verifyReleaseDelta(parent, candidate) {
 	const before = manifestVersion(parent.manifest, 'parent', true);
 	const after = manifestVersion(candidate.manifest, 'candidate');
+	if (before === UNRELEASED && after !== '0.1.0-beta.1') {
+		refuse('release_version_not_advanced', 'first release must be 0.1.0-beta.1');
+	}
 	if (before !== UNRELEASED && !BETA.test(before)) {
 		refuse('release_content_drift', 'parent release state is invalid');
 	}
