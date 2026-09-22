@@ -11,7 +11,10 @@ const ci = readFileSync(
 	'utf8'
 );
 const config = JSON.parse(
-	readFileSync(new URL('../release-please-config.json', import.meta.url), 'utf8')
+	readFileSync(
+		new URL('../release-please-config.json', import.meta.url),
+		'utf8'
+	)
 );
 const packageConfig = config.packages['.'];
 
