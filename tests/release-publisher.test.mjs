@@ -97,7 +97,10 @@ test('candidate accepts canonical SemVer beta versions', () => {
 	};
 	assert.equal(candidateIdentity(linked, SHA).version, next);
 	for (const version of ['0.2.0-beta.1', '1.0.0-beta.1']) {
-		assert.equal(candidateIdentity(contents(version), SHA).version, version);
+		assert.equal(
+			candidateIdentity(contents(version), SHA).version,
+			version
+		);
 	}
 	for (const version of [
 		'01.0.0-beta.1',
