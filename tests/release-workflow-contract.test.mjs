@@ -26,7 +26,7 @@ test('source releases use the pinned thin Profile A caller', () => {
 	assert.match(workflow, /^permissions: \{\}$/m);
 	assert.match(
 		workflow,
-		/^jobs:\n  release:\n    permissions:\n      actions: write\n      contents: write\n      issues: write\n      pull-requests: write$/m
+		/^jobs:\n  release:\n    permissions:\n      actions: write\n      contents: write\n      issues: write\n      pull-requests: write\n    uses: /m
 	);
 	assert.match(
 		workflow,
