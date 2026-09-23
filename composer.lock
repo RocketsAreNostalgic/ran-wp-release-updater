@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7824341e35808f6b1d4b1439ed7ad2df",
+    "content-hash": "089fbcc67a52f1f85810a703d54031a3",
     "packages": [],
     "packages-dev": [
         {
@@ -1354,16 +1354,16 @@
         },
         {
             "name": "ran/updater-support",
-            "version": "v0.1.0-beta.2",
+            "version": "v1.0.0-beta.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/RocketsAreNostalgic/ran-updater-support.git",
-                "reference": "83384bb6f4652d8988374867f4103fde63878451"
+                "reference": "357db930b407941bd19a9e890c925d3d16ae9b15"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RocketsAreNostalgic/ran-updater-support/zipball/83384bb6f4652d8988374867f4103fde63878451",
-                "reference": "83384bb6f4652d8988374867f4103fde63878451",
+                "url": "https://api.github.com/repos/RocketsAreNostalgic/ran-updater-support/zipball/357db930b407941bd19a9e890c925d3d16ae9b15",
+                "reference": "357db930b407941bd19a9e890c925d3d16ae9b15",
                 "shasum": ""
             },
             "require": {
@@ -1385,20 +1385,16 @@
             "scripts": {
                 "check": [
                     "@validate:strict",
-                    "@lint:php",
+                    "@lint:syntax",
                     "@standards",
                     "@analyze",
-                    "@test:contract",
-                    "@test:release-publisher"
+                    "@test"
                 ],
                 "validate:strict": [
                     "composer validate --strict --no-check-publish"
                 ],
                 "test:contract": [
                     "php tests/contract.php"
-                ],
-                "lint:php": [
-                    "find src tests -type f -name '*.php' -print0 | xargs -0 -n1 php -l"
                 ],
                 "standards": [
                     "phpcs --standard=.phpcs.xml"
@@ -1409,8 +1405,15 @@
                 "analyze": [
                     "phpstan analyse --configuration=phpstan.neon --no-progress --memory-limit=512M"
                 ],
-                "test:release-publisher": [
-                    "node --test tests/release-publisher.test.mjs tests/release-publisher-decision.test.mjs tests/release-publisher-recovery-retirement.test.mjs"
+                "test:release-control": [
+                    "node --test tests/release-workflow-contract.test.mjs"
+                ],
+                "lint:syntax": [
+                    "bash -o pipefail -c 'find src tests -type f -name \"*.php\" -print0 | xargs -0 -n1 php -l'"
+                ],
+                "test": [
+                    "@test:contract",
+                    "@test:release-control"
                 ]
             },
             "license": [
@@ -1422,7 +1425,7 @@
                 "security": "https://github.com/RocketsAreNostalgic/ran-updater-support/security/advisories/new",
                 "source": "https://github.com/RocketsAreNostalgic/ran-updater-support"
             },
-            "time": "2026-09-14T16:25:11+00:00"
+            "time": "2026-09-23T11:24:10+00:00"
         },
         {
             "name": "sebastian/cli-parser",

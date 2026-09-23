@@ -11,7 +11,7 @@ final class ArchiveSafety {
 	public const MAX_COMPONENT_BYTES = 255;
 
 	/** @return array{path:string,directory:bool}|null */
-	public static function normalizePath( string $name ): ?array {
+	public static function normalize_path( string $name ): ?array {
 		if (
 			'' === $name || strlen( $name ) > self::MAX_PATH_BYTES || str_starts_with( $name, '/' )
 			|| 1 === preg_match( '/[\\x00-\\x1f\\x7f]/', $name )
@@ -42,18 +42,18 @@ final class ArchiveSafety {
 		);
 	}
 
-	public static function entryTypeFailure( ?int $originOs, ?int $attributes, bool $directory ): ?string {
-		if ( null === $originOs || null === $attributes ) {
+	public static function entry_type_failure( ?int $origin_os, ?int $attributes, bool $directory ): ?string {
+		if ( null === $origin_os || null === $attributes ) {
 			return 'entry_metadata_invalid';
 		}
-		if ( 3 === $originOs ) {
+		if ( 3 === $origin_os ) {
 			$type = ( $attributes >> 16 ) & 0170000;
 			if ( ! in_array( $type, array( 0, 0040000, 0100000 ), true ) ) {
 				return 'entry_type_unsupported';
 			}
 			return 0 === $type || ( 0040000 === $type ) === $directory ? null : 'entry_metadata_invalid';
 		}
-		if ( 0 !== $originOs ) {
+		if ( 0 !== $origin_os ) {
 			return 'entry_type_unsupported';
 		}
 		$flags = $attributes & 0xff;
@@ -64,24 +64,24 @@ final class ArchiveSafety {
 	}
 
 	/** @param list<array{path:string,directory:bool}> $entries */
-	public static function collisionFailure( array $entries ): ?string {
-		$entriesByPath = array();
+	public static function collision_failure( array $entries ): ?string {
+		$entries_by_path = array();
 		foreach ( $entries as $entry ) {
 			$key = strtolower( $entry['path'] ) . '/';
-			if ( isset( $entriesByPath[ $key ] ) ) {
+			if ( isset( $entries_by_path[ $key ] ) ) {
 				return 'path_duplicate';
 			}
-			$entriesByPath[ $key ] = $entry['directory'];
+			$entries_by_path[ $key ] = $entry['directory'];
 		}
-		ksort( $entriesByPath, SORT_STRING );
-		$previousPath      = null;
-		$previousDirectory = true;
-		foreach ( $entriesByPath as $path => $directory ) {
-			if ( ! $previousDirectory && is_string( $previousPath ) && str_starts_with( $path, $previousPath ) ) {
+		ksort( $entries_by_path, SORT_STRING );
+		$previous_path      = null;
+		$previous_directory = true;
+		foreach ( $entries_by_path as $path => $directory ) {
+			if ( ! $previous_directory && is_string( $previous_path ) && str_starts_with( $path, $previous_path ) ) {
 				return 'file_parent_collision';
 			}
-			$previousPath      = $path;
-			$previousDirectory = $directory;
+			$previous_path      = $path;
+			$previous_directory = $directory;
 		}
 
 		return null;

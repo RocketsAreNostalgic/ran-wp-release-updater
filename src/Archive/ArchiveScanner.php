@@ -27,12 +27,12 @@ final class ArchiveScanner {
 		for ( $index = 0; $index < $zip->numFiles; ++$index ) {
 			$name        = $zip->getNameIndex( $index, \ZipArchive::FL_UNCHANGED );
 			$stat        = $zip->statIndex( $index, \ZipArchive::FL_UNCHANGED );
-			$path        = is_string( $name ) ? ArchiveSafety::normalizePath( $name ) : null;
+			$path        = is_string( $name ) ? ArchiveSafety::normalize_path( $name ) : null;
 			$origin      = 0;
 			$attributes  = 0;
 			$typeFailure = null === $path || ! $zip->getExternalAttributesIndex( $index, $origin, $attributes, \ZipArchive::FL_UNCHANGED )
-				? ArchiveSafety::entryTypeFailure( null, null, false )
-				: ArchiveSafety::entryTypeFailure( $origin, $attributes, $path['directory'] );
+				? ArchiveSafety::entry_type_failure( null, null, false )
+				: ArchiveSafety::entry_type_failure( $origin, $attributes, $path['directory'] );
 			if (
 				null === $path
 				|| ! is_array( $stat )
@@ -83,7 +83,7 @@ final class ArchiveScanner {
 			$collisionEntries[] = $path;
 		}
 
-		$collision = ArchiveSafety::collisionFailure( $collisionEntries );
+		$collision = ArchiveSafety::collision_failure( $collisionEntries );
 		if ( 'path_duplicate' === $collision ) {
 			return ArchiveScanResult::blocked( 'archive_path_duplicate' );
 		}

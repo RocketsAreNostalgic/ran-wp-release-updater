@@ -86,8 +86,8 @@ $registrar = require $argv[1] . '/bootstrap.php';
 foreach ($GLOBALS['actions'] as $action) { $action(); }
 $archiveSafety = new ReflectionClass('RAN\\WPReleaseUpdater\\V1\\Dependency\\ArchiveSafety');
 $archiveClass = 'RAN\\WPReleaseUpdater\\V1\\Dependency\\ArchiveSafety';
-$safe = $archiveClass::normalizePath('package/asset.php');
-$rejected = $archiveClass::normalizePath('../asset.php');
+$safe = $archiveClass::normalize_path('package/asset.php');
+$rejected = $archiveClass::normalize_path('../asset.php');
 echo json_encode(array('registrar' => is_object($registrar), 'file' => $archiveSafety->getFileName(), 'safe' => $safe, 'rejected' => $rejected), JSON_THROW_ON_ERROR);
 PHP;
 file_put_contents( $root . '/probe.php', $probe );

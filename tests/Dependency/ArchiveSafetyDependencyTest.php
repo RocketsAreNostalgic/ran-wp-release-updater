@@ -13,15 +13,15 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 		$fixture = require dirname( __DIR__, 2 ) . '/vendor/ran/updater-support/tests/fixtures/archive-safety.php';
 		foreach ( $fixture['paths'] as $name => $case ) {
 			[$input, $expected] = $case;
-			self::assertSame( $expected, ArchiveSafety::normalizePath( $input ), $name );
+			self::assertSame( $expected, ArchiveSafety::normalize_path( $input ), $name );
 		}
 		foreach ( $fixture['metadata'] as $name => $case ) {
 			[$origin, $attributes, $directory, $expected] = $case;
-			self::assertSame( $expected, ArchiveSafety::entryTypeFailure( $origin, $attributes, $directory ), $name );
+			self::assertSame( $expected, ArchiveSafety::entry_type_failure( $origin, $attributes, $directory ), $name );
 		}
 		foreach ( $fixture['collisions'] as $name => $case ) {
 			[$entries, $expected] = $case;
-			self::assertSame( $expected, ArchiveSafety::collisionFailure( $entries ), $name );
+			self::assertSame( $expected, ArchiveSafety::collision_failure( $entries ), $name );
 		}
 	}
 }
