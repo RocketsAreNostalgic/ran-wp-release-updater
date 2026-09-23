@@ -25,7 +25,7 @@
     "phpcompatibility/phpcompatibility-wp": "3.0.0-alpha2",
     "phpstan/phpstan": "^2.1",
     "phpunit/phpunit": "^11.0",
-    "ran/coding-standards": "dev-main",
+    "ran/coding-standards": "^1.0",
     "ran/updater-support": "1.0.0-beta.4",
     "szepeviktor/phpstan-wordpress": "^2.0"
   },
