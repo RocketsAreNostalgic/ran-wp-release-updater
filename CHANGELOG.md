@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0-beta.8](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.8...v1.0.0-beta.8) (2026-09-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* adopt Support snake_case archive API ([#63](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/63))
+
+### Code Refactoring
+
+* adopt Support snake_case archive API ([#63](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/63)) ([e97fb24](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/e97fb24b2d04d2ee59ea4f31e2cd97b4d5ee00c2))
+
 ## [0.1.0-beta.8](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.7...v0.1.0-beta.8) (2026-09-22)
 
 
