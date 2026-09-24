@@ -35,6 +35,11 @@ Its listing helpers share precise PHPStan candidate/result shapes. The sort
 callback explicitly rejects an invalid version comparison; adapter tests cover
 malformed-tag filtering, descending SemVer order and the existing identity tie-break.
 
+`src/WordPress/NativePackageUpdater.php` is also directly analysed at level 8.
+Missing binding state or release descriptors take the existing failure/cleanup
+paths before typed receipt or archive operations. Native lifecycle tests cover
+missing-descriptor rejection, archive cleanup and lease release.
+
 Focused commands retain the same underlying tools and boundaries:
 
 | Command | Scope |

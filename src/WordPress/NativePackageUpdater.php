@@ -48,7 +48,10 @@ final class NativePackageUpdater {
 	private StagedPackageManifest $manifestBuilder;
 	private PendingInstallState $pendingInstall;
 
-	/** @param array<string,string> $headers @param array<string,mixed> $archivePolicy */
+	/**
+	 * @param array<string,string> $headers
+	 * @param array<string,mixed> $archivePolicy
+	 */
 	private function __construct(
 		private string $targetType,
 		private string $installedIdentity,
@@ -68,7 +71,10 @@ final class NativePackageUpdater {
 		$this->pendingInstall  = new PendingInstallState();
 	}
 
-	/** @param array<string,mixed> $configuration @param array<string,mixed> $archivePolicy */
+	/**
+	 * @param array<string,mixed> $configuration
+	 * @param array<string,mixed> $archivePolicy
+	 */
 	public static function fromConfiguration(
 		array $configuration,
 		BindingRecord $binding,
@@ -134,7 +140,11 @@ final class NativePackageUpdater {
 		$this->registered = true;
 	}
 
-	/** @param array<string,mixed>|false $update @param array<string,mixed> $packageData @param list<string> $locales */
+	/**
+	 * @param array<string,mixed>|false $update
+	 * @param array<string,mixed> $packageData
+	 * @param list<string> $locales
+	 */
 	public function filterUpdate( mixed $update, array $packageData, string $packageIdentity, array $locales ): mixed {
 		unset( $locales );
 		if ( ! hash_equals( $this->installedIdentity, $packageIdentity ) || ! $this->live() ) {
@@ -224,7 +234,6 @@ final class NativePackageUpdater {
 		return $this->directFilesystem() && $descriptor instanceof IdentityDescriptor && $this->newerThanInstalled( $descriptor ) && $this->automaticEligible( $descriptor );
 	}
 
-	/** @param array<string,mixed> $hookExtra */
 	public function capturePackageOptions( mixed $options ): mixed {
 		if ( ! $this->live() ) {
 			return $options;
@@ -275,6 +284,9 @@ final class NativePackageUpdater {
 		}
 		if ( ! hash_equals( $token->fingerprintValue(), $fresh->fingerprintValue() ) ) {
 			return $this->failure( 'remote_release_changed' );
+		}
+		if ( ! $this->state instanceof BindingState ) {
+			return $this->failure( 'binding_fence_lost' );
 		}
 		$this->descriptor = $fresh;
 		$renewed          = BindingFenceCoordinator::renewPersistentBindingState( $this->wpdb, $this->state, $this->claim, 3600 );
@@ -329,6 +341,7 @@ final class NativePackageUpdater {
 		if (
 			! $this->directFilesystem()
 			|| null === $verified
+			|| ! $this->descriptor instanceof IdentityDescriptor
 			|| ! is_array( $this->pendingInstall->archiveIdentity() )
 			|| ! $this->archiveStore->sameIdentity( $file, $this->descriptor, $this->pendingInstall->archiveIdentity() )
 			|| ! $this->pendingInstall->receipt() instanceof AcquisitionReceipt
@@ -373,6 +386,7 @@ final class NativePackageUpdater {
 			|| ! $this->pendingInstall->active()
 			|| ! $this->pendingInstall->extractionAdmitted()
 			|| null === $verified
+			|| ! $this->descriptor instanceof IdentityDescriptor
 			|| ! $this->pendingInstall->receipt() instanceof AcquisitionReceipt
 			|| ! is_string( $source )
 			|| ! is_array( $manifest )
@@ -421,6 +435,7 @@ final class NativePackageUpdater {
 			|| ! $this->pendingInstall->active()
 			|| ! $this->pendingInstall->extractionAdmitted()
 			|| null === $verified
+			|| ! $this->descriptor instanceof IdentityDescriptor
 			|| ! $this->pendingInstall->receipt() instanceof AcquisitionReceipt
 			|| $response instanceof \WP_Error
 		) {
@@ -482,6 +497,10 @@ final class NativePackageUpdater {
 		}
 
 		try {
+			if ( ! $this->descriptor instanceof IdentityDescriptor ) {
+				$this->diagnose( 'outcome_uncertain', null );
+				return;
+			}
 			$destination             = is_array( $this->pendingInstall->installResult() ) && is_string( $this->pendingInstall->installResult()['destination'] ?? null )
 				? $this->pendingInstall->installResult()['destination']
 				: null;
@@ -648,7 +667,7 @@ final class NativePackageUpdater {
 		}
 
 		$parsed = PackageIdentityValidator::parseHeader( $contents, $this->targetType );
-		if ( 'installed_header_verified' !== $parsed['code'] ) {
+		if ( 'installed_header_verified' !== $parsed['code'] || ! isset( $parsed['headers'] ) ) {
 			return false;
 		}
 
@@ -926,7 +945,7 @@ final class NativePackageUpdater {
 		} if ( 'theme' === $type ) {
 			return 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $identity );
 		} return 'plugin' === $type && 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D', $identity ); }
-	/** @param array<string,mixed> $value @param list<string> $keys */ private static function exactKeys( mixed $value, array $keys ): bool {
+	/** @param list<string> $keys */ private static function exactKeys( mixed $value, array $keys ): bool {
 		if ( ! is_array( $value ) || count( $value ) !== count( $keys ) ) {
 			return false;
 		} foreach ( $keys as $key ) {

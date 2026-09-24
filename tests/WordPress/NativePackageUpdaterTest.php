@@ -979,6 +979,79 @@ namespace Tests\WordPress {
 				}
 			}
 		}
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'missingDescriptorCallbacks' )]
+		public function testMissingDescriptorRejectsPendingLifecycleAndCleansUp( string $callback, string $code ): void {
+			list( $updater, , $database, , $binding ) = $this->subject();
+			$offer                                    = $this->offer( $updater );
+			$ownedArchive                             = $updater->filterPreDownload( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $ownedArchive );
+			if ( 'pre-unzip' !== $callback ) {
+				self::assertNull( $updater->filterPreUnzipFile( null, $ownedArchive, '/tmp', array(), 0.0 ) );
+			}
+			if ( 'finalize' === $callback ) {
+				self::assertTrue( $updater->filterPreInstall( true, $this->extra() ) );
+				$stagedPackage = $this->staged();
+				self::assertSame( $stagedPackage, $updater->filterSourceSelection( $stagedPackage, '/tmp', null, $this->extra() ) );
+				$updater->captureInstallPackageResult( array( 'destination' => $stagedPackage ), $this->extra() );
+				$updater->observeCompletion(
+					null,
+					array(
+						'action'  => 'update',
+						'type'    => 'plugin',
+						'plugins' => array( 'package/package.php' ),
+					)
+				);
+			}
+			( new \ReflectionProperty( $updater, 'descriptor' ) )->setValue( $updater, null );
+			if ( 'finalize' === $callback ) {
+				$updater->finalizePendingInstall();
+			} else {
+				$result = match ( $callback ) {
+					'pre-unzip' => $updater->filterPreUnzipFile( null, $ownedArchive, '/tmp', array(), 0.0 ),
+					'source-selection' => $updater->filterSourceSelection( $this->staged(), '/tmp', null, $this->extra() ),
+					'pre-install' => $updater->filterPreInstall( true, $this->extra() ),
+				};
+				self::assertInstanceOf( \WP_Error::class, $result );
+			}
+			self::assertContains( $code, $updater->diagnostics() );
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
+			self::assertFileDoesNotExist( $ownedArchive );
+			self::assertSame( 'claimed', BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
+		}
+		/** @return array<string,array{string,string}> */
+		public static function missingDescriptorCallbacks(): array {
+			return array(
+				'pre unzip'        => array( 'pre-unzip', 'archive_changed_before_extraction' ),
+				'source selection' => array( 'source-selection', 'staged_package_identity_invalid' ),
+				'pre install'      => array( 'pre-install', 'unverified_pre_install' ),
+				'finalize'         => array( 'finalize', 'outcome_uncertain' ),
+			);
+		}
+		public function testRefreshDuringFreshInspectionRejectsBeforeReacquisition(): void {
+			list( $updater, $adapter, $database, , $binding ) = $this->subject();
+			$offer            = $this->offer( $updater );
+			$reentrantAdapter = new class( $adapter, $updater ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter {
+				public function __construct( private ControllableReleaseAdapter $inner, private NativePackageUpdater $updater ) {}
+				/** @return array<string,mixed> */
+				public function listReleases( array $conditional = array() ): array {
+					return $this->inner->listReleases( $conditional );
+				}
+				public function inspect( string $releaseIdentity, ?string $expectedTag = null ): IdentityDescriptor {
+					$descriptor = $this->inner->inspect( $releaseIdentity, $expectedTag );
+					$this->updater->refresh();
+					return $descriptor;
+				}
+				public function acquire( IdentityDescriptor $descriptor ): \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact {
+					return $this->inner->acquire( $descriptor );
+				}
+			};
+			( new \ReflectionProperty( $updater, 'adapter' ) )->setValue( $updater, $reentrantAdapter );
+			$result = $updater->filterPreDownload( false, $offer['package'], null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertContains( 'binding_fence_lost', $updater->diagnostics() );
+			self::assertSame( 1, $adapter->acquireCalls );
+			self::assertSame( 'claimed', BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
+		}
 		public function testRefreshClearsDiagnosticsAndDestroysPendingOwnedArchive(): void {
 			list( $updater ) = $this->subject();
 			$offer           = $this->offer( $updater );
