@@ -19,9 +19,10 @@ PHPStan's level-8 roots include `src/WordPress/InstalledPackageResolver.php`.
 Its five private race/read/lock/rewind seams are assigned through Reflection by
 `InstalledPackageResolverTest`; only `property.unusedType` is ignored at those
 specific declarations. Their callable types and all method bodies remain checked.
-`scanDirectories: src` supplies symbols for other files without analysing their
-bodies. Coverage expansion remains tracked in issue #60; only the generated
-`src/Dependency/ArchiveSafety.php` remains outside direct roots.
+`scanDirectories: src` supplies symbol discovery; it does not itself analyse
+method bodies. All 36 shipped PHP files (`bootstrap.php`, `runtime.php` and
+production PHP under `src/`) now have direct level-8 roots. Issue #60 still owns
+final acceptance; this coverage count does not close the wider quality rollout.
 
 `src/Runtime/ReleaseSource.php` is also a level-8 root. Its direct `FS_METHOD`
 inspection deliberately avoids filesystem negotiation; the line-specific
@@ -68,6 +69,13 @@ failure handling. The artifact ownership predicate communicates its checked
 type to PHPStan so the existing impure cleanup retry remains analysed without
 suppression. Bootstrap/provenance, public release-source schema and registrar
 lifecycle tests cover these boundaries.
+
+The generated `src/Dependency/ArchiveSafety.php` is explicitly analysed at level 8.
+Its source remains owned by the pinned `ran/updater-support` dependency;
+`scripts/sync-updater-support.php --check` requires namespace-only byte parity.
+Future fixes belong upstream and must arrive through the reviewed dependency and
+copy-sync process. Direct analysis does not remove its generated-code PHPCS
+exclusion or permit local edits to the copied helper.
 
 Focused commands retain the same underlying tools and boundaries:
 
