@@ -8,6 +8,7 @@ parameters:
 		- src/Archive
 		- src/Contract
 		# Security-sensitive custody, state, runtime selection, and provider collaborators are required to remain level-8 clean.
+		- src/WordPress/InstalledPackageResolver.php
 		- src/WordPress/OwnedArchiveStore.php
 		- src/WordPress/StagedPackageManifest.php
 		- src/WordPress/PendingInstallState.php

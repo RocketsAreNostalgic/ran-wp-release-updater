@@ -15,6 +15,15 @@ composer check
 
 `composer check` validates the package metadata and generated updater-support copy, audits locked Composer dependencies, lints PHP syntax/style, runs PHPStan, executes PHPUnit, and proves the installed no-dev Composer consumer path.
 
+PHPStan's level-8 roots include `src/WordPress/InstalledPackageResolver.php`.
+Its five private race/read/lock/rewind seams are assigned through Reflection by
+`InstalledPackageResolverTest`; only `property.unusedType` is ignored at those
+specific declarations. Their callable types and all method bodies remain checked.
+`scanDirectories: src` supplies symbols for other files without analysing their
+bodies. Coverage expansion remains tracked in issue #60; neither the two root
+entrypoints nor all production source are claimed as analysed.
+
+
 Focused commands retain the same underlying tools and boundaries:
 
 | Command | Scope |
