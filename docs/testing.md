@@ -20,8 +20,8 @@ Its five private race/read/lock/rewind seams are assigned through Reflection by
 `InstalledPackageResolverTest`; only `property.unusedType` is ignored at those
 specific declarations. Their callable types and all method bodies remain checked.
 `scanDirectories: src` supplies symbols for other files without analysing their
-bodies. Coverage expansion remains tracked in issue #60; neither the two root
-entrypoints nor all production source are claimed as analysed.
+bodies. Coverage expansion remains tracked in issue #60; `bootstrap.php` and
+the generated `src/Dependency/ArchiveSafety.php` remain outside direct roots.
 
 `src/Runtime/ReleaseSource.php` is also a level-8 root. Its direct `FS_METHOD`
 inspection deliberately avoids filesystem negotiation; the line-specific
@@ -53,6 +53,13 @@ admit magic or inherited extra methods. Eight unused private validator
 forwarders were removed. The `validNativeStatus` Reflection seam remains,
 with only its `method.unused` diagnostic ignored at the declaration because
 `ConciseRegistrarTest` calls it directly; its body remains analysed.
+
+`runtime.php` is a direct level-8 root. Its handoff arrays have explicit element
+types, and native handle calls check callability while retaining the object-based
+fixture seam. Theme directory values are passed as a list without changing their
+order or mutating WordPress globals; a regression covers sparse and string keys.
+Selected-root validation, the sealed provider catalog and liveness checks remain
+in place. The runtime-copy revision is regenerated from the shipped PHP payload.
 
 Focused commands retain the same underlying tools and boundaries:
 
