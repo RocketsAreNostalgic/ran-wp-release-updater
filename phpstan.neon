@@ -9,6 +9,8 @@ parameters:
 		- runtime.php
 		- src/Archive
 		- src/Contract
+		# Generated upstream copy: analyse directly; preserve namespace-only parity.
+		- src/Dependency/ArchiveSafety.php
 		# Security-sensitive custody, state, runtime selection, and provider collaborators are required to remain level-8 clean.
 		- src/WordPress/NativePackageUpdater.php
 		- src/WordPress/InstalledPackageResolver.php
