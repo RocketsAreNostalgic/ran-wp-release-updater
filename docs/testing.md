@@ -20,8 +20,8 @@ Its five private race/read/lock/rewind seams are assigned through Reflection by
 `InstalledPackageResolverTest`; only `property.unusedType` is ignored at those
 specific declarations. Their callable types and all method bodies remain checked.
 `scanDirectories: src` supplies symbols for other files without analysing their
-bodies. Coverage expansion remains tracked in issue #60; `bootstrap.php` and
-the generated `src/Dependency/ArchiveSafety.php` remain outside direct roots.
+bodies. Coverage expansion remains tracked in issue #60; only the generated
+`src/Dependency/ArchiveSafety.php` remains outside direct roots.
 
 `src/Runtime/ReleaseSource.php` is also a level-8 root. Its direct `FS_METHOD`
 inspection deliberately avoids filesystem negotiation; the line-specific
@@ -60,6 +60,14 @@ fixture seam. Theme directory values are passed as a list without changing their
 order or mutating WordPress globals; a regression covers sparse and string keys.
 Selected-root validation, the sealed provider catalog and liveness checks remain
 in place. The runtime-copy revision is regenerated from the shipped PHP payload.
+
+`bootstrap.php` is also a direct level-8 root. Broker reflection accepts only
+already-loaded classes; native provenance checks still determine ownership.
+Dynamic broker calls retain the existing object-based fixture contracts and
+failure handling. The artifact ownership predicate communicates its checked
+type to PHPStan so the existing impure cleanup retry remains analysed without
+suppression. Bootstrap/provenance, public release-source schema and registrar
+lifecycle tests cover these boundaries.
 
 Focused commands retain the same underlying tools and boundaries:
 
