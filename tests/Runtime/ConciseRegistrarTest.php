@@ -42,6 +42,17 @@ PHP
 		self::assertSame( 0, $result['credentials'] );
 	}
 
+	public function testThemeDirectoriesRetainValuesWithSparseAndStringKeys(): void {
+		$result = $this->probe(
+			<<<'PHP'
+$GLOBALS['wp_theme_directories']=[7=>$data['root'],'ignored'=>null];$registrar=require $data['bootstrap'];$theme=$registrar->theme('github',$data['theme'],'acme/example-theme','234567890','stable','automatic');$theme->register();$activated=$GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>4,'wordpress_version'=>'6.8.0']);echo json_encode(['activation'=>$activated['code'],'theme'=>$theme->status()['code'],'keys'=>array_keys($GLOBALS['wp_theme_directories'])]);
+PHP
+		);
+		self::assertSame( 'runtime_active', $result['activation'] );
+		self::assertSame( 'target_active', $result['theme'] );
+		self::assertSame( array( 7, 'ignored' ), $result['keys'] );
+	}
+
 	public function testInvalidAndUnsupportedDeclarationsStayPassive(): void {
 		$result = $this->probe(
 			<<<'PHP'

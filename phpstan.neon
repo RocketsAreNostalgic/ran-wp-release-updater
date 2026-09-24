@@ -5,6 +5,7 @@ parameters:
 	level: 8
 	treatPhpDocTypesAsCertain: false
 	paths:
+		- runtime.php
 		- src/Archive
 		- src/Contract
 		# Security-sensitive custody, state, runtime selection, and provider collaborators are required to remain level-8 clean.

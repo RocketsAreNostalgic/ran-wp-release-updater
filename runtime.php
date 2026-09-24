@@ -124,9 +124,13 @@ return new class(
 			return false;
 		}
 		$diagnostics = $this->broker->diagnostics();
-		return is_array( $diagnostics ) && in_array( $diagnostics['state'] ?? null, array( 'activating', 'active' ), true );
+		return in_array( $diagnostics['state'] ?? null, array( 'activating', 'active' ), true );
 	}
-	/** @param list<array<string,mixed>> $submissions @return array<string,mixed> */
+	/**
+	 * @param array<string,mixed> $environment
+	 * @param list<array<string,mixed>> $submissions
+	 * @return array<string,mixed>
+	 */
 	public function boot( array $environment, array $submissions ): array {
 		if ( ! $this->live() ) {
 			throw new RuntimeException( 'Inactive runtime handoff.' );
@@ -141,7 +145,10 @@ return new class(
 			'results'  => $results,
 		);
 	}
-	/** @param array<string,mixed> $submission @return array<string,mixed> */
+	/**
+	 * @param array<string,mixed> $submission
+	 * @return array<string,mixed>
+	 */
 	public function registerTarget( array $submission ): array {
 		if ( ! $this->live() ) {
 			throw new RuntimeException( 'Inactive runtime handoff.' );
@@ -157,7 +164,7 @@ return new class(
 		$installed = new \RAN\WPReleaseUpdater\V1\WordPress\InstalledPackageResolver(
 			defined( 'WP_PLUGIN_DIR' ) ? WP_PLUGIN_DIR : '',
 			is_array( $GLOBALS['wp_plugin_paths'] ?? null ) ? $GLOBALS['wp_plugin_paths'] : array(),
-			is_array( $GLOBALS['wp_theme_directories'] ?? null ) ? $GLOBALS['wp_theme_directories'] : array(),
+			is_array( $GLOBALS['wp_theme_directories'] ?? null ) ? array_values( $GLOBALS['wp_theme_directories'] ) : array(),
 		);
 		$resolved  = $installed->resolve( $d );
 		if ( 'installed_identity_verified' !== ( $resolved['code'] ?? null ) ) {
@@ -219,7 +226,11 @@ return new class(
 				$diagnostics = $this->broker->diagnostics();
 				return is_array( $diagnostics ) && in_array( $diagnostics['state'] ?? null, array( 'activating', 'active' ), true );
 			}
+			/** @return array<string,mixed> */
 			public function status(): array {
+				if ( ! is_callable( array( $this->native, 'status' ) ) ) {
+					throw new RuntimeException( 'Invalid native handle.' );
+				}
 				if ( $this->live() ) {
 					return array(
 						'state'                => 'active',
@@ -237,12 +248,16 @@ return new class(
 					'native'               => $this->native->status(),
 				);
 			}
+			/** @return array{state:string,diagnostics:array<array{code:string}>} */
 			public function diagnostics(): array {
 				if ( ! $this->live() ) {
 					return array(
 						'state'       => 'inactive',
 						'diagnostics' => array( array( 'code' => $this->livenessCode() ) ),
 					);
+				}
+				if ( ! is_callable( array( $this->native, 'diagnostics' ) ) ) {
+					throw new RuntimeException( 'Invalid native handle.' );
 				}
 				return array(
 					'state'       => 'active',
@@ -252,6 +267,9 @@ return new class(
 			public function refresh(): bool {
 				if ( ! $this->live() ) {
 					return false;
+				}
+				if ( ! is_callable( array( $this->native, 'refresh' ) ) ) {
+					throw new RuntimeException( 'Invalid native handle.' );
 				}
 				return $this->native->refresh();
 			}
@@ -271,7 +289,10 @@ return new class(
 		);
 		return $this->accepted( $id, 'target_active', $key, $handle );
 	}
-	/** @param array<string,mixed> $declaration @return array{accepted:bool,code:string,source_handle:object|null} */
+	/**
+	 * @param array<string,mixed> $declaration
+	 * @return array{accepted:bool,code:string,source_handle:object|null}
+	 */
 	public function releaseSource( array $declaration ): array {
 		if ( ! $this->live() ) {
 			return $this->releaseFailure( 'runtime_unavailable' );
@@ -318,6 +339,10 @@ return new class(
 		}
 		return is_int( $networkId ) && 0 < $networkId ? $networkId : null;
 	}
+	/**
+	 * @param array<string,mixed> $first
+	 * @param array<string,mixed> $next
+	 */
 	private function sameDeclaration( array $first, array $next ): bool {
 		foreach ( array( 'target_type', 'provider_code', 'repository_locator', 'repository_identity', 'channel', 'update_policy', 'credential_resolver', 'maximum_artifact_bytes' ) as $fact ) {
 			if ( $first[ $fact ] !== $next[ $fact ] ) {
@@ -328,6 +353,7 @@ return new class(
 	}
 	private function deferredHandle(): object {
 		return new class() {
+			/** @return array<string,mixed> */
 			public function status(): array {
 				return array(
 					'state'                => 'deferred',
@@ -338,6 +364,7 @@ return new class(
 				);
 			}
 
+			/** @return array{state:string,diagnostics:list<array{code:string}>} */
 			public function diagnostics(): array {
 				return array(
 					'state'       => 'deferred',
