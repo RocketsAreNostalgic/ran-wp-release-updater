@@ -13,19 +13,28 @@ final class InstalledPackageResolver {
 	private const MAX_HEADER_BYTES = 8192;
 
 	/** @var null|\Closure(string):void Tests inject a deterministic race by Reflection. */
+	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
 	private ?\Closure $beforeFirstStat = null;
 
 	/** @var null|\Closure(string):void Tests inject a deterministic race by Reflection. */
+	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
 	private ?\Closure $afterFirstRead = null;
 
-	/** @var null|\Closure(resource,int):string|false Tests inject bounded read failures by Reflection. */
+	/** @var (\Closure(resource,int):(string|false))|null Tests inject bounded read failures by Reflection. */
+	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
 	private ?\Closure $read = null;
 
 	/** @var null|\Closure(resource):bool Tests inject lock and rewind failures by Reflection. */
-	private ?\Closure $lock   = null;
+	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
+	private ?\Closure $lock = null;
+	/** @var null|\Closure(resource):bool Tests inject rewind failures by Reflection. */
+	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
 	private ?\Closure $rewind = null;
 
-	/** @param array<string,mixed> $pluginPaths @param list<mixed> $themeDirectories */
+	/**
+	 * @param array<string,mixed> $pluginPaths Registered logical-to-physical plugin paths.
+	 * @param list<mixed>         $themeDirectories Registered theme directories.
+	 */
 	public function __construct(
 		private readonly string $pluginDirectory,
 		private readonly array $pluginPaths,
@@ -33,7 +42,10 @@ final class InstalledPackageResolver {
 	) {
 	}
 
-	/** @param array<string,mixed> $declaration @return array<string,mixed> */
+	/**
+	 * @param array<string,mixed> $declaration Target declaration.
+	 * @return array<string,mixed>
+	 */
 	public function resolve( array $declaration ): array {
 		$file = $declaration['installed_file'] ?? null;
 		$type = $declaration['target_type'] ?? null;
@@ -213,10 +225,7 @@ final class InstalledPackageResolver {
 
 	private function hasInternalLink( string $file, string $root ): bool {
 		$relative = substr( $file, strlen( $root ) + 1 );
-		if ( false === $relative ) {
-			return true;
-		}
-		$path = $root;
+		$path     = $root;
 		foreach ( explode( '/', $relative ) as $part ) {
 			$path .= '/' . $part;
 			if ( $path !== $file && is_link( $path ) ) {
@@ -260,7 +269,10 @@ final class InstalledPackageResolver {
 		);
 	}
 
-	/** @return string|array{0:string,1:array<string,int>} */
+	/**
+	 * @param array<int|string,int> $initial Initial file metadata.
+	 * @return string|array{0:string,1:array<int|string,int>}
+	 */
 	private function capture( string $file, array $initial ): string|array {
 		$stream = @fopen( $file, 'rb' );
 		if ( ! is_resource( $stream ) ) {
@@ -314,6 +326,10 @@ final class InstalledPackageResolver {
 		return '' !== $headers['RequiresWP'] && ( null === ReleaseVersion::normalizeHeader( $headers['RequiresWP'] ) || null === $comparison || $comparison < 0 );
 	}
 
+	/**
+	 * @param array<int|string,int> $one Initial file metadata.
+	 * @phpstan-assert-if-true =array<mixed> $two
+	 */
 	private function sameStat( array $one, mixed $two ): bool {
 		if ( ! is_array( $two ) ) {
 			return false;
