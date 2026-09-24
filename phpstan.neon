@@ -18,6 +18,7 @@ parameters:
 		- src/Runtime/ReleaseSource.php
 		- src/Runtime/ReleaseFailure.php
 		- src/Runtime/RequestProtocolValidator.php
+		- src/Runtime/RequestBroker.php
 		- src/Runtime/RuntimeCopySelector.php
 		- src/Runtime/SelectedRuntimeState.php
 		- src/Provider/GitHub/GitHubApiClient.php

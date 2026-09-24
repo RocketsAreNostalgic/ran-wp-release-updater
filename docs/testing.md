@@ -47,6 +47,13 @@ including magic-method proxies, without requiring a new interface. SQL, lease
 and exact-value compare-and-swap behaviour remain covered by existing tests
 and the native MySQL proof.
 
+`src/Runtime/RequestBroker.php` is a direct level-8 root. Local callable
+checks supplement source ownership and exact-method validation; they do not
+admit magic or inherited extra methods. Eight unused private validator
+forwarders were removed. The `validNativeStatus` Reflection seam remains,
+with only its `method.unused` diagnostic ignored at the declaration because
+`ConciseRegistrarTest` calls it directly; its body remains analysed.
+
 Focused commands retain the same underlying tools and boundaries:
 
 | Command | Scope |
