@@ -17,6 +17,9 @@ installation path. Run the applicable additional environment-specific suites
 for the changed boundary rather than treating `composer check` as the entire
 verification matrix.
 
+For focused commands and their scope, see the command table in
+[Testing and verification](docs/testing.md#default-quality-gate).
+
 The installed WordPress integration suite is separate from `composer check`.
 It verifies installed-distribution operation and that main-site and subsite
 discovery share one operation fence. It has no Booster checkout or live
