@@ -110,6 +110,9 @@ if ( $ran_wp_release_updater_request_broker_unloaded && is_array( $ran_wp_releas
 	require_once $ran_wp_release_updater_current_package_origin['source'];
 }
 $ran_wp_release_updater_broker_origin            = static function ( object|string $broker ) use ( $ran_wp_release_updater_current_package_origin, $ran_wp_release_updater_package_origin ): ?array {
+	if ( is_string( $broker ) && ! class_exists( $broker, false ) ) {
+		return null;
+	}
 	try {
 		$source = ( new ReflectionClass( $broker ) )->getFileName();
 		$source = is_string( $source ) ? realpath( $source ) : false;
@@ -254,7 +257,10 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 			return false;
 		}
 
-		/** @return array<string,mixed> */
+		/**
+		 * @param array<string,mixed> $environment
+		 * @return array<string,mixed>
+		 */
 		public function activate( array $environment ): array {
 			unset( $environment );
 			return array(
@@ -278,7 +284,10 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 			);
 		}
 
-		/** @return array{accepted:false,submission_id:0,code:string} */
+		/**
+		 * @param array<string,mixed> $declaration
+		 * @return array{accepted:false,submission_id:0,code:string}
+		 */
 		public function registerTarget( array $declaration ): array {
 			unset( $declaration );
 			return array(
@@ -288,6 +297,10 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 			);
 		}
 
+		/**
+		 * @param array<string,mixed> $declaration
+		 * @return array{accepted:false,code:string,source_handle:null}
+		 */
 		public function releaseSource( array $declaration ): array {
 			unset( $declaration );
 			return array(
@@ -366,9 +379,14 @@ return new class( $ran_wp_release_updater_broker ) {
 			private ?object $selected = null;
 			private bool $terminal    = false;
 
+			/** @param array<string,mixed> $declaration */
 			public function __construct( private object $broker, private array $declaration ) {
 			}
 
+			/**
+			 * @param array<array-key,mixed> $conditional
+			 * @return array<string,mixed>
+			 */
 			public function list( array $conditional = array() ): array {
 				if ( $this->terminalNow() ) {
 					return $this->failure( 'runtime_unavailable' );
@@ -379,6 +397,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				return $this->call( 'list', array( $conditional ) );
 			}
 
+			/** @return array<string,mixed> */
 			public function inspect( string $releaseId, string $expectedTag ): array {
 				if ( $this->terminalNow() ) {
 					return $this->failure( 'runtime_unavailable' );
@@ -389,6 +408,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				return $this->call( 'inspect', array( $releaseId, $expectedTag ) );
 			}
 
+			/** @return array<string,mixed> */
 			public function acquire( string $releaseId, string $expectedTag, string $expectedFingerprint ): array {
 				if ( $this->terminalNow() ) {
 					return $this->failure( 'runtime_unavailable' );
@@ -399,9 +419,16 @@ return new class( $ran_wp_release_updater_broker ) {
 				return $this->call( 'acquire', array( $releaseId, $expectedTag, $expectedFingerprint ) );
 			}
 
+			/**
+			 * @param list<mixed> $arguments
+			 * @return array<string,mixed>
+			 */
 			private function call( string $method, array $arguments ): array {
 				if ( ! is_object( $this->selected ) ) {
 					try {
+						if ( ! is_callable( array( $this->broker, 'releaseSource' ) ) ) {
+							throw new RuntimeException( 'Invalid broker handle.' );
+						}
 						$resolved = $this->broker->releaseSource( $this->declaration );
 					} catch ( Throwable ) {
 						$this->terminal = true;
@@ -455,6 +482,9 @@ return new class( $ran_wp_release_updater_broker ) {
 					return true;
 				}
 				try {
+					if ( ! is_callable( array( $this->broker, 'diagnostics' ) ) ) {
+						throw new RuntimeException( 'Invalid broker handle.' );
+					}
 					$diagnostics    = $this->broker->diagnostics();
 					$this->terminal = ! is_array( $diagnostics ) || in_array( $diagnostics['state'] ?? null, array( 'inactive', 'conflict' ), true );
 				} catch ( Throwable ) {
@@ -631,6 +661,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				return hash_equals( 'v2:' . hash( 'sha256', json_encode( $facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ), $value['fingerprint'] );
 			}
 
+			/** @param list<string> $keys */
 			private function keys( mixed $value, array $keys ): bool {
 				return is_array( $value ) && array_keys( $value ) === $keys;
 			}
@@ -653,8 +684,9 @@ return new class( $ran_wp_release_updater_broker ) {
 					&& ! array_intersect( array( 'user', 'pass', 'port', 'query', 'fragment' ), array_keys( $parts ) );
 			}
 
+			/** @phpstan-assert-if-true \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact $artifact */
 			private function ownedArtifact( mixed $artifact ): bool {
-				if ( ! is_object( $artifact ) || 'RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact' !== $artifact::class ) {
+				if ( ! is_object( $this->selected ) || ! is_object( $artifact ) || 'RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact' !== $artifact::class ) {
 					return false;
 				}
 				$source = ( new ReflectionClass( $this->selected ) )->getFileName();
@@ -679,6 +711,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				return in_array( $cleanup, array( 'not_applicable', 'complete', 'failed' ), true ) ? $cleanup : 'failed';
 			}
 
+			/** @param array<array-key,mixed> $value */
 			private function validConditional( array $value ): bool {
 				foreach ( $value as $key => $item ) {
 					if ( ! in_array( $key, array( 'etag', 'last_modified' ), true ) || ( null !== $item && ! is_string( $item ) ) ) {
@@ -692,6 +725,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				return '' !== $value && strlen( $value ) <= $limit && 1 === preg_match( '//u', $value ) && 1 === preg_match( '/\\A[^\\p{C}\\p{Z}\\s]+\\z/u', $value );
 			}
 
+			/** @return array{ok:false,code:string,value:null,retry_after:null,cleanup_status:string} */
 			private function failure( string $code, string $cleanup = 'not_applicable' ): array {
 				return array(
 					'ok'             => false,
@@ -706,6 +740,9 @@ return new class( $ran_wp_release_updater_broker ) {
 
 	/** @return array<string,mixed> */
 	public function diagnostics(): array {
+		if ( ! is_callable( array( $this->broker, 'diagnostics' ) ) ) {
+			throw new RuntimeException( 'Invalid broker handle.' );
+		}
 		return $this->broker->diagnostics();
 	}
 
@@ -727,6 +764,7 @@ return new class( $ran_wp_release_updater_broker ) {
 			private bool $accepted    = false;
 			private ?string $code     = null;
 
+			/** @param array<string,mixed> $declaration */
 			public function __construct( private object $broker, private array $declaration ) {
 			}
 
@@ -735,9 +773,15 @@ return new class( $ran_wp_release_updater_broker ) {
 					if ( ! $this->accepted || 0 === $this->submissionId ) {
 						return false;
 					}
+					if ( ! is_callable( array( $this->broker, 'targetStatus' ) ) ) {
+						throw new RuntimeException( 'Invalid broker handle.' );
+					}
 					return 'inactive' !== ( $this->broker->targetStatus( $this->submissionId )['state'] ?? null );
 				}
-				$this->submitted    = true;
+				$this->submitted = true;
+				if ( ! is_callable( array( $this->broker, 'registerTarget' ) ) ) {
+					throw new RuntimeException( 'Invalid broker handle.' );
+				}
 				$result             = $this->broker->registerTarget( $this->declaration );
 				$this->submissionId = $result['submission_id'];
 				$this->accepted     = $result['accepted'];
@@ -748,6 +792,9 @@ return new class( $ran_wp_release_updater_broker ) {
 			/** @return array<string,mixed> */
 			public function status(): array {
 				if ( 0 < $this->submissionId ) {
+					if ( ! is_callable( array( $this->broker, 'targetStatus' ) ) ) {
+						throw new RuntimeException( 'Invalid broker handle.' );
+					}
 					return $this->broker->targetStatus( $this->submissionId );
 				}
 				if ( $this->submitted ) {
@@ -771,6 +818,9 @@ return new class( $ran_wp_release_updater_broker ) {
 			/** @return array<string,mixed> */
 			public function diagnostics(): array {
 				if ( 0 < $this->submissionId ) {
+					if ( ! is_callable( array( $this->broker, 'targetDiagnostics' ) ) ) {
+						throw new RuntimeException( 'Invalid broker handle.' );
+					}
 					return $this->broker->targetDiagnostics( $this->submissionId );
 				}
 				if ( $this->submitted ) {
@@ -786,7 +836,13 @@ return new class( $ran_wp_release_updater_broker ) {
 			}
 
 			public function refresh(): bool {
-				return 0 < $this->submissionId && $this->broker->refreshTarget( $this->submissionId );
+				if ( 0 >= $this->submissionId ) {
+					return false;
+				}
+				if ( ! is_callable( array( $this->broker, 'refreshTarget' ) ) ) {
+					throw new RuntimeException( 'Invalid broker handle.' );
+				}
+				return $this->broker->refreshTarget( $this->submissionId );
 			}
 		};
 	}

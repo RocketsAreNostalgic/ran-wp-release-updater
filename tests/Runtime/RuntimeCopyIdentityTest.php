@@ -159,6 +159,18 @@ PHP,
 		self::assertSame( array( 'protocol_conflict_inactive' ), array_column( $result['diagnostics']['diagnostics'], 'code' ) );
 	}
 
+	public function testInvalidCopyDoesNotInvokeAnAutoloaderForTheBroker(): void {
+		$copy = $this->packageCopy( 'invalid-autoload' );
+		file_put_contents( $copy . '/runtime-copy.json', '{' );
+		$result = $this->probe(
+			'$autoloads=array();spl_autoload_register(static function(string $class)use(&$autoloads):void{$autoloads[]=$class;});$registrar=require $data["copy"]."/bootstrap.php";echo json_encode(array("autoloads"=>$autoloads,"state"=>$registrar->diagnostics()["state"],"published"=>array_key_exists("ran_wp_release_updater_v1_broker",$GLOBALS)));',
+			array( 'copy' => $copy )
+		);
+		self::assertSame( array(), $result['autoloads'] );
+		self::assertSame( 'conflict', $result['state'] );
+		self::assertFalse( $result['published'] );
+	}
+
 	public function testInvalidFirstCopyCannotDefineSharedRuntimeClassesBeforeAValidLaterCopyBoots(): void {
 		$invalid = $this->packageCopy( 'invalid-first' );
 		$valid   = $this->packageCopy( 'valid-later' );
