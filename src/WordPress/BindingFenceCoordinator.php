@@ -53,7 +53,7 @@ final class BindingFenceCoordinator {
 	public static function releasePersistentBindingState( object $wpdb, BindingState $expected, mixed $claim ): array {
 		return self::transitionPersistentBindingState( $wpdb, $expected, $claim, null, 'released' );
 	}
-	/** @return array{current:BindingState|null,now?:int,result:string} */
+	/** @return array{current:BindingState,now:int,result:'verified'}|array{current:BindingState|null,result:'binding_fence_lost'} */
 	public static function verifyPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim ): array {
 		if ( ! self::database( $wpdb ) ) {
 			return self::lost();
@@ -188,6 +188,9 @@ final class BindingFenceCoordinator {
 			&& hash_equals( $claim['owner_token'], $state->ownerToken() );
 	}
 	private static function time( object $wpdb ): ?int {
+		if ( ! is_callable( array( $wpdb, 'get_var' ) ) ) {
+			return null;
+		}
 		$value = $wpdb->get_var( 'SELECT UNIX_TIMESTAMP()' );
 		if ( is_int( $value ) && $value >= 0 && $value <= BindingState::MAX_SAFE_INTEGER ) {
 			return $value;
@@ -195,6 +198,9 @@ final class BindingFenceCoordinator {
 		return is_string( $value ) && 1 === preg_match( '/\A[0-9]+\z/D', $value ) && (int) $value <= BindingState::MAX_SAFE_INTEGER ? (int) $value : null;
 	}
 	private static function read( object $wpdb, string $name ): ?string {
+		if ( ! is_callable( array( $wpdb, 'prepare' ) ) || ! is_callable( array( $wpdb, 'get_var' ) ) ) {
+			return null;
+		}
 		$table = self::optionsTable( $wpdb );
 		if ( null === $table ) {
 			return null;
@@ -208,6 +214,9 @@ final class BindingFenceCoordinator {
 		return is_string( $actual ) && hash_equals( $expected, $actual );
 	}
 	private static function insert( object $wpdb, string $name, string $value ): bool {
+		if ( ! is_callable( array( $wpdb, 'prepare' ) ) || ! is_callable( array( $wpdb, 'query' ) ) ) {
+			return false;
+		}
 		$table = self::optionsTable( $wpdb );
 		if ( null === $table ) {
 			return false;
@@ -215,6 +224,9 @@ final class BindingFenceCoordinator {
 		return 1 === $wpdb->query( $wpdb->prepare( $sql, $name, $value ) );
 	}
 	private static function cas( object $wpdb, string $name, string $old, string $new, int $deadline, bool $expired = false ): bool {
+		if ( ! is_callable( array( $wpdb, 'prepare' ) ) || ! is_callable( array( $wpdb, 'query' ) ) ) {
+			return false;
+		}
 		$table = self::optionsTable( $wpdb );
 		if ( null === $table ) {
 			return false;
@@ -222,6 +234,7 @@ final class BindingFenceCoordinator {
 		$sql        = "UPDATE {$table} SET option_value = %s WHERE option_name = %s AND BINARY option_value = BINARY %s AND UNIX_TIMESTAMP() {$operator} %d";
 		return 1 === $wpdb->query( $wpdb->prepare( $sql, $new, $name, $old, $deadline ) );
 	}
+	/** @param array<string,mixed> $value */
 	private static function json( array $value ): ?string {
 		try {
 			$json = json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ); } catch ( \JsonException ) {
@@ -241,7 +254,7 @@ final class BindingFenceCoordinator {
 	}
 	private static function hash( mixed $value ): bool {
 		return is_string( $value ) && 1 === preg_match( '/\A[a-f0-9]{64}\z/D', $value ); }
-	/** @return array{current:BindingState|null,result:string} */
+	/** @return array{current:BindingState|null,result:'binding_fence_lost'} */
 	private static function lost( ?BindingState $current = null ): array {
 		return array(
 			'current' => $current,

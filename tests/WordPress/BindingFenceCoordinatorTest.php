@@ -14,6 +14,55 @@ use Tests\Support\FakeOptionDatabase;
 
 final class BindingFenceCoordinatorTest extends TestCase {
 
+	public function testMagicDatabaseProxyRetainsTheCompleteLeaseLifecycle(): void {
+		$inner    = new FakeOptionDatabase( 100 );
+		$database = new class( $inner ) {
+			public string $options = 'wp_options';
+			public function __construct( private FakeOptionDatabase $inner ) {}
+			/** @param list<mixed> $arguments */
+			public function __call( string $name, array $arguments ): mixed {
+				return match ( $name ) {
+					'prepare' => $this->inner->prepare( ...$arguments ),
+					'get_var' => $this->inner->get_var( ...$arguments ),
+					'query' => $this->inner->query( ...$arguments ),
+					default => throw new \BadMethodCallException( 'Unexpected database call.' ),
+				};
+			}
+		};
+		$binding  = $this->binding();
+		$claimed  = BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		self::assertSame( 'claimed', $claimed['result'] );
+		$verified = BindingFenceCoordinator::verifyPersistentBindingState( $database, $claimed['current'], $this->claim( $claimed['current'] ) );
+		self::assertSame( 'verified', $verified['result'] );
+		self::assertSame( 100, $verified['now'] );
+		self::assertSame( $claimed['current']->toArray(), $verified['current']->toArray() );
+		$renewed = BindingFenceCoordinator::renewPersistentBindingState( $database, $verified['current'], $this->claim( $verified['current'] ), 30 );
+		self::assertSame( 'renewed', $renewed['result'] );
+		self::assertSame( 130, $renewed['current']->leaseDeadline() );
+		$released = BindingFenceCoordinator::releasePersistentBindingState( $database, $renewed['current'], $this->claim( $renewed['current'] ) );
+		self::assertSame( 'released', $released['result'] );
+		self::assertSame( 1, $released['current']->leaseDeadline() );
+		self::assertCount( 1, $inner->rows() );
+	}
+	public function testIncompleteDatabaseIsRejectedBeforeAnyRead(): void {
+		$database = new class() {
+			public string $options = 'wp_options';
+			public int $reads      = 0;
+			public function get_var( string $query ): int {
+				++$this->reads;
+				return 100;
+			}
+		};
+		$result   = BindingFenceCoordinator::claimPersistentBindingState( $database, $this->binding(), str_repeat( 'a', 64 ), 20 );
+		self::assertSame(
+			array(
+				'current' => null,
+				'result'  => 'binding_fence_lost',
+			),
+			$result
+		);
+		self::assertSame( 0, $database->reads );
+	}
 	public function testOneSelfContainedTargetRowClaimsAndDoesNotReadLegacyRows(): void {
 		$database = new FakeOptionDatabase( 100 );
 		$database->seedOption( 'ran_wp_gh_op_v1_deadbeef', '{"hostile":true}', 'yes' );
