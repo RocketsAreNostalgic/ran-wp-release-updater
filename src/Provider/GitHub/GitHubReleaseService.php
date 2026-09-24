@@ -14,7 +14,27 @@ use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 
-/** Shared, request-local GitHub release protocol for installed and prospective packages. */
+/**
+ * Shared, request-local GitHub release protocol for installed and prospective packages.
+ *
+ * @phpstan-type ListedRelease array{
+ *   details_url:string,
+ *   expected_asset_names:list<string>,
+ *   prerelease:bool,
+ *   publication_immutable:bool,
+ *   published_at:string,
+ *   release_identity:string,
+ *   tag:string,
+ *   version:string
+ * }
+ * @phpstan-type ReleaseListing array{
+ *   candidates:list<ListedRelease>,
+ *   conditional:array{etag:?string,last_modified:?string},
+ *   not_modified:bool,
+ *   rate_limit:array{limited:bool,remaining:?int,reset_at:?int,retry_after:int},
+ *   search_exhausted:bool
+ * }
+ */
 final class GitHubReleaseService {
 
 	private const MAX_CANDIDATES           = 8;
@@ -80,7 +100,10 @@ final class GitHubReleaseService {
 		$this->artifactStore = new GitHubArtifactStore();
 	}
 
-	/** @internal Sealed-catalog composition for a prospective source. */
+	/**
+	 * @internal Sealed-catalog composition for a prospective source.
+	 * @param array<string, mixed> $declaration
+	 */
 	public static function fromReleaseDeclaration( array $declaration, SelectedRuntimeState $state ): object {
 		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes' );
 		if ( ! self::exactKeys( $declaration, $keys ) || 'github' !== $declaration['provider_code'] ) {
@@ -106,7 +129,11 @@ final class GitHubReleaseService {
 		);
 	}
 
-	/** @return array<string,mixed> @internal Release-source operation. */
+	/**
+	 * @internal Release-source operation.
+	 * @param array{etag?:string,last_modified?:string} $conditional
+	 * @return ReleaseListing
+	 */
 	public function list( array $conditional = array() ): array {
 		try {
 			$this->assertLive();
@@ -166,22 +193,7 @@ final class GitHubReleaseService {
 
 	/**
 	 * @param array{etag?:string,last_modified?:string} $conditional
-	 * @return array{
-	 *   candidates:list<array{
-	 *     details_url:string,
-	 *     expected_asset_names:list<string>,
-	 *     prerelease:bool,
-	 *     publication_immutable:bool,
-	 *     published_at:string,
-	 *     release_identity:string,
-	 *     tag:string,
-	 *     version:string
-	 *   }>,
-	 *   conditional:array{etag:?string,last_modified:?string},
-	 *   not_modified:bool,
-	 *   rate_limit:array{limited:bool,remaining:?int,reset_at:?int,retry_after:int},
-	 *   search_exhausted:bool
-	 * }
+	 * @return ReleaseListing
 	 */
 	public function listReleases( array $conditional = array() ): array {
 		$conditional = self::conditional( $conditional );
@@ -265,6 +277,9 @@ final class GitHubReleaseService {
 				$candidates,
 				static function ( array $left, array $right ): int {
 					$comparison = ReleaseVersion::compare( $right['version'], $left['version'] );
+					if ( null === $comparison ) {
+						throw new RuntimeException( 'The GitHub release version is invalid.' );
+					}
 					return 0 !== $comparison ? $comparison : strcmp( $left['release_identity'], $right['release_identity'] );
 				}
 			);
@@ -335,6 +350,7 @@ final class GitHubReleaseService {
 			throw $this->operationFailure( $exception ); }
 	}
 
+	/** @param array<string, mixed> $facts */
 	private function acquireWithToken(
 		array $facts,
 		string $artifactIdentity,
@@ -667,18 +683,7 @@ final class GitHubReleaseService {
 		return true;
 	}
 
-	/**
-	 * @return array{
-	 *   details_url:string,
-	 *   expected_asset_names:list<string>,
-	 *   prerelease:bool,
-	 *   publication_immutable:bool,
-	 *   published_at:string,
-	 *   release_identity:string,
-	 *   tag:string,
-	 *   version:string
-	 * }|null
-	 */
+	/** @return ListedRelease|null */
 	private function listedRelease( mixed $release ): ?array {
 		if (
 			! is_array( $release )
@@ -801,7 +806,10 @@ final class GitHubReleaseService {
 		return new ReleaseFailure( 'operation_failed', null, $cleanup, $exception );
 	}
 
-	/** @return array<string, mixed> */
+	/**
+	 * @param array<string, mixed> $response
+	 * @return array<string, mixed>
+	 */
 	private function jsonSuccess(
 		array $response,
 		int $limit,
@@ -987,10 +995,11 @@ final class GitHubReleaseService {
 		);
 	}
 
-	/** @param list<array<string, mixed>> $candidates
+	/**
+	 * @param list<ListedRelease> $candidates
 	 * @param array{etag:?string,last_modified:?string} $conditional
 	 * @param array{limited:bool,remaining:?int,reset_at:?int,retry_after:int} $rateLimit
-	 * @return array<string, mixed>
+	 * @return ReleaseListing
 	 */
 	private static function listingResult(
 		array $candidates,
@@ -1179,7 +1188,11 @@ final class GitHubReleaseService {
 		return true;
 	}
 
-	/** @param array<string, mixed> $value @param list<string> $keys @return array<string, mixed> */
+	/**
+	 * @param array<string, mixed> $value
+	 * @param list<string> $keys
+	 * @return array<string, mixed>
+	 */
 	private static function ordered( array $value, array $keys ): array {
 		$ordered = array();
 		foreach ( $keys as $key ) {

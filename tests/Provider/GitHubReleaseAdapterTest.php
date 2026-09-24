@@ -838,6 +838,27 @@ namespace Tests\Provider {
 			self::assertFalse( $result['search_exhausted'] );
 		}
 
+		public function testListingFiltersInvalidVersionsAndBreaksVersionTiesByIdentity(): void {
+			$GLOBALS['ran_github_responses'] = array(
+				$this->response(
+					200,
+					array(
+						$this->release( 2, 'v1.1.0' ),
+						$this->release( 3, 'v1.2' ),
+						$this->release( 4, 'v01.2.3' ),
+						$this->release( 10, 'v1.1.0' ),
+						$this->release( 5, 'invalid' ),
+						$this->release( 6, 'v2.0.0' ),
+					)
+				),
+			);
+
+			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->listReleases();
+
+			self::assertSame( array( '2.0.0', '1.1.0', '1.1.0' ), array_column( $result['candidates'], 'version' ) );
+			self::assertSame( array( '6', '10', '2' ), array_column( $result['candidates'], 'release_identity' ) );
+		}
+
 		public function testPrereleaseListingKeepsSemverOrderingWithinItsChannel(): void {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response(

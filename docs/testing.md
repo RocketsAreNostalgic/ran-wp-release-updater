@@ -30,6 +30,11 @@ inspection deliberately avoids filesystem negotiation; the line-specific
 it mutates custody/filesystem state and cleanup retries can return different
 results. Neither change weakens analysis for the rest of the file.
 
+`src/Provider/GitHub/GitHubReleaseService.php` is a direct level-8 root.
+Its listing helpers share precise PHPStan candidate/result shapes. The sort
+callback explicitly rejects an invalid version comparison; adapter tests cover
+malformed-tag filtering, descending SemVer order and the existing identity tie-break.
+
 Focused commands retain the same underlying tools and boundaries:
 
 | Command | Scope |
