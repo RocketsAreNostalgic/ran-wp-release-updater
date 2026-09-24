@@ -15,6 +15,21 @@ composer check
 
 `composer check` validates the package metadata and generated updater-support copy, audits locked Composer dependencies, lints PHP syntax/style, runs PHPStan, executes PHPUnit, and proves the installed no-dev Composer consumer path.
 
+Focused commands retain the same underlying tools and boundaries:
+
+| Command | Scope |
+| --- | --- |
+| `composer lint:syntax` | Parse root bootstrap/runtime files and PHP in `src`, `scripts`, and `tests`. |
+| `composer standards` | PHPCS using the repository `.phpcs.xml`. |
+| `composer standards:fix` | PHPCBF using the same ruleset and paths; modifies files. |
+| `composer analyze` | Existing level-8 PHPStan analysis on the configured paths. |
+| `composer test` | Unit tests, then the installed no-dev consumer proof. |
+
+`test:unit` and `test:no-dev-consumer` remain available individually.
+The obsolete `lint:php`, `format:php`, and `check:php-style` names have been
+replaced by `standards` and `standards:fix`. Composer audit remains blocking
+inside `check`; it uses live advisory data and requires network access.
+
 It is the baseline repository gate, not the complete environment matrix.
 
 The CI quality job additionally requires JavaScript quality/workflow-contract checks and the isolated MySQL CAS lifecycle proof. CI also has separate PHP 8.5, Windows portability, and installed-WordPress jobs.

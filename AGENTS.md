@@ -20,10 +20,13 @@ Do not copy shared ancestry back into local PHPCS configuration and do not
 promote release-updater exceptions into the shared standard merely to reduce
 this file.
 
-`composer check` remains the authoritative deterministic PHP aggregate and must
+`composer check` remains the authoritative non-mutating PHP aggregate and must
 retain strict validation, updater-support parity, Composer audit, syntax lint,
 shared PHPCS/PHPCompatibility checks, PHPStan, unit tests, and the no-dev
-consumer proof.
+consumer proof. The audit uses live advisory data and requires network access.
+Use `lint:syntax` for parsing, `standards` for PHPCS, `standards:fix` for
+PHPCBF with the same ruleset and scope, `analyze` for the existing PHPStan
+boundaries, and `test` for unit tests followed by the no-dev consumer proof.
 
 - Preserve the package coordinate, `RAN\WPReleaseUpdater\V1` namespace, and
   canonical `MAJOR.MINOR.PATCH-beta.N` prerelease line, with SemVer-core advancement permitted when reviewed release-driving metadata requires it.
