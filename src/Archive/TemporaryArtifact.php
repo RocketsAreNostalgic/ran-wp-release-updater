@@ -76,7 +76,13 @@ final class TemporaryArtifact {
 		return $result;
 	}
 
-	/** Delete only the exact unchanged file while this object owns it. */
+	/**
+	 * Delete only the exact unchanged file while this object owns it.
+	 *
+	 * A retry can observe changed filesystem state and return a different result.
+	 *
+	 * @phpstan-impure
+	 */
 	public function discard(): bool {
 		if ( $this->busy ) {
 			throw self::busyException();

@@ -23,6 +23,12 @@ specific declarations. Their callable types and all method bodies remain checked
 bodies. Coverage expansion remains tracked in issue #60; neither the two root
 entrypoints nor all production source are claimed as analysed.
 
+`src/Runtime/ReleaseSource.php` is also a level-8 root. Its direct `FS_METHOD`
+inspection deliberately avoids filesystem negotiation; the line-specific
+`phpstanWP.wpConstant.fetch` exception preserves the contract exercised by
+`PublicReleaseSourceTest`. `TemporaryArtifact::discard()` is marked impure because
+it mutates custody/filesystem state and cleanup retries can return different
+results. Neither change weakens analysis for the rest of the file.
 
 Focused commands retain the same underlying tools and boundaries:
 

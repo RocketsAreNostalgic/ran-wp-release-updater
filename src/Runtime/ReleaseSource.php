@@ -15,10 +15,15 @@ final class ReleaseSource {
 	}
 
 	private static function directFilesystemAvailable(): bool {
+		// @phpstan-ignore phpstanWP.wpConstant.fetch (The sealed runtime must inspect direct-filesystem policy without invoking filesystem negotiation.)
 		return ( defined( 'FS_METHOD' ) && 'direct' === FS_METHOD )
 			|| ( ! defined( 'FS_METHOD' ) && ( ( $GLOBALS['wp_filesystem'] ?? null ) instanceof \WP_Filesystem_Direct ) );
 	}
 
+	/**
+	 * @param array<string,mixed> $conditional Caller-provided conditional request values.
+	 * @return array<string,mixed>
+	 */
 	public function list( array $conditional = array() ): array {
 		foreach ( $conditional as $key => $value ) {
 			if ( ! in_array( $key, array( 'etag', 'last_modified' ), true ) || ( null !== $value && ! is_string( $value ) ) ) {
@@ -28,6 +33,9 @@ final class ReleaseSource {
 		return $this->operate( 'list', array( $conditional ) );
 	}
 
+	/**
+	 * @return array<string,mixed>
+	 */
 	public function inspect( string $releaseId, string $expectedTag ): array {
 		if ( ! $this->opaque( $releaseId ) || ! $this->opaque( $expectedTag ) ) {
 			return $this->invalid( 'invalid_release' );
@@ -35,6 +43,9 @@ final class ReleaseSource {
 		return $this->operate( 'inspect', array( $releaseId, $expectedTag ) );
 	}
 
+	/**
+	 * @return array<string,mixed>
+	 */
 	public function acquire( string $releaseId, string $expectedTag, string $expectedFingerprint ): array {
 		if ( ! $this->opaque( $releaseId ) || ! $this->opaque( $expectedTag ) || 1 !== preg_match( '/\Av2:[a-f0-9]{64}\z/D', $expectedFingerprint ) ) {
 			return $this->invalid( 'invalid_release' );
@@ -42,6 +53,10 @@ final class ReleaseSource {
 		return $this->operate( 'acquire', array( $releaseId, $expectedTag, $expectedFingerprint ) );
 	}
 
+	/**
+	 * @param list<mixed> $arguments Arguments for the selected service operation.
+	 * @return array<string,mixed>
+	 */
 	private function operate( string $method, array $arguments ): array {
 		$failure = $this->readiness();
 		if ( null !== $failure ) {
@@ -100,6 +115,9 @@ final class ReleaseSource {
 		}
 	}
 
+	/**
+	 * @return array<string,mixed>|null
+	 */
 	private function readiness(): ?array {
 		if ( $this->terminalUnavailable ) {
 			return $this->failure( new ReleaseFailure( 'runtime_unavailable' ) );
@@ -108,6 +126,9 @@ final class ReleaseSource {
 		return null === $code ? null : $this->failure( new ReleaseFailure( $code ) );
 	}
 
+	/**
+	 * @return array<string,mixed>
+	 */
 	private function failure( ReleaseFailure $failure ): array {
 		if ( 'runtime_unavailable' === $failure->releaseCode ) {
 			$this->terminalUnavailable = true;
@@ -130,6 +151,9 @@ final class ReleaseSource {
 		);
 	}
 
+	/**
+	 * @return array<string,mixed>
+	 */
 	private function invalid( string $code ): array {
 		if ( $this->terminalUnavailable || 'runtime_unavailable' === $this->state->releaseReadinessCode() ) {
 			return $this->failure( new ReleaseFailure( 'runtime_unavailable' ) );
