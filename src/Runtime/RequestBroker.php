@@ -20,7 +20,6 @@ final class RequestBroker {
 
 	private const MAX_DIAGNOSTICS = 16;
 
-
 	/** @var list<array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string}> */
 	private array $candidates = array();
 	/** @var array<string, true> */
@@ -138,6 +137,9 @@ final class RequestBroker {
 			);
 		}
 		try {
+			if ( ! is_object( $this->handoff ) || ! is_callable( array( $this->handoff, 'boot' ) ) ) {
+				throw new RuntimeException( 'Invalid runtime handoff.' );
+			}
 			$result = $this->handoff->boot( $environment, $batch );
 			if (
 				! is_array( $result )
@@ -170,7 +172,10 @@ final class RequestBroker {
 					break;
 				}
 				$submission = $this->submissions[ $id ];
-				$item       = $this->handoff->registerTarget(
+				if ( ! is_object( $this->handoff ) || ! is_callable( array( $this->handoff, 'registerTarget' ) ) ) {
+					throw new RuntimeException( 'Invalid runtime handoff.' );
+				}
+				$item = $this->handoff->registerTarget(
 					array(
 						'submission_id' => $id,
 						'declaration'   => $submission['declaration'],
@@ -189,7 +194,10 @@ final class RequestBroker {
 		return $this->result( true, 'runtime_active' );
 	}
 
-	/** @param array<string,mixed> $declaration @return array{accepted:bool,submission_id:int,code:string} */
+	/**
+	 * @param array<string,mixed> $declaration
+	 * @return array{accepted:bool,submission_id:int,code:string}
+	 */
 	public function registerTarget( array $declaration ): array {
 		if ( ! $this->protocolLive() ) {
 			return array(
@@ -219,6 +227,9 @@ final class RequestBroker {
 		);
 		if ( 'active' === $this->state && is_object( $this->handoff ) ) {
 			try {
+				if ( ! is_object( $this->handoff ) || ! is_callable( array( $this->handoff, 'registerTarget' ) ) ) {
+					throw new RuntimeException( 'Invalid runtime handoff.' );
+				}
 				$result = $this->handoff->registerTarget(
 					array(
 						'submission_id' => $id,
@@ -251,7 +262,10 @@ final class RequestBroker {
 		);
 	}
 
-	/** @param array<string,mixed> $declaration @return array{accepted:bool,code:string,source_handle:object|null} */
+	/**
+	 * @param array<string,mixed> $declaration
+	 * @return array{accepted:bool,code:string,source_handle:object|null}
+	 */
 	public function releaseSource( array $declaration ): array {
 		$this->protocolLive();
 		if ( in_array( $this->state, array( 'inactive', 'conflict' ), true ) ) {
@@ -264,6 +278,9 @@ final class RequestBroker {
 			return $this->releaseFailure( 'runtime_not_ready' );
 		}
 		try {
+			if ( ! is_object( $this->handoff ) || ! is_callable( array( $this->handoff, 'releaseSource' ) ) ) {
+				throw new RuntimeException( 'Invalid runtime handoff.' );
+			}
 			$result = $this->handoff->releaseSource( $declaration );
 		} catch ( Throwable ) {
 			$this->disable( 'runtime_handoff_invalid' );
@@ -276,7 +293,7 @@ final class RequestBroker {
 		$validHandle = is_object( $result['source_handle'] ) && is_string( $this->selectedRoot )
 			&& RequestProtocolValidator::ownedBy( $result['source_handle'], $this->selectedRoot )
 			&& RequestProtocolValidator::exactPublicMethods( $result['source_handle'], array( 'acquire', 'inspect', 'list' ) );
-		if ( true === $result['accepted'] && 'release_source_ready' === $result['code'] && $validHandle ) {
+		if ( true === $result['accepted'] && 'release_source_ready' === $result['code'] && $validHandle && is_object( $result['source_handle'] ) ) {
 			return $result;
 		}
 		if ( false === $result['accepted'] && null === $result['source_handle'] && in_array( $result['code'], array( 'provider_unavailable', 'filesystem_unsupported', 'invalid_configuration', 'runtime_not_ready', 'runtime_unavailable' ), true ) ) {
@@ -313,6 +330,9 @@ final class RequestBroker {
 			);
 		}
 		try {
+			if ( ! is_callable( array( $item['handle'], 'diagnostics' ) ) ) {
+				throw new RuntimeException( 'Invalid target result.' );
+			}
 			$diagnostics = $item['handle']->diagnostics();
 			if ( ! RequestProtocolValidator::validDiagnostics( $diagnostics, $status['state'] ) ) {
 				$this->disable( 'runtime_handoff_invalid' );
@@ -333,6 +353,9 @@ final class RequestBroker {
 			return false;
 		}
 		try {
+			if ( ! is_callable( array( $item['handle'], 'refresh' ) ) ) {
+				throw new RuntimeException( 'Invalid target result.' );
+			}
 			$refreshed = $item['handle']->refresh();
 			if ( ! is_bool( $refreshed ) ) {
 				$this->disable( 'runtime_handoff_invalid' );
@@ -426,6 +449,9 @@ final class RequestBroker {
 		} elseif ( isset( $this->targetHandles[ $result['target_key'] ] ) ) {
 			throw new RuntimeException( 'Invalid target result.' );
 		}
+		if ( ! is_callable( array( $result['target_handle'], 'status' ) ) || ! is_callable( array( $result['target_handle'], 'diagnostics' ) ) ) {
+			throw new RuntimeException( 'Invalid target result.' );
+		}
 		$status      = $result['target_handle']->status();
 		$diagnostics = $result['target_handle']->diagnostics();
 		if ( ! RequestProtocolValidator::validStatus( $status ) || ! RequestProtocolValidator::validDiagnostics( $diagnostics, $status['state'] ) ) {
@@ -451,7 +477,10 @@ final class RequestBroker {
 		}
 	}
 
-	/** @param array<string,mixed> $item @return array<string,mixed> */
+	/**
+	 * @param array<string,mixed> $item
+	 * @return array<string,mixed>
+	 */
 	private function projectStatus( array $item ): array {
 		if ( isset( $item['terminal_code'] ) || null !== $this->terminalCode ) {
 			$last = $this->lastNativeStatus( $item );
@@ -471,6 +500,9 @@ final class RequestBroker {
 			return $this->status( 'queued', true, false, 'target_queued' );
 		}
 		try {
+			if ( ! is_callable( array( $item['handle'], 'status' ) ) ) {
+				throw new RuntimeException( 'Invalid target result.' );
+			}
 			$status = $item['handle']->status();
 			if ( ! RequestProtocolValidator::validStatus( $status ) ) {
 				$this->disable( 'runtime_handoff_invalid' );
@@ -483,7 +515,10 @@ final class RequestBroker {
 		}
 	}
 
-	/** @param array<string,mixed> $item @return array<string,mixed> */
+	/**
+	 * @param array<string,mixed> $item
+	 * @return array<string,mixed>
+	 */
 	private function lastNativeStatus( array $item ): array {
 		if ( isset( $item['last_status'] ) && is_array( $item['last_status'] ) ) {
 			return $item['last_status'];
@@ -492,6 +527,9 @@ final class RequestBroker {
 			return array();
 		}
 		try {
+			if ( ! is_callable( array( $item['handle'], 'status' ) ) ) {
+				throw new RuntimeException( 'Invalid target result.' );
+			}
 			$status = $item['handle']->status();
 			return RequestProtocolValidator::validStatus( $status ) ? $status : array();
 		} catch ( Throwable ) {
@@ -499,7 +537,10 @@ final class RequestBroker {
 		}
 	}
 
-	/** @param array<string,mixed> $item @return array{state:string,diagnostics:list<array{code:string}>} */
+	/**
+	 * @param array<string,mixed> $item
+	 * @return array{state:string,diagnostics:list<array{code:string}>}
+	 */
 	private function inactiveDiagnostics( array $item ): array {
 		$status = $this->projectStatus( $item );
 		return array(
@@ -508,18 +549,12 @@ final class RequestBroker {
 		);
 	}
 
+	/** @return array{loaded:bool,state:string,code:string,diagnostics:list<array{code:string}>} */
 	private function disable( string $code ): array {
 		$this->diagnose( $code );
 		$this->terminalCode = $code;
 		$this->state        = 'protocol_conflict_inactive' === $code ? 'conflict' : 'inactive';
 		return $this->result( false, $code );
-	}
-	private function ownedBy( object $value, string $root ): bool {
-		return RequestProtocolValidator::ownedBy( $value, $root );
-	}
-
-	private function exactPublicMethods( object $value, array $expected ): bool {
-		return RequestProtocolValidator::exactPublicMethods( $value, $expected );
 	}
 
 	private function terminal( int $id, string $code ): void {
@@ -537,31 +572,14 @@ final class RequestBroker {
 		);
 	}
 
-	/** @param array<string,mixed> $status */
-	private function validStatus( mixed $status ): bool {
-		return RequestProtocolValidator::validStatus( $status );
-	}
-
+	// @phpstan-ignore method.unused (ConciseRegistrarTest invokes this validation seam through Reflection.)
 	private function validNativeStatus( mixed $native ): bool {
 		return RequestProtocolValidator::validNativeStatus( $native );
 	}
 
-	/** @param array<string,mixed> $diagnostics */
-	private function validDiagnostics( mixed $diagnostics, string $state ): bool {
-		return RequestProtocolValidator::validDiagnostics( $diagnostics, $state );
-	}
-
-	private function validDiagnosticCode( string $code ): bool {
-		return RequestProtocolValidator::validDiagnosticCode( $code );
-	}
 	/** @param array<string,mixed> $value */
 	private function declarationCode( array $value ): ?string {
 		return RequestProtocolValidator::declarationCode( $value );
-	}
-
-	/** @param array<string,mixed> $value */
-	private function releaseDeclarationCode( array $value ): ?string {
-		return RequestProtocolValidator::releaseDeclarationCode( $value );
 	}
 
 	/** @return array{accepted:false,code:string,source_handle:null} */
@@ -571,10 +589,6 @@ final class RequestBroker {
 			'code'          => $code,
 			'source_handle' => null,
 		);
-	}
-
-	private function opaque( mixed $value, int $limit ): bool {
-		return RequestProtocolValidator::opaque( $value, $limit );
 	}
 
 	private function diagnose( string $code ): void {
@@ -591,9 +605,5 @@ final class RequestBroker {
 			}
 		}
 		$this->diagnose( $code );
-	}
-
-	private function exactKeys( array $value, array $keys ): bool {
-		return RequestProtocolValidator::exactKeys( $value, $keys );
 	}
 }
