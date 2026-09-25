@@ -87,7 +87,7 @@ $ran_wp_release_updater_broker_origin = static function ( mixed $broker, mixed $
 $ran_wp_release_updater_provider_catalog = array(
 	'github' => array(
 		'native'  => static function ( array $d, array $resolved, array $headers, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
-			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::compose_from_declaration( $d, $resolved, $headers, $identity, $networkId, $selectedRuntimeState );
+			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::compose_from_declaration( $d, $resolved, $headers, $identity, network_id: $networkId, selected_runtime_state: $selectedRuntimeState );
 		},
 		'release' => static function ( array $d, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
 			$service = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::fromReleaseDeclaration( $d, $state );
