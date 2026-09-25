@@ -350,7 +350,7 @@ final class NativePackageUpdater {
 			return $this->failure( 'archive_changed_before_extraction' );
 		}
 		try {
-			AcquisitionReceipt::assertFresh( $this->pendingInstall->receipt(), $verified['current'], $this->descriptor, $verified['now'] );
+			AcquisitionReceipt::assert_fresh( $this->pendingInstall->receipt(), $verified['current'], $this->descriptor, $verified['now'] );
 		} catch ( InvalidArgumentException ) {
 			$this->clearPending();
 			return $this->failure( 'archive_changed_before_extraction' );
@@ -396,7 +396,7 @@ final class NativePackageUpdater {
 		}
 
 		try {
-			AcquisitionReceipt::assertArchiveManifest(
+			AcquisitionReceipt::assert_archive_manifest(
 				$this->pendingInstall->receipt(),
 				$verified['current'],
 				$this->descriptor,
@@ -443,7 +443,7 @@ final class NativePackageUpdater {
 			return $this->failure( 'unverified_pre_install' );
 		}
 		try {
-			AcquisitionReceipt::assertFresh( $this->pendingInstall->receipt(), $verified['current'], $this->descriptor, $verified['now'] );
+			AcquisitionReceipt::assert_fresh( $this->pendingInstall->receipt(), $verified['current'], $this->descriptor, $verified['now'] );
 		} catch ( InvalidArgumentException ) {
 			$this->clearPending();
 			return $this->failure( 'unverified_pre_install' );
@@ -513,7 +513,7 @@ final class NativePackageUpdater {
 				&& is_array( $manifest )
 			) {
 				try {
-					AcquisitionReceipt::assertArchiveManifest(
+					AcquisitionReceipt::assert_archive_manifest(
 						$this->pendingInstall->receipt(),
 						$verified['current'],
 						$this->descriptor,
