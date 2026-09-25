@@ -14,8 +14,8 @@ use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 final class IdentityDescriptorTest extends TestCase {
 	public function testClosedFingerprintBindsEveryReleaseFact(): void {
 		$descriptor = IdentityDescriptor::create( $this->facts() );
-		self::assertMatchesRegularExpression( '/\Av1:[a-f0-9]{64}\z/D', $descriptor->fingerprintValue() );
-		$snapshot                     = $descriptor->toArray();
+		self::assertMatchesRegularExpression( '/\Av1:[a-f0-9]{64}\z/D', $descriptor->fingerprint_value() );
+		$snapshot                     = $descriptor->to_array();
 		$snapshot['release_identity'] = '43';
 		$this->expectException( InvalidArgumentException::class );
 		IdentityDescriptor::rehydrate( $snapshot ); }
@@ -23,13 +23,13 @@ final class IdentityDescriptorTest extends TestCase {
 		$descriptor = IdentityDescriptor::create( $this->facts() );
 		foreach ( array( array( 'provider_code' => 'gitlab' ), array( 'repository_identity' => 'repo:2' ), array( 'repository_locator' => 'other/repo' ) ) as $replacement ) {
 			try {
-				IdentityDescriptor::assertTargetBinding( $descriptor, array_merge( $this->target(), $replacement ) );
+				IdentityDescriptor::assert_target_binding( $descriptor, array_merge( $this->target(), $replacement ) );
 				self::fail( 'Switched target was accepted.' );
 			} catch ( InvalidArgumentException ) {
 				self::addToAssertionCount( 1 ); }
 		} }
 	public function testAutomaticAssuranceFactsRemainClosed(): void {
-		$snapshot = IdentityDescriptor::create( $this->facts() )->toArray();
+		$snapshot = IdentityDescriptor::create( $this->facts() )->to_array();
 		$snapshot['assurance_facts']['publication_immutable'] = false;
 		$this->expectException( InvalidArgumentException::class );
 		IdentityDescriptor::rehydrate( $snapshot ); }
@@ -43,8 +43,17 @@ final class IdentityDescriptorTest extends TestCase {
 		$facts['artifact_filename'] = 'RAN-Booster.ZIP';
 		self::assertSame(
 			'RAN-Booster.ZIP',
-			IdentityDescriptor::create( $facts )->toArray()['artifact_filename']
+			IdentityDescriptor::create( $facts )->to_array()['artifact_filename']
 		);
+	}
+	public function testNamedParametersPreserveExplicitTargetAndLengthChecks(): void {
+		$descriptor = IdentityDescriptor::create( $this->facts() );
+		$snapshot   = $descriptor->to_array();
+		self::assertSame( $snapshot, IdentityDescriptor::rehydrate( value: $snapshot, expected_target: $this->target() )->to_array() );
+		self::assertTrue( IdentityDescriptor::is_bounded_opaque_identity( value: 'abc', maximum_bytes: 3 ) );
+		self::assertFalse( IdentityDescriptor::is_bounded_opaque_identity( value: 'abcd', maximum_bytes: 3 ) );
+		$this->expectException( InvalidArgumentException::class );
+		IdentityDescriptor::rehydrate( value: $snapshot, expected_target: null );
 	}
 	/** @return array<string,mixed> */ private function facts(): array {
 		return array(

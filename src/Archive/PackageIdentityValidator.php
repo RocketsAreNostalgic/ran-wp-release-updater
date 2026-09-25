@@ -141,7 +141,7 @@ final class PackageIdentityValidator {
 	 * @param array<string, mixed> $policy Exact target and archive policy, not caller-controlled discovery hints.
 	 */
 	public function validate( IdentityDescriptor $descriptor, array $policy, string $archivePath ): ValidatedPackage {
-		$descriptorFacts = $descriptor->toArray();
+		$descriptorFacts = $descriptor->to_array();
 		if ( ! $this->validPolicy( $descriptor, $policy ) ) {
 			return ValidatedPackage::blocked( 'archive_target_policy_invalid' );
 		}
@@ -247,7 +247,7 @@ final class PackageIdentityValidator {
 					'manifest_hash'           => hash( 'sha256', $manifestJson ),
 					'metadata_name'           => $name,
 					'package_type'            => $policy['target_type'],
-					'descriptor_fingerprint'  => $descriptor->fingerprintValue(),
+					'descriptor_fingerprint'  => $descriptor->fingerprint_value(),
 					'sha256'                  => $descriptorFacts['artifact_sha256'],
 					'size'                    => $descriptorFacts['artifact_size'],
 					'update_uri'              => $descriptorFacts['canonical_update_uri'],
@@ -267,8 +267,8 @@ final class PackageIdentityValidator {
 			throw new \InvalidArgumentException( 'The package receipt proof is invalid.' );
 		}
 		$proof = $this->receiptProofs[ $package ];
-		$facts = $descriptor->toArray();
-		if ( ! hash_equals( $proof['descriptor_fingerprint'], $descriptor->fingerprintValue() ) || ! is_int( $proof['manifest_entry_count'] ) || $proof['manifest_entry_count'] < 1 || $proof['manifest_entry_count'] > self::MAX_ARCHIVE_ENTRIES || ! is_int( $proof['manifest_expanded_bytes'] ) || $proof['manifest_expanded_bytes'] < 0 || $proof['manifest_expanded_bytes'] > self::MAX_EXPANDED_ARCHIVE_BYTES || ! is_string( $proof['manifest_hash'] ) || 1 !== preg_match( '/\A[a-f0-9]{64}\z/D', $proof['manifest_hash'] ) || ! hash_equals( $proof['sha256'], $facts['artifact_sha256'] ) || $proof['size'] !== $facts['artifact_size'] || ! hash_equals( $proof['update_uri'], $facts['canonical_update_uri'] ) ) {
+		$facts = $descriptor->to_array();
+		if ( ! hash_equals( $proof['descriptor_fingerprint'], $descriptor->fingerprint_value() ) || ! is_int( $proof['manifest_entry_count'] ) || $proof['manifest_entry_count'] < 1 || $proof['manifest_entry_count'] > self::MAX_ARCHIVE_ENTRIES || ! is_int( $proof['manifest_expanded_bytes'] ) || $proof['manifest_expanded_bytes'] < 0 || $proof['manifest_expanded_bytes'] > self::MAX_EXPANDED_ARCHIVE_BYTES || ! is_string( $proof['manifest_hash'] ) || 1 !== preg_match( '/\A[a-f0-9]{64}\z/D', $proof['manifest_hash'] ) || ! hash_equals( $proof['sha256'], $facts['artifact_sha256'] ) || $proof['size'] !== $facts['artifact_size'] || ! hash_equals( $proof['update_uri'], $facts['canonical_update_uri'] ) ) {
 			throw new \InvalidArgumentException( 'The package receipt proof is invalid.' );
 		}
 		unset( $this->receiptProofs[ $package ] );
@@ -307,13 +307,13 @@ final class PackageIdentityValidator {
 				return false;
 			}
 		}
-		if ( $policy['maximum_artifact_bytes'] < 1 || $descriptor->toArray()['artifact_size'] > $policy['maximum_artifact_bytes'] ) {
+		if ( $policy['maximum_artifact_bytes'] < 1 || $descriptor->to_array()['artifact_size'] > $policy['maximum_artifact_bytes'] ) {
 			return false;
 		}
 		if ( ( 'plugin' === $policy['target_type'] && '' !== $policy['theme_template'] ) || ( 'theme' === $policy['target_type'] && '' !== $policy['theme_template'] && 1 !== preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $policy['theme_template'] ) ) ) {
 			return false;
 		}
-		$facts = $descriptor->toArray();
+		$facts = $descriptor->to_array();
 		foreach ( array( 'installed_package_identity', 'provider_code', 'repository_identity', 'repository_locator', 'target_type' ) as $key ) {
 			if ( ! hash_equals( $facts[ $key ], $policy[ $key ] ) ) {
 				return false;

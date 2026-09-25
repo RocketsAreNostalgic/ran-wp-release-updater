@@ -42,7 +42,7 @@ final class MixedBulkFixtureAdapter implements ReleaseAdapter {
 	public function listReleases( array $conditional = array() ): array {
 		unset( $conditional );
 		++$this->listCalls;
-		$facts = $this->descriptor->toArray();
+		$facts = $this->descriptor->to_array();
 		return array(
 			'candidates' => array(
 				array(
@@ -55,7 +55,7 @@ final class MixedBulkFixtureAdapter implements ReleaseAdapter {
 	}
 	public function inspect( string $releaseIdentity, ?string $expectedTag = null ): IdentityDescriptor {
 		++$this->inspectCalls;
-		$facts = $this->descriptor->toArray();
+		$facts = $this->descriptor->to_array();
 		if ( $facts['release_identity'] !== $releaseIdentity || $facts['tag'] !== $expectedTag ) {
 			throw new RuntimeException( 'The fixture release identity changed.' );
 		}
@@ -63,7 +63,7 @@ final class MixedBulkFixtureAdapter implements ReleaseAdapter {
 	}
 	public function acquire( IdentityDescriptor $descriptor ): TemporaryArtifact {
 		++$this->acquireCalls;
-		if ( $descriptor->fingerprintValue() !== $this->descriptor->fingerprintValue() ) {
+		if ( $descriptor->fingerprint_value() !== $this->descriptor->fingerprint_value() ) {
 			throw new RuntimeException( 'The fixture descriptor crossed target custody.' );
 		}
 		$path = tempnam( sys_get_temp_dir(), 'ran-mixed-bulk-artifact-' );

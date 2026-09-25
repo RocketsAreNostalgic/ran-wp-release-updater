@@ -11,9 +11,9 @@ compatibility ancestry comes from `ran/coding-standards` through
 `RANWordPressLibrary`; the tracked Composer lock binds the published v1.0.0 release
 under the `^1.0` development constraint. The additional `RANOwnedMethods`
 check is enabled only for `CanonicalUpdateUri.php`, `ReleaseVersion.php`,
-`AcquisitionReceipt.php` and `BindingRecord.php` under `src/Contract/`.
+`AcquisitionReceipt.php`, `BindingRecord.php` and `IdentityDescriptor.php` under `src/Contract/`.
 Variable naming enforcement is enabled only for `ReleaseVersion.php`,
-`AcquisitionReceipt.php` and `BindingRecord.php`. Expand these completed scopes
+`AcquisitionReceipt.php`, `BindingRecord.php` and `IdentityDescriptor.php`. Expand these completed scopes
 only with reviewed declaration/caller and enforcement proof.
 
 Keep release-updater identity and product constraints local: the

@@ -301,7 +301,7 @@ final class GitHubReleaseService {
 		string $releaseIdentity,
 		?string $expectedTag = null
 	): IdentityDescriptor {
-		if ( ! IdentityDescriptor::isBoundedOpaqueIdentity( $installedPackageIdentity, 255 ) ) {
+		if ( ! IdentityDescriptor::is_bounded_opaque_identity( $installedPackageIdentity, 255 ) ) {
 			throw new InvalidArgumentException( 'The installed package identity is invalid.' );
 		}
 		list( $releaseIdentity, $expectedTag ) = $this->inspectInput(
@@ -528,7 +528,7 @@ final class GitHubReleaseService {
 
 	/** @return array{array<string,mixed>,string} */
 	private function acquisitionInput( IdentityDescriptor $descriptor ): array {
-		$facts            = $descriptor->toArray();
+		$facts            = $descriptor->to_array();
 		$artifactIdentity = self::canonicalDecimal( $facts['artifact_identity'] ?? null );
 		if (
 			'github' !== $facts['provider_code']

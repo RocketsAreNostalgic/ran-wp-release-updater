@@ -184,7 +184,7 @@ namespace Tests\WordPress {
 		}
 		public function testFailedDiscoveryAndRuntimeDisplacementNeverReuseASnapshot(): void {
 			list( $updater, $adapter, , $descriptor ) = $this->subject( 'manual', null, 'stable', false, null, true );
-			$facts                                    = $descriptor->toArray();
+			$facts                                    = $descriptor->to_array();
 			unset( $facts['fingerprint'] );
 			$facts['tag']               = 'v2.0.1';
 			$adapter->inspectDescriptor = IdentityDescriptor::create( $facts );
@@ -333,7 +333,7 @@ namespace Tests\WordPress {
 		}
 		public function testThemeListingRateLimitFactsStopBeforeAnyCandidateInspection(): void {
 			$archive = $this->archive();
-			$facts   = $this->descriptor( $archive )->toArray();
+			$facts   = $this->descriptor( $archive )->to_array();
 			unset( $facts['fingerprint'] );
 			$facts['installed_package_identity']         = 'package';
 			$facts['target_type']                        = 'theme';
@@ -419,8 +419,8 @@ namespace Tests\WordPress {
 			list( $updater, $adapter, , $first ) = $this->subject();
 			$second                              = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
 			$adapter->listResponse               = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
-			$adapter->inspectOutcomes[ $first->releaseIdentity() ]  = $second;
-			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+			$adapter->inspectOutcomes[ $first->release_identity() ]  = $second;
+			$adapter->inspectOutcomes[ $second->release_identity() ] = $second;
 
 			self::assertFalse(
 				$updater->filterUpdate(
@@ -441,8 +441,8 @@ namespace Tests\WordPress {
 			list( $updater, $adapter, , $first ) = $this->subject();
 			$second                              = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
 			$adapter->listResponse               = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
-			$adapter->inspectOutcomes[ $first->releaseIdentity() ]  = $failure;
-			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+			$adapter->inspectOutcomes[ $first->release_identity() ]  = $failure;
+			$adapter->inspectOutcomes[ $second->release_identity() ] = $second;
 
 			self::assertFalse(
 				$updater->filterUpdate(
@@ -473,8 +473,8 @@ namespace Tests\WordPress {
 			list( $updater, $adapter, , $first ) = $this->subject();
 			$second                              = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
 			$adapter->listResponse               = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
-			$adapter->inspectOutcomes[ $first->releaseIdentity() ]  = $failure;
-			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+			$adapter->inspectOutcomes[ $first->release_identity() ]  = $failure;
+			$adapter->inspectOutcomes[ $second->release_identity() ] = $second;
 
 			$offer = $updater->filterUpdate(
 				false,
@@ -501,9 +501,9 @@ namespace Tests\WordPress {
 			list( $updater, $adapter, , $first ) = $this->subject();
 			$second                              = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
 			$adapter->listResponse               = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
-			$adapter->inspectOutcomes[ $first->releaseIdentity() ]  = $first;
-			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
-			$adapter->acquireOutcomes[ $first->releaseIdentity() ]  = $failure;
+			$adapter->inspectOutcomes[ $first->release_identity() ]  = $first;
+			$adapter->inspectOutcomes[ $second->release_identity() ] = $second;
+			$adapter->acquireOutcomes[ $first->release_identity() ]  = $failure;
 
 			self::assertFalse(
 				$updater->filterUpdate(
@@ -532,9 +532,9 @@ namespace Tests\WordPress {
 			list( $updater, $adapter, , $first ) = $this->subject();
 			$second                              = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
 			$adapter->listResponse               = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
-			$adapter->inspectOutcomes[ $first->releaseIdentity() ]  = $first;
-			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
-			$adapter->acquireOutcomes[ $first->releaseIdentity() ]  = $failure;
+			$adapter->inspectOutcomes[ $first->release_identity() ]  = $first;
+			$adapter->inspectOutcomes[ $second->release_identity() ] = $second;
+			$adapter->acquireOutcomes[ $first->release_identity() ]  = $failure;
 
 			self::assertIsArray(
 				$updater->filterUpdate(
@@ -569,8 +569,8 @@ namespace Tests\WordPress {
 			list( $updater, $adapter, , $first ) = $this->subject( 'manual', null, 'stable', false, null, false, $validator );
 			$second                              = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
 			$adapter->listResponse               = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
-			$adapter->inspectOutcomes[ $first->releaseIdentity() ]  = $first;
-			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+			$adapter->inspectOutcomes[ $first->release_identity() ]  = $first;
+			$adapter->inspectOutcomes[ $second->release_identity() ] = $second;
 
 			self::assertFalse(
 				$updater->filterUpdate(
@@ -600,8 +600,8 @@ namespace Tests\WordPress {
 			list( $updater, $adapter, , $first ) = $this->subject( 'manual', null, 'stable', false, null, false, $validator );
 			$second                              = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
 			$adapter->listResponse               = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
-			$adapter->inspectOutcomes[ $first->releaseIdentity() ]  = $first;
-			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+			$adapter->inspectOutcomes[ $first->release_identity() ]  = $first;
+			$adapter->inspectOutcomes[ $second->release_identity() ] = $second;
 
 			self::assertFalse(
 				$updater->filterUpdate(
@@ -632,8 +632,8 @@ namespace Tests\WordPress {
 			list( $updater, $adapter, , $first ) = $this->subject( 'manual', null, 'stable', false, null, false, $validator );
 			$second                              = $this->withReleaseIdentity( $first, 'release:3', 'v2.0.1' );
 			$adapter->listResponse               = array( 'candidates' => array( $this->candidate( $first ), $this->candidate( $second ) ) );
-			$adapter->inspectOutcomes[ $first->releaseIdentity() ]  = $first;
-			$adapter->inspectOutcomes[ $second->releaseIdentity() ] = $second;
+			$adapter->inspectOutcomes[ $first->release_identity() ]  = $first;
+			$adapter->inspectOutcomes[ $second->release_identity() ] = $second;
 
 			self::assertFalse(
 				$updater->filterUpdate(
@@ -656,7 +656,7 @@ namespace Tests\WordPress {
 			list( $updater, $adapter, , $descriptor ) = $this->subject();
 			$this->offer( $updater );
 			self::assertSame( 'release:2', $updater->status()['offered_release_identity'] );
-			$facts = $descriptor->toArray();
+			$facts = $descriptor->to_array();
 			unset( $facts['fingerprint'] );
 			$facts['release_identity']  = 'release:3';
 			$replacement                = IdentityDescriptor::create( $facts );
@@ -683,7 +683,7 @@ namespace Tests\WordPress {
 		public function testCanonicalStaleAndOlderTokensAreRejectedAtAutomaticAndDownloadAdmission(): void {
 			list( $updater, $adapter, , $descriptor, $binding ) = $this->subject( 'automatic' );
 			foreach ( array( '1.0.0', '0.9.0' ) as $version ) {
-				$facts = $descriptor->toArray();
+				$facts = $descriptor->to_array();
 				unset( $facts['fingerprint'] );
 				$facts['version'] = $version;
 				$facts['tag']     = 'v' . $version;
@@ -747,7 +747,7 @@ namespace Tests\WordPress {
 		public function testFreshInspectionDriftRejectsBeforeReacquisition(): void {
 			list( $updater, $adapter, , $descriptor ) = $this->subject();
 			$offer                                    = $this->offer( $updater );
-			$descriptorFacts                          = $descriptor->toArray();
+			$descriptorFacts                          = $descriptor->to_array();
 			unset( $descriptorFacts['fingerprint'] );
 			$descriptorFacts['commit_identity'] = 'changed';
 			$adapter->inspectDescriptor         = IdentityDescriptor::create( $descriptorFacts );
@@ -758,7 +758,7 @@ namespace Tests\WordPress {
 		public function testFreshInspectionMustRemainNewerThanTheInstalledHeader(): void {
 			list( $updater, $adapter, , $descriptor ) = $this->subject();
 			$offer                                    = $this->offer( $updater );
-			$facts                                    = $descriptor->toArray();
+			$facts                                    = $descriptor->to_array();
 			unset( $facts['fingerprint'] );
 			$facts['version']           = '1.0.0';
 			$facts['tag']               = 'v1.0.0';
@@ -1279,7 +1279,7 @@ namespace Tests\WordPress {
 		}
 		/** @return array{release_identity:string,tag:string,version:string} */
 		private function candidate( IdentityDescriptor $descriptor ): array {
-			$facts = $descriptor->toArray();
+			$facts = $descriptor->to_array();
 			return array(
 				'release_identity' => $facts['release_identity'],
 				'tag'              => $facts['tag'],
@@ -1287,7 +1287,7 @@ namespace Tests\WordPress {
 			);
 		}
 		private function withReleaseIdentity( IdentityDescriptor $descriptor, string $releaseIdentity, string $tag ): IdentityDescriptor {
-			$facts = $descriptor->toArray();
+			$facts = $descriptor->to_array();
 			unset( $facts['fingerprint'] );
 			$facts['release_identity'] = $releaseIdentity;
 			$facts['tag']              = $tag;
@@ -1296,7 +1296,7 @@ namespace Tests\WordPress {
 		private function token( IdentityDescriptor $descriptor, BindingRecord $binding ): string {
 			$value = array(
 				'binding_hash' => $binding->binding_hash(),
-				'descriptor'   => $descriptor->toArray(),
+				'descriptor'   => $descriptor->to_array(),
 				'schema'       => 1,
 			);
 			return 'ran-wp-release-updater:v1:' . rtrim( strtr( base64_encode( json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) ), '+/', '-_' ), '=' );

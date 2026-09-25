@@ -57,7 +57,7 @@ final readonly class BindingRecord {
 			! self::exact_keys( $value, $keys )
 			|| ! self::positive_integer( $value['network_id'] )
 			|| ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true )
-			|| ! IdentityDescriptor::isBoundedOpaqueIdentity( $value['installed_package_identity'], 255 )
+			|| ! IdentityDescriptor::is_bounded_opaque_identity( $value['installed_package_identity'], 255 )
 		) {
 			throw new InvalidArgumentException( 'The target fence is invalid.' );
 		}
@@ -89,7 +89,7 @@ final readonly class BindingRecord {
 		return $record;
 	}
 	public static function assert_descriptor_binding( IdentityDescriptor $descriptor, self $binding ): IdentityDescriptor {
-		$facts = $descriptor->toArray();
+		$facts = $descriptor->to_array();
 		foreach ( self::DESCRIPTOR_PAIRS as $descriptor_key => $binding_key ) {
 			if ( ! hash_equals( (string) $facts[ $descriptor_key ], (string) $binding->facts[ $binding_key ] ) ) {
 				throw new InvalidArgumentException( 'The descriptor binding is invalid.' );
@@ -110,19 +110,19 @@ final readonly class BindingRecord {
 	private static function valid_facts( mixed $value ): bool {
 		return self::exact_keys( $value, self::FACT_KEYS )
 			&& ( 'plugin' === $value['target_type'] || 'theme' === $value['target_type'] )
-			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['installed_package_identity'], 255 )
+			&& IdentityDescriptor::is_bounded_opaque_identity( $value['installed_package_identity'], 255 )
 			&& self::positive_integer( $value['maximum_artifact_bytes'] )
 			&& self::positive_integer( $value['network_id'] )
-			&& IdentityDescriptor::isProviderCode( $value['provider_code'] )
-			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['canonical_repository_locator'], 255 )
-			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['stable_repository_identity'] )
+			&& IdentityDescriptor::is_provider_code( $value['provider_code'] )
+			&& IdentityDescriptor::is_bounded_opaque_identity( $value['canonical_repository_locator'], 255 )
+			&& IdentityDescriptor::is_bounded_opaque_identity( $value['stable_repository_identity'] )
 			&& is_string( $value['canonical_update_uri'] )
 			&& CanonicalUpdateUri::canonicalize( $value['canonical_update_uri'] ) === $value['canonical_update_uri']
 			&& in_array( $value['release_channel'], array( 'stable', 'prerelease' ), true )
 			&& self::valid_theme_template( $value['target_type'], $value['theme_template'] )
 			&& in_array( $value['update_policy'], array( 'disabled', 'forced-off', 'manual', 'automatic' ), true )
-			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['php_runtime_version'], 64 )
-			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['wordpress_runtime_version'], 64 );
+			&& IdentityDescriptor::is_bounded_opaque_identity( $value['php_runtime_version'], 64 )
+			&& IdentityDescriptor::is_bounded_opaque_identity( $value['wordpress_runtime_version'], 64 );
 	}
 	/**
 	 * @param array<string,mixed> $value
