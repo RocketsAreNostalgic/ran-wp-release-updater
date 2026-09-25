@@ -23,7 +23,7 @@ final class ReleaseVersion {
 	}
 
 	/** WordPress may use two-part stable headers; prereleases remain complete. */
-	public static function normalizeHeader( string $version ): ?string {
+	public static function normalize_header( string $version ): ?string {
 		if ( strlen( $version ) > self::MAX_LENGTH ) {
 			return null;
 		}
@@ -33,51 +33,51 @@ final class ReleaseVersion {
 		return self::normalize( $version );
 	}
 
-	public static function isPrerelease( string $version ): bool {
+	public static function is_prerelease( string $version ): bool {
 		return null !== self::normalize( $version ) && str_contains( $version, '-' );
 	}
 
 	/** @return -1|0|1|null */
 	public static function compare( string $left, string $right ): ?int {
-		$left  = self::normalizeHeader( $left );
-		$right = self::normalizeHeader( $right );
+		$left  = self::normalize_header( $left );
+		$right = self::normalize_header( $right );
 		if ( null === $left || null === $right ) {
 			return null;
 		}
 
-		$leftParts  = explode( '-', $left, 2 );
-		$rightParts = explode( '-', $right, 2 );
-		$leftCore   = explode( '.', $leftParts[0] );
-		$rightCore  = explode( '.', $rightParts[0] );
-		foreach ( array_keys( $leftCore ) as $index ) {
-			$comparison = self::compareNumericIdentifier( $leftCore[ $index ], $rightCore[ $index ] );
+		$left_parts  = explode( '-', $left, 2 );
+		$right_parts = explode( '-', $right, 2 );
+		$left_core   = explode( '.', $left_parts[0] );
+		$right_core  = explode( '.', $right_parts[0] );
+		foreach ( array_keys( $left_core ) as $index ) {
+			$comparison = self::compare_numeric_identifier( $left_core[ $index ], $right_core[ $index ] );
 			if ( 0 !== $comparison ) {
 				return $comparison;
 			}
 		}
 
-		$leftPrerelease  = $leftParts[1] ?? null;
-		$rightPrerelease = $rightParts[1] ?? null;
-		if ( null === $leftPrerelease || null === $rightPrerelease ) {
-			return $leftPrerelease === $rightPrerelease ? 0 : ( null === $leftPrerelease ? 1 : -1 );
+		$left_prerelease  = $left_parts[1] ?? null;
+		$right_prerelease = $right_parts[1] ?? null;
+		if ( null === $left_prerelease || null === $right_prerelease ) {
+			return $left_prerelease === $right_prerelease ? 0 : ( null === $left_prerelease ? 1 : -1 );
 		}
 
-		$leftIdentifiers  = explode( '.', $leftPrerelease );
-		$rightIdentifiers = explode( '.', $rightPrerelease );
-		$sharedCount      = min( count( $leftIdentifiers ), count( $rightIdentifiers ) );
-		for ( $index = 0; $index < $sharedCount; ++$index ) {
-			$leftIdentifier  = $leftIdentifiers[ $index ];
-			$rightIdentifier = $rightIdentifiers[ $index ];
-			$leftNumeric     = 1 === preg_match( '/\A\d+\z/D', $leftIdentifier );
-			$rightNumeric    = 1 === preg_match( '/\A\d+\z/D', $rightIdentifier );
-			$comparison      = $leftNumeric && $rightNumeric
-				? self::compareNumericIdentifier( $leftIdentifier, $rightIdentifier )
-				: ( $leftNumeric || $rightNumeric ? ( $leftNumeric ? -1 : 1 ) : ( strcmp( $leftIdentifier, $rightIdentifier ) <=> 0 ) );
+		$left_identifiers  = explode( '.', $left_prerelease );
+		$right_identifiers = explode( '.', $right_prerelease );
+		$shared_count      = min( count( $left_identifiers ), count( $right_identifiers ) );
+		for ( $index = 0; $index < $shared_count; ++$index ) {
+			$left_identifier  = $left_identifiers[ $index ];
+			$right_identifier = $right_identifiers[ $index ];
+			$left_numeric     = 1 === preg_match( '/\A\d+\z/D', $left_identifier );
+			$right_numeric    = 1 === preg_match( '/\A\d+\z/D', $right_identifier );
+			$comparison       = $left_numeric && $right_numeric
+				? self::compare_numeric_identifier( $left_identifier, $right_identifier )
+				: ( $left_numeric || $right_numeric ? ( $left_numeric ? -1 : 1 ) : ( strcmp( $left_identifier, $right_identifier ) <=> 0 ) );
 			if ( 0 !== $comparison ) {
 				return $comparison;
 			}
 		}
-		return count( $leftIdentifiers ) <=> count( $rightIdentifiers );
+		return count( $left_identifiers ) <=> count( $right_identifiers );
 	}
 
 	public static function relationship( string $candidate, string $baseline ): string {
@@ -92,8 +92,8 @@ final class ReleaseVersion {
 	}
 
 	/** @return -1|0|1 */
-	private static function compareNumericIdentifier( string $left, string $right ): int {
-		$lengthComparison = strlen( $left ) <=> strlen( $right );
-		return 0 !== $lengthComparison ? $lengthComparison : ( strcmp( $left, $right ) <=> 0 );
+	private static function compare_numeric_identifier( string $left, string $right ): int {
+		$length_comparison = strlen( $left ) <=> strlen( $right );
+		return 0 !== $length_comparison ? $length_comparison : ( strcmp( $left, $right ) <=> 0 );
 	}
 }

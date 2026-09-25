@@ -315,15 +315,15 @@ final class InstalledPackageResolver {
 
 	/** @param array<string,string> $headers */
 	private function requirementsIncompatible( array $headers ): bool {
-		if ( null === ReleaseVersion::normalizeHeader( $headers['Version'] ) ) {
+		if ( null === ReleaseVersion::normalize_header( $headers['Version'] ) ) {
 			return true;
 		}
-		if ( '' !== $headers['RequiresPHP'] && ( null === ReleaseVersion::normalizeHeader( $headers['RequiresPHP'] ) || ReleaseVersion::compare( PHP_VERSION, $headers['RequiresPHP'] ) < 0 ) ) {
+		if ( '' !== $headers['RequiresPHP'] && ( null === ReleaseVersion::normalize_header( $headers['RequiresPHP'] ) || ReleaseVersion::compare( PHP_VERSION, $headers['RequiresPHP'] ) < 0 ) ) {
 			return true;
 		}
 		$wordpress  = \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null );
 		$comparison = is_string( $wordpress ) ? ReleaseVersion::compare( $wordpress, $headers['RequiresWP'] ) : null;
-		return '' !== $headers['RequiresWP'] && ( null === ReleaseVersion::normalizeHeader( $headers['RequiresWP'] ) || null === $comparison || $comparison < 0 );
+		return '' !== $headers['RequiresWP'] && ( null === ReleaseVersion::normalize_header( $headers['RequiresWP'] ) || null === $comparison || $comparison < 0 );
 	}
 
 	/**

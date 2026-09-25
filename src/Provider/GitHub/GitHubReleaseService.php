@@ -82,9 +82,9 @@ final class GitHubReleaseService {
 			|| ! in_array( $configuration['target_type'], array( 'plugin', 'theme' ), true )
 			|| ! in_array( $configuration['release_channel'], array( 'stable', 'prerelease' ), true )
 			|| ! is_string( $configuration['php_runtime_version'] )
-			|| null === ReleaseVersion::normalizeHeader( $configuration['php_runtime_version'] )
+			|| null === ReleaseVersion::normalize_header( $configuration['php_runtime_version'] )
 			|| ! is_string( $configuration['wordpress_runtime_version'] )
-			|| null === ReleaseVersion::normalizeHeader( $configuration['wordpress_runtime_version'] )
+			|| null === ReleaseVersion::normalize_header( $configuration['wordpress_runtime_version'] )
 		) {
 			throw new InvalidArgumentException( 'The GitHub release configuration is invalid.' );
 		}
@@ -577,7 +577,7 @@ final class GitHubReleaseService {
 			|| ( null !== $expectedTag && ! hash_equals( $expectedTag, $tag ) )
 			|| (
 				'stable' === $this->binding['release_channel']
-				&& ( $release['prerelease'] || ReleaseVersion::isPrerelease( $version ) )
+				&& ( $release['prerelease'] || ReleaseVersion::is_prerelease( $version ) )
 			)
 			|| ! self::validReleasePage(
 				$release['html_url'] ?? null,
@@ -700,7 +700,7 @@ final class GitHubReleaseService {
 		$releaseIdentity = self::providerIdentity( $release['id'] ?? null );
 		$version         = self::versionFromTag( $release['tag_name'] );
 		$prerelease      = $release['prerelease']
-			|| ( is_string( $version ) && ReleaseVersion::isPrerelease( $version ) );
+			|| ( is_string( $version ) && ReleaseVersion::is_prerelease( $version ) );
 		if (
 			null === $releaseIdentity
 			|| null === $version
