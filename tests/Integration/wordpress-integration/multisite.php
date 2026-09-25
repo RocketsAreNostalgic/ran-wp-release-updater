@@ -20,7 +20,7 @@ apply_filters( 'update_plugins_github.com', false, $pluginData, 'ran-network-tar
 $providerAfter = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
 
 $networkId = get_current_network_id();
-$key       = 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::targetFenceKey(
+$key       = 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
 	array(
 		'network_id'                 => $networkId,
 		'target_type'                => 'plugin',

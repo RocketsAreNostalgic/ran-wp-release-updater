@@ -100,8 +100,8 @@ final class BindingFenceCoordinator {
 		);
 	}
 	private static function name( BindingRecord $binding ): string {
-		$facts = $binding->toArray();
-		return self::PREFIX . BindingRecord::targetFenceKey(
+		$facts = $binding->to_array();
+		return self::PREFIX . BindingRecord::target_fence_key(
 			array(
 				'network_id'                 => $facts['network_id'],
 				'target_type'                => $facts['target_type'],
@@ -168,8 +168,8 @@ final class BindingFenceCoordinator {
 		return hash_equals( self::json( $left->toArray() ) ?? '', self::json( $right->toArray() ) ?? '' );
 	}
 	private static function sameTarget( BindingRecord $left, BindingRecord $right ): bool {
-		$leftFacts  = $left->toArray();
-		$rightFacts = $right->toArray();
+		$leftFacts  = $left->to_array();
+		$rightFacts = $right->to_array();
 		return $leftFacts['network_id'] === $rightFacts['network_id']
 			&& hash_equals( $leftFacts['target_type'], $rightFacts['target_type'] )
 			&& hash_equals( $leftFacts['installed_package_identity'], $rightFacts['installed_package_identity'] );
@@ -184,7 +184,7 @@ final class BindingFenceCoordinator {
 			&& is_int( $claim['lease_deadline'] ) && is_string( $claim['owner_token'] )
 			&& $claim['binding_generation'] === $state->bindingGeneration()
 			&& $claim['lease_deadline'] === $state->leaseDeadline()
-			&& hash_equals( $claim['binding_hash'], $state->binding()->bindingHash() )
+			&& hash_equals( $claim['binding_hash'], $state->binding()->binding_hash() )
 			&& hash_equals( $claim['owner_token'], $state->ownerToken() );
 	}
 	private static function time( object $wpdb ): ?int {

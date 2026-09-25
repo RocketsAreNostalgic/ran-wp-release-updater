@@ -157,7 +157,7 @@ namespace Tests\WordPress {
 		public function testClaimTakeoverAndExpiryReclaimNeverReuseASnapshot(): void {
 			list( $updater, $adapter, $database, , $binding ) = $this->subject( 'manual', null, 'stable', false, null, true );
 			$this->offer( $updater );
-			$name      = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey(
+			$name      = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
 				array(
 					'network_id'                 => 1,
 					'target_type'                => 'plugin',
@@ -788,11 +788,11 @@ namespace Tests\WordPress {
 			self::assertIsString( $ownedArchive );
 			self::assertNull( $updater->filterPreUnzipFile( null, $ownedArchive, '/tmp', array(), 0.0 ) );
 			$state        = BindingState::rehydrate( json_decode( array_values( $database->rows() )[0]['option_value'], true, 32, JSON_THROW_ON_ERROR ) );
-			$bindingFacts = $binding->toArray();
+			$bindingFacts = $binding->to_array();
 			unset( $bindingFacts['binding_hash'] );
 			$bindingFacts['update_policy'] = 'automatic';
 			$reboundBinding                = BindingRecord::create( $bindingFacts );
-			$name                          = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey(
+			$name                          = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
 				array(
 					'network_id'                 => 1,
 					'target_type'                => 'plugin',
@@ -1295,7 +1295,7 @@ namespace Tests\WordPress {
 		}
 		private function token( IdentityDescriptor $descriptor, BindingRecord $binding ): string {
 			$value = array(
-				'binding_hash' => $binding->bindingHash(),
+				'binding_hash' => $binding->binding_hash(),
 				'descriptor'   => $descriptor->toArray(),
 				'schema'       => 1,
 			);
@@ -1305,7 +1305,7 @@ namespace Tests\WordPress {
 		private function claim( BindingState $state ): array {
 			return array(
 				'binding_generation' => $state->bindingGeneration(),
-				'binding_hash'       => $state->binding()->bindingHash(),
+				'binding_hash'       => $state->binding()->binding_hash(),
 				'lease_deadline'     => $state->leaseDeadline(),
 				'owner_token'        => $state->ownerToken(),
 			);

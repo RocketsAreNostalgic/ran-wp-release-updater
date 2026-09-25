@@ -16,7 +16,7 @@ use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 final class BindingRecordTest extends TestCase {
 	public function testHashChangesForEveryLiveBindingSwitch(): void {
 		$facts = $this->facts();
-		$base  = BindingRecord::create( $facts )->bindingHash();
+		$base  = BindingRecord::create( $facts )->binding_hash();
 		foreach ( array(
 			'maximum_artifact_bytes'       => 2,
 			'network_id'                   => 2,
@@ -25,7 +25,7 @@ final class BindingRecordTest extends TestCase {
 			'canonical_update_uri'         => 'https://example.com/other/repo',
 			'update_policy'                => 'automatic',
 		) as $key => $value ) {
-			self::assertNotSame( $base, BindingRecord::create( array_merge( $facts, array( $key => $value ) ) )->bindingHash(), $key );
+			self::assertNotSame( $base, BindingRecord::create( array_merge( $facts, array( $key => $value ) ) )->binding_hash(), $key );
 		} $theme = array_merge(
 			$facts,
 			array(
@@ -33,7 +33,7 @@ final class BindingRecordTest extends TestCase {
 				'installed_package_identity' => 'theme',
 			)
 		);
-		self::assertNotSame( BindingRecord::create( $theme )->bindingHash(), BindingRecord::create( array_merge( $theme, array( 'theme_template' => 'parent-theme' ) ) )->bindingHash(), 'theme_template' ); }
+		self::assertNotSame( BindingRecord::create( $theme )->binding_hash(), BindingRecord::create( array_merge( $theme, array( 'theme_template' => 'parent-theme' ) ) )->binding_hash(), 'theme_template' ); }
 	public function testThemeTemplateIsClosedToThemesAndSafeThemeSlugs(): void {
 		foreach ( array(
 			array(
@@ -65,29 +65,29 @@ final class BindingRecordTest extends TestCase {
 						'theme_template' => 'parent-theme',
 					)
 				)
-			)->toArray()['theme_template']
+			)->to_array()['theme_template']
 		); }
 	public function testDescriptorAndBindingMustRemainExactPair(): void {
 		$descriptor = IdentityDescriptor::create( $this->descriptorFacts() );
 		$binding    = BindingRecord::create( $this->facts() );
-		self::assertSame( $descriptor, BindingRecord::assertDescriptorBinding( $descriptor, $binding ) );
+		self::assertSame( $descriptor, BindingRecord::assert_descriptor_binding( $descriptor, $binding ) );
 		foreach ( array(
 			'provider_code'                => 'gitlab',
 			'canonical_repository_locator' => 'other/repo',
 			'canonical_update_uri'         => 'https://example.com/other/repo',
 		) as $key => $value ) {
 			$this->expectException( InvalidArgumentException::class );
-			BindingRecord::assertDescriptorBinding( $descriptor, BindingRecord::create( array_merge( $this->facts(), array( $key => $value ) ) ) ); } }
+			BindingRecord::assert_descriptor_binding( $descriptor, BindingRecord::create( array_merge( $this->facts(), array( $key => $value ) ) ) ); } }
 	public function testDescriptorMustNotContainThePolicyFactAndCannotExceedItsBindingLimit(): void {
 		$facts                  = $this->descriptorFacts();
 		$facts['artifact_size'] = 2;
 		$descriptor             = IdentityDescriptor::create( $facts );
 		$binding                = BindingRecord::create( array_merge( $this->facts(), array( 'maximum_artifact_bytes' => 1 ) ) );
 		$this->expectException( InvalidArgumentException::class );
-		BindingRecord::assertDescriptorBinding( $descriptor, $binding ); }
+		BindingRecord::assert_descriptor_binding( $descriptor, $binding ); }
 	public function testRehydrateRejectsForgedOrOpenSnapshots(): void {
-		$snapshot = BindingRecord::create( $this->facts() )->toArray();
-		self::assertSame( $snapshot, BindingRecord::rehydrate( $snapshot )->toArray() );
+		$snapshot = BindingRecord::create( $this->facts() )->to_array();
+		self::assertSame( $snapshot, BindingRecord::rehydrate( $snapshot )->to_array() );
 		foreach ( array( array_merge( $snapshot, array( 'binding_hash' => str_repeat( 'f', 64 ) ) ), array_merge( $snapshot, array( 'unexpected' => true ) ) ) as $invalid ) {
 			try {
 				BindingRecord::rehydrate( $invalid );
@@ -96,7 +96,7 @@ final class BindingRecordTest extends TestCase {
 				self::addToAssertionCount( 1 ); }
 		} }
 	public function testTargetFenceHasOneCanonicalNetworkTypeAndIdentityOrder(): void {
-		$first = BindingRecord::targetFenceKey(
+		$first = BindingRecord::target_fence_key(
 			array(
 				'installed_package_identity' => 'x/x.php',
 				'target_type'                => 'plugin',
@@ -105,7 +105,7 @@ final class BindingRecordTest extends TestCase {
 		);
 		self::assertSame(
 			$first,
-			BindingRecord::targetFenceKey(
+			BindingRecord::target_fence_key(
 				array(
 					'network_id'                 => 1,
 					'target_type'                => 'plugin',
@@ -115,7 +115,7 @@ final class BindingRecordTest extends TestCase {
 		);
 		self::assertNotSame(
 			$first,
-			BindingRecord::targetFenceKey(
+			BindingRecord::target_fence_key(
 				array(
 					'network_id'                 => 2,
 					'target_type'                => 'plugin',
@@ -125,7 +125,7 @@ final class BindingRecordTest extends TestCase {
 		);
 		self::assertNotSame(
 			$first,
-			BindingRecord::targetFenceKey(
+			BindingRecord::target_fence_key(
 				array(
 					'network_id'                 => 1,
 					'target_type'                => 'theme',
@@ -158,7 +158,7 @@ final class BindingRecordTest extends TestCase {
 			),
 		) as $facts ) {
 			try {
-				BindingRecord::targetFenceKey( $facts );
+				BindingRecord::target_fence_key( $facts );
 				self::fail( 'Invalid target fence was accepted.' );
 			} catch ( InvalidArgumentException ) {
 				self::addToAssertionCount( 1 ); }

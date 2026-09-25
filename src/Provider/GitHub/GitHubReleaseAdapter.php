@@ -125,7 +125,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 			'staged_package_update_uri'  => $uri,
 			'target_type'                => $declaration['target_type'],
 			'theme_template'             => $headers['Template'],
-			'wordpress_runtime_version'  => $binding->toArray()['wordpress_runtime_version'],
+			'wordpress_runtime_version'  => $binding->to_array()['wordpress_runtime_version'],
 		);
 		return array(
 			'native' => self::registerFromConfiguration(
@@ -172,7 +172,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		private BindingRecord $bindingRecord,
 		?GitHubCredentialResolver $credentials = null
 	) {
-		$facts = $bindingRecord->toArray();
+		$facts = $bindingRecord->to_array();
 		if ( 'github' !== $facts['provider_code'] ) {
 			throw new InvalidArgumentException( 'The GitHub binding is invalid.' );
 		}
@@ -198,14 +198,14 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 
 	public function inspect( string $releaseIdentity, ?string $expectedTag = null ): IdentityDescriptor {
 		return $this->service->inspectInstalled(
-			$this->bindingRecord->toArray()['installed_package_identity'],
+			$this->bindingRecord->to_array()['installed_package_identity'],
 			$releaseIdentity,
 			$expectedTag
 		);
 	}
 
 	public function acquire( IdentityDescriptor $descriptor ): TemporaryArtifact {
-		BindingRecord::assertDescriptorBinding( $descriptor, $this->bindingRecord );
+		BindingRecord::assert_descriptor_binding( $descriptor, $this->bindingRecord );
 		return $this->service->acquireInstalled( $descriptor );
 	}
 }

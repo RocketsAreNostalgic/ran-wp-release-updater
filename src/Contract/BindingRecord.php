@@ -49,49 +49,49 @@ final readonly class BindingRecord {
 		'repository_identity'        => 'stable_repository_identity',
 	);
 	/** @param array<string,mixed> $facts */
-	private function __construct( private array $facts, private string $bindingHash ) {
+	private function __construct( private array $facts, private string $binding_hash ) {
 	}
-	public static function targetFenceKey( mixed $value ): string {
+	public static function target_fence_key( mixed $value ): string {
 		$keys = array( 'network_id', 'target_type', 'installed_package_identity' );
 		if (
-			! self::exactKeys( $value, $keys )
-			|| ! self::positiveInteger( $value['network_id'] )
+			! self::exact_keys( $value, $keys )
+			|| ! self::positive_integer( $value['network_id'] )
 			|| ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true )
 			|| ! IdentityDescriptor::isBoundedOpaqueIdentity( $value['installed_package_identity'], 255 )
 		) {
 			throw new InvalidArgumentException( 'The target fence is invalid.' );
 		}
 
-		return hash( 'sha256', self::canonicalJson( self::ordered( $value, $keys ) ) );
+		return hash( 'sha256', self::canonical_json( self::ordered( $value, $keys ) ) );
 	}
 	public static function create( mixed $facts ): self {
-		if ( ! self::validFacts( $facts ) ) {
+		if ( ! self::valid_facts( $facts ) ) {
 			throw new InvalidArgumentException( 'The binding facts are invalid.' );
 		}
 		$facts = self::ordered( $facts, self::FACT_KEYS );
-		return new self( $facts, hash( 'sha256', self::canonicalJson( $facts ) ) );
+		return new self( $facts, hash( 'sha256', self::canonical_json( $facts ) ) );
 	}
 	public static function rehydrate( mixed $value ): self {
-		$facts = self::exactKeys( $value, self::KEYS )
+		$facts = self::exact_keys( $value, self::KEYS )
 			? self::ordered( $value, self::FACT_KEYS )
 			: null;
 		if (
 			! is_array( $facts )
-			|| ! self::validFacts( $facts )
-			|| ! self::isSha256( $value['binding_hash'] )
+			|| ! self::valid_facts( $facts )
+			|| ! self::is_sha256( $value['binding_hash'] )
 		) {
 			throw new InvalidArgumentException( 'The binding record is invalid.' );
 		}
 		$record = self::create( $facts );
-		if ( ! hash_equals( $record->bindingHash, $value['binding_hash'] ) ) {
+		if ( ! hash_equals( $record->binding_hash, $value['binding_hash'] ) ) {
 			throw new InvalidArgumentException( 'The binding hash is invalid.' );
 		}
 		return $record;
 	}
-	public static function assertDescriptorBinding( IdentityDescriptor $descriptor, self $binding ): IdentityDescriptor {
+	public static function assert_descriptor_binding( IdentityDescriptor $descriptor, self $binding ): IdentityDescriptor {
 		$facts = $descriptor->toArray();
-		foreach ( self::DESCRIPTOR_PAIRS as $descriptorKey => $bindingKey ) {
-			if ( ! hash_equals( (string) $facts[ $descriptorKey ], (string) $binding->facts[ $bindingKey ] ) ) {
+		foreach ( self::DESCRIPTOR_PAIRS as $descriptor_key => $binding_key ) {
+			if ( ! hash_equals( (string) $facts[ $descriptor_key ], (string) $binding->facts[ $binding_key ] ) ) {
 				throw new InvalidArgumentException( 'The descriptor binding is invalid.' );
 			}
 		}
@@ -101,25 +101,25 @@ final readonly class BindingRecord {
 		return $descriptor;
 	}
 	/** @return array<string,mixed> */
-	public function toArray(): array {
-		return array_merge( $this->facts, array( 'binding_hash' => $this->bindingHash ) );
+	public function to_array(): array {
+		return array_merge( $this->facts, array( 'binding_hash' => $this->binding_hash ) );
 	}
-	public function bindingHash(): string {
-		return $this->bindingHash;
+	public function binding_hash(): string {
+		return $this->binding_hash;
 	}
-	private static function validFacts( mixed $value ): bool {
-		return self::exactKeys( $value, self::FACT_KEYS )
+	private static function valid_facts( mixed $value ): bool {
+		return self::exact_keys( $value, self::FACT_KEYS )
 			&& ( 'plugin' === $value['target_type'] || 'theme' === $value['target_type'] )
 			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['installed_package_identity'], 255 )
-			&& self::positiveInteger( $value['maximum_artifact_bytes'] )
-			&& self::positiveInteger( $value['network_id'] )
+			&& self::positive_integer( $value['maximum_artifact_bytes'] )
+			&& self::positive_integer( $value['network_id'] )
 			&& IdentityDescriptor::isProviderCode( $value['provider_code'] )
 			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['canonical_repository_locator'], 255 )
 			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['stable_repository_identity'] )
 			&& is_string( $value['canonical_update_uri'] )
 			&& CanonicalUpdateUri::canonicalize( $value['canonical_update_uri'] ) === $value['canonical_update_uri']
 			&& in_array( $value['release_channel'], array( 'stable', 'prerelease' ), true )
-			&& self::validThemeTemplate( $value['target_type'], $value['theme_template'] )
+			&& self::valid_theme_template( $value['target_type'], $value['theme_template'] )
 			&& in_array( $value['update_policy'], array( 'disabled', 'forced-off', 'manual', 'automatic' ), true )
 			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['php_runtime_version'], 64 )
 			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['wordpress_runtime_version'], 64 );
@@ -137,11 +137,11 @@ final readonly class BindingRecord {
 		return $ordered;
 	}
 	/** @param array<string,mixed> $value */
-	private static function canonicalJson( array $value ): string {
+	private static function canonical_json( array $value ): string {
 		return json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 	}
 	/** @param list<string> $keys */
-	private static function exactKeys( mixed $value, array $keys ): bool {
+	private static function exact_keys( mixed $value, array $keys ): bool {
 		if ( ! is_array( $value ) || count( $value ) !== count( $keys ) ) {
 			return false;
 		}
@@ -152,18 +152,18 @@ final readonly class BindingRecord {
 		}
 		return true;
 	}
-	private static function isSha256( mixed $value ): bool {
+	private static function is_sha256( mixed $value ): bool {
 		return is_string( $value ) && 1 === preg_match( '/\A[a-f0-9]{64}\z/D', $value );
 	}
-	private static function positiveInteger( mixed $value ): bool {
+	private static function positive_integer( mixed $value ): bool {
 		return is_int( $value ) && 0 < $value;
 	}
-	private static function validThemeTemplate( string $targetType, mixed $value ): bool {
+	private static function valid_theme_template( string $target_type, mixed $value ): bool {
 		return is_string( $value )
 			&& (
-				( 'plugin' === $targetType && '' === $value )
+				( 'plugin' === $target_type && '' === $value )
 				|| (
-					'theme' === $targetType
+					'theme' === $target_type
 					&& ( '' === $value || 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $value ) )
 				)
 			);

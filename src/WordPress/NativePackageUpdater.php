@@ -85,7 +85,7 @@ final class NativePackageUpdater {
 		?SelectedRuntimeState $selectedRuntimeState = null,
 		bool $nativeDiscoveryReuse = false
 	): ?self {
-		$bindingFacts = $binding->toArray();
+		$bindingFacts = $binding->to_array();
 		if (
 			! self::validConfiguration( $configuration, $binding )
 			|| $configuration['policy'] !== $bindingFacts['update_policy']
@@ -185,7 +185,7 @@ final class NativePackageUpdater {
 			'requires_php'                        => $this->headers['RequiresPHP'],
 			'version'                             => $facts['version'],
 			'autoupdate'                          => $this->automaticEligible( $descriptor ),
-			'ran_wp_release_updater_binding_hash' => $this->binding->bindingHash(),
+			'ran_wp_release_updater_binding_hash' => $this->binding->binding_hash(),
 		);
 		if ( 'plugin' === $this->targetType ) {
 			$offer['plugin'] = $this->installedIdentity;
@@ -275,7 +275,7 @@ final class NativePackageUpdater {
 		}
 		try {
 			$fresh = $this->adapter->inspect( $token->releaseIdentity(), $token->toArray()['tag'] );
-			BindingRecord::assertDescriptorBinding( $fresh, $this->binding );
+			BindingRecord::assert_descriptor_binding( $fresh, $this->binding );
 		} catch ( \Throwable ) {
 			return $this->failure( 'acquisition_failed' );
 		}
@@ -588,7 +588,7 @@ final class NativePackageUpdater {
 				return false;
 			}
 		}
-		$facts = $binding->toArray();
+		$facts = $binding->to_array();
 		if ( $configuration['target_type'] !== $facts['target_type'] || ! hash_equals( $configuration['installed_package_identity'], $facts['installed_package_identity'] ) || null === ReleaseVersion::normalize_header( $configuration['headers']['Version'] ) ) {
 			return false;
 		}
@@ -605,7 +605,7 @@ final class NativePackageUpdater {
 	private function matchesRuntimeUri( string $runtimeUri ): bool {
 		return CanonicalUpdateUri::canonicalize_boundaries(
 			array(
-				'archive_preflight' => $this->binding->toArray()['canonical_update_uri'],
+				'archive_preflight' => $this->binding->to_array()['canonical_update_uri'],
 				'configuration'     => $this->updateUri,
 				'offer'             => $runtimeUri,
 				'staged_package'    => $this->headers['UpdateURI'],
@@ -677,7 +677,7 @@ final class NativePackageUpdater {
 			: null;
 
 		return hash_equals( $this->headers['Name'], $headers['Name'] )
-			&& hash_equals( $this->binding->toArray()['theme_template'], $headers['Template'] )
+			&& hash_equals( $this->binding->to_array()['theme_template'], $headers['Template'] )
 			&& is_string( $expectedVersion )
 			&& 0 === ReleaseVersion::compare( $headers['Version'], $expectedVersion )
 			&& $this->matchesRuntimeUri( $headers['UpdateURI'] );
@@ -754,7 +754,7 @@ final class NativePackageUpdater {
 				continue; }
 			try {
 				$descriptor = $this->adapter->inspect( $candidate['release_identity'], $candidate['tag'] );
-				BindingRecord::assertDescriptorBinding( $descriptor, $this->binding );
+				BindingRecord::assert_descriptor_binding( $descriptor, $this->binding );
 			} catch ( ReleaseFailure $failure ) {
 				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
 				if ( self::canRejectCandidate( $failure ) ) {
@@ -839,7 +839,7 @@ final class NativePackageUpdater {
 		$this->status['offered_version']          = null; }
 	private function token( IdentityDescriptor $descriptor ): ?string {
 		$value = array(
-			'binding_hash' => $this->binding->bindingHash(),
+			'binding_hash' => $this->binding->binding_hash(),
 			'descriptor'   => $descriptor->toArray(),
 			'schema'       => 1,
 		);
@@ -872,11 +872,11 @@ final class NativePackageUpdater {
 			if ( ! self::exactKeys( $value, array( 'binding_hash', 'descriptor', 'schema' ) ) || 1 !== $value['schema'] ) {
 				return null;
 			}
-			if ( ! is_string( $value['binding_hash'] ) || ! hash_equals( $this->binding->bindingHash(), $value['binding_hash'] ) ) {
+			if ( ! is_string( $value['binding_hash'] ) || ! hash_equals( $this->binding->binding_hash(), $value['binding_hash'] ) ) {
 				return null;
 			}
 			$descriptor = IdentityDescriptor::rehydrate( $value['descriptor'] );
-			BindingRecord::assertDescriptorBinding( $descriptor, $this->binding );
+			BindingRecord::assert_descriptor_binding( $descriptor, $this->binding );
 			return $descriptor;
 		} catch ( \Throwable ) {
 			return null; }
@@ -890,7 +890,7 @@ final class NativePackageUpdater {
 	/** @return array<string,mixed> */ private function claim( BindingState $state ): array {
 		return array(
 			'binding_generation' => $state->bindingGeneration(),
-			'binding_hash'       => $state->binding()->bindingHash(),
+			'binding_hash'       => $state->binding()->binding_hash(),
 			'lease_deadline'     => $state->leaseDeadline(),
 			'owner_token'        => $state->ownerToken(),
 		); }

@@ -10,11 +10,11 @@ This repository uses the RAN `php-library` quality profile. PHP coding and
 compatibility ancestry comes from `ran/coding-standards` through
 `RANWordPressLibrary`; the tracked Composer lock binds the published v1.0.0 release
 under the `^1.0` development constraint. The additional `RANOwnedMethods`
-check is enabled only for `src/Contract/CanonicalUpdateUri.php`,
-`src/Contract/ReleaseVersion.php` and `src/Contract/AcquisitionReceipt.php`.
-Variable naming enforcement is enabled only for `ReleaseVersion.php` and
-`AcquisitionReceipt.php`. Expand these completed scopes only with reviewed
-declaration/caller and enforcement proof.
+check is enabled only for `CanonicalUpdateUri.php`, `ReleaseVersion.php`,
+`AcquisitionReceipt.php` and `BindingRecord.php` under `src/Contract/`.
+Variable naming enforcement is enabled only for `ReleaseVersion.php`,
+`AcquisitionReceipt.php` and `BindingRecord.php`. Expand these completed scopes
+only with reviewed declaration/caller and enforcement proof.
 
 Keep release-updater identity and product constraints local: the
 `RAN\WPReleaseUpdater\V1` namespace, WordPress 6.5 floor, PHP `^8.2` range,
