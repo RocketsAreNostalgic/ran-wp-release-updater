@@ -117,7 +117,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$claim     = $this->claim( $state );
 		$receipt   = AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, 10 );
 		$next      = BindingRecord::create( array_merge( $this->bindingFacts(), array( 'update_policy' => 'automatic' ) ) );
-		$name      = 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey(
+		$name      = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
 			array(
 				'network_id'                 => 1,
 				'target_type'                => 'plugin',
@@ -187,7 +187,7 @@ final class AcquisitionReceiptTest extends TestCase {
 	private function claim( BindingState $state ): array {
 		return array(
 			'binding_generation' => $state->bindingGeneration(),
-			'binding_hash'       => $state->binding()->bindingHash(),
+			'binding_hash'       => $state->binding()->binding_hash(),
 			'lease_deadline'     => $state->leaseDeadline(),
 			'owner_token'        => $state->ownerToken(),
 		); }

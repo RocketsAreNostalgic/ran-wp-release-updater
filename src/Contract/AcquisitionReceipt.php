@@ -22,7 +22,7 @@ final readonly class AcquisitionReceipt {
 		}
 		try {
 			$binding = $state->binding();
-			BindingRecord::assertDescriptorBinding( $descriptor, $binding );
+			BindingRecord::assert_descriptor_binding( $descriptor, $binding );
 			$proof = $validator->consumeReceiptProof( $package, $descriptor );
 		} catch ( InvalidArgumentException ) {
 			throw new InvalidArgumentException( 'The acquisition receipt is invalid.' );
@@ -31,7 +31,7 @@ final readonly class AcquisitionReceipt {
 		$facts                     = array(
 			'archive_identity_verified' => true,
 			'binding_generation'        => $state->bindingGeneration(),
-			'binding_hash'              => $binding->bindingHash(),
+			'binding_hash'              => $binding->binding_hash(),
 			'descriptor_fingerprint'    => $descriptor->fingerprintValue(),
 			'local_sha256'              => $proof['sha256'],
 			'opaque_artifact_identity'  => $descriptor_facts['artifact_identity'],
@@ -94,12 +94,12 @@ final readonly class AcquisitionReceipt {
 		}
 		try {
 			$binding = $state->binding();
-			BindingRecord::assertDescriptorBinding( $descriptor, $binding );
+			BindingRecord::assert_descriptor_binding( $descriptor, $binding );
 		} catch ( InvalidArgumentException ) {
 			return false;
 		}
 		return $value['binding_generation'] === $state->bindingGeneration()
-			&& self::equal( $value['binding_hash'], $binding->bindingHash() )
+			&& self::equal( $value['binding_hash'], $binding->binding_hash() )
 			&& self::equal( $value['descriptor_fingerprint'], $descriptor->fingerprintValue() )
 			&& $value['provider_code'] === $descriptor->toArray()['provider_code']
 			&& $value['opaque_release_identity'] === $descriptor->releaseIdentity()

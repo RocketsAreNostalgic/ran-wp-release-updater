@@ -251,7 +251,7 @@ namespace Tests\Provider {
 			$invalid           = $configuration;
 			$invalid['policy'] = 'unsupported';
 			self::assertNull( GitHubReleaseAdapter::registerFromConfiguration( $invalid, $binding, null, new class() {}, array() ) );
-			$facts = $binding->toArray();
+			$facts = $binding->to_array();
 			unset( $facts['binding_hash'] );
 			$facts['provider_code'] = 'gitlab';
 			self::assertNull( GitHubReleaseAdapter::registerFromConfiguration( $configuration, BindingRecord::create( $facts ), null, new class() {}, array() ) );
@@ -2145,7 +2145,7 @@ namespace Tests\Provider {
 
 		/** @return array<string,mixed> */
 		private function serviceConfiguration( BindingRecord $binding ): array {
-			$facts = $binding->toArray();
+			$facts = $binding->to_array();
 			return array(
 				'canonical_repository_locator' => $facts['canonical_repository_locator'],
 				'canonical_update_uri'         => $facts['canonical_update_uri'],

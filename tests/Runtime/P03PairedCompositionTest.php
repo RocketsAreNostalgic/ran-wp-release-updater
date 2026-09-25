@@ -152,10 +152,10 @@ $explicit = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::regis
 if (! $explicit instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater) {
 	throw new RuntimeException('Explicit GitHub composition failed.');
 }
-$conciseBinding = (new ReflectionProperty($concise, 'binding'))->getValue($concise)->toArray();
+$conciseBinding = (new ReflectionProperty($concise, 'binding'))->getValue($concise)->to_array();
 $conciseHeaders = (new ReflectionProperty($concise, 'headers'))->getValue($concise);
 $concisePolicy = (new ReflectionProperty($concise, 'archivePolicy'))->getValue($concise);
-$explicitBinding = (new ReflectionProperty($explicit, 'binding'))->getValue($explicit)->toArray();
+$explicitBinding = (new ReflectionProperty($explicit, 'binding'))->getValue($explicit)->to_array();
 $explicitHeaders = (new ReflectionProperty($explicit, 'headers'))->getValue($explicit);
 $explicitPolicy = (new ReflectionProperty($explicit, 'archivePolicy'))->getValue($explicit);
 if ($conciseBinding !== $explicitBinding || $conciseHeaders !== $explicitHeaders || $concisePolicy !== $explicitPolicy) {

@@ -15,7 +15,7 @@ final readonly class BindingState {
 		if ( ! self::hash( $owner ) || ! self::number( $deadline ) || ! self::number( $generation ) || ! self::number( $epoch ) ) {
 			throw new InvalidArgumentException( 'The binding state is invalid.' );
 		}
-		return new self( BindingRecord::rehydrate( $binding->toArray() ), $generation, $epoch, $deadline, $owner );
+		return new self( BindingRecord::rehydrate( $binding->to_array() ), $generation, $epoch, $deadline, $owner );
 	}
 	public static function rehydrate( mixed $value ): self {
 		if ( ! is_array( $value ) || ! self::closed( $value ) || 1 !== $value['state_schema'] ) {
@@ -41,7 +41,7 @@ final readonly class BindingState {
 		return $this->owner; }
 	/** @return array<string,mixed> */ public function toArray(): array {
 		return array(
-			'binding'            => $this->binding->toArray(),
+			'binding'            => $this->binding->to_array(),
 			'binding_generation' => $this->generation,
 			'fence_epoch'        => $this->epoch,
 			'lease_deadline'     => $this->deadline,

@@ -235,7 +235,7 @@ function build_target( string $type, string $identity, string $uri, string $arch
 				'target'  => $targetStatus,
 				'manager' => $managerStatus,
 			),
-			'targetName'         => 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::targetFenceKey(
+			'targetName'         => 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
 				array(
 					'network_id'                 => 1,
 					'target_type'                => $type,
@@ -260,7 +260,7 @@ function build_target( string $type, string $identity, string $uri, string $arch
 			'target'  => $targetStatus,
 			'manager' => $managerStatus,
 		),
-		'targetName'         => 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::targetFenceKey(
+		'targetName'         => 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
 			array(
 				'network_id'                 => 1,
 				'target_type'                => $type,

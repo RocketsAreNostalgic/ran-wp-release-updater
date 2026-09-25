@@ -271,8 +271,8 @@ function assertFinalRows( MysqliOptionDatabase $database, BindingRecord $binding
 	} }
 /** @param array<string,mixed> $facts */
 function targetName( BindingRecord $binding ): string {
-	$facts = $binding->toArray();
-	return 'ran_wp_release_updater_target_v1_' . BindingRecord::targetFenceKey(
+	$facts = $binding->to_array();
+	return 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
 		array(
 			'network_id'                 => $facts['network_id'],
 			'target_type'                => $facts['target_type'],

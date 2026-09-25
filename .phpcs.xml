@@ -27,6 +27,7 @@
 		<include-pattern>/src/Contract/CanonicalUpdateUri.php</include-pattern>
 		<include-pattern>/src/Contract/ReleaseVersion.php</include-pattern>
 		<include-pattern>/src/Contract/AcquisitionReceipt.php</include-pattern>
+		<include-pattern>/src/Contract/BindingRecord.php</include-pattern>
 	</rule>
 
 	<!-- Unmigrated methods retain their existing names; completed scopes use RANOwnedMethods above. -->
@@ -37,6 +38,7 @@
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
 		<include-pattern>/src/Contract/ReleaseVersion.php</include-pattern>
 		<include-pattern>/src/Contract/AcquisitionReceipt.php</include-pattern>
+		<include-pattern>/src/Contract/BindingRecord.php</include-pattern>
 	</rule>
 	<!-- Synthetic WordPress/SQL and performance fixtures retain their purpose-built conditions. -->
 	<rule ref="WordPress.PHP.YodaConditions">

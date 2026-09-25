@@ -173,7 +173,7 @@ return new class(
 		$type     = $d['target_type'];
 		$headers  = $resolved['headers'];
 		$identity = $resolved['installed_package_identity'];
-		$key      = \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::targetFenceKey(
+		$key      = \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
 			array(
 				'network_id'                 => $this->networkId,
 				'target_type'                => $type,

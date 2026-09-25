@@ -477,7 +477,7 @@ namespace Tests\WordPress {
 		private function claim( BindingState $state ): array {
 			return array(
 				'binding_generation' => $state->bindingGeneration(),
-				'binding_hash'       => $state->binding()->bindingHash(),
+				'binding_hash'       => $state->binding()->binding_hash(),
 				'lease_deadline'     => $state->leaseDeadline(),
 				'owner_token'        => $state->ownerToken(),
 			);
