@@ -41,19 +41,30 @@ final class AcquisitionReceiptTest extends TestCase {
 		$first         = AcquisitionReceipt::issue( $state, $descriptor, $validator, $firstPackage, 10 );
 		$second        = AcquisitionReceipt::issue( $state, $descriptor, $validator, $secondPackage, 10 );
 		$manifest      = $firstPackage->toArray();
-		self::assertSame( $first, AcquisitionReceipt::assertArchiveManifest( $first, $state, $descriptor, 10, $manifest['manifest_hash'], $manifest['manifest_entry_count'], $manifest['manifest_expanded_bytes'] ) );
+		self::assertSame(
+			$first,
+			AcquisitionReceipt::assert_archive_manifest(
+				receipt: $first,
+				state: $state,
+				descriptor: $descriptor,
+				now: 10,
+				manifest_hash: $manifest['manifest_hash'],
+				entry_count: $manifest['manifest_entry_count'],
+				expanded_bytes: $manifest['manifest_expanded_bytes']
+			)
+		);
 		try {
-			AcquisitionReceipt::assertArchiveManifest( $first, $state, $descriptor, 10, str_repeat( 'f', 64 ), $manifest['manifest_entry_count'], $manifest['manifest_expanded_bytes'] );
+			AcquisitionReceipt::assert_archive_manifest( $first, $state, $descriptor, 10, str_repeat( 'f', 64 ), $manifest['manifest_entry_count'], $manifest['manifest_expanded_bytes'] );
 			self::fail( 'A changed archive manifest was accepted.' );
 		} catch ( InvalidArgumentException ) {
 			self::addToAssertionCount( 1 ); }
 		try {
-			AcquisitionReceipt::acceptFresh( clone $first, $state, $descriptor, 10 );
+			AcquisitionReceipt::accept_fresh( clone $first, $state, $descriptor, 10 );
 			self::fail( 'Clone was accepted.' );
 		} catch ( InvalidArgumentException ) {
 			self::addToAssertionCount( 1 ); }
-		self::assertSame( $first, AcquisitionReceipt::acceptFresh( $first, $state, $descriptor, 10 ) );
-		self::assertSame( $second, AcquisitionReceipt::acceptFresh( $second, $state, $descriptor, 10 ) );
+		self::assertSame( $first, AcquisitionReceipt::accept_fresh( $first, $state, $descriptor, 10 ) );
+		self::assertSame( $second, AcquisitionReceipt::accept_fresh( $second, $state, $descriptor, 10 ) );
 	}
 
 	public function testPublicReadyBlockedAndClonePackagesCannotMintAndFlagsAreNotInputs(): void {
@@ -83,12 +94,12 @@ final class AcquisitionReceiptTest extends TestCase {
 		$receipt   = AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, 10 );
 		$successor = BindingState::create( $state->binding(), str_repeat( 'b', 64 ), 30, $state->bindingGeneration() + 1, $state->fenceEpoch() + 1 );
 		try {
-			AcquisitionReceipt::acceptFresh( $receipt, $successor, $descriptor, 21 );
+			AcquisitionReceipt::accept_fresh( $receipt, $successor, $descriptor, 21 );
 			self::fail( 'Old claim receipt was accepted.' );
 		} catch ( InvalidArgumentException ) {
 			self::addToAssertionCount( 1 ); }
 		$fresh = $validator->validate( $descriptor, $this->policy(), $this->archives[0] );
-		self::assertInstanceOf( AcquisitionReceipt::class, AcquisitionReceipt::acceptFresh( AcquisitionReceipt::issue( $successor, $descriptor, $validator, $fresh, 22 ), $successor, $descriptor, 22 ) );
+		self::assertInstanceOf( AcquisitionReceipt::class, AcquisitionReceipt::accept_fresh( AcquisitionReceipt::issue( $successor, $descriptor, $validator, $fresh, 22 ), $successor, $descriptor, 22 ) );
 		$expired = $validator->validate( $descriptor, $this->policy(), $this->archives[0] );
 		try {
 			AcquisitionReceipt::issue( $state, $descriptor, $validator, $expired, 21 );
@@ -124,7 +135,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$completed = BindingFenceCoordinator::completePersistentInstall( $database, $state, $claim, $receipt, $descriptor );
 		self::assertSame( 'binding_fence_lost', $completed['result'] );
 		try {
-			AcquisitionReceipt::acceptFresh( $receipt, $state, $descriptor, 10 );
+			AcquisitionReceipt::accept_fresh( $receipt, $state, $descriptor, 10 );
 			self::fail( 'The receipt was not consumed before the completion race was detected.' );
 		} catch ( InvalidArgumentException ) {
 			self::addToAssertionCount( 1 );

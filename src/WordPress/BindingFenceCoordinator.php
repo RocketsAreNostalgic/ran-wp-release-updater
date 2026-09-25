@@ -80,7 +80,7 @@ final class BindingFenceCoordinator {
 			return $first;
 		}
 		try {
-			$accepted = AcquisitionReceipt::acceptFresh( $receipt, $first['current'], $descriptor, $first['now'] );
+			$accepted = AcquisitionReceipt::accept_fresh( $receipt, $first['current'], $descriptor, $first['now'] );
 		} catch ( InvalidArgumentException ) {
 			return self::lost( $first['current'] );
 		}

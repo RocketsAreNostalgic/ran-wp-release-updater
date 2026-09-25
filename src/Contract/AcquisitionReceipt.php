@@ -27,17 +27,17 @@ final readonly class AcquisitionReceipt {
 		} catch ( InvalidArgumentException ) {
 			throw new InvalidArgumentException( 'The acquisition receipt is invalid.' );
 		}
-		$descriptorFacts           = $descriptor->toArray();
+		$descriptor_facts          = $descriptor->toArray();
 		$facts                     = array(
 			'archive_identity_verified' => true,
 			'binding_generation'        => $state->bindingGeneration(),
 			'binding_hash'              => $binding->bindingHash(),
 			'descriptor_fingerprint'    => $descriptor->fingerprintValue(),
 			'local_sha256'              => $proof['sha256'],
-			'opaque_artifact_identity'  => $descriptorFacts['artifact_identity'],
+			'opaque_artifact_identity'  => $descriptor_facts['artifact_identity'],
 			'opaque_release_identity'   => $descriptor->releaseIdentity(),
 			'package_identity_verified' => true,
-			'provider_code'             => $descriptorFacts['provider_code'],
+			'provider_code'             => $descriptor_facts['provider_code'],
 			'receipt_schema'            => 1,
 		);
 		$receipt                   = new self( $facts );
@@ -51,7 +51,7 @@ final readonly class AcquisitionReceipt {
 		return $receipt;
 	}
 
-	public static function acceptFresh( mixed $receipt, BindingState $state, IdentityDescriptor $descriptor, int $now ): self {
+	public static function accept_fresh( mixed $receipt, BindingState $state, IdentityDescriptor $descriptor, int $now ): self {
 		if ( ! $receipt instanceof self || ! isset( self::issued()[ $receipt ] ) ) {
 			throw new InvalidArgumentException( 'The acquisition receipt is stale.' );
 		}
@@ -67,7 +67,7 @@ final readonly class AcquisitionReceipt {
 	}
 
 	/** Verify a live receipt without consuming the one-use completion proof. */
-	public static function assertFresh( mixed $receipt, BindingState $state, IdentityDescriptor $descriptor, int $now ): self {
+	public static function assert_fresh( mixed $receipt, BindingState $state, IdentityDescriptor $descriptor, int $now ): self {
 		if ( ! $receipt instanceof self || ! isset( self::issued()[ $receipt ] ) ) {
 			throw new InvalidArgumentException( 'The acquisition receipt is stale.' );
 		}
@@ -79,17 +79,17 @@ final readonly class AcquisitionReceipt {
 	}
 
 	/** Verify that an extracted or installed tree is byte-identical to the inspected archive inventory. */
-	public static function assertArchiveManifest( mixed $receipt, BindingState $state, IdentityDescriptor $descriptor, int $now, mixed $manifestHash, mixed $entryCount, mixed $expandedBytes ): self {
-		self::assertFresh( $receipt, $state, $descriptor, $now );
+	public static function assert_archive_manifest( mixed $receipt, BindingState $state, IdentityDescriptor $descriptor, int $now, mixed $manifest_hash, mixed $entry_count, mixed $expanded_bytes ): self {
+		self::assert_fresh( $receipt, $state, $descriptor, $now );
 		$incarnation = self::issued()[ $receipt ];
-		if ( ! self::sha256( $manifestHash ) || ! is_int( $entryCount ) || $entryCount < 1 || ! is_int( $expandedBytes ) || $expandedBytes < 0 || $entryCount !== $incarnation['manifest_entry_count'] || $expandedBytes !== $incarnation['manifest_expanded_bytes'] || ! hash_equals( $incarnation['manifest_hash'], $manifestHash ) ) {
+		if ( ! self::sha256( $manifest_hash ) || ! is_int( $entry_count ) || $entry_count < 1 || ! is_int( $expanded_bytes ) || $expanded_bytes < 0 || $entry_count !== $incarnation['manifest_entry_count'] || $expanded_bytes !== $incarnation['manifest_expanded_bytes'] || ! hash_equals( $incarnation['manifest_hash'], $manifest_hash ) ) {
 			throw new InvalidArgumentException( 'The acquisition receipt archive manifest is invalid.' );
 		}
 		return $receipt;
 	}
 
 	private static function valid( mixed $value, BindingState $state, IdentityDescriptor $descriptor, int $now ): bool {
-		if ( ! self::exactKeys( $value ) || $now < 0 || $now > BindingState::MAX_SAFE_INTEGER || $now > $state->leaseDeadline() || 1 !== $value['receipt_schema'] || true !== $value['archive_identity_verified'] || true !== $value['package_identity_verified'] || ! self::sha256( $value['local_sha256'] ) ) {
+		if ( ! self::exact_keys( $value ) || $now < 0 || $now > BindingState::MAX_SAFE_INTEGER || $now > $state->leaseDeadline() || 1 !== $value['receipt_schema'] || true !== $value['archive_identity_verified'] || true !== $value['package_identity_verified'] || ! self::sha256( $value['local_sha256'] ) ) {
 			return false;
 		}
 		try {
@@ -121,7 +121,7 @@ final readonly class AcquisitionReceipt {
 		return $issued ??= new WeakMap();
 	}
 
-	private static function exactKeys( mixed $value ): bool {
+	private static function exact_keys( mixed $value ): bool {
 		if ( ! is_array( $value ) || count( $value ) !== count( self::KEYS ) ) {
 			return false;
 		}
