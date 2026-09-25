@@ -16,7 +16,7 @@ final class CanonicalUpdateUri {
 	/**
 	 * @param array<string, mixed> $boundaries
 	 */
-	public static function canonicalizeBoundaries( array $boundaries ): ?string {
+	public static function canonicalize_boundaries( array $boundaries ): ?string {
 		if ( count( $boundaries ) !== count( self::BOUNDARY_KEYS ) ) {
 			return null;
 		}
@@ -57,7 +57,7 @@ final class CanonicalUpdateUri {
 		$host = strtolower( $matches['host'] );
 		if ( strlen( $host ) > 253
 			|| str_ends_with( $host, '.' )
-			|| self::isNumericIpLiteral( $host )
+			|| self::is_numeric_ip_literal( $host )
 		) {
 			return null;
 		}
@@ -80,7 +80,7 @@ final class CanonicalUpdateUri {
 		return 'https://' . $host . '/' . rtrim( $path, '/' );
 	}
 
-	private static function isNumericIpLiteral( string $host ): bool {
+	private static function is_numeric_ip_literal( string $host ): bool {
 		return 1 === preg_match(
 			'/\A(?:0x[0-9a-f]+|[0-9]+)(?:\.(?:0x[0-9a-f]+|[0-9]+)){0,3}\z/Di',
 			$host

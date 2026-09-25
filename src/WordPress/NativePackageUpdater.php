@@ -592,7 +592,7 @@ final class NativePackageUpdater {
 		if ( $configuration['target_type'] !== $facts['target_type'] || ! hash_equals( $configuration['installed_package_identity'], $facts['installed_package_identity'] ) || null === ReleaseVersion::normalizeHeader( $configuration['headers']['Version'] ) ) {
 			return false;
 		}
-		return CanonicalUpdateUri::canonicalizeBoundaries(
+		return CanonicalUpdateUri::canonicalize_boundaries(
 			array(
 				'archive_preflight' => $facts['canonical_update_uri'],
 				'configuration'     => $configuration['update_uri'],
@@ -603,7 +603,7 @@ final class NativePackageUpdater {
 	}
 
 	private function matchesRuntimeUri( string $runtimeUri ): bool {
-		return CanonicalUpdateUri::canonicalizeBoundaries(
+		return CanonicalUpdateUri::canonicalize_boundaries(
 			array(
 				'archive_preflight' => $this->binding->toArray()['canonical_update_uri'],
 				'configuration'     => $this->updateUri,

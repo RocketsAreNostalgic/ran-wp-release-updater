@@ -28,14 +28,14 @@ final class KernelPerformanceTest extends TestCase {
 		$state = $claimed['current'];
 		$claim = $this->claim( $state );
 		for ( $index = 0; $index < 100; ++$index ) {
-			CanonicalUpdateUri::canonicalizeBoundaries( $this->boundaries() );
+			CanonicalUpdateUri::canonicalize_boundaries( $this->boundaries() );
 			BindingFenceCoordinator::verifyPersistentBindingState( $database, $state, $claim );
 		}
 		$memoryBefore = memory_get_usage( true );
 		$cpuBefore    = $this->cpuNanoseconds();
 		$started      = hrtime( true );
 		for ( $index = 0; $index < 1000; ++$index ) {
-			$uri          = CanonicalUpdateUri::canonicalizeBoundaries( $this->boundaries() );
+			$uri          = CanonicalUpdateUri::canonicalize_boundaries( $this->boundaries() );
 			$verifyResult = BindingFenceCoordinator::verifyPersistentBindingState( $database, $state, $claim );
 		}
 		$elapsedNanoseconds    = hrtime( true ) - $started;

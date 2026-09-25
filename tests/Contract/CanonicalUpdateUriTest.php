@@ -99,17 +99,17 @@ final class CanonicalUpdateUriTest extends TestCase {
 
 		self::assertSame(
 			'https://updates.example.test/Release/Plugin',
-			CanonicalUpdateUri::canonicalizeBoundaries( $boundaries )
+			CanonicalUpdateUri::canonicalize_boundaries( $boundaries )
 		);
 
 		self::assertNull(
-			CanonicalUpdateUri::canonicalizeBoundaries(
+			CanonicalUpdateUri::canonicalize_boundaries(
 				array_merge( $boundaries, array( 'unexpected' => true ) )
 			)
 		);
 
 		unset( $boundaries['staged_package'] );
-		self::assertNull( CanonicalUpdateUri::canonicalizeBoundaries( $boundaries ) );
+		self::assertNull( CanonicalUpdateUri::canonicalize_boundaries( $boundaries ) );
 	}
 
 	public function testFourBoundaryTupleRejectsAChangedPathOrInvalidValueType(): void {
@@ -120,9 +120,9 @@ final class CanonicalUpdateUriTest extends TestCase {
 			'staged_package'    => 'https://updates.example.test/release/Plugin',
 		);
 
-		self::assertNull( CanonicalUpdateUri::canonicalizeBoundaries( $boundaries ) );
+		self::assertNull( CanonicalUpdateUri::canonicalize_boundaries( $boundaries ) );
 
 		$boundaries['staged_package'] = array();
-		self::assertNull( CanonicalUpdateUri::canonicalizeBoundaries( $boundaries ) );
+		self::assertNull( CanonicalUpdateUri::canonicalize_boundaries( $boundaries ) );
 	}
 }
