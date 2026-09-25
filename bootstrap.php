@@ -640,7 +640,7 @@ return new class( $ran_wp_release_updater_broker ) {
 					}
 				}
 				foreach ( array( 'php_runtime_version', 'wordpress_runtime_version' ) as $key ) {
-					if ( ! is_string( $value[ $key ] ) || null === \RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion::normalizeHeader( $value[ $key ] ) ) {
+					if ( ! is_string( $value[ $key ] ) || null === \RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion::normalize_header( $value[ $key ] ) ) {
 						return false;
 					}
 				}

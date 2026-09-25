@@ -156,7 +156,7 @@ final class NativePackageUpdater {
 		$this->status['installed_version'] = $installed;
 		$this->status['last_check']        = time();
 		$runtimeUri                        = is_string( $packageData['UpdateURI'] ?? null ) ? $packageData['UpdateURI'] : '';
-		if ( null === ReleaseVersion::normalizeHeader( $installed ) || ! $this->matchesRuntimeUri( $runtimeUri ) ) {
+		if ( null === ReleaseVersion::normalize_header( $installed ) || ! $this->matchesRuntimeUri( $runtimeUri ) ) {
 			return $this->diagnose( 'runtime_package_identity_invalid', $update );
 		}
 		if ( in_array( $this->policy, array( 'disabled', 'forced-off' ), true ) ) {
@@ -589,7 +589,7 @@ final class NativePackageUpdater {
 			}
 		}
 		$facts = $binding->toArray();
-		if ( $configuration['target_type'] !== $facts['target_type'] || ! hash_equals( $configuration['installed_package_identity'], $facts['installed_package_identity'] ) || null === ReleaseVersion::normalizeHeader( $configuration['headers']['Version'] ) ) {
+		if ( $configuration['target_type'] !== $facts['target_type'] || ! hash_equals( $configuration['installed_package_identity'], $facts['installed_package_identity'] ) || null === ReleaseVersion::normalize_header( $configuration['headers']['Version'] ) ) {
 			return false;
 		}
 		return CanonicalUpdateUri::canonicalize_boundaries(
@@ -716,7 +716,7 @@ final class NativePackageUpdater {
 	}
 	/** claimDiscovery() has established the current binding fence before discovery. */
 	private function discover( string $installed ): ?IdentityDescriptor {
-		$normalizedInstalled = ReleaseVersion::normalizeHeader( $installed );
+		$normalizedInstalled = ReleaseVersion::normalize_header( $installed );
 		if ( ! is_string( $normalizedInstalled ) ) {
 			return null;
 		}

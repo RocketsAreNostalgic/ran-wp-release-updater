@@ -25,14 +25,16 @@
 	<!-- Completed owned-method cohort; expand only with reviewed declaration/caller proof. -->
 	<rule ref="RANOwnedMethods">
 		<include-pattern>/src/Contract/CanonicalUpdateUri.php</include-pattern>
+		<include-pattern>/src/Contract/ReleaseVersion.php</include-pattern>
 	</rule>
 
 	<!-- Unmigrated methods retain their existing names; completed scopes use RANOwnedMethods above. -->
 	<rule ref="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid">
 		<severity>0</severity>
 	</rule>
+	<!-- Variable enforcement follows the completed ReleaseVersion cohort only. -->
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
-		<severity>0</severity>
+		<include-pattern>/src/Contract/ReleaseVersion.php</include-pattern>
 	</rule>
 	<!-- Synthetic WordPress/SQL and performance fixtures retain their purpose-built conditions. -->
 	<rule ref="WordPress.PHP.YodaConditions">

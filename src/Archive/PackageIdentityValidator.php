@@ -56,9 +56,9 @@ final class PackageIdentityValidator {
 			|| ! is_string( $policy['version'] )
 			|| null === ReleaseVersion::normalize( $policy['version'] )
 			|| ! is_string( $policy['php_runtime_version'] )
-			|| null === ReleaseVersion::normalizeHeader( $policy['php_runtime_version'] )
+			|| null === ReleaseVersion::normalize_header( $policy['php_runtime_version'] )
 			|| ! is_string( $policy['wordpress_runtime_version'] )
-			|| null === ReleaseVersion::normalizeHeader( $policy['wordpress_runtime_version'] )
+			|| null === ReleaseVersion::normalize_header( $policy['wordpress_runtime_version'] )
 		) {
 			return null;
 		}
@@ -322,7 +322,7 @@ final class PackageIdentityValidator {
 		if ( ( 'plugin' === $policy['target_type'] && $policy['installed_package_identity'] !== $policy['archive_root'] . '/' . $policy['header_file'] ) || ( 'theme' === $policy['target_type'] && ( $policy['installed_package_identity'] !== $policy['archive_root'] || 'style.css' !== $policy['header_file'] ) ) ) {
 			return false;
 		}
-		if ( ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $policy['archive_root'] ) || ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(?:php|css)\z/D', $policy['header_file'] ) || ( 'plugin' === $policy['target_type'] && ! str_ends_with( $policy['header_file'], '.php' ) ) || ( 'theme' === $policy['target_type'] && 'style.css' !== $policy['header_file'] ) || '' === $policy['metadata_name'] || strlen( $policy['metadata_name'] ) > 500 || 1 === preg_match( '/[\x00-\x1f\x7f]/', $policy['metadata_name'] ) || null === ReleaseVersion::normalizeHeader( $policy['php_runtime_version'] ) || null === ReleaseVersion::normalizeHeader( $policy['wordpress_runtime_version'] ) ) {
+		if ( ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $policy['archive_root'] ) || ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(?:php|css)\z/D', $policy['header_file'] ) || ( 'plugin' === $policy['target_type'] && ! str_ends_with( $policy['header_file'], '.php' ) ) || ( 'theme' === $policy['target_type'] && 'style.css' !== $policy['header_file'] ) || '' === $policy['metadata_name'] || strlen( $policy['metadata_name'] ) > 500 || 1 === preg_match( '/[\x00-\x1f\x7f]/', $policy['metadata_name'] ) || null === ReleaseVersion::normalize_header( $policy['php_runtime_version'] ) || null === ReleaseVersion::normalize_header( $policy['wordpress_runtime_version'] ) ) {
 			return false;
 		}
 		return CanonicalUpdateUri::canonicalize_boundaries(
@@ -481,7 +481,7 @@ final class PackageIdentityValidator {
 				);
 			}
 		}
-		if ( null === ReleaseVersion::normalizeHeader( $result['Version'] ) ) {
+		if ( null === ReleaseVersion::normalize_header( $result['Version'] ) ) {
 			return array(
 				'code'   => 'installed_header_invalid',
 				'header' => 'Version',
