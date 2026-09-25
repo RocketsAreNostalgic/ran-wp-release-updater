@@ -25,7 +25,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 	 * @param array<string,mixed> $headers
 	 * @return array{native:?NativePackageUpdater,code:string}
 	 */
-	public static function composeFromDeclaration(
+	public static function compose_from_declaration(
 		array $declaration,
 		array $resolved,
 		array $headers,
@@ -128,7 +128,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 			'wordpress_runtime_version'  => $binding->to_array()['wordpress_runtime_version'],
 		);
 		return array(
-			'native' => self::registerFromConfiguration(
+			'native' => self::register_from_configuration(
 				$configuration,
 				$binding,
 				$resolver,
@@ -146,7 +146,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 	 * @param array<string, mixed> $configuration
 	 * @param array<string, mixed> $archivePolicy
 	 */
-	public static function registerFromConfiguration(
+	public static function register_from_configuration(
 		array $configuration,
 		BindingRecord $binding,
 		?GitHubCredentialResolver $credentials,
@@ -192,15 +192,15 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 	}
 
 	/** @return array<string, mixed> */
-	public function listReleases( array $conditional = array() ): array {
+	public function list_releases( array $conditional = array() ): array {
 		return $this->service->listReleases( $conditional );
 	}
 
-	public function inspect( string $releaseIdentity, ?string $expectedTag = null ): IdentityDescriptor {
+	public function inspect( string $release_identity, ?string $expected_tag = null ): IdentityDescriptor {
 		return $this->service->inspectInstalled(
 			$this->bindingRecord->to_array()['installed_package_identity'],
-			$releaseIdentity,
-			$expectedTag
+			$release_identity,
+			$expected_tag
 		);
 	}
 

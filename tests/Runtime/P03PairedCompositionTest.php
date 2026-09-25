@@ -142,7 +142,7 @@ $policy = array(
 	'wordpress_runtime_version' => '6.8.0',
 );
 $explicitDatabase = clone $GLOBALS['wpdb'];
-$explicit = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::registerFromConfiguration(
+$explicit = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::register_from_configuration(
 	$configuration,
 	$binding,
 	new \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubCredentialResolver($resolver),
@@ -188,11 +188,11 @@ $adapter = new class($descriptor, $archive) implements \RAN\WPReleaseUpdater\V1\
 	public int $inspectCalls = 0;
 	public int $acquireCalls = 0;
 	public function __construct(private \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor $descriptor, private string $archive) {}
-	public function listReleases(array $conditional = array()): array {
+	public function list_releases(array $conditional = array()): array {
 		++$this->listCalls;
 		return array('candidates' => array(array('release_identity' => '7', 'tag' => 'v2.0.0', 'version' => '2.0.0')));
 	}
-	public function inspect(string $releaseIdentity, ?string $expectedTag = null): \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor {
+	public function inspect(string $release_identity, ?string $expected_tag = null): \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor {
 		++$this->inspectCalls;
 		return $this->descriptor;
 	}
