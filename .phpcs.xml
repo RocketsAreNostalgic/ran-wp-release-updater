@@ -29,9 +29,16 @@
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
 		<severity>0</severity>
 	</rule>
-	<!-- Yoda rewrites would create broad semantic diffs without improving this sealed runtime. -->
+	<!-- Synthetic WordPress/SQL and performance fixtures retain their purpose-built conditions. -->
 	<rule ref="WordPress.PHP.YodaConditions">
-		<severity>0</severity>
+		<exclude-pattern>/tests/Integration/phase-2.4-wordpress-core-proof.php</exclude-pattern>
+		<exclude-pattern>/tests/Integration/phase-2.4-wordpress-core-proof-harness.php</exclude-pattern>
+		<exclude-pattern>/tests/Integration/wordpress-native-mixed-bulk-proof-harness.php</exclude-pattern>
+		<exclude-pattern>/tests/Integration/real-mysql-cas-proof.php</exclude-pattern>
+		<exclude-pattern>/tests/Integration/release-source-consumer-proof.php</exclude-pattern>
+		<exclude-pattern>/tests/Integration/wordpress-native-mixed-bulk-proof.php</exclude-pattern>
+		<exclude-pattern>/tests/Performance/native-discovery-measure.php</exclude-pattern>
+		<exclude-pattern>/tests/Support/MysqliOptionDatabase.php</exclude-pattern>
 	</rule>
 
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">

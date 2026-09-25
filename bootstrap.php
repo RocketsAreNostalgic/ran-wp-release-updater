@@ -38,7 +38,7 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 		if (
 			! is_array( $copy )
 			|| array_is_list( $copy )
-			|| $keys !== array_keys( $copy )
+			|| array_keys( $copy ) !== $keys
 			|| ! is_string( $copy['package_revision'] )
 			|| 1 !== preg_match( '/\A[a-f0-9]{64}\z/D', $copy['package_revision'] )
 			|| ! is_string( $copy['package_version'] )
@@ -169,7 +169,7 @@ $ran_wp_release_updater_cached_broker_provenance = $ran_wp_release_updater_cache
 $ran_wp_release_updater_broker_class_origin      = is_array( $ran_wp_release_updater_cached_broker_provenance )
 	? $ran_wp_release_updater_cached_broker_provenance
 	: ( null === $ran_wp_release_updater_existing_broker ? $ran_wp_release_updater_broker_origin( RequestBroker::class ) : null );
-$ran_wp_release_updater_can_create_broker        = is_array( $ran_wp_release_updater_broker_class_origin ) && $ran_wp_release_updater_broker_class_origin['root'] === realpath( __DIR__ );
+$ran_wp_release_updater_can_create_broker        = is_array( $ran_wp_release_updater_broker_class_origin ) && realpath( __DIR__ ) === $ran_wp_release_updater_broker_class_origin['root'];
 if ( null === $ran_wp_release_updater_existing_broker && $ran_wp_release_updater_can_create_broker ) {
 	$ran_wp_release_updater_state_source = $ran_wp_release_updater_broker_class_origin['root'] . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'SelectedRuntimeState.php';
 	if ( ! class_exists( SelectedRuntimeState::class, false ) ) {
@@ -178,7 +178,7 @@ if ( null === $ran_wp_release_updater_existing_broker && $ran_wp_release_updater
 	try {
 		$ran_wp_release_updater_loaded_state_source = ( new ReflectionClass( SelectedRuntimeState::class ) )->getFileName();
 		$ran_wp_release_updater_loaded_state_source = is_string( $ran_wp_release_updater_loaded_state_source ) ? realpath( $ran_wp_release_updater_loaded_state_source ) : false;
-		$ran_wp_release_updater_can_create_broker   = is_string( $ran_wp_release_updater_loaded_state_source ) && $ran_wp_release_updater_loaded_state_source === realpath( $ran_wp_release_updater_state_source );
+		$ran_wp_release_updater_can_create_broker   = is_string( $ran_wp_release_updater_loaded_state_source ) && realpath( $ran_wp_release_updater_state_source ) === $ran_wp_release_updater_loaded_state_source;
 	} catch ( Throwable ) {
 		$ran_wp_release_updater_can_create_broker = false;
 	}
@@ -505,7 +505,7 @@ return new class( $ran_wp_release_updater_broker ) {
 					}
 					return match ( $operation ) {
 						'list' => 'not_applicable' === $cleanup && $this->validListing( $result['value'] )
-							&& $result['code'] === ( $result['value']['not_modified'] ? 'releases_not_modified' : 'releases_listed' ),
+							&& ( $result['value']['not_modified'] ? 'releases_not_modified' : 'releases_listed' ) === $result['code'],
 						'inspect' => 'release_inspected' === $result['code'] && 'complete' === $cleanup && $this->validInspection( $result['value'] ),
 						'acquire' => 'release_acquired' === $result['code'] && 'retained' === $cleanup
 							&& $this->keys( $result['value'], array( 'inspection', 'artifact' ) )
@@ -652,7 +652,7 @@ return new class( $ran_wp_release_updater_broker ) {
 					|| ! $this->matches( $value['package_root'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D' )
 					|| ( 'theme' === $value['target_type'] ? 'style.css' !== $value['main_file'] : ! $this->matches( $value['main_file'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D' ) )
 					|| ! is_string( $value['canonical_update_uri'] )
-					|| $value['canonical_update_uri'] !== \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $value['canonical_update_uri'] )
+					|| \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $value['canonical_update_uri'] ) !== $value['canonical_update_uri']
 					|| ! $this->matches( $value['fingerprint'], '/\Av2:[a-f0-9]{64}\z/D' ) ) {
 					return false;
 				}
