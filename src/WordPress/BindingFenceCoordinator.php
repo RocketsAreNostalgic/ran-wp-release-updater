@@ -223,7 +223,7 @@ final class BindingFenceCoordinator {
 		} $sql = "INSERT INTO {$table} (option_name,option_value,autoload) VALUES (%s,%s,'no')";
 		return 1 === $wpdb->query( $wpdb->prepare( $sql, $name, $value ) );
 	}
-	private static function cas( object $wpdb, string $name, string $old, string $new, int $deadline, bool $expired = false ): bool {
+	private static function cas( object $wpdb, string $name, string $old, string $replacement, int $deadline, bool $expired = false ): bool {
 		if ( ! is_callable( array( $wpdb, 'prepare' ) ) || ! is_callable( array( $wpdb, 'query' ) ) ) {
 			return false;
 		}
@@ -232,7 +232,7 @@ final class BindingFenceCoordinator {
 			return false;
 		} $operator = $expired ? '>' : '<=';
 		$sql        = "UPDATE {$table} SET option_value = %s WHERE option_name = %s AND BINARY option_value = BINARY %s AND UNIX_TIMESTAMP() {$operator} %d";
-		return 1 === $wpdb->query( $wpdb->prepare( $sql, $new, $name, $old, $deadline ) );
+		return 1 === $wpdb->query( $wpdb->prepare( $sql, $replacement, $name, $old, $deadline ) );
 	}
 	/** @param array<string,mixed> $value */
 	private static function json( array $value ): ?string {
