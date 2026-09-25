@@ -11,7 +11,7 @@ final class OwnedArchiveStore {
 
 	/** @return array{directory:string,path:string}|null */
 	public function copy( string $source, IdentityDescriptor $descriptor ): ?array {
-		$facts  = $descriptor->toArray();
+		$facts  = $descriptor->to_array();
 		$before = $this->identity( $source, $descriptor );
 		if ( null === $before ) {
 			return null;
@@ -109,7 +109,7 @@ final class OwnedArchiveStore {
 
 	/** @return array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null */
 	public function identity( string $path, IdentityDescriptor $descriptor ): ?array {
-		$facts = $descriptor->toArray();
+		$facts = $descriptor->to_array();
 		clearstatcache( true, $path );
 		$stat = @lstat( $path );
 		$hash = is_file( $path ) ? hash_file( 'sha256', $path ) : false;

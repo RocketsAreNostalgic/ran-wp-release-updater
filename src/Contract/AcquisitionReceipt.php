@@ -27,15 +27,15 @@ final readonly class AcquisitionReceipt {
 		} catch ( InvalidArgumentException ) {
 			throw new InvalidArgumentException( 'The acquisition receipt is invalid.' );
 		}
-		$descriptor_facts          = $descriptor->toArray();
+		$descriptor_facts          = $descriptor->to_array();
 		$facts                     = array(
 			'archive_identity_verified' => true,
 			'binding_generation'        => $state->bindingGeneration(),
 			'binding_hash'              => $binding->binding_hash(),
-			'descriptor_fingerprint'    => $descriptor->fingerprintValue(),
+			'descriptor_fingerprint'    => $descriptor->fingerprint_value(),
 			'local_sha256'              => $proof['sha256'],
 			'opaque_artifact_identity'  => $descriptor_facts['artifact_identity'],
-			'opaque_release_identity'   => $descriptor->releaseIdentity(),
+			'opaque_release_identity'   => $descriptor->release_identity(),
 			'package_identity_verified' => true,
 			'provider_code'             => $descriptor_facts['provider_code'],
 			'receipt_schema'            => 1,
@@ -100,11 +100,11 @@ final readonly class AcquisitionReceipt {
 		}
 		return $value['binding_generation'] === $state->bindingGeneration()
 			&& self::equal( $value['binding_hash'], $binding->binding_hash() )
-			&& self::equal( $value['descriptor_fingerprint'], $descriptor->fingerprintValue() )
-			&& $value['provider_code'] === $descriptor->toArray()['provider_code']
-			&& $value['opaque_release_identity'] === $descriptor->releaseIdentity()
-			&& $value['opaque_artifact_identity'] === $descriptor->toArray()['artifact_identity']
-			&& self::equal( $value['local_sha256'], $descriptor->toArray()['artifact_sha256'] );
+			&& self::equal( $value['descriptor_fingerprint'], $descriptor->fingerprint_value() )
+			&& $value['provider_code'] === $descriptor->to_array()['provider_code']
+			&& $value['opaque_release_identity'] === $descriptor->release_identity()
+			&& $value['opaque_artifact_identity'] === $descriptor->to_array()['artifact_identity']
+			&& self::equal( $value['local_sha256'], $descriptor->to_array()['artifact_sha256'] );
 	}
 
 	private static function equal( mixed $left, mixed $right ): bool {

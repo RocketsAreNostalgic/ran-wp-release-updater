@@ -123,12 +123,12 @@ final readonly class ProspectiveReleaseInspection {
 		$root = $value['package_root'];
 		$main = $value['main_file'];
 		return ( 'plugin' === $type || 'theme' === $type )
-			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['repository_locator'], 255 )
-			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['repository_identity'] )
-			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['release_identity'] )
-			&& IdentityDescriptor::isExactTag( $value['tag'] )
-			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['commit_identity'] )
-			&& IdentityDescriptor::isBoundedOpaqueIdentity( $value['artifact_identity'] )
+			&& IdentityDescriptor::is_bounded_opaque_identity( $value['repository_locator'], 255 )
+			&& IdentityDescriptor::is_bounded_opaque_identity( $value['repository_identity'] )
+			&& IdentityDescriptor::is_bounded_opaque_identity( $value['release_identity'] )
+			&& IdentityDescriptor::is_exact_tag( $value['tag'] )
+			&& IdentityDescriptor::is_bounded_opaque_identity( $value['commit_identity'] )
+			&& IdentityDescriptor::is_bounded_opaque_identity( $value['artifact_identity'] )
 			&& is_string( $value['artifact_filename'] )
 			&& 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di', $value['artifact_filename'] )
 		&& is_int( $value['artifact_size'] )

@@ -715,7 +715,7 @@ namespace Tests\Provider {
 			$valid                           = new GitHubReleaseAdapter( $this->binding() );
 			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
 			$descriptor                      = $valid->inspect( '7' );
-			$facts                           = $descriptor->toArray();
+			$facts                           = $descriptor->to_array();
 			unset( $facts['fingerprint'] );
 			$facts['artifact_identity'] = 'invalid-asset';
 			$invalidDescriptor          = IdentityDescriptor::create( $facts );
@@ -1096,7 +1096,7 @@ namespace Tests\Provider {
 				true
 			);
 
-			$facts = $adapter->inspect( '7', 'v1.2.3' )->toArray();
+			$facts = $adapter->inspect( '7', 'v1.2.3' )->to_array();
 
 			self::assertSame( '99', $facts['repository_identity'] );
 			self::assertSame( '7', $facts['release_identity'] );
@@ -1288,7 +1288,7 @@ namespace Tests\Provider {
 				false
 			);
 
-			$facts = $adapter->inspect( '7' )->toArray();
+			$facts = $adapter->inspect( '7' )->to_array();
 
 			self::assertSame( 'theme', $facts['target_type'] );
 			self::assertTrue( $facts['prerelease'] );
@@ -1306,7 +1306,7 @@ namespace Tests\Provider {
 				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
 			);
 
-			$facts = ( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7' )->toArray();
+			$facts = ( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7' )->to_array();
 
 			self::assertSame( 'Repository.ZIP', $facts['artifact_filename'] );
 		}
@@ -1324,7 +1324,7 @@ namespace Tests\Provider {
 
 			$facts = ( new GitHubReleaseAdapter(
 				$this->binding( 'stable', 'plugin', (string) $identity )
-			) )->inspect( (string) $identity )->toArray();
+			) )->inspect( (string) $identity )->to_array();
 
 			self::assertSame( (string) $identity, $facts['repository_identity'] );
 			self::assertSame( (string) $identity, $facts['release_identity'] );
@@ -1341,7 +1341,7 @@ namespace Tests\Provider {
 				$this->response( 200, $release ),
 				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
 			);
-			self::assertSame( $limit, ( new GitHubReleaseAdapter( $this->binding( maximumArtifactBytes: $limit ) ) )->inspect( '7' )->toArray()['artifact_size'] );
+			self::assertSame( $limit, ( new GitHubReleaseAdapter( $this->binding( maximumArtifactBytes: $limit ) ) )->inspect( '7' )->to_array()['artifact_size'] );
 		}
 
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'invalidInspectionProvider' )]

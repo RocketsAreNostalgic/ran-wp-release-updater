@@ -301,7 +301,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		$validator  = new PackageIdentityValidator();
 		$descriptor = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );
 		$policy     = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
-		$facts      = $descriptor->toArray();
+		$facts      = $descriptor->to_array();
 		unset( $facts['fingerprint'] );
 		$badDigest = IdentityDescriptor::create( array_replace( $facts, array( 'artifact_sha256' => str_repeat( 'b', 64 ) ) ) );
 		self::assertSame( 'archive_file_identity_mismatch', $validator->validate( $badDigest, $policy, $archive )->code() );
@@ -347,7 +347,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		$validator  = new PackageIdentityValidator();
 		$descriptor = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );
 		$package    = $validator->validate( $descriptor, $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $archive );
-		$facts      = $descriptor->toArray();
+		$facts      = $descriptor->to_array();
 		unset( $facts['fingerprint'] );
 		$wrong = IdentityDescriptor::create( array_replace( $facts, array( 'artifact_sha256' => str_repeat( 'b', 64 ) ) ) );
 		try {
@@ -355,7 +355,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 			self::fail( 'Wrong descriptor consumed the proof.' );
 		} catch ( \InvalidArgumentException ) {
 			self::addToAssertionCount( 1 ); }
-		self::assertSame( $descriptor->fingerprintValue(), $validator->consumeReceiptProof( $package, $descriptor )['descriptor_fingerprint'] );
+		self::assertSame( $descriptor->fingerprint_value(), $validator->consumeReceiptProof( $package, $descriptor )['descriptor_fingerprint'] );
 		try {
 			$validator->consumeReceiptProof( $package, $descriptor );
 			self::fail( 'Proof consumed twice.' );

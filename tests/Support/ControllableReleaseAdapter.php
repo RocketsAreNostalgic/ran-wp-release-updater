@@ -32,7 +32,7 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 		if ( is_array( $this->listResponse ) ) {
 			return $this->listResponse;
 		}
-		$facts = $this->descriptor->toArray();
+		$facts = $this->descriptor->to_array();
 		return array(
 			'candidates' => array(
 				array(
@@ -56,7 +56,7 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 	}
 	public function acquire( IdentityDescriptor $descriptor ): TemporaryArtifact {
 		++$this->acquireCalls;
-		$releaseIdentity = $descriptor->releaseIdentity();
+		$releaseIdentity = $descriptor->release_identity();
 		if ( array_key_exists( $releaseIdentity, $this->acquireOutcomes ) ) {
 			$outcome = $this->acquireOutcomes[ $releaseIdentity ];
 			if ( $outcome instanceof \Throwable ) {

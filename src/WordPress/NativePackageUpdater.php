@@ -173,9 +173,9 @@ final class NativePackageUpdater {
 		if ( null === $token ) {
 			return $update;
 		}
-		$facts                                    = $descriptor->toArray();
+		$facts                                    = $descriptor->to_array();
 		$this->status['offered_version']          = $facts['version'];
-		$this->status['offered_release_identity'] = $descriptor->releaseIdentity();
+		$this->status['offered_release_identity'] = $descriptor->release_identity();
 		$offer                                    = array(
 			'id'                                  => $this->updateUri,
 			'slug'                                => $this->informationSlug(),
@@ -207,7 +207,7 @@ final class NativePackageUpdater {
 		if ( ! $descriptor instanceof IdentityDescriptor || ! $this->manualEligible( $descriptor ) ) {
 			return $result;
 		}
-		$facts               = $descriptor->toArray();
+		$facts               = $descriptor->to_array();
 		$info                = new \stdClass();
 		$info->name          = $this->headers['Name'];
 		$info->slug          = $this->informationSlug();
@@ -274,7 +274,7 @@ final class NativePackageUpdater {
 			return $this->failure( 'binding_fence_lost' );
 		}
 		try {
-			$fresh = $this->adapter->inspect( $token->releaseIdentity(), $token->toArray()['tag'] );
+			$fresh = $this->adapter->inspect( $token->release_identity(), $token->to_array()['tag'] );
 			BindingRecord::assert_descriptor_binding( $fresh, $this->binding );
 		} catch ( \Throwable ) {
 			return $this->failure( 'acquisition_failed' );
@@ -282,7 +282,7 @@ final class NativePackageUpdater {
 		if ( ! $this->newerThanInstalled( $fresh ) ) {
 			return $this->failure( 'unverified_pre_download' );
 		}
-		if ( ! hash_equals( $token->fingerprintValue(), $fresh->fingerprintValue() ) ) {
+		if ( ! hash_equals( $token->fingerprint_value(), $fresh->fingerprint_value() ) ) {
 			return $this->failure( 'remote_release_changed' );
 		}
 		if ( ! $this->state instanceof BindingState ) {
@@ -612,17 +612,17 @@ final class NativePackageUpdater {
 			)
 		) === $this->updateUri; }
 	private function manualEligible( IdentityDescriptor $descriptor ): bool {
-		$facts = $descriptor->toArray()['assurance_facts'];
+		$facts = $descriptor->to_array()['assurance_facts'];
 		foreach ( array( 'exact_artifact_identity', 'exact_commit_identity', 'exact_reacquisition_supported', 'exact_release_identity', 'repository_identity_stable', 'trusted_digest_source' ) as $fact ) {
 			if ( true !== $facts[ $fact ] ) {
 				return false;
 			}
 		} return true; }
 	private function automaticEligible( IdentityDescriptor $descriptor ): bool {
-		$facts = $descriptor->toArray()['assurance_facts'];
+		$facts = $descriptor->to_array()['assurance_facts'];
 		return 'automatic' === $this->policy && $this->manualEligible( $descriptor ) && true === $facts['publication_immutable'] && true === $facts['provenance_verified']; }
 	private function newerThanInstalled( IdentityDescriptor $descriptor ): bool {
-		return ReleaseVersion::RELATIONSHIP_NEWER === ReleaseVersion::relationship( $descriptor->toArray()['version'], $this->headers['Version'] ); }
+		return ReleaseVersion::RELATIONSHIP_NEWER === ReleaseVersion::relationship( $descriptor->to_array()['version'], $this->headers['Version'] ); }
 	private function informationSlug(): string {
 		return 'ran-wp-release-updater-' . substr( hash( 'sha256', $this->targetType . "\0" . $this->installedIdentity ), 0, 24 ); }
 	private function matchesItemIdentity( object $item ): bool {
@@ -673,7 +673,7 @@ final class NativePackageUpdater {
 
 		$headers           = $parsed['headers'];
 		$expectedVersion ??= $this->descriptor instanceof IdentityDescriptor
-			? $this->descriptor->toArray()['version']
+			? $this->descriptor->to_array()['version']
 			: null;
 
 		return hash_equals( $this->headers['Name'], $headers['Name'] )
@@ -765,7 +765,7 @@ final class NativePackageUpdater {
 				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
 				return null;
 			}
-			$facts = $descriptor->toArray();
+			$facts = $descriptor->to_array();
 			if ( ! hash_equals( $candidate['release_identity'], $facts['release_identity'] ) || ! hash_equals( $candidate['tag'], $facts['tag'] ) || 0 !== ReleaseVersion::compare( $candidate['version'], $facts['version'] ) ) {
 				$this->status['candidate_validation_code'] = 'candidate_descriptor_mismatch';
 				return null; }
@@ -823,7 +823,7 @@ final class NativePackageUpdater {
 			return null;
 		}
 		$descriptor                                = $this->discoverySnapshot['descriptor'];
-		$facts                                     = $descriptor->toArray();
+		$facts                                     = $descriptor->to_array();
 		$this->status['candidate_tag']             = $facts['tag'];
 		$this->status['candidate_version']         = $facts['version'];
 		$this->status['candidate_header_version']  = $facts['version'];
@@ -840,7 +840,7 @@ final class NativePackageUpdater {
 	private function token( IdentityDescriptor $descriptor ): ?string {
 		$value = array(
 			'binding_hash' => $this->binding->binding_hash(),
-			'descriptor'   => $descriptor->toArray(),
+			'descriptor'   => $descriptor->to_array(),
 			'schema'       => 1,
 		);
 		try {

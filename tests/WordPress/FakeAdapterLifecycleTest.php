@@ -267,7 +267,7 @@ namespace Tests\WordPress {
 
 		private function updater( array $configuration, BindingRecord $binding, FakeOptionDatabase $database, IdentityDescriptor $descriptor, string $archive, array $policy ): ?NativePackageUpdater {
 			$adapter = new class( $descriptor, $archive ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter { public function __construct( private IdentityDescriptor $descriptor, private string $archive ) {} public function listReleases( array $conditional = array() ): array {
-					$facts = $this->descriptor->toArray();
+					$facts = $this->descriptor->to_array();
 					return array(
 						'candidates' => array(
 							array(
