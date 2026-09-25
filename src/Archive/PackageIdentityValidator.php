@@ -217,7 +217,7 @@ final class PackageIdentityValidator {
 			if ( null === $template || ! hash_equals( $policy['theme_template'], $template ) ) {
 				return ValidatedPackage::blocked( 'archive_metadata_identity_mismatch' );
 			}
-			if ( null === $uri || null === CanonicalUpdateUri::canonicalizeBoundaries(
+			if ( null === $uri || null === CanonicalUpdateUri::canonicalize_boundaries(
 				array(
 					'archive_preflight' => $uri,
 					'configuration'     => $policy['configuration_update_uri'],
@@ -325,7 +325,7 @@ final class PackageIdentityValidator {
 		if ( ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $policy['archive_root'] ) || ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(?:php|css)\z/D', $policy['header_file'] ) || ( 'plugin' === $policy['target_type'] && ! str_ends_with( $policy['header_file'], '.php' ) ) || ( 'theme' === $policy['target_type'] && 'style.css' !== $policy['header_file'] ) || '' === $policy['metadata_name'] || strlen( $policy['metadata_name'] ) > 500 || 1 === preg_match( '/[\x00-\x1f\x7f]/', $policy['metadata_name'] ) || null === ReleaseVersion::normalizeHeader( $policy['php_runtime_version'] ) || null === ReleaseVersion::normalizeHeader( $policy['wordpress_runtime_version'] ) ) {
 			return false;
 		}
-		return CanonicalUpdateUri::canonicalizeBoundaries(
+		return CanonicalUpdateUri::canonicalize_boundaries(
 			array(
 				'archive_preflight' => $facts['canonical_update_uri'],
 				'configuration'     => $policy['configuration_update_uri'],
