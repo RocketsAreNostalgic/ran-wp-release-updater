@@ -592,25 +592,25 @@ final class NativePackageUpdater {
 		if ( $configuration['target_type'] !== $facts['target_type'] || ! hash_equals( $configuration['installed_package_identity'], $facts['installed_package_identity'] ) || null === ReleaseVersion::normalizeHeader( $configuration['headers']['Version'] ) ) {
 			return false;
 		}
-		return $facts['canonical_update_uri'] === CanonicalUpdateUri::canonicalizeBoundaries(
+		return CanonicalUpdateUri::canonicalizeBoundaries(
 			array(
 				'archive_preflight' => $facts['canonical_update_uri'],
 				'configuration'     => $configuration['update_uri'],
 				'offer'             => $configuration['headers']['UpdateURI'],
 				'staged_package'    => $facts['canonical_update_uri'],
 			)
-		);
+		) === $facts['canonical_update_uri'];
 	}
 
 	private function matchesRuntimeUri( string $runtimeUri ): bool {
-		return $this->updateUri === CanonicalUpdateUri::canonicalizeBoundaries(
+		return CanonicalUpdateUri::canonicalizeBoundaries(
 			array(
 				'archive_preflight' => $this->binding->toArray()['canonical_update_uri'],
 				'configuration'     => $this->updateUri,
 				'offer'             => $runtimeUri,
 				'staged_package'    => $this->headers['UpdateURI'],
 			)
-		); }
+		) === $this->updateUri; }
 	private function manualEligible( IdentityDescriptor $descriptor ): bool {
 		$facts = $descriptor->toArray()['assurance_facts'];
 		foreach ( array( 'exact_artifact_identity', 'exact_commit_identity', 'exact_reacquisition_supported', 'exact_release_identity', 'repository_identity_stable', 'trusted_digest_source' ) as $fact ) {
@@ -637,7 +637,7 @@ final class NativePackageUpdater {
 		$identity = 'plugin' === $this->targetType ? ( $extra['plugin'] ?? null ) : ( $extra['theme'] ?? null );
 		return is_string( $identity ) && hash_equals( $this->installedIdentity, $identity ); }
 	/** @param array<string,mixed> $extra */ private function matchesCompletion( array $extra ): bool {
-		if ( 'update' !== ( $extra['action'] ?? null ) || $this->targetType !== ( $extra['type'] ?? null ) ) {
+		if ( 'update' !== ( $extra['action'] ?? null ) || ( $extra['type'] ?? null ) !== $this->targetType ) {
 			return false;
 		} $key   = 'plugin' === $this->targetType ? 'plugins' : 'themes';
 		$single  = 'plugin' === $this->targetType ? 'plugin' : 'theme';

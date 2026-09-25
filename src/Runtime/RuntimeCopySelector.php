@@ -129,7 +129,7 @@ final class RuntimeCopySelector {
 		}
 
 		$source = $root . DIRECTORY_SEPARATOR . 'src';
-		if ( is_link( $source ) || ! is_dir( $source ) || $source !== realpath( $source ) ) {
+		if ( is_link( $source ) || ! is_dir( $source ) || realpath( $source ) !== $source ) {
 			throw new RuntimeException( 'Invalid runtime source.' );
 		}
 		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $source, \FilesystemIterator::SKIP_DOTS ) );
