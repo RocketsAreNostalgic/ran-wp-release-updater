@@ -728,7 +728,7 @@ final class NativePackageUpdater {
 		$discoveryClaim = $this->claim;
 		$discoveryEpoch = $this->discoveryEpoch;
 		try {
-			$listed     = $this->adapter->listReleases();
+			$listed     = $this->adapter->list_releases();
 			$candidates = $listed['candidates'] ?? null;
 		} catch ( \Throwable ) {
 			$this->status['candidate_validation_code'] = 'release_list_failed';

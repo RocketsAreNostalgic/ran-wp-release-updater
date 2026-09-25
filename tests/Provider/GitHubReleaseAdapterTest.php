@@ -223,7 +223,7 @@ namespace Tests\Provider {
 				'target_type'                => 'plugin',
 				'update_uri'                 => 'https://github.com/owner/repository',
 			);
-			$updater       = GitHubReleaseAdapter::registerFromConfiguration(
+			$updater       = GitHubReleaseAdapter::register_from_configuration(
 				$configuration,
 				$binding,
 				new GitHubCredentialResolver(
@@ -250,11 +250,11 @@ namespace Tests\Provider {
 
 			$invalid           = $configuration;
 			$invalid['policy'] = 'unsupported';
-			self::assertNull( GitHubReleaseAdapter::registerFromConfiguration( $invalid, $binding, null, new class() {}, array() ) );
+			self::assertNull( GitHubReleaseAdapter::register_from_configuration( $invalid, $binding, null, new class() {}, array() ) );
 			$facts = $binding->to_array();
 			unset( $facts['binding_hash'] );
 			$facts['provider_code'] = 'gitlab';
-			self::assertNull( GitHubReleaseAdapter::registerFromConfiguration( $configuration, BindingRecord::create( $facts ), null, new class() {}, array() ) );
+			self::assertNull( GitHubReleaseAdapter::register_from_configuration( $configuration, BindingRecord::create( $facts ), null, new class() {}, array() ) );
 			self::assertSame( 0, $calls );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 			self::assertCount( 10, $GLOBALS['ran_wp_release_updater_test_hooks'] );
@@ -670,7 +670,7 @@ namespace Tests\Provider {
 				$this->response( 200, array( $this->release( 1, 'v1.0.0' ) ) ),
 			);
 
-			$adapter->listReleases();
+			$adapter->list_releases();
 
 			self::assertSame( 1, $calls );
 			self::assertSame(
@@ -684,7 +684,7 @@ namespace Tests\Provider {
 			);
 			$this->expectException( ReleaseFailure::class );
 			try {
-				$invalid->listReleases();
+				$invalid->list_releases();
 			} finally {
 				self::assertCount( 1, $GLOBALS['ran_github_requests'] );
 			}
@@ -705,7 +705,7 @@ namespace Tests\Provider {
 				$this->response( 200, array( $this->release( 1, 'v1.0.0' ) ) ),
 			);
 
-			$adapter->listReleases();
+			$adapter->list_releases();
 
 			self::assertSame( 1, $calls );
 			self::assertArrayNotHasKey( 'Authorization', $GLOBALS['ran_github_requests'][0][1]['headers'] );
@@ -815,7 +815,7 @@ namespace Tests\Provider {
 				),
 			);
 
-			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->listReleases();
+			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 
 			self::assertSame(
 				array( '1.1.0', '1.0.0' ),
@@ -853,7 +853,7 @@ namespace Tests\Provider {
 				),
 			);
 
-			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->listReleases();
+			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 
 			self::assertSame( array( '2.0.0', '1.1.0', '1.1.0' ), array_column( $result['candidates'], 'version' ) );
 			self::assertSame( array( '6', '10', '2' ), array_column( $result['candidates'], 'release_identity' ) );
@@ -871,7 +871,7 @@ namespace Tests\Provider {
 				),
 			);
 
-			$result = ( new GitHubReleaseAdapter( $this->binding( 'prerelease' ) ) )->listReleases();
+			$result = ( new GitHubReleaseAdapter( $this->binding( 'prerelease' ) ) )->list_releases();
 
 			self::assertSame(
 				array( '2.0.0', '2.0.0-beta.2', '2.0.0-beta.1' ),
@@ -885,7 +885,7 @@ namespace Tests\Provider {
 				$this->response( 200, array( $this->release( 1, 'v1.0.0' ), 'invalid-member' ) ),
 			);
 			try {
-				( new GitHubReleaseAdapter( $this->binding() ) )->listReleases();
+				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 				self::fail( 'A malformed release-list member must reject the complete response.' );
 			} catch ( ReleaseFailure $exception ) {
 				self::assertSame( 'operation_failed', $exception->releaseCode );
@@ -896,7 +896,7 @@ namespace Tests\Provider {
 			$oversized['body']               = str_repeat( 'x', 262145 );
 			$GLOBALS['ran_github_responses'] = array( $oversized );
 			try {
-				( new GitHubReleaseAdapter( $this->binding() ) )->listReleases();
+				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 				self::fail( 'An oversized response must stop the operation.' );
 			} catch ( ReleaseFailure $exception ) {
 				self::assertSame( 'operation_failed', $exception->releaseCode );
@@ -906,7 +906,7 @@ namespace Tests\Provider {
 		public function testResponseContainersDistinguishOperationAndCandidateFailures(): void {
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, (object) array() ) );
 			try {
-				( new GitHubReleaseAdapter( $this->binding() ) )->listReleases();
+				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 				self::fail( 'A JSON object is not a release listing.' );
 			} catch ( ReleaseFailure $failure ) {
 				self::assertSame( 'operation_failed', $failure->releaseCode );
@@ -978,7 +978,7 @@ namespace Tests\Provider {
 				),
 			);
 
-			$result = $adapter->listReleases(
+			$result = $adapter->list_releases(
 				array(
 					'etag'          => '"prior"',
 					'last_modified' => 'Thu, 21 Aug 2026 10:00:00 GMT',
@@ -1000,7 +1000,7 @@ namespace Tests\Provider {
 				),
 			);
 			try {
-				$adapter->listReleases();
+				$adapter->list_releases();
 				self::fail( 'An over-bound rate-limit delay must stop the operation.' );
 			} catch ( ReleaseFailure $failure ) {
 				self::assertSame( 'operation_failed', $failure->releaseCode );
@@ -1011,7 +1011,7 @@ namespace Tests\Provider {
 		public function testAuthenticatedAuthorizationFailuresAreNotRateLimits( int $status ): void {
 			$GLOBALS['ran_github_responses'] = array( $this->response( $status, null ) );
 			$this->expectException( ReleaseFailure::class );
-			( new GitHubReleaseAdapter( $this->binding() ) )->listReleases();
+			( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 		}
 
 		/** @return iterable<string,array{0:int}> */
@@ -1025,7 +1025,7 @@ namespace Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array( new \WP_Error( 'transport', 'not connected' ) );
 			$this->expectException( ReleaseFailure::class );
 			try {
-				( new GitHubReleaseAdapter( $this->binding() ) )->listReleases();
+				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 			} catch ( ReleaseFailure $exception ) {
 				self::assertSame( 'operation_failed', $exception->releaseCode );
 				throw $exception;
@@ -1040,7 +1040,7 @@ namespace Tests\Provider {
 
 			$this->expectException( ReleaseFailure::class );
 			try {
-				$adapter->listReleases();
+				$adapter->list_releases();
 			} finally {
 				self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 			}
@@ -1054,7 +1054,7 @@ namespace Tests\Provider {
 
 			$this->expectException( ReleaseFailure::class );
 			try {
-				$adapter->listReleases();
+				$adapter->list_releases();
 			} finally {
 				self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 			}
@@ -1071,7 +1071,7 @@ namespace Tests\Provider {
 
 			$this->expectException( ReleaseFailure::class );
 			try {
-				$adapter->listReleases();
+				$adapter->list_releases();
 			} finally {
 				self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 			}
@@ -1081,7 +1081,7 @@ namespace Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array( $this->response( 500, null ) );
 			$this->expectException( ReleaseFailure::class );
 			try {
-				( new GitHubReleaseAdapter( $this->binding() ) )->listReleases();
+				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 			} catch ( ReleaseFailure $exception ) {
 				self::assertSame( 'operation_failed', $exception->releaseCode );
 				throw $exception; }
@@ -1096,7 +1096,7 @@ namespace Tests\Provider {
 				true
 			);
 
-			$facts = $adapter->inspect( '7', 'v1.2.3' )->to_array();
+			$facts = $adapter->inspect( release_identity: '7', expected_tag: 'v1.2.3' )->to_array();
 
 			self::assertSame( '99', $facts['repository_identity'] );
 			self::assertSame( '7', $facts['release_identity'] );

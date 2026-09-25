@@ -39,7 +39,7 @@ final class MixedBulkFixtureAdapter implements ReleaseAdapter {
 	public array $acquiredPaths = array();
 	public function __construct( private IdentityDescriptor $descriptor, private string $archive ) {
 	}
-	public function listReleases( array $conditional = array() ): array {
+	public function list_releases( array $conditional = array() ): array {
 		unset( $conditional );
 		++$this->listCalls;
 		$facts = $this->descriptor->to_array();
@@ -53,10 +53,10 @@ final class MixedBulkFixtureAdapter implements ReleaseAdapter {
 			),
 		);
 	}
-	public function inspect( string $releaseIdentity, ?string $expectedTag = null ): IdentityDescriptor {
+	public function inspect( string $release_identity, ?string $expected_tag = null ): IdentityDescriptor {
 		++$this->inspectCalls;
 		$facts = $this->descriptor->to_array();
-		if ( $facts['release_identity'] !== $releaseIdentity || $facts['tag'] !== $expectedTag ) {
+		if ( $facts['release_identity'] !== $release_identity || $facts['tag'] !== $expected_tag ) {
 			throw new RuntimeException( 'The fixture release identity changed.' );
 		}
 		return $this->descriptor;

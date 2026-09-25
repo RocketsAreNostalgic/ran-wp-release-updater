@@ -27,7 +27,7 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 		$this->inspectDescriptor = $descriptor;
 	}
 	/** @return array<string,mixed> */
-	public function listReleases( array $conditional = array() ): array {
+	public function list_releases( array $conditional = array() ): array {
 		++$this->listCalls;
 		if ( is_array( $this->listResponse ) ) {
 			return $this->listResponse;
@@ -43,10 +43,10 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 			),
 		);
 	}
-	public function inspect( string $releaseIdentity, ?string $expectedTag = null ): IdentityDescriptor {
+	public function inspect( string $release_identity, ?string $expected_tag = null ): IdentityDescriptor {
 		++$this->inspectCalls;
-		if ( array_key_exists( $releaseIdentity, $this->inspectOutcomes ) ) {
-			$outcome = $this->inspectOutcomes[ $releaseIdentity ];
+		if ( array_key_exists( $release_identity, $this->inspectOutcomes ) ) {
+			$outcome = $this->inspectOutcomes[ $release_identity ];
 			if ( $outcome instanceof \Throwable ) {
 				throw $outcome;
 			}

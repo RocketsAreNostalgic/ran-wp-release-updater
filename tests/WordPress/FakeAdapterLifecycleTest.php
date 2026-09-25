@@ -266,7 +266,7 @@ namespace Tests\WordPress {
 		}
 
 		private function updater( array $configuration, BindingRecord $binding, FakeOptionDatabase $database, IdentityDescriptor $descriptor, string $archive, array $policy ): ?NativePackageUpdater {
-			$adapter = new class( $descriptor, $archive ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter { public function __construct( private IdentityDescriptor $descriptor, private string $archive ) {} public function listReleases( array $conditional = array() ): array {
+			$adapter = new class( $descriptor, $archive ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter { public function __construct( private IdentityDescriptor $descriptor, private string $archive ) {} public function list_releases( array $conditional = array() ): array {
 					$facts = $this->descriptor->to_array();
 					return array(
 						'candidates' => array(
@@ -277,7 +277,7 @@ namespace Tests\WordPress {
 							),
 						),
 					);
-			} public function inspect( string $releaseIdentity, ?string $expectedTag = null ): IdentityDescriptor {
+			} public function inspect( string $release_identity, ?string $expected_tag = null ): IdentityDescriptor {
 				return $this->descriptor;
 			} public function acquire( IdentityDescriptor $descriptor ): \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact {
 				$path = tempnam( sys_get_temp_dir(), 'ran-fake-adapter-' );

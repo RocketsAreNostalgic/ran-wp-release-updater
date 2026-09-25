@@ -1033,11 +1033,11 @@ namespace Tests\WordPress {
 			$reentrantAdapter = new class( $adapter, $updater ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter {
 				public function __construct( private ControllableReleaseAdapter $inner, private NativePackageUpdater $updater ) {}
 				/** @return array<string,mixed> */
-				public function listReleases( array $conditional = array() ): array {
-					return $this->inner->listReleases( $conditional );
+				public function list_releases( array $conditional = array() ): array {
+					return $this->inner->list_releases( $conditional );
 				}
-				public function inspect( string $releaseIdentity, ?string $expectedTag = null ): IdentityDescriptor {
-					$descriptor = $this->inner->inspect( $releaseIdentity, $expectedTag );
+				public function inspect( string $release_identity, ?string $expected_tag = null ): IdentityDescriptor {
+					$descriptor = $this->inner->inspect( release_identity: $release_identity, expected_tag: $expected_tag );
 					$this->updater->refresh();
 					return $descriptor;
 				}

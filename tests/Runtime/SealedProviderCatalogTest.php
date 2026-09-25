@@ -318,14 +318,14 @@ PHP;
 		);
 		$adapter = new class( $d['credential_resolver'] ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter {
 			public function __construct( private mixed $resolver ) {}
-			public function listReleases( array $conditional = array() ): array {
+			public function list_releases( array $conditional = array() ): array {
 				unset( $conditional );
 				if ( is_callable( $this->resolver ) ) {
 					( $this->resolver )();
 				}
 				return array( 'candidates' => array() );
 			}
-			public function inspect( string $releaseIdentity, ?string $expectedTag = null ): \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor {
+			public function inspect( string $release_identity, ?string $expected_tag = null ): \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor {
 				throw new \RuntimeException( 'Synthetic inspection must not run.' );
 			}
 			public function acquire( \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor $descriptor ): \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact {
