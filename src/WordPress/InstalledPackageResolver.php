@@ -179,7 +179,7 @@ final class InstalledPackageResolver {
 		if ( 0 === count( $matches ) ) {
 			return null;
 		}
-		$explicitMatches = array_filter( $matches, static fn ( array $match ): bool => $match['explicit'] );
+		$explicitMatches = array_filter( $matches, static fn ( array $candidate ): bool => $candidate['explicit'] );
 		if ( 0 !== count( $explicitMatches ) ) {
 			$matches = $explicitMatches;
 		}

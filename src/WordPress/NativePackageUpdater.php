@@ -915,12 +915,12 @@ final class NativePackageUpdater {
 			$this->leaseHeld = false;
 		}
 	}
-	private function diagnose( string $code, mixed $return ): mixed {
+	private function diagnose( string $code, mixed $return_value ): mixed {
 		if ( count( $this->diagnostics ) === self::MAX_DIAGNOSTICS ) {
 			array_shift( $this->diagnostics );
 		} $this->diagnostics[]        = $code;
 		$this->status['failure_code'] = 'update_completed' === $code ? null : $code;
-		return $return; }
+		return $return_value; }
 	/** @return array{candidate_header_version:null,candidate_tag:null,candidate_validation_code:null,candidate_version:null,failure_code:null,installed_version:null,last_check:null,offered_release_identity:null,offered_version:null,relationship:null} */ private static function emptyStatus(): array {
 		return array(
 			'candidate_header_version'  => null,
