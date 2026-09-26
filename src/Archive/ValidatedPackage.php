@@ -27,7 +27,7 @@ final readonly class ValidatedPackage {
 		return new self( $code, array() );
 	}
 
-	public function isValid(): bool {
+	public function is_valid(): bool {
 		return 'archive_identity_verified' === $this->code;
 	}
 
@@ -36,7 +36,7 @@ final readonly class ValidatedPackage {
 	}
 
 	/** @return array<string, scalar> */
-	public function toArray(): array {
+	public function to_array(): array {
 		return $this->snapshot;
 	}
 }

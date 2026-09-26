@@ -790,7 +790,7 @@ final class NativePackageUpdater {
 				return null;
 			}
 			$this->status['candidate_validation_code'] = $valid->code();
-			if ( ! $valid->isValid() ) {
+			if ( ! $valid->is_valid() ) {
 				if ( ! $artifact->discard() ) {
 					$this->status['candidate_validation_code'] = 'candidate_validation_failed';
 					return null;
@@ -886,7 +886,7 @@ final class NativePackageUpdater {
 			$proof = $this->validator->validate( $descriptor, $this->archivePolicy, $path );
 		} catch ( \Throwable ) {
 			return null;
-		} return $proof->isValid() ? $this->archiveStore->copy( $path, $descriptor ) : null; }
+		} return $proof->is_valid() ? $this->archiveStore->copy( $path, $descriptor ) : null; }
 	/** @return array<string,mixed> */ private function claim( BindingState $state ): array {
 		return array(
 			'binding_generation' => $state->bindingGeneration(),

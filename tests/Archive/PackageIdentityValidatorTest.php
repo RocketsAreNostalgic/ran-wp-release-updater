@@ -28,9 +28,9 @@ final class PackageIdentityValidatorTest extends TestCase {
 		$validator = new PackageIdentityValidator();
 
 		$result = $validator->validate( $this->descriptor( $plugin, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $plugin );
-		self::assertTrue( $result->isValid() );
-		self::assertSame( 'example-plugin/example-plugin.php', $result->toArray()['archive_root'] . '/' . $result->toArray()['header_file'] );
-		self::assertTrue( $validator->validate( $this->descriptor( $theme, 'theme', 'example-theme' ), $this->policy( 'theme', 'example-theme', 'style.css', 'Example Theme' ), $theme )->isValid() );
+		self::assertTrue( $result->is_valid() );
+		self::assertSame( 'example-plugin/example-plugin.php', $result->to_array()['archive_root'] . '/' . $result->to_array()['header_file'] );
+		self::assertTrue( $validator->validate( $this->descriptor( $theme, 'theme', 'example-theme' ), $this->policy( 'theme', 'example-theme', 'style.css', 'Example Theme' ), $theme )->is_valid() );
 	}
 
 	public function testThemeTemplateMustExactlyPreserveChildOrStandaloneIdentity(): void {
@@ -38,14 +38,14 @@ final class PackageIdentityValidatorTest extends TestCase {
 		$validator  = new PackageIdentityValidator();
 		$descriptor = $this->descriptor( $child, 'theme', 'child' );
 		$policy     = $this->policy( 'theme', 'child', 'style.css', 'Child Theme', 'parent' );
-		self::assertTrue( $validator->validate( $descriptor, $policy, $child )->isValid() );
+		self::assertTrue( $validator->validate( $descriptor, $policy, $child )->is_valid() );
 		foreach ( array( '', 'other-parent' ) as $template ) {
 			$candidate = $this->archive( array( 'child/style.css' => $this->header( 'Theme Name', 'Child Theme', '' === $template ? '' : "Template: {$template}\n" ) ) );
 			self::assertSame( 'archive_metadata_identity_mismatch', $validator->validate( $this->descriptor( $candidate, 'theme', 'child' ), $policy, $candidate )->code() );
 		}
 		$standalone       = $this->archive( array( 'standalone/style.css' => $this->header( 'Theme Name', 'Standalone' ) ) );
 		$standalonePolicy = $this->policy( 'theme', 'standalone', 'style.css', 'Standalone' );
-		self::assertTrue( $validator->validate( $this->descriptor( $standalone, 'theme', 'standalone' ), $standalonePolicy, $standalone )->isValid() );
+		self::assertTrue( $validator->validate( $this->descriptor( $standalone, 'theme', 'standalone' ), $standalonePolicy, $standalone )->is_valid() );
 		self::assertSame( 'archive_metadata_identity_mismatch', $validator->validate( $this->descriptor( $standalone, 'theme', 'standalone' ), array_replace( $standalonePolicy, array( 'theme_template' => 'parent' ) ), $standalone )->code() );
 	}
 
@@ -104,7 +104,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 						),
 						$policy,
 						$archive
-					)->isValid()
+					)->is_valid()
 				);
 			}
 		}
@@ -386,11 +386,11 @@ final class PackageIdentityValidatorTest extends TestCase {
 		$policy        = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
 		$firstPackage  = $validator->validate( $this->descriptor( $first, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $first );
 		$secondPackage = $validator->validate( $this->descriptor( $second, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $second );
-		self::assertTrue( $firstPackage->isValid() );
-		self::assertTrue( $secondPackage->isValid() );
-		self::assertSame( $firstPackage->toArray()['manifest_hash'], $secondPackage->toArray()['manifest_hash'] );
-		self::assertSame( 2, $firstPackage->toArray()['manifest_entry_count'] );
-		self::assertSame( strlen( $header ) + strlen( '<?php return true;' ), $firstPackage->toArray()['manifest_expanded_bytes'] );
+		self::assertTrue( $firstPackage->is_valid() );
+		self::assertTrue( $secondPackage->is_valid() );
+		self::assertSame( $firstPackage->to_array()['manifest_hash'], $secondPackage->to_array()['manifest_hash'] );
+		self::assertSame( 2, $firstPackage->to_array()['manifest_entry_count'] );
+		self::assertSame( strlen( $header ) + strlen( '<?php return true;' ), $firstPackage->to_array()['manifest_expanded_bytes'] );
 	}
 
 	public function testRejectsDuplicateSemanticHeaders(): void {
@@ -479,7 +479,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 			),
 			$validator->inspectProspective( $this->prospectivePolicy( $dos, 'plugin' ), $dos )
 		);
-		self::assertTrue( $validator->validate( $this->descriptor( $dos, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $dos )->isValid() );
+		self::assertTrue( $validator->validate( $this->descriptor( $dos, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $dos )->is_valid() );
 
 		$mismatch = $this->archive(
 			array( 'example-plugin/example-plugin.php' => $header ),
@@ -507,7 +507,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 			$archive    = $this->archive( array( $root . '/' . $file => $header ) );
 			$descriptor = $this->descriptor( $archive, $type, 'theme' === $type ? $root : $root . '/' . $file );
 			$policy     = $this->policy( $type, $root, $file, $name );
-			self::assertTrue( ( new PackageIdentityValidator() )->validate( $descriptor, $policy, $archive )->isValid() );
+			self::assertTrue( ( new PackageIdentityValidator() )->validate( $descriptor, $policy, $archive )->is_valid() );
 
 			$duplicate  = $this->archive( array( $root . '/' . $file => $header . "\nVersion: 1.0.0" ) );
 			$descriptor = $this->descriptor( $duplicate, $type, 'theme' === $type ? $root : $root . '/' . $file );

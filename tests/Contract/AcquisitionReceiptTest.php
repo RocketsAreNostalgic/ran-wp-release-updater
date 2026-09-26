@@ -40,7 +40,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$secondPackage = $validator->validate( $descriptor, $this->policy(), $this->archives[0] );
 		$first         = AcquisitionReceipt::issue( $state, $descriptor, $validator, $firstPackage, 10 );
 		$second        = AcquisitionReceipt::issue( $state, $descriptor, $validator, $secondPackage, 10 );
-		$manifest      = $firstPackage->toArray();
+		$manifest      = $firstPackage->to_array();
 		self::assertSame(
 			$first,
 			AcquisitionReceipt::assert_archive_manifest(
@@ -69,7 +69,7 @@ final class AcquisitionReceiptTest extends TestCase {
 
 	public function testPublicReadyBlockedAndClonePackagesCannotMintAndFlagsAreNotInputs(): void {
 		list( $validator, $descriptor, $state, $package ) = $this->ready();
-		foreach ( array( ValidatedPackage::ready( $package->toArray() ), ValidatedPackage::blocked( 'blocked' ), clone $package ) as $forged ) {
+		foreach ( array( ValidatedPackage::ready( $package->to_array() ), ValidatedPackage::blocked( 'blocked' ), clone $package ) as $forged ) {
 			try {
 				AcquisitionReceipt::issue( $state, $descriptor, $validator, $forged, 10 );
 				self::fail( 'Forged package minted a receipt.' );
@@ -148,7 +148,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$descriptor = $this->descriptor( $path );
 		$validator  = new PackageIdentityValidator();
 		$package    = $validator->validate( $descriptor, $this->policy(), $path );
-		self::assertTrue( $package->isValid() );
+		self::assertTrue( $package->is_valid() );
 		return array( $validator, $descriptor, BindingState::create( BindingRecord::create( $this->bindingFacts() ), str_repeat( 'a', 64 ), 20 ), $package ); }
 	private function archive(): string {
 		$path = tempnam( sys_get_temp_dir(), 'ran-receipt-' );
