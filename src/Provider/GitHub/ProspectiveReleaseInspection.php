@@ -73,15 +73,15 @@ final readonly class ProspectiveReleaseInspection {
 	}
 
 	public static function create( mixed $facts ): self {
-		if ( ! self::validFacts( $facts ) ) {
+		if ( ! self::valid_facts( $facts ) ) {
 			throw new InvalidArgumentException( 'The prospective GitHub release facts are invalid.' );
 		}
-		$canonical = self::orderedFacts( $facts );
-		return new self( $canonical, self::fingerprintFacts( $canonical ) );
+		$canonical = self::ordered_facts( $facts );
+		return new self( $canonical, self::fingerprint_facts( $canonical ) );
 	}
 
 	public static function rehydrate( mixed $value ): self {
-		if ( ! self::exactKeys( $value, self::KEYS ) || ! is_string( $value['fingerprint'] ) ) {
+		if ( ! self::exact_keys( $value, self::KEYS ) || ! is_string( $value['fingerprint'] ) ) {
 			throw new InvalidArgumentException( 'The prospective GitHub release inspection is invalid.' );
 		}
 		$facts = array();
@@ -96,17 +96,17 @@ final readonly class ProspectiveReleaseInspection {
 	}
 
 	/** @return array<string, mixed> */
-	public function toArray(): array {
+	public function to_array(): array {
 		$facts                = $this->facts;
 		$facts['fingerprint'] = $this->fingerprint;
 		return self::ordered( $facts, self::KEYS );
 	}
 
-	public function fingerprintValue(): string {
+	public function fingerprint_value(): string {
 		return $this->fingerprint;
 	}
 
-	public function releaseIdentity(): string {
+	public function release_identity(): string {
 		return $this->facts['release_identity'];
 	}
 
@@ -115,8 +115,8 @@ final readonly class ProspectiveReleaseInspection {
 	}
 
 	/** @param array<string, mixed> $value */
-	private static function validFacts( mixed $value ): bool {
-		if ( ! self::exactKeys( $value, self::FACT_KEYS ) ) {
+	private static function valid_facts( mixed $value ): bool {
+		if ( ! self::exact_keys( $value, self::FACT_KEYS ) ) {
 			return false;
 		}
 		$type = $value['target_type'];
@@ -150,19 +150,19 @@ final readonly class ProspectiveReleaseInspection {
 			&& is_string( $root )
 			&& 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $root )
 			&& is_string( $main )
-			&& self::validMainFile( $type, $main )
-			&& self::validAssuranceFacts( $value['assurance_facts'] );
+			&& self::valid_main_file( $type, $main )
+			&& self::valid_assurance_facts( $value['assurance_facts'] );
 	}
 
-	private static function validMainFile( string $type, string $main ): bool {
+	private static function valid_main_file( string $type, string $main ): bool {
 		if ( 'theme' === $type ) {
 			return 'style.css' === $main;
 		}
 		return 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D', $main );
 	}
 
-	private static function validAssuranceFacts( mixed $value ): bool {
-		if ( ! self::exactKeys( $value, self::ASSURANCE_FACT_KEYS ) ) {
+	private static function valid_assurance_facts( mixed $value ): bool {
+		if ( ! self::exact_keys( $value, self::ASSURANCE_FACT_KEYS ) ) {
 			return false;
 		}
 		foreach ( self::ASSURANCE_FACT_KEYS as $key ) {
@@ -177,14 +177,14 @@ final readonly class ProspectiveReleaseInspection {
 	 * @param array<string, mixed> $facts
 	 * @return array<string, mixed>
 	 */
-	private static function orderedFacts( array $facts ): array {
+	private static function ordered_facts( array $facts ): array {
 		$ordered                    = self::ordered( $facts, self::FACT_KEYS );
 		$ordered['assurance_facts'] = self::ordered( $facts['assurance_facts'], self::ASSURANCE_FACT_KEYS );
 		return $ordered;
 	}
 
 	/** @param array<string, mixed> $facts */
-	private static function fingerprintFacts( array $facts ): string {
+	private static function fingerprint_facts( array $facts ): string {
 		return 'v2:' . hash( 'sha256', json_encode( $facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
 	}
 
@@ -202,7 +202,7 @@ final readonly class ProspectiveReleaseInspection {
 	}
 
 	/** @param list<string> $keys */
-	private static function exactKeys( mixed $value, array $keys ): bool {
+	private static function exact_keys( mixed $value, array $keys ): bool {
 		if ( ! is_array( $value ) || count( $value ) !== count( $keys ) ) {
 			return false;
 		}
