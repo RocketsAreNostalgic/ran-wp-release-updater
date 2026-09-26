@@ -57,7 +57,7 @@ Require the updater from the plugin's main file, before `plugins_loaded`, then c
 
 $registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';
 
-$releaseUpdater = $registrar->plugin(
+$release_updater = $registrar->plugin(
     provider: 'github',
     plugin_file: __FILE__,
     repository: 'acme/example-plugin',
@@ -66,7 +66,7 @@ $releaseUpdater = $registrar->plugin(
     update_policy: 'manual'
 );
 
-$releaseUpdater->register();
+$release_updater->register();
 ```
 
 The repository ID is GitHub's numeric repository `id`, represented as a string—not `owner/repository`:
@@ -124,9 +124,9 @@ The updater freshly rechecks the selected release before installation and verifi
 Keep the target handle if your product needs request-local inspection:
 
 ```php
-$releaseUpdater->status();
-$releaseUpdater->diagnostics();
-$releaseUpdater->refresh();
+$release_updater->status();
+$release_updater->diagnostics();
+$release_updater->refresh();
 ```
 
 `status()` returns a target envelope with `state`, `declaration_accepted`, `hooks_registered`, `code`, and `native`. When the target is active, installed/candidate/offered release fields live under `status()['native']`, not at the top level. `diagnostics()` returns an envelope with `state` and a nested `diagnostics` list of machine-readable entries. Native admission failures use `WP_Error` codes prefixed with `ran_wp_release_updater_` and a deliberately generic fallback English message. Map those codes to your own localized product messages rather than parsing the fallback string.
@@ -140,7 +140,7 @@ See [Integrating the release updater](docs/integration.md#status-diagnostics-and
 Pass an optional request-local callback when a private repository or authenticated GitHub quota is needed:
 
 ```php
-$releaseUpdater = $registrar->plugin(
+$release_updater = $registrar->plugin(
     provider: 'github',
     plugin_file: __FILE__,
     repository: 'acme/example-plugin',
@@ -148,7 +148,7 @@ $releaseUpdater = $registrar->plugin(
     credentials: static fn (): ?string => getenv('EXAMPLE_PLUGIN_GITHUB_TOKEN') ?: null
 );
 
-$releaseUpdater->register();
+$release_updater->register();
 ```
 
 Registration does not invoke the callback. Tokens should remain outside plugin source/release ZIPs. The updater does not persist them in target state, diagnostics or URLs. A `null` callback result selects anonymous access; credential/access failures do not silently retry anonymously.

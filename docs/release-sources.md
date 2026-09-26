@@ -103,7 +103,15 @@ A successful `acquire()` returns a controlled artifact. The artifact exposes onl
 
 Copy bytes inside `inspect()` if the application needs a durable copy, verify the copied size/digest against the returned inspection facts, and then call `discard()` on the updater-owned artifact.
 
+Before running this custody step, supply the ready `$source`, the selected
+`$release_id`/`$tag` and retained `$fingerprint` from a successful inspection.
+Set `$application_storage_directory` from your application's configuration to
+an existing, writable, private directory owned by the application. The example
+constructs its destination there; it does not create or select a storage directory.
+
 ```php
+$application_owned_path = $application_storage_directory . '/prepared-release.zip';
+
 $acquisition = $source->acquire(
     release_id: $release_id,
     expected_tag: $tag,
@@ -116,21 +124,21 @@ if (!$acquisition['ok']) {
 
 $artifact = $acquisition['value']['artifact'];
 $facts = $acquisition['value']['inspection'];
-$createdApplicationCopy = false;
+$created_application_copy = false;
 
 try {
-    $artifact->inspect(static function (string $path) use ($applicationOwnedPath, $facts, &$createdApplicationCopy): void {
+    $artifact->inspect(static function (string $path) use ($application_owned_path, $facts, &$created_application_copy): void {
         $input = fopen($path, 'rb');
         if (false === $input) {
             throw new \RuntimeException('Unable to open verified artifact.');
         }
 
-        $output = fopen($applicationOwnedPath, 'xb');
+        $output = fopen($application_owned_path, 'xb');
         if (false === $output) {
             fclose($input);
             throw new \RuntimeException('Unable to create application copy.');
         }
-        $createdApplicationCopy = true;
+        $created_application_copy = true;
 
         try {
             stream_copy_to_stream($input, $output, $facts['artifact_size']);
@@ -139,7 +147,7 @@ try {
             fclose($output);
         }
 
-        if (hash_file('sha256', $applicationOwnedPath) !== $facts['artifact_sha256']) {
+        if (hash_file('sha256', $application_owned_path) !== $facts['artifact_sha256']) {
             throw new \RuntimeException('Application copy did not preserve the verified digest.');
         }
     });
@@ -153,8 +161,8 @@ try {
     } catch (\Throwable) {
         // Preserve the primary failure.
     }
-    if ($createdApplicationCopy) {
-        @unlink($applicationOwnedPath);
+    if ($created_application_copy) {
+        @unlink($application_owned_path);
     }
     throw $failure;
 }

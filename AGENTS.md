@@ -9,55 +9,22 @@ for eventual public disclosure.
 This repository uses the RAN `php-library` quality profile. PHP coding and
 compatibility ancestry comes from `ran/coding-standards` through
 `RANWordPressLibrary`; the tracked Composer lock binds the published v1.0.0 release
-under the `^1.0` development constraint. The additional `RANOwnedMethods`
-check is enabled only for `CanonicalUpdateUri.php`, `ReleaseVersion.php`,
-`AcquisitionReceipt.php`, `BindingRecord.php`, `IdentityDescriptor.php` and
-`ReleaseAdapter.php` under `src/Contract/`, plus
-`src/Provider/GitHub/GitHubReleaseAdapter.php`.
-Variable naming enforcement is enabled only for `ReleaseVersion.php`,
-`AcquisitionReceipt.php`, `BindingRecord.php`, `IdentityDescriptor.php` and
-`ReleaseAdapter.php` under `src/Contract/`, plus
-`src/Provider/GitHub/GitHubReleaseAdapter.php`. Expand these completed scopes
-only with reviewed declaration/caller and enforcement proof.
+under the `^1.0` development constraint.
+`RANOwnedMethods` and variable naming cover all maintained PHP under `src/`,
+root `bootstrap.php`/`runtime.php`, and `scripts/`, including future files.
+The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded and is
+namespace-only parity checked against the locked upstream package. All 36
+shipped PHP files, including that generated copy, remain directly analysed at
+PHPStan level 8.
 
-Completed result/proof cohorts also enforce owned methods and variable naming in
-`ArchiveScanResult.php` and `ValidatedPackage.php` under `src/Archive/`, plus
-`ProspectiveReleaseInspection.php` and `ProspectiveReleaseArtifact.php` under
-`src/Provider/GitHub/`.
-
-Completed result/proof cohorts also enforce owned methods and variable naming in
-`src/Archive/ArchiveScanner.php`,
-`src/Archive/PackageIdentityValidator.php`,
-`src/Archive/TemporaryArtifact.php`.
-
-Completed result/proof cohorts also enforce owned methods and variable naming in
-`src/Provider/GitHub/GitHubApiClient.php`,
-`src/Provider/GitHub/GitHubArtifactCustodyFailure.php`,
-`src/Provider/GitHub/GitHubArtifactStore.php`,
-`src/Provider/GitHub/GitHubCredentialResolver.php`,
-`src/Provider/GitHub/GitHubReleaseReadUnavailable.php`,
-`src/Provider/GitHub/GitHubReleaseService.php`.
-
-Completed result/proof cohorts also enforce owned methods and variable naming in
-`src/Runtime/ReleaseFailure.php`.
-
-Completed result/proof cohorts also enforce owned methods and variable naming in
-`src/WordPress/BindingFenceCoordinator.php`,
-`src/WordPress/BindingState.php`,
-`src/WordPress/InstalledPackageResolver.php`,
-`src/WordPress/NativePackageUpdater.php`,
-`src/WordPress/OwnedArchiveStore.php`,
-`src/WordPress/PendingInstallState.php`,
-`src/WordPress/StagedPackageManifest.php`,
-`src/Runtime/SelectedRuntimeState.php`.
-
-Completed result/proof cohorts also enforce owned methods and variable naming in
-`bootstrap.php`,
-`runtime.php`,
-`src/Runtime/RequestBroker.php`,
-`src/Runtime/RequestProtocolValidator.php`,
-`src/Runtime/RuntimeCopySelector.php`,
-`src/Runtime/ReleaseSource.php`.
+Purpose-built test harnesses/fixture interfaces retain their naming boundary;
+actual production calls, named arguments, Reflection seams and callback strings
+must follow the production API. This does not exempt a production class because
+it inherits or implements an interface. New owned methods must be snake_case;
+PHP magic signatures remain recognized. An externally required non-snake name
+needs a declaration-local justification, never a whole-class exemption.
+See `QUALITY_ACCEPTANCE.md` for exceptions, evidence and pending release/adoption
+gates. Do not infer release or dependency-adoption authority from naming acceptance.
 
 Keep release-updater identity and product constraints local: the
 `RAN\WPReleaseUpdater\V1` namespace, WordPress 6.5 floor, PHP `^8.2` range,
