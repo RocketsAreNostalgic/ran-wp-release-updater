@@ -39,6 +39,7 @@
 	</rule>
 	<!-- Variable enforcement follows the completed cohorts below only. -->
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
+		<include-pattern>/src/Provider/GitHub/GitHubReleaseAdapter.php</include-pattern>
 		<include-pattern>/src/Contract/ReleaseVersion.php</include-pattern>
 		<include-pattern>/src/Contract/AcquisitionReceipt.php</include-pattern>
 		<include-pattern>/src/Contract/BindingRecord.php</include-pattern>

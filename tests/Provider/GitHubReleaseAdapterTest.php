@@ -175,7 +175,7 @@ namespace Tests\Provider {
 				}
 			);
 
-			$adapter = new GitHubReleaseAdapter( $this->binding(), $resolver );
+			$adapter = new GitHubReleaseAdapter( binding_record: $this->binding(), credentials: $resolver );
 
 			self::assertInstanceOf( GitHubReleaseAdapter::class, $adapter );
 			self::assertInstanceOf( ReleaseAdapter::class, $adapter );
@@ -232,10 +232,12 @@ namespace Tests\Provider {
 						return 'private-token'; }
 				),
 				new class() {},
-				array(
+				archive_policy: array(
 					'archive_root'   => 'repository',
 					'theme_template' => '',
-				)
+				),
+				selected_runtime_state: null,
+				native_discovery_reuse: false
 			);
 
 			self::assertNotNull( $updater );

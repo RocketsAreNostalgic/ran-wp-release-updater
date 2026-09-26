@@ -30,18 +30,18 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		array $resolved,
 		array $headers,
 		string $identity,
-		int $networkId,
-		mixed $selectedRuntimeState
+		int $network_id,
+		mixed $selected_runtime_state
 	): array {
-		$locator      = $declaration['repository_locator'];
-		$repositoryId = $declaration['repository_identity'];
+		$locator       = $declaration['repository_locator'];
+		$repository_id = $declaration['repository_identity'];
 		if ( 1 !== preg_match( '/\\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\\/(?!\\.{1,2}\\z)[A-Za-z0-9_.-]{1,100}\\z/D', $locator ) ) {
 			return array(
 				'native' => null,
 				'code'   => 'repository_locator_invalid',
 			);
 		}
-		if ( 1 !== preg_match( '/\\A[1-9][0-9]{0,18}\\z/D', $repositoryId ) ) {
+		if ( 1 !== preg_match( '/\\A[1-9][0-9]{0,18}\\z/D', $repository_id ) ) {
 			return array(
 				'native' => null,
 				'code'   => 'repository_identity_invalid',
@@ -56,14 +56,14 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 			);
 		}
 		try {
-			$installedUri = \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $headers['UpdateURI'] );
+			$installed_uri = \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $headers['UpdateURI'] );
 		} catch ( \Throwable ) {
 			return array(
 				'native' => null,
 				'code'   => 'installed_update_uri_mismatch',
 			);
 		}
-		if ( $uri !== $installedUri ) {
+		if ( $uri !== $installed_uri ) {
 			return array(
 				'native' => null,
 				'code'   => 'installed_update_uri_mismatch',
@@ -75,42 +75,42 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				'code'   => 'target_composition_failed',
 			);
 		}
-		$wordpressVersion = SelectedRuntimeState::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null );
-		if ( ! is_string( $wordpressVersion ) ) {
+		$wordpress_version = SelectedRuntimeState::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null );
+		if ( ! is_string( $wordpress_version ) ) {
 			return array(
 				'native' => null,
 				'code'   => 'target_composition_failed',
 			);
 		}
-		$binding                    = BindingRecord::create(
+		$binding                     = BindingRecord::create(
 			array(
 				'canonical_repository_locator' => $locator,
 				'canonical_update_uri'         => $uri,
 				'installed_package_identity'   => $identity,
 				'maximum_artifact_bytes'       => $declaration['maximum_artifact_bytes'],
-				'network_id'                   => $networkId,
+				'network_id'                   => $network_id,
 				'php_runtime_version'          => PHP_VERSION,
 				'provider_code'                => 'github',
 				'release_channel'              => $declaration['channel'],
-				'stable_repository_identity'   => $repositoryId,
+				'stable_repository_identity'   => $repository_id,
 				'target_type'                  => $declaration['target_type'],
 				'theme_template'               => $headers['Template'],
 				'update_policy'                => $declaration['update_policy'],
-				'wordpress_runtime_version'    => $wordpressVersion,
+				'wordpress_runtime_version'    => $wordpress_version,
 			)
 		);
-		$resolver                   = new GitHubCredentialResolver( $declaration['credential_resolver'] );
-		$nativeHeaders              = $headers;
-		$nativeHeaders['PluginURI'] = $nativeHeaders['PackageURI'];
-		unset( $nativeHeaders['PackageURI'], $nativeHeaders['Template'] );
-		$configuration = array(
-			'headers'                    => $nativeHeaders,
+		$resolver                    = new GitHubCredentialResolver( $declaration['credential_resolver'] );
+		$native_headers              = $headers;
+		$native_headers['PluginURI'] = $native_headers['PackageURI'];
+		unset( $native_headers['PackageURI'], $native_headers['Template'] );
+		$configuration  = array(
+			'headers'                    => $native_headers,
 			'installed_package_identity' => $identity,
 			'policy'                     => $declaration['update_policy'],
 			'target_type'                => $declaration['target_type'],
 			'update_uri'                 => $uri,
 		);
-		$archivePolicy = array(
+		$archive_policy = array(
 			'archive_root'               => $resolved['archive_root'],
 			'configuration_update_uri'   => $uri,
 			'header_file'                => $resolved['header_file'],
@@ -120,7 +120,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 			'offer_update_uri'           => $uri,
 			'php_runtime_version'        => PHP_VERSION,
 			'provider_code'              => 'github',
-			'repository_identity'        => $repositoryId,
+			'repository_identity'        => $repository_id,
 			'repository_locator'         => $locator,
 			'staged_package_update_uri'  => $uri,
 			'target_type'                => $declaration['target_type'],
@@ -133,9 +133,9 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				$binding,
 				$resolver,
 				$GLOBALS['wpdb'],
-				$archivePolicy,
+				$archive_policy,
 				null,
-				$selectedRuntimeState,
+				$selected_runtime_state,
 				null === $declaration['credential_resolver'],
 			),
 			'code'   => 'target_composition_failed',
@@ -144,24 +144,24 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 
 	/**
 	 * @param array<string, mixed> $configuration
-	 * @param array<string, mixed> $archivePolicy
+	 * @param array<string, mixed> $archive_policy
 	 */
 	public static function register_from_configuration(
 		array $configuration,
 		BindingRecord $binding,
 		?GitHubCredentialResolver $credentials,
 		object $wpdb,
-		array $archivePolicy,
+		array $archive_policy,
 		?PackageIdentityValidator $validator = null,
-		?SelectedRuntimeState $selectedRuntimeState = null,
-		bool $nativeDiscoveryReuse = false
+		?SelectedRuntimeState $selected_runtime_state = null,
+		bool $native_discovery_reuse = false
 	): ?NativePackageUpdater {
 		try {
 			$adapter = new self( $binding, $credentials );
 		} catch ( InvalidArgumentException ) {
 			return null;
 		}
-		$updater = NativePackageUpdater::fromConfiguration( $configuration, $binding, $adapter, $wpdb, $archivePolicy, $validator, $selectedRuntimeState, $nativeDiscoveryReuse );
+		$updater = NativePackageUpdater::fromConfiguration( $configuration, $binding, $adapter, $wpdb, $archive_policy, $validator, $selected_runtime_state, $native_discovery_reuse );
 		if ( $updater instanceof NativePackageUpdater ) {
 			$updater->register();
 		}
@@ -169,10 +169,10 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 	}
 
 	public function __construct(
-		private BindingRecord $bindingRecord,
+		private BindingRecord $binding_record,
 		?GitHubCredentialResolver $credentials = null
 	) {
-		$facts = $bindingRecord->to_array();
+		$facts = $binding_record->to_array();
 		if ( 'github' !== $facts['provider_code'] ) {
 			throw new InvalidArgumentException( 'The GitHub binding is invalid.' );
 		}
@@ -198,14 +198,14 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 
 	public function inspect( string $release_identity, ?string $expected_tag = null ): IdentityDescriptor {
 		return $this->service->inspectInstalled(
-			$this->bindingRecord->to_array()['installed_package_identity'],
+			$this->binding_record->to_array()['installed_package_identity'],
 			$release_identity,
 			$expected_tag
 		);
 	}
 
 	public function acquire( IdentityDescriptor $descriptor ): TemporaryArtifact {
-		BindingRecord::assert_descriptor_binding( $descriptor, $this->bindingRecord );
+		BindingRecord::assert_descriptor_binding( $descriptor, $this->binding_record );
 		return $this->service->acquireInstalled( $descriptor );
 	}
 }

@@ -16,9 +16,9 @@ check is enabled only for `CanonicalUpdateUri.php`, `ReleaseVersion.php`,
 `src/Provider/GitHub/GitHubReleaseAdapter.php`.
 Variable naming enforcement is enabled only for `ReleaseVersion.php`,
 `AcquisitionReceipt.php`, `BindingRecord.php`, `IdentityDescriptor.php` and
-`ReleaseAdapter.php`. The GitHub adapter's other parameters and locals remain
-outside variable enforcement. Expand these completed scopes only with reviewed
-declaration/caller and enforcement proof.
+`ReleaseAdapter.php` under `src/Contract/`, plus
+`src/Provider/GitHub/GitHubReleaseAdapter.php`. Expand these completed scopes
+only with reviewed declaration/caller and enforcement proof.
 
 Keep release-updater identity and product constraints local: the
 `RAN\WPReleaseUpdater\V1` namespace, WordPress 6.5 floor, PHP `^8.2` range,
