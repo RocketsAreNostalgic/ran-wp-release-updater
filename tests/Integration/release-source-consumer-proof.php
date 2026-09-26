@@ -203,10 +203,10 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 		$queueProof();
 		$inspection = $source->inspect( '7', 'v1.2.3' );
 		rs_assert( $inspection['ok'], 'Fence prerequisite inspection failed.' );
-		$release_id           = '7';
-		$tag                  = 'v1.2.3';
-		$fingerprint          = $inspection['value']['fingerprint'];
-		$applicationOwnedPath = $root . '/fence-prepared.zip';
+		$release_id             = '7';
+		$tag                    = 'v1.2.3';
+		$fingerprint            = $inspection['value']['fingerprint'];
+		$application_owned_path = $root . '/fence-prepared.zip';
 		$queueProof();
 	} elseif ( 'fence-list' === $scenario ) {
 		$GLOBALS['rs_responses'] = array( rs_response( array( $release ) ) ); } else {
@@ -237,8 +237,8 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 			);
 		} else {
 			rs_assert( isset( $acquisition ) && is_array( $acquisition ) && true === ( $acquisition['ok'] ?? false ), 'Acquisition fence returned a failure.' );
-			rs_assert( is_file( $applicationOwnedPath ), 'Acquisition fence did not create its prepared copy.' );
-			rs_assert( hash_equals( $acquisition['value']['inspection']['artifact_sha256'], (string) hash_file( 'sha256', $applicationOwnedPath ) ), 'Acquisition fence prepared-copy digest changed.' );
+			rs_assert( is_file( $application_owned_path ), 'Acquisition fence did not create its prepared copy.' );
+			rs_assert( hash_equals( $acquisition['value']['inspection']['artifact_sha256'], (string) hash_file( 'sha256', $application_owned_path ) ), 'Acquisition fence prepared-copy digest changed.' );
 			rs_assert(
 				array(
 					'requests' => 6,
