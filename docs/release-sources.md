@@ -103,7 +103,15 @@ A successful `acquire()` returns a controlled artifact. The artifact exposes onl
 
 Copy bytes inside `inspect()` if the application needs a durable copy, verify the copied size/digest against the returned inspection facts, and then call `discard()` on the updater-owned artifact.
 
+Before running this custody step, supply the ready `$source`, the selected
+`$release_id`/`$tag` and retained `$fingerprint` from a successful inspection.
+Set `$application_storage_directory` from your application's configuration to
+an existing, writable, private directory owned by the application. The example
+constructs its destination there; it does not create or select a storage directory.
+
 ```php
+$application_owned_path = $application_storage_directory . '/prepared-release.zip';
+
 $acquisition = $source->acquire(
     release_id: $release_id,
     expected_tag: $tag,
