@@ -146,7 +146,7 @@ namespace Tests\WordPress {
 			self::assertSame( 'archive_target_policy_invalid', $validator->validate( $descriptor, $redirectCandidate, $archive )->code() );
 
 			$package = $validator->validate( $descriptor, $policy, $archive );
-			self::assertTrue( $package->isValid() );
+			self::assertTrue( $package->is_valid() );
 
 			$binding     = $this->binding( $targetType, $uri, $channel );
 			$database    = new FakeOptionDatabase( 100 );

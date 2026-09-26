@@ -366,7 +366,7 @@ function mintReceipt( string $path, \RAN\WPReleaseUpdater\V1\WordPress\BindingSt
 		),
 		$path
 	);
-	if ( ! $package->isValid() ) {
+	if ( ! $package->is_valid() ) {
 		throw new RuntimeException( 'Could not validate proof receipt fixture.' );
 	} return array( $descriptor, AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, time() ) ); }
 /** @param list<string> $command */
