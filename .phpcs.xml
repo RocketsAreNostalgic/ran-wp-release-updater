@@ -24,6 +24,9 @@
 
 	<!-- Completed owned-method cohort; expand only with reviewed declaration/caller proof. -->
 	<rule ref="RANOwnedMethods">
+		<include-pattern>/src/Archive/TemporaryArtifact.php</include-pattern>
+		<include-pattern>/src/Archive/PackageIdentityValidator.php</include-pattern>
+		<include-pattern>/src/Archive/ArchiveScanner.php</include-pattern>
 		<include-pattern>/src/Provider/GitHub/ProspectiveReleaseArtifact.php</include-pattern>
 		<include-pattern>/src/Provider/GitHub/ProspectiveReleaseInspection.php</include-pattern>
 		<include-pattern>/src/Archive/ValidatedPackage.php</include-pattern>
@@ -43,6 +46,9 @@
 	</rule>
 	<!-- Variable enforcement follows the completed cohorts below only. -->
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
+		<include-pattern>/src/Archive/TemporaryArtifact.php</include-pattern>
+		<include-pattern>/src/Archive/PackageIdentityValidator.php</include-pattern>
+		<include-pattern>/src/Archive/ArchiveScanner.php</include-pattern>
 		<include-pattern>/src/Provider/GitHub/ProspectiveReleaseArtifact.php</include-pattern>
 		<include-pattern>/src/Provider/GitHub/ProspectiveReleaseInspection.php</include-pattern>
 		<include-pattern>/src/Archive/ValidatedPackage.php</include-pattern>

@@ -25,10 +25,18 @@ final class PackageIdentityValidatorTest extends TestCase {
 	public function testAcceptsAnExactPluginAndThemeWithoutExtraction(): void {
 		$plugin    = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$theme     = $this->archive( array( 'example-theme/style.css' => $this->header( 'Theme Name', 'Example Theme' ) ) );
-		$validator = new PackageIdentityValidator();
+		$validator = new PackageIdentityValidator( after_open: null );
 
-		$result = $validator->validate( $this->descriptor( $plugin, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $plugin );
+		$result = $validator->validate( $this->descriptor( $plugin, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), archive_path: $plugin );
 		self::assertTrue( $result->is_valid() );
+		$zip = new \ZipArchive();
+		self::assertTrue( $zip->open( $plugin ) );
+		try {
+			self::assertTrue( \RAN\WPReleaseUpdater\V1\Archive\ArchiveScanner::scan( $zip, expected_root: 'example-plugin' )->is_valid() );
+			self::assertFalse( \RAN\WPReleaseUpdater\V1\Archive\ArchiveScanner::scan( $zip, expected_root: 'other-root' )->is_valid() );
+		} finally {
+			$zip->close();
+		}
 		self::assertSame( 'example-plugin/example-plugin.php', $result->to_array()['archive_root'] . '/' . $result->to_array()['header_file'] );
 		self::assertTrue( $validator->validate( $this->descriptor( $theme, 'theme', 'example-theme' ), $this->policy( 'theme', 'example-theme', 'style.css', 'Example Theme' ), $theme )->is_valid() );
 	}
@@ -55,7 +63,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertIsInt( $size );
 		$prospective                           = $this->prospectivePolicy( $archive, 'plugin' );
 		$prospective['maximum_artifact_bytes'] = $size - 1;
-		self::assertNull( ( new PackageIdentityValidator() )->inspectProspective( $prospective, $archive ) );
+		self::assertNull( ( new PackageIdentityValidator() )->inspect_prospective( $prospective, $archive ) );
 		$policy                           = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
 		$policy['maximum_artifact_bytes'] = $size - 1;
 		self::assertSame( 'archive_target_policy_invalid', ( new PackageIdentityValidator() )->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $archive )->code() );
@@ -83,14 +91,14 @@ final class PackageIdentityValidatorTest extends TestCase {
 
 				self::assertSame(
 					'installed_header_verified',
-					PackageIdentityValidator::parseHeader( $header, $type )['code']
+					PackageIdentityValidator::parse_header( $header, $type )['code']
 				);
 				self::assertSame(
 					array(
 						'package_root' => $root,
 						'main_file'    => $file,
 					),
-					( new PackageIdentityValidator() )->inspectProspective(
+					( new PackageIdentityValidator() )->inspect_prospective(
 						$this->prospectivePolicy( $archive, $type ),
 						$archive
 					)
@@ -135,7 +143,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 			$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
 			self::assertNotSame(
 				'installed_header_verified',
-				PackageIdentityValidator::parseHeader( $header, 'plugin' )['code'],
+				PackageIdentityValidator::parse_header( $header, 'plugin' )['code'],
 				$case
 			);
 			self::assertSame(
@@ -173,14 +181,14 @@ final class PackageIdentityValidatorTest extends TestCase {
 				'package_root' => 'example-plugin',
 				'main_file'    => 'example-plugin.php',
 			),
-			$validator->inspectProspective( $this->prospectivePolicy( $plugin, 'plugin' ), $plugin )
+			$validator->inspect_prospective( $this->prospectivePolicy( $plugin, 'plugin' ), archive_path: $plugin )
 		);
 		self::assertSame(
 			array(
 				'package_root' => 'example-theme',
 				'main_file'    => 'style.css',
 			),
-			$validator->inspectProspective( $this->prospectivePolicy( $theme, 'theme' ), $theme )
+			$validator->inspect_prospective( $this->prospectivePolicy( $theme, 'theme' ), $theme )
 		);
 	}
 
@@ -191,7 +199,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 				'example-plugin/b.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
 			)
 		);
-		self::assertNull( ( new PackageIdentityValidator() )->inspectProspective( $this->prospectivePolicy( $archive, 'plugin' ), $archive ) );
+		self::assertNull( ( new PackageIdentityValidator() )->inspect_prospective( $this->prospectivePolicy( $archive, 'plugin' ), $archive ) );
 	}
 
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'prospectiveUnsafeArchives' )]
@@ -281,7 +289,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 			array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Other Plugin' ) )
 		);
 		$validator   = new PackageIdentityValidator();
-		$afterOpen   = new \ReflectionProperty( $validator, 'afterOpen' );
+		$afterOpen   = new \ReflectionProperty( $validator, 'after_open' );
 		$afterOpen->setValue(
 			$validator,
 			static function ( string $path ) use ( $replacement ): void {
@@ -289,7 +297,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 			}
 		);
 		self::assertNull(
-			$validator->inspectProspective(
+			$validator->inspect_prospective(
 				$this->prospectivePolicy( $archive, 'plugin' ),
 				$archive
 			)
@@ -331,7 +339,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		$archive     = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$replacement = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Other Plugin' ) ) );
 		$validator   = new PackageIdentityValidator();
-		$afterOpen   = new \ReflectionProperty( $validator, 'afterOpen' );
+		$afterOpen   = new \ReflectionProperty( $validator, 'after_open' );
 		$afterOpen->setValue(
 			$validator,
 			static function ( string $path ) use ( $replacement ): void {
@@ -351,13 +359,13 @@ final class PackageIdentityValidatorTest extends TestCase {
 		unset( $facts['fingerprint'] );
 		$wrong = IdentityDescriptor::create( array_replace( $facts, array( 'artifact_sha256' => str_repeat( 'b', 64 ) ) ) );
 		try {
-			$validator->consumeReceiptProof( $package, $wrong );
+			$validator->consume_receipt_proof( $package, $wrong );
 			self::fail( 'Wrong descriptor consumed the proof.' );
 		} catch ( \InvalidArgumentException ) {
 			self::addToAssertionCount( 1 ); }
-		self::assertSame( $descriptor->fingerprint_value(), $validator->consumeReceiptProof( $package, $descriptor )['descriptor_fingerprint'] );
+		self::assertSame( $descriptor->fingerprint_value(), $validator->consume_receipt_proof( $package, $descriptor )['descriptor_fingerprint'] );
 		try {
-			$validator->consumeReceiptProof( $package, $descriptor );
+			$validator->consume_receipt_proof( $package, $descriptor );
 			self::fail( 'Proof consumed twice.' );
 		} catch ( \InvalidArgumentException ) {
 			self::addToAssertionCount( 1 ); }
@@ -463,7 +471,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 			),
 		) as $name => $entries ) {
 			$archive = $this->archive( $entries );
-			self::assertNull( $validator->inspectProspective( $this->prospectivePolicy( $archive, 'plugin' ), $archive ), $name );
+			self::assertNull( $validator->inspect_prospective( $this->prospectivePolicy( $archive, 'plugin' ), $archive ), $name );
 			self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $archive )->code(), $name );
 		}
 
@@ -477,7 +485,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 				'package_root' => 'example-plugin',
 				'main_file'    => 'example-plugin.php',
 			),
-			$validator->inspectProspective( $this->prospectivePolicy( $dos, 'plugin' ), $dos )
+			$validator->inspect_prospective( $this->prospectivePolicy( $dos, 'plugin' ), $dos )
 		);
 		self::assertTrue( $validator->validate( $this->descriptor( $dos, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $dos )->is_valid() );
 
@@ -486,7 +494,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 			array(),
 			array( 'example-plugin/example-plugin.php' => array( \ZipArchive::OPSYS_UNIX, 0040000 << 16 ) )
 		);
-		self::assertNull( $validator->inspectProspective( $this->prospectivePolicy( $mismatch, 'plugin' ), $mismatch ) );
+		self::assertNull( $validator->inspect_prospective( $this->prospectivePolicy( $mismatch, 'plugin' ), $mismatch ) );
 		self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $mismatch, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $mismatch )->code() );
 	}
 
@@ -588,7 +596,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 
 	/** @return array{package_root:string,main_file:string}|null */
 	private function prospectivePlugin( string $archive ): ?array {
-		return ( new PackageIdentityValidator() )->inspectProspective(
+		return ( new PackageIdentityValidator() )->inspect_prospective(
 			$this->prospectivePolicy( $archive, 'plugin' ),
 			$archive
 		);

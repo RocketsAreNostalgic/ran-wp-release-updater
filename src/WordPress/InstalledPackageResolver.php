@@ -100,7 +100,7 @@ final class InstalledPackageResolver {
 			return array( 'code' => 'installed_file_changed' );
 		}
 
-		$headerResult = PackageIdentityValidator::parseHeader( $captured[0], $type );
+		$headerResult = PackageIdentityValidator::parse_header( $captured[0], $type );
 		if ( 'installed_header_verified' !== $headerResult['code'] || ! isset( $headerResult['headers'] ) ) {
 			return array( 'code' => $headerResult['code'] );
 		}
