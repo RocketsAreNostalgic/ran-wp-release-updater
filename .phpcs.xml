@@ -24,6 +24,13 @@
 
 	<!-- Completed owned-method cohort; expand only with reviewed declaration/caller proof. -->
 	<rule ref="RANOwnedMethods">
+		<include-pattern>/src/Runtime/ReleaseFailure.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubReleaseService.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubReleaseReadUnavailable.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubCredentialResolver.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubArtifactStore.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubArtifactCustodyFailure.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubApiClient.php</include-pattern>
 		<include-pattern>/src/Archive/TemporaryArtifact.php</include-pattern>
 		<include-pattern>/src/Archive/PackageIdentityValidator.php</include-pattern>
 		<include-pattern>/src/Archive/ArchiveScanner.php</include-pattern>
@@ -46,6 +53,13 @@
 	</rule>
 	<!-- Variable enforcement follows the completed cohorts below only. -->
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
+		<include-pattern>/src/Runtime/ReleaseFailure.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubReleaseService.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubReleaseReadUnavailable.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubCredentialResolver.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubArtifactStore.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubArtifactCustodyFailure.php</include-pattern>
+		<include-pattern>/src/Provider/GitHub/GitHubApiClient.php</include-pattern>
 		<include-pattern>/src/Archive/TemporaryArtifact.php</include-pattern>
 		<include-pattern>/src/Archive/PackageIdentityValidator.php</include-pattern>
 		<include-pattern>/src/Archive/ArchiveScanner.php</include-pattern>

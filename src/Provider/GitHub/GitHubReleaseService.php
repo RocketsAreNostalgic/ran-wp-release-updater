@@ -58,24 +58,24 @@ final class GitHubReleaseService {
 	private array $binding;
 	private GitHubCredentialResolver $credentials;
 	private GitHubApiClient $client;
-	private GitHubArtifactStore $artifactStore;
+	private GitHubArtifactStore $artifact_store;
 	/** @var null|callable():?string */
-	private $livenessGuard;
+	private $liveness_guard;
 
 	/** @param array<string, mixed> $configuration */
 	public function __construct(
 		array $configuration,
 		?GitHubCredentialResolver $credentials = null,
-		?callable $livenessGuard = null
+		?callable $liveness_guard = null
 	) {
 		if (
-			! self::exactKeys( $configuration, self::CONFIGURATION_KEYS )
-			|| ! self::validLocator( $configuration['canonical_repository_locator'] )
+			! self::exact_keys( $configuration, self::CONFIGURATION_KEYS )
+			|| ! self::valid_locator( $configuration['canonical_repository_locator'] )
 			|| ! is_int( $configuration['maximum_artifact_bytes'] )
 			|| 0 >= $configuration['maximum_artifact_bytes']
 			|| ! is_string( $configuration['stable_repository_identity'] )
-			|| self::canonicalDecimal( $configuration['stable_repository_identity'] ) !== $configuration['stable_repository_identity']
-			|| ! self::validReleaseUri(
+			|| self::canonical_decimal( $configuration['stable_repository_identity'] ) !== $configuration['stable_repository_identity']
+			|| ! self::valid_release_uri(
 				$configuration['canonical_update_uri'],
 				$configuration['canonical_repository_locator']
 			)
@@ -89,24 +89,24 @@ final class GitHubReleaseService {
 			throw new InvalidArgumentException( 'The GitHub release configuration is invalid.' );
 		}
 
-		$this->binding       = self::ordered( $configuration, self::CONFIGURATION_KEYS );
-		$this->credentials   = $credentials ?? new GitHubCredentialResolver();
-		$this->livenessGuard = $livenessGuard;
-		$this->client        = new GitHubApiClient(
+		$this->binding        = self::ordered( $configuration, self::CONFIGURATION_KEYS );
+		$this->credentials    = $credentials ?? new GitHubCredentialResolver();
+		$this->liveness_guard = $liveness_guard;
+		$this->client         = new GitHubApiClient(
 			function (): void {
-				$this->assertLive();
+				$this->assert_live();
 			}
 		);
-		$this->artifactStore = new GitHubArtifactStore();
+		$this->artifact_store = new GitHubArtifactStore();
 	}
 
 	/**
 	 * @internal Sealed-catalog composition for a prospective source.
 	 * @param array<string, mixed> $declaration
 	 */
-	public static function fromReleaseDeclaration( array $declaration, SelectedRuntimeState $state ): object {
+	public static function from_release_declaration( array $declaration, SelectedRuntimeState $state ): object {
 		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes' );
-		if ( ! self::exactKeys( $declaration, $keys ) || 'github' !== $declaration['provider_code'] ) {
+		if ( ! self::exact_keys( $declaration, $keys ) || 'github' !== $declaration['provider_code'] ) {
 			throw new InvalidArgumentException( 'The release declaration is invalid.' );
 		}
 		$wordpress = SelectedRuntimeState::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null );
@@ -136,9 +136,9 @@ final class GitHubReleaseService {
 	 */
 	public function list( array $conditional = array() ): array {
 		try {
-			$this->assertLive();
-			$result = $this->listReleases( $conditional );
-			$this->assertLive();
+			$this->assert_live();
+			$result = $this->list_releases( $conditional );
+			$this->assert_live();
 			if ( $result['rate_limit']['limited'] ) {
 				throw new ReleaseFailure( 'rate_limited', $result['rate_limit']['retry_after'] );
 			}
@@ -146,40 +146,40 @@ final class GitHubReleaseService {
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \InvalidArgumentException $exception ) {
 			throw new ReleaseFailure( 'invalid_configuration', null, 'not_applicable', $exception ); } catch ( \Throwable $exception ) {
-				throw $this->operationFailure( $exception ); }
+				throw $this->operation_failure( $exception ); }
 	}
 
 	/** @return array<string,mixed> @internal Release-source operation. */
-	public function inspect( string $releaseIdentity, string $expectedTag ): array {
+	public function inspect( string $release_identity, string $expected_tag ): array {
 		try {
-			$this->assertLive();
-			$result = $this->inspectProspective( $releaseIdentity, $expectedTag );
-			$this->assertLive();
+			$this->assert_live();
+			$result = $this->inspect_prospective( $release_identity, $expected_tag );
+			$this->assert_live();
 			return $result->to_array();
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \InvalidArgumentException $exception ) {
 			throw new ReleaseFailure( 'invalid_release', null, 'not_applicable', $exception ); } catch ( \Throwable $exception ) {
-				throw $this->operationFailure( $exception ); }
+				throw $this->operation_failure( $exception ); }
 	}
 
 	/** @return array{inspection:array<string,mixed>,artifact:TemporaryArtifact} @internal Release-source operation. */
-	public function acquire( string $releaseIdentity, string $expectedTag, string $expectedFingerprint ): array {
-		if ( 1 !== preg_match( '/\Av2:[a-f0-9]{64}\z/D', $expectedFingerprint ) ) {
+	public function acquire( string $release_identity, string $expected_tag, string $expected_fingerprint ): array {
+		if ( 1 !== preg_match( '/\Av2:[a-f0-9]{64}\z/D', $expected_fingerprint ) ) {
 			throw new ReleaseFailure( 'invalid_release' );
 		}
 		try {
-			$this->assertLive();
-			list($releaseIdentity, $expectedTag) = $this->inspectInput( $releaseIdentity, $expectedTag );
-			list($fresh, $artifact)              = $this->prospectiveProof( $releaseIdentity, $expectedTag, $this->resolveCredentials(), true );
-			if ( ! $artifact instanceof TemporaryArtifact || ! hash_equals( $expectedFingerprint, $fresh->fingerprint_value() ) ) {
+			$this->assert_live();
+			list($release_identity, $expected_tag) = $this->inspect_input( $release_identity, $expected_tag );
+			list($fresh, $artifact)                = $this->prospective_proof( $release_identity, $expected_tag, $this->resolve_credentials(), true );
+			if ( ! $artifact instanceof TemporaryArtifact || ! hash_equals( $expected_fingerprint, $fresh->fingerprint_value() ) ) {
 				$clean = ! $artifact instanceof TemporaryArtifact || ( $artifact->discard() || $artifact->discard() );
 				throw new ReleaseFailure( 'release_changed', null, $clean ? 'complete' : 'failed' );
 			}
 			try {
-				$this->assertLive();
+				$this->assert_live();
 			} catch ( ReleaseFailure $failure ) {
 				$clean = $artifact->discard() || $artifact->discard();
-				throw new ReleaseFailure( $failure->releaseCode, $failure->retryAfter, $clean ? 'complete' : 'failed', $failure );
+				throw new ReleaseFailure( $failure->release_code, $failure->retry_after, $clean ? 'complete' : 'failed', $failure );
 			}
 			return array(
 				'inspection' => $fresh->to_array(),
@@ -188,72 +188,72 @@ final class GitHubReleaseService {
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \InvalidArgumentException $exception ) {
 			throw new ReleaseFailure( 'invalid_release', null, 'not_applicable', $exception ); } catch ( \Throwable $exception ) {
-				throw $this->operationFailure( $exception ); }
+				throw $this->operation_failure( $exception ); }
 	}
 
 	/**
 	 * @param array{etag?:string,last_modified?:string} $conditional
 	 * @return ReleaseListing
 	 */
-	public function listReleases( array $conditional = array() ): array {
+	public function list_releases( array $conditional = array() ): array {
 		$conditional = self::conditional( $conditional );
 		try {
-			$token           = $this->resolveCredentials();
-			$candidates      = array();
-			$seen            = array();
-			$responseBytes   = 0;
-			$searchExhausted = false;
-			$nextConditional = array(
+			$token            = $this->resolve_credentials();
+			$candidates       = array();
+			$seen             = array();
+			$response_bytes   = 0;
+			$search_exhausted = false;
+			$next_conditional = array(
 				'etag'          => null,
 				'last_modified' => null,
 			);
-			$rateLimit       = self::emptyRateLimit();
+			$rate_limit       = self::empty_rate_limit();
 
 			for ( $page = 1; $page <= self::MAX_PAGES; ++$page ) {
-				$headers        = 1 === $page ? self::conditionalHeaders( $conditional ) : array();
-				$remainingBytes = self::RELEASE_LIST_BYTES_LIMIT - $responseBytes;
-				$response       = $this->client->request(
-					$this->repositoryApiUrl()
+				$headers         = 1 === $page ? self::conditional_headers( $conditional ) : array();
+				$remaining_bytes = self::RELEASE_LIST_BYTES_LIMIT - $response_bytes;
+				$response        = $this->client->request(
+					$this->repository_api_url()
 					. '/releases?per_page=' . self::PAGE_SIZE . '&page=' . $page,
 					$token,
 					$headers,
-					min( self::RELEASE_RESPONSE_LIMIT, $remainingBytes )
+					min( self::RELEASE_RESPONSE_LIMIT, $remaining_bytes )
 				);
 
-				$status = GitHubApiClient::responseCode( $response );
+				$status = GitHubApiClient::response_code( $response );
 				if ( 1 === $page ) {
-					$nextConditional = self::responseConditional( $response );
+					$next_conditional = self::response_conditional( $response );
 				}
-				$rateLimit = self::rateLimit( $response );
+				$rate_limit = self::rate_limit( $response );
 				if ( 1 === $page && 304 === $status ) {
-					return self::listingResult(
+					return self::listing_result(
 						array(),
-						$nextConditional,
+						$next_conditional,
 						true,
-						$rateLimit,
+						$rate_limit,
 						false
 					);
 				}
-				if ( $rateLimit['limited'] ) {
-					return self::listingResult(
+				if ( $rate_limit['limited'] ) {
+					return self::listing_result(
 						array(),
-						$nextConditional,
+						$next_conditional,
 						false,
-						$rateLimit,
+						$rate_limit,
 						false
 					);
 				}
-				self::requireSuccess( $response );
+				self::require_success( $response );
 
-				$body           = GitHubApiClient::responseBody( $response, self::RELEASE_RESPONSE_LIMIT );
-				$responseBytes += strlen( $body );
-				if ( $responseBytes > self::RELEASE_LIST_BYTES_LIMIT ) {
+				$body            = GitHubApiClient::response_body( $response, self::RELEASE_RESPONSE_LIMIT );
+				$response_bytes += strlen( $body );
+				if ( $response_bytes > self::RELEASE_LIST_BYTES_LIMIT ) {
 					throw new RuntimeException( 'The GitHub release listing is too large.' );
 				}
 
-				$decoded = self::decodeList( $body );
+				$decoded = self::decode_list( $body );
 				foreach ( $decoded as $release ) {
-					$candidate = $this->listedRelease( $release );
+					$candidate = $this->listed_release( $release );
 					if (
 					null !== $candidate
 					&& ! isset( $seen[ $candidate['release_identity'] ] )
@@ -263,13 +263,13 @@ final class GitHubReleaseService {
 					}
 				}
 
-				$pageFull = self::PAGE_SIZE === count( $decoded );
-				if ( count( $candidates ) >= self::MAX_CANDIDATES || ! $pageFull ) {
-					$searchExhausted = count( $candidates ) > self::MAX_CANDIDATES || $pageFull;
+				$page_full = self::PAGE_SIZE === count( $decoded );
+				if ( count( $candidates ) >= self::MAX_CANDIDATES || ! $page_full ) {
+					$search_exhausted = count( $candidates ) > self::MAX_CANDIDATES || $page_full;
 					break;
 				}
 				if ( self::MAX_PAGES === $page ) {
-					$searchExhausted = true;
+					$search_exhausted = true;
 				}
 			}
 
@@ -284,93 +284,93 @@ final class GitHubReleaseService {
 				}
 			);
 
-			return self::listingResult(
+			return self::listing_result(
 				array_slice( $candidates, 0, self::MAX_CANDIDATES ),
-				$nextConditional,
+				$next_conditional,
 				false,
-				$rateLimit,
-				$searchExhausted
+				$rate_limit,
+				$search_exhausted
 			);
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \Throwable $exception ) {
-			throw $this->operationFailure( $exception ); }
+			throw $this->operation_failure( $exception ); }
 	}
 
-	public function inspectInstalled(
-		string $installedPackageIdentity,
-		string $releaseIdentity,
-		?string $expectedTag = null
+	public function inspect_installed(
+		string $installed_package_identity,
+		string $release_identity,
+		?string $expected_tag = null
 	): IdentityDescriptor {
-		if ( ! IdentityDescriptor::is_bounded_opaque_identity( $installedPackageIdentity, 255 ) ) {
+		if ( ! IdentityDescriptor::is_bounded_opaque_identity( $installed_package_identity, 255 ) ) {
 			throw new InvalidArgumentException( 'The installed package identity is invalid.' );
 		}
-		list( $releaseIdentity, $expectedTag ) = $this->inspectInput(
-			$releaseIdentity,
-			$expectedTag
+		list( $release_identity, $expected_tag ) = $this->inspect_input(
+			$release_identity,
+			$expected_tag
 		);
 		try {
-			return $this->inspectWithToken(
-				$installedPackageIdentity,
-				$releaseIdentity,
-				$expectedTag,
-				$this->resolveCredentials()
+			return $this->inspect_with_token(
+				$installed_package_identity,
+				$release_identity,
+				$expected_tag,
+				$this->resolve_credentials()
 			);
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \Throwable $exception ) {
-			throw $this->operationFailure( $exception ); }
+			throw $this->operation_failure( $exception ); }
 	}
 
-	private function inspectWithToken(
-		string $installedPackageIdentity,
-		string $releaseIdentity,
-		?string $expectedTag,
+	private function inspect_with_token(
+		string $installed_package_identity,
+		string $release_identity,
+		?string $expected_tag,
 		?string $token
 	): IdentityDescriptor {
 		return IdentityDescriptor::create(
 			array_merge(
-				$this->releaseFacts( $releaseIdentity, $expectedTag, $token ),
+				$this->release_facts( $release_identity, $expected_tag, $token ),
 				array(
-					'installed_package_identity' => $installedPackageIdentity,
+					'installed_package_identity' => $installed_package_identity,
 					'provider_code'              => 'github',
 				)
 			)
 		);
 	}
 
-	public function acquireInstalled( IdentityDescriptor $descriptor ): TemporaryArtifact {
-		list( $facts, $artifactIdentity ) = $this->acquisitionInput( $descriptor );
+	public function acquire_installed( IdentityDescriptor $descriptor ): TemporaryArtifact {
+		list( $facts, $artifact_identity ) = $this->acquisition_input( $descriptor );
 		try {
-			return $this->acquireWithToken(
+			return $this->acquire_with_token(
 				$facts,
-				$artifactIdentity,
-				$this->resolveCredentials()
+				$artifact_identity,
+				$this->resolve_credentials()
 			);
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \Throwable $exception ) {
-			throw $this->operationFailure( $exception ); }
+			throw $this->operation_failure( $exception ); }
 	}
 
 	/** @param array<string, mixed> $facts */
-	private function acquireWithToken(
+	private function acquire_with_token(
 		array $facts,
-		string $artifactIdentity,
+		string $artifact_identity,
 		?string $token
 	): TemporaryArtifact {
-		$this->repositoryIdentity( $token );
-		$path            = null;
-		$initialIdentity = null;
+		$this->repository_identity( $token );
+		$path             = null;
+		$initial_identity = null;
 
 		try {
-			list($path, $initialIdentity) = $this->artifactStore->allocate( $facts['artifact_filename'] );
-			$response                     = $this->client->request(
-				$this->repositoryApiUrl() . '/releases/assets/' . $artifactIdentity,
+			list($path, $initial_identity) = $this->artifact_store->allocate( $facts['artifact_filename'] );
+			$response                      = $this->client->request(
+				$this->repository_api_url() . '/releases/assets/' . $artifact_identity,
 				$token,
 				array( 'Accept' => 'application/octet-stream' ),
 				$this->binding['maximum_artifact_bytes'],
 				$path
 			);
-			$this->requireAssetSuccess( $response );
-			$identity = $this->artifactStore->identity( $path );
+			$this->require_asset_success( $response );
+			$identity = $this->artifact_store->identity( $path );
 			if (
 				null === $identity
 				|| 1 !== $identity['nlink']
@@ -385,53 +385,53 @@ final class GitHubReleaseService {
 				throw new ReleaseFailure( 'package_incompatible' );
 			}
 
-			$this->repositoryIdentity( $token );
-			$this->assertLive();
-			return new TemporaryArtifact( $path, $sha256, $identity, $this->livenessGuard );
+			$this->repository_identity( $token );
+			$this->assert_live();
+			return new TemporaryArtifact( $path, $sha256, $identity, $this->liveness_guard );
 		} catch ( \Throwable $exception ) {
-			if ( is_string( $path ) && is_array( $initialIdentity ) ) {
-				$clean = $this->artifactStore->remove( $path, $initialIdentity );
+			if ( is_string( $path ) && is_array( $initial_identity ) ) {
+				$clean = $this->artifact_store->remove( $path, $initial_identity );
 			} elseif ( $exception instanceof GitHubArtifactCustodyFailure ) {
-				$clean = $exception->cleanupComplete;
+				$clean = $exception->cleanup_complete;
 			} else {
 				throw $exception;
 			}
-			throw $this->postAllocationFailure( $exception, $clean );
+			throw $this->post_allocation_failure( $exception, $clean );
 		}
 	}
 
-	public function inspectProspective(
-		string $releaseIdentity,
-		?string $expectedTag = null
+	public function inspect_prospective(
+		string $release_identity,
+		?string $expected_tag = null
 	): ProspectiveReleaseInspection {
-		list( $releaseIdentity, $expectedTag ) = $this->inspectInput(
-			$releaseIdentity,
-			$expectedTag
+		list( $release_identity, $expected_tag ) = $this->inspect_input(
+			$release_identity,
+			$expected_tag
 		);
-		list($inspection, $artifact)           = $this->prospectiveProof(
-			$releaseIdentity,
-			$expectedTag,
-			$this->resolveCredentials(),
+		list($inspection, $artifact)             = $this->prospective_proof(
+			$release_identity,
+			$expected_tag,
+			$this->resolve_credentials(),
 			false
 		);
 		unset( $artifact );
 		return $inspection;
 	}
 
-	public function acquireProspective(
+	public function acquire_prospective(
 		ProspectiveReleaseInspection $inspection,
-		string $expectedFingerprint
+		string $expected_fingerprint
 	): ProspectiveReleaseArtifact {
-		$this->assertProspectiveInput( $inspection, $expectedFingerprint );
-		list($fresh, $artifact) = $this->prospectiveProof(
+		$this->assert_prospective_input( $inspection, $expected_fingerprint );
+		list($fresh, $artifact) = $this->prospective_proof(
 			$inspection->release_identity(),
 			$inspection->tag(),
-			$this->resolveCredentials(),
+			$this->resolve_credentials(),
 			true
 		);
 		if (
 			! $artifact instanceof TemporaryArtifact
-			|| ! hash_equals( $expectedFingerprint, $fresh->fingerprint_value() )
+			|| ! hash_equals( $expected_fingerprint, $fresh->fingerprint_value() )
 			|| ! hash_equals( $inspection->fingerprint_value(), $fresh->fingerprint_value() )
 		) {
 			if ( $artifact instanceof TemporaryArtifact ) {
@@ -443,16 +443,16 @@ final class GitHubReleaseService {
 	}
 
 	/** @return array{ProspectiveReleaseInspection,?TemporaryArtifact} */
-	private function prospectiveProof(
-		string $releaseIdentity,
-		?string $expectedTag,
+	private function prospective_proof(
+		string $release_identity,
+		?string $expected_tag,
 		?string $token,
-		bool $retainArtifact
+		bool $retain_artifact
 	): array {
-		$release          = $this->releaseFacts( $releaseIdentity, $expectedTag, $token );
-		$artifactIdentity = self::canonicalDecimal( $release['artifact_identity'] )
+		$release           = $this->release_facts( $release_identity, $expected_tag, $token );
+		$artifact_identity = self::canonical_decimal( $release['artifact_identity'] )
 			?? throw new RuntimeException( 'The GitHub artifact identity is invalid.' );
-		$artifact         = $this->acquireWithToken( $release, $artifactIdentity, $token );
+		$artifact          = $this->acquire_with_token( $release, $artifact_identity, $token );
 		try {
 			$validator = new PackageIdentityValidator();
 			$package   = $artifact->inspect(
@@ -505,9 +505,9 @@ final class GitHubReleaseService {
 				// Preserve the primary failure and report the synchronous cleanup result.
 				$clean = false;
 			}
-			throw $this->postAllocationFailure( $exception, $clean );
+			throw $this->post_allocation_failure( $exception, $clean );
 		}
-		if ( ! $retainArtifact ) {
+		if ( ! $retain_artifact ) {
 			if ( ! ( $artifact->discard() || $artifact->discard() ) ) {
 				throw new ReleaseFailure( 'cleanup_failed', null, 'failed' );
 			}
@@ -517,39 +517,39 @@ final class GitHubReleaseService {
 	}
 
 	/** @return array{string,?string} */
-	private function inspectInput( string $releaseIdentity, ?string $expectedTag ): array {
-		$releaseIdentity = self::canonicalDecimal( $releaseIdentity )
+	private function inspect_input( string $release_identity, ?string $expected_tag ): array {
+		$release_identity = self::canonical_decimal( $release_identity )
 			?? throw new InvalidArgumentException( 'The GitHub release identity is invalid.' );
-		if ( null !== $expectedTag && null === self::versionFromTag( $expectedTag ) ) {
+		if ( null !== $expected_tag && null === self::version_from_tag( $expected_tag ) ) {
 			throw new InvalidArgumentException( 'The expected GitHub release tag is invalid.' );
 		}
-		return array( $releaseIdentity, $expectedTag );
+		return array( $release_identity, $expected_tag );
 	}
 
 	/** @return array{array<string,mixed>,string} */
-	private function acquisitionInput( IdentityDescriptor $descriptor ): array {
-		$facts            = $descriptor->to_array();
-		$artifactIdentity = self::canonicalDecimal( $facts['artifact_identity'] ?? null );
+	private function acquisition_input( IdentityDescriptor $descriptor ): array {
+		$facts             = $descriptor->to_array();
+		$artifact_identity = self::canonical_decimal( $facts['artifact_identity'] ?? null );
 		if (
 			'github' !== $facts['provider_code']
-			|| null === $artifactIdentity
-			|| ! $this->matchesConfiguration( $facts )
+			|| null === $artifact_identity
+			|| ! $this->matches_configuration( $facts )
 		) {
 			throw new InvalidArgumentException( 'The GitHub artifact identity is invalid.' );
 		}
-		return array( $facts, $artifactIdentity );
+		return array( $facts, $artifact_identity );
 	}
 
 	/** @return array<string, mixed> */
-	private function releaseFacts(
-		string $expectedRelease,
-		?string $expectedTag,
+	private function release_facts(
+		string $expected_release,
+		?string $expected_tag,
 		?string $token
 	): array {
-		$repositoryIdentity = $this->repositoryIdentity( $token );
-		$release            = $this->jsonSuccess(
+		$repository_identity = $this->repository_identity( $token );
+		$release             = $this->json_success(
 			$this->client->request(
-				$this->repositoryApiUrl() . '/releases/' . $expectedRelease,
+				$this->repository_api_url() . '/releases/' . $expected_release,
 				$token,
 				array(),
 				self::RELEASE_RESPONSE_LIMIT
@@ -557,10 +557,10 @@ final class GitHubReleaseService {
 			self::RELEASE_RESPONSE_LIMIT,
 			'release'
 		);
-		$releaseIdentity    = self::providerIdentity( $release['id'] ?? null );
+		$release_identity    = self::provider_identity( $release['id'] ?? null );
 		if (
-			null === $releaseIdentity
-			|| ! hash_equals( $expectedRelease, $releaseIdentity )
+			null === $release_identity
+			|| ! hash_equals( $expected_release, $release_identity )
 			|| ! is_bool( $release['draft'] ?? null )
 			|| ! is_bool( $release['prerelease'] ?? null )
 			|| ! is_bool( $release['immutable'] ?? null )
@@ -571,15 +571,15 @@ final class GitHubReleaseService {
 		}
 
 		$tag     = $release['tag_name'];
-		$version = self::versionFromTag( $tag );
+		$version = self::version_from_tag( $tag );
 		if (
 			null === $version
-			|| ( null !== $expectedTag && ! hash_equals( $expectedTag, $tag ) )
+			|| ( null !== $expected_tag && ! hash_equals( $expected_tag, $tag ) )
 			|| (
 				'stable' === $this->binding['release_channel']
 				&& ( $release['prerelease'] || ReleaseVersion::is_prerelease( $version ) )
 			)
-			|| ! self::validReleasePage(
+			|| ! self::valid_release_page(
 				$release['html_url'] ?? null,
 				$this->binding['canonical_repository_locator']
 			)
@@ -587,10 +587,10 @@ final class GitHubReleaseService {
 			throw new ReleaseFailure( 'package_incompatible' );
 		}
 
-		$asset          = $this->zipAsset( $release['assets'] ?? null );
-		$commit         = $this->jsonSuccess(
+		$asset           = $this->zip_asset( $release['assets'] ?? null );
+		$commit          = $this->json_success(
 			$this->client->request(
-				$this->repositoryApiUrl() . '/commits/' . rawurlencode( $tag ),
+				$this->repository_api_url() . '/commits/' . rawurlencode( $tag ),
 				$token,
 				array(),
 				self::COMMIT_RESPONSE_LIMIT
@@ -598,10 +598,10 @@ final class GitHubReleaseService {
 			self::COMMIT_RESPONSE_LIMIT,
 			'commit'
 		);
-		$commitIdentity = is_string( $commit['sha'] ?? null )
+		$commit_identity = is_string( $commit['sha'] ?? null )
 			? strtolower( $commit['sha'] )
 			: '';
-		if ( 1 !== preg_match( '/\A[a-f0-9]{40}\z/D', $commitIdentity ) ) {
+		if ( 1 !== preg_match( '/\A[a-f0-9]{40}\z/D', $commit_identity ) ) {
 			throw new ReleaseFailure( 'operation_failed' );
 		}
 
@@ -624,10 +624,10 @@ final class GitHubReleaseService {
 			),
 			'canonical_update_uri' => $this->binding['canonical_update_uri'],
 			'channel'              => $this->binding['release_channel'],
-			'commit_identity'      => $commitIdentity,
+			'commit_identity'      => $commit_identity,
 			'prerelease'           => $release['prerelease'],
-			'release_identity'     => $releaseIdentity,
-			'repository_identity'  => $repositoryIdentity,
+			'release_identity'     => $release_identity,
+			'repository_identity'  => $repository_identity,
 			'repository_locator'   => $this->binding['canonical_repository_locator'],
 			'tag'                  => $tag,
 			'target_type'          => $this->binding['target_type'],
@@ -635,23 +635,23 @@ final class GitHubReleaseService {
 		);
 	}
 
-	private function assertProspectiveInput(
+	private function assert_prospective_input(
 		ProspectiveReleaseInspection $inspection,
-		string $expectedFingerprint
+		string $expected_fingerprint
 	): void {
 		$facts = $inspection->to_array();
 		if (
-			1 !== preg_match( '/\Av2:[a-f0-9]{64}\z/D', $expectedFingerprint )
-			|| ! hash_equals( $inspection->fingerprint_value(), $expectedFingerprint )
-			|| ! $this->matchesConfiguration( $facts )
+			1 !== preg_match( '/\Av2:[a-f0-9]{64}\z/D', $expected_fingerprint )
+			|| ! hash_equals( $inspection->fingerprint_value(), $expected_fingerprint )
+			|| ! $this->matches_configuration( $facts )
 		) {
 			throw new InvalidArgumentException( 'The prospective GitHub release acquisition is invalid.' );
 		}
-		$this->inspectInput( $inspection->release_identity(), $inspection->tag() );
+		$this->inspect_input( $inspection->release_identity(), $inspection->tag() );
 	}
 
 	/** @param array<string, mixed> $facts */
-	private function matchesConfiguration( array $facts ): bool {
+	private function matches_configuration( array $facts ): bool {
 		$pairs = array(
 			'canonical_update_uri' => 'canonical_update_uri',
 			'channel'              => 'release_channel',
@@ -684,7 +684,7 @@ final class GitHubReleaseService {
 	}
 
 	/** @return ListedRelease|null */
-	private function listedRelease( mixed $release ): ?array {
+	private function listed_release( mixed $release ): ?array {
 		if (
 			! is_array( $release )
 			|| ! is_bool( $release['draft'] ?? null )
@@ -697,19 +697,19 @@ final class GitHubReleaseService {
 			return null;
 		}
 
-		$releaseIdentity = self::providerIdentity( $release['id'] ?? null );
-		$version         = self::versionFromTag( $release['tag_name'] );
-		$prerelease      = $release['prerelease']
+		$release_identity = self::provider_identity( $release['id'] ?? null );
+		$version          = self::version_from_tag( $release['tag_name'] );
+		$prerelease       = $release['prerelease']
 			|| ( is_string( $version ) && ReleaseVersion::is_prerelease( $version ) );
 		if (
-			null === $releaseIdentity
+			null === $release_identity
 			|| null === $version
 			|| ( 'stable' === $this->binding['release_channel'] && $prerelease )
 			|| 1 !== preg_match(
 				'/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\z/D',
 				$release['published_at']
 			)
-			|| ! self::validReleasePage(
+			|| ! self::valid_release_page(
 				$release['html_url'] ?? null,
 				$this->binding['canonical_repository_locator']
 			)
@@ -717,35 +717,35 @@ final class GitHubReleaseService {
 			return null;
 		}
 
-		$assetNames = array();
+		$asset_names = array();
 		if ( is_array( $release['assets'] ?? null ) ) {
 			foreach ( $release['assets'] as $asset ) {
 				$name = is_array( $asset ) && is_string( $asset['name'] ?? null )
 					? $asset['name']
 					: '';
-				if ( self::validZipName( $name ) ) {
-					$assetNames[] = $name;
+				if ( self::valid_zip_name( $name ) ) {
+					$asset_names[] = $name;
 				}
 			}
 		}
 
 		return array(
 			'details_url'           => $release['html_url'],
-			'expected_asset_names'  => array_slice( $assetNames, 0, 2 ),
+			'expected_asset_names'  => array_slice( $asset_names, 0, 2 ),
 			'prerelease'            => $prerelease,
 			'publication_immutable' => $release['immutable'],
 			'published_at'          => $release['published_at'],
-			'release_identity'      => $releaseIdentity,
+			'release_identity'      => $release_identity,
 			'tag'                   => $release['tag_name'],
 			'version'               => $version,
 		);
 	}
 
-	private function repositoryIdentity( ?string $token ): string {
+	private function repository_identity( ?string $token ): string {
 		$expected   = $this->binding['stable_repository_identity'];
-		$repository = $this->jsonSuccess(
+		$repository = $this->json_success(
 			$this->client->request(
-				$this->repositoryApiUrl(),
+				$this->repository_api_url(),
 				$token,
 				array(),
 				self::RELEASE_RESPONSE_LIMIT
@@ -753,7 +753,7 @@ final class GitHubReleaseService {
 			self::RELEASE_RESPONSE_LIMIT,
 			'repository'
 		);
-		$actual     = self::providerIdentity( $repository['id'] ?? null );
+		$actual     = self::provider_identity( $repository['id'] ?? null );
 		if ( null === $actual || ! hash_equals( $expected, $actual ) ) {
 			throw new ReleaseFailure( 'operation_failed' );
 		}
@@ -761,19 +761,19 @@ final class GitHubReleaseService {
 		return $actual;
 	}
 
-	private function resolveCredentials(): ?string {
-		$this->assertLive();
+	private function resolve_credentials(): ?string {
+		$this->assert_live();
 		$credential = $this->credentials->resolve();
-		$this->assertLive();
+		$this->assert_live();
 		return $credential;
 	}
 
-	private function assertLive(): void {
-		if ( null === $this->livenessGuard ) {
+	private function assert_live(): void {
+		if ( null === $this->liveness_guard ) {
 			return;
 		}
 		try {
-			$code = ( $this->livenessGuard )();
+			$code = ( $this->liveness_guard )();
 		} catch ( \Throwable $exception ) {
 			throw new ReleaseFailure( 'runtime_unavailable', null, 'not_applicable', $exception );
 		}
@@ -782,7 +782,7 @@ final class GitHubReleaseService {
 		}
 	}
 
-	private function operationFailure( \Throwable $exception ): ReleaseFailure {
+	private function operation_failure( \Throwable $exception ): ReleaseFailure {
 		if ( $exception instanceof ReleaseFailure ) {
 			return $exception;
 		}
@@ -792,10 +792,10 @@ final class GitHubReleaseService {
 		return new ReleaseFailure( 'operation_failed', null, 'not_applicable', $exception );
 	}
 
-	private function postAllocationFailure( \Throwable $exception, bool $clean ): ReleaseFailure {
+	private function post_allocation_failure( \Throwable $exception, bool $clean ): ReleaseFailure {
 		$cleanup = $clean ? 'complete' : 'failed';
 		if ( $exception instanceof ReleaseFailure ) {
-			return new ReleaseFailure( $exception->releaseCode, $exception->retryAfter, $cleanup, $exception );
+			return new ReleaseFailure( $exception->release_code, $exception->retry_after, $cleanup, $exception );
 		}
 		if ( $exception instanceof GitHubReleaseReadUnavailable ) {
 			return new ReleaseFailure( 'operation_failed', null, $cleanup, $exception );
@@ -810,33 +810,33 @@ final class GitHubReleaseService {
 	 * @param array<string, mixed> $response
 	 * @return array<string, mixed>
 	 */
-	private function jsonSuccess(
+	private function json_success(
 		array $response,
 		int $limit,
 		string $context
 	): array {
-		$rateLimit = self::rateLimit( $response );
-		if ( $rateLimit['limited'] ) {
-			throw new ReleaseFailure( 'rate_limited', $rateLimit['retry_after'] );
+		$rate_limit = self::rate_limit( $response );
+		if ( $rate_limit['limited'] ) {
+			throw new ReleaseFailure( 'rate_limited', $rate_limit['retry_after'] );
 		}
-		self::requireSuccess( $response, 'repository' === $context );
+		self::require_success( $response, 'repository' === $context );
 		try {
-			return self::decodeObject( GitHubApiClient::responseBody( $response, $limit ) );
+			return self::decode_object( GitHubApiClient::response_body( $response, $limit ) );
 		} catch ( \Throwable $exception ) {
 			throw new ReleaseFailure( 'operation_failed', null, 'not_applicable', $exception );
 		}
 	}
 
 	/** @param array<string,mixed> $response */
-	private function requireAssetSuccess( array $response ): void {
-		$rateLimit = self::rateLimit( $response );
-		if ( $rateLimit['limited'] ) {
-			throw new ReleaseFailure( 'rate_limited', $rateLimit['retry_after'] );
+	private function require_asset_success( array $response ): void {
+		$rate_limit = self::rate_limit( $response );
+		if ( $rate_limit['limited'] ) {
+			throw new ReleaseFailure( 'rate_limited', $rate_limit['retry_after'] );
 		}
-		self::requireSuccess( $response, false );
+		self::require_success( $response, false );
 	}
 
-	private function repositoryApiUrl(): string {
+	private function repository_api_url(): string {
 		list($owner, $repository) = explode(
 			'/',
 			$this->binding['canonical_repository_locator'],
@@ -847,12 +847,12 @@ final class GitHubReleaseService {
 
 
 	/** @param array<string, mixed> $response */
-	private static function requireSuccess( array $response, bool $missingIsReadUnavailable = true ): void {
-		$status = GitHubApiClient::responseCode( $response );
-		if ( in_array( $status, array( 401, 403 ), true ) || ( $missingIsReadUnavailable && 404 === $status ) ) {
+	private static function require_success( array $response, bool $missing_is_read_unavailable = true ): void {
+		$status = GitHubApiClient::response_code( $response );
+		if ( in_array( $status, array( 401, 403 ), true ) || ( $missing_is_read_unavailable && 404 === $status ) ) {
 			throw new ReleaseFailure( 'repository_access_unavailable' );
 		}
-		if ( ! $missingIsReadUnavailable && 404 === $status ) {
+		if ( ! $missing_is_read_unavailable && 404 === $status ) {
 			throw new ReleaseFailure( 'release_unavailable' );
 		}
 		if ( $status < 200 || $status > 299 ) {
@@ -861,7 +861,7 @@ final class GitHubReleaseService {
 	}
 
 	/** @return list<array<string, mixed>> */
-	private static function decodeList( string $body ): array {
+	private static function decode_list( string $body ): array {
 		$trimmed = ltrim( $body );
 		if ( '' === $trimmed || '[' !== $trimmed[0] ) {
 			throw new RuntimeException( 'The GitHub response is invalid.' );
@@ -885,7 +885,7 @@ final class GitHubReleaseService {
 	}
 
 	/** @return array<string, mixed> */
-	private static function decodeObject( string $body ): array {
+	private static function decode_object( string $body ): array {
 		$trimmed = ltrim( $body );
 		if ( '' === $trimmed || '{' !== $trimmed[0] ) {
 			throw new RuntimeException( 'The GitHub response is invalid.' );
@@ -909,25 +909,25 @@ final class GitHubReleaseService {
 		if ( array_diff( array_keys( $conditional ), array( 'etag', 'last_modified' ) ) ) {
 			throw new InvalidArgumentException( 'The GitHub conditional state is invalid.' );
 		}
-		$etag         = $conditional['etag'] ?? null;
-		$lastModified = $conditional['last_modified'] ?? null;
+		$etag          = $conditional['etag'] ?? null;
+		$last_modified = $conditional['last_modified'] ?? null;
 		if (
-			( null !== $etag && ! self::validEtag( $etag ) )
-			|| ( null !== $lastModified && ! self::validLastModified( $lastModified ) )
+			( null !== $etag && ! self::valid_etag( $etag ) )
+			|| ( null !== $last_modified && ! self::valid_last_modified( $last_modified ) )
 		) {
 			throw new InvalidArgumentException( 'The GitHub conditional state is invalid.' );
 		}
 
 		return array(
 			'etag'          => $etag,
-			'last_modified' => $lastModified,
+			'last_modified' => $last_modified,
 		);
 	}
 
 	/** @param array{etag:?string,last_modified:?string} $conditional
 	 * @return array<string, string>
 	 */
-	private static function conditionalHeaders( array $conditional ): array {
+	private static function conditional_headers( array $conditional ): array {
 		$headers = array();
 		if ( null !== $conditional['etag'] ) {
 			$headers['If-None-Match'] = $conditional['etag'];
@@ -942,14 +942,14 @@ final class GitHubReleaseService {
 	/** @param array<string, mixed> $response
 	 * @return array{etag:?string,last_modified:?string}
 	 */
-	private static function responseConditional( array $response ): array {
-		$etag         = GitHubApiClient::responseHeader( $response, 'etag' );
-		$lastModified = GitHubApiClient::responseHeader( $response, 'last-modified' );
+	private static function response_conditional( array $response ): array {
+		$etag          = GitHubApiClient::response_header( $response, 'etag' );
+		$last_modified = GitHubApiClient::response_header( $response, 'last-modified' );
 		return array(
-			'etag'          => is_string( $etag ) && self::validEtag( $etag ) ? $etag : null,
-			'last_modified' => is_string( $lastModified )
-				&& self::validLastModified( $lastModified )
-					? $lastModified
+			'etag'          => is_string( $etag ) && self::valid_etag( $etag ) ? $etag : null,
+			'last_modified' => is_string( $last_modified )
+				&& self::valid_last_modified( $last_modified )
+					? $last_modified
 					: null,
 		);
 	}
@@ -957,31 +957,31 @@ final class GitHubReleaseService {
 	/** @param array<string, mixed> $response
 	 * @return array{limited:bool,remaining:?int,reset_at:?int,retry_after:int}
 	 */
-	private static function rateLimit( array $response, ?int $now = null ): array {
-		$now      ??= time();
-		$status     = GitHubApiClient::responseCode( $response );
-		$remaining  = self::nonNegativeHeader(
-			GitHubApiClient::responseHeader( $response, 'x-ratelimit-remaining' )
+	private static function rate_limit( array $response, ?int $now = null ): array {
+		$now       ??= time();
+		$status      = GitHubApiClient::response_code( $response );
+		$remaining   = self::non_negative_header(
+			GitHubApiClient::response_header( $response, 'x-ratelimit-remaining' )
 		);
-		$reset      = GitHubApiClient::responseHeader( $response, 'x-ratelimit-reset' );
-		$resetAt    = self::nonNegativeHeader( $reset );
-		$retryAfter = in_array( $status, array( 403, 429 ), true )
-			? self::positiveDelayHeader( GitHubApiClient::responseHeader( $response, 'retry-after' ) )
+		$reset       = GitHubApiClient::response_header( $response, 'x-ratelimit-reset' );
+		$reset_at    = self::non_negative_header( $reset );
+		$retry_after = in_array( $status, array( 403, 429 ), true )
+			? self::positive_delay_header( GitHubApiClient::response_header( $response, 'retry-after' ) )
 			: null;
-		$limited    = 429 === $status
-			|| ( 403 === $status && ( null !== $retryAfter || 0 === $remaining ) );
-		$cooldown   = 0;
+		$limited     = 429 === $status
+			|| ( 403 === $status && ( null !== $retry_after || 0 === $remaining ) );
+		$cooldown    = 0;
 		if ( $limited ) {
 			$delays = array();
-			if ( null !== $retryAfter ) {
-				$delays[] = $retryAfter;
+			if ( null !== $retry_after ) {
+				$delays[] = $retry_after;
 			}
 			if ( 0 === $remaining && is_string( $reset ) && 1 === preg_match( '/\A\d+\z/D', $reset ) ) {
-				if ( null === $resetAt || $resetAt > $now + 86400 ) {
+				if ( null === $reset_at || $reset_at > $now + 86400 ) {
 					throw new RuntimeException( 'The GitHub rate-limit delay is invalid.' );
 				}
-				if ( $resetAt > $now ) {
-					$delays[] = $resetAt - $now;
+				if ( $reset_at > $now ) {
+					$delays[] = $reset_at - $now;
 				}
 			}
 			$cooldown = array() === $delays ? 900 : max( $delays );
@@ -990,7 +990,7 @@ final class GitHubReleaseService {
 		return array(
 			'limited'     => $limited,
 			'remaining'   => $remaining,
-			'reset_at'    => $resetAt,
+			'reset_at'    => $reset_at,
 			'retry_after' => $cooldown,
 		);
 	}
@@ -998,27 +998,27 @@ final class GitHubReleaseService {
 	/**
 	 * @param list<ListedRelease> $candidates
 	 * @param array{etag:?string,last_modified:?string} $conditional
-	 * @param array{limited:bool,remaining:?int,reset_at:?int,retry_after:int} $rateLimit
+	 * @param array{limited:bool,remaining:?int,reset_at:?int,retry_after:int} $rate_limit
 	 * @return ReleaseListing
 	 */
-	private static function listingResult(
+	private static function listing_result(
 		array $candidates,
 		array $conditional,
-		bool $notModified,
-		array $rateLimit,
-		bool $searchExhausted
+		bool $not_modified,
+		array $rate_limit,
+		bool $search_exhausted
 	): array {
 		return array(
 			'candidates'       => $candidates,
 			'conditional'      => $conditional,
-			'not_modified'     => $notModified,
-			'rate_limit'       => $rateLimit,
-			'search_exhausted' => $searchExhausted,
+			'not_modified'     => $not_modified,
+			'rate_limit'       => $rate_limit,
+			'search_exhausted' => $search_exhausted,
 		);
 	}
 
 	/** @return array{identity:string,name:string,sha256:string,size:int} */
-	private function zipAsset( mixed $assets ): array {
+	private function zip_asset( mixed $assets ): array {
 		if ( ! is_array( $assets ) || ! array_is_list( $assets ) ) {
 			throw new ReleaseFailure( 'package_incompatible' );
 		}
@@ -1028,7 +1028,7 @@ final class GitHubReleaseService {
 				static function ( mixed $asset ): bool {
 					return is_array( $asset )
 						&& is_string( $asset['name'] ?? null )
-						&& self::validZipName( $asset['name'] );
+						&& self::valid_zip_name( $asset['name'] );
 				}
 			)
 		);
@@ -1037,8 +1037,8 @@ final class GitHubReleaseService {
 		}
 
 		$asset    = $matches[0];
-		$identity = self::providerIdentity( $asset['id'] ?? null );
-		$size     = self::providerPositiveInteger( $asset['size'] ?? null );
+		$identity = self::provider_identity( $asset['id'] ?? null );
+		$size     = self::provider_positive_integer( $asset['size'] ?? null );
 		$digest   = is_string( $asset['digest'] ?? null )
 			? strtolower( $asset['digest'] )
 			: '';
@@ -1047,7 +1047,7 @@ final class GitHubReleaseService {
 			|| null === $size
 			|| $size > $this->binding['maximum_artifact_bytes']
 			|| 'uploaded' !== ( $asset['state'] ?? null )
-			|| 1 !== preg_match( '/\Asha256:([a-f0-9]{64})\z/D', $digest, $digestMatch )
+			|| 1 !== preg_match( '/\Asha256:([a-f0-9]{64})\z/D', $digest, $digest_match )
 		) {
 			throw new ReleaseFailure( 'package_incompatible' );
 		}
@@ -1055,12 +1055,12 @@ final class GitHubReleaseService {
 		return array(
 			'identity' => $identity,
 			'name'     => $asset['name'],
-			'sha256'   => $digestMatch[1],
+			'sha256'   => $digest_match[1],
 			'size'     => $size,
 		);
 	}
 
-	private static function validLocator( mixed $value ): bool {
+	private static function valid_locator( mixed $value ): bool {
 		return is_string( $value )
 			&& 1 === preg_match(
 				'/\A[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9_.-]{1,100}\z/D',
@@ -1068,7 +1068,7 @@ final class GitHubReleaseService {
 			);
 	}
 
-	private static function canonicalDecimal( mixed $value ): ?string {
+	private static function canonical_decimal( mixed $value ): ?string {
 		if ( is_int( $value ) && $value > 0 ) {
 			return (string) $value;
 		}
@@ -1078,15 +1078,15 @@ final class GitHubReleaseService {
 				: null;
 	}
 
-	private static function providerIdentity( mixed $value ): ?string {
+	private static function provider_identity( mixed $value ): ?string {
 		return is_int( $value ) && $value > 0 ? (string) $value : null;
 	}
 
-	private static function providerPositiveInteger( mixed $value ): ?int {
+	private static function provider_positive_integer( mixed $value ): ?int {
 		return is_int( $value ) && $value > 0 ? $value : null;
 	}
 
-	private static function nonNegativeHeader( ?string $value ): ?int {
+	private static function non_negative_header( ?string $value ): ?int {
 		if ( null === $value || 1 !== preg_match( '/\A\d+\z/D', $value ) ) {
 			return null;
 		}
@@ -1094,7 +1094,7 @@ final class GitHubReleaseService {
 		return false === $integer ? null : $integer;
 	}
 
-	private static function positiveDelayHeader( ?string $value ): ?int {
+	private static function positive_delay_header( ?string $value ): ?int {
 		if (
 			null === $value
 			|| 1 !== preg_match( '/\A[1-9]\d*\z/D', $value )
@@ -1111,7 +1111,7 @@ final class GitHubReleaseService {
 		return (int) $whole;
 	}
 
-	private static function versionFromTag( string $tag ): ?string {
+	private static function version_from_tag( string $tag ): ?string {
 		if ( strlen( $tag ) > ReleaseVersion::MAX_LENGTH + 1 ) {
 			return null;
 		}
@@ -1119,11 +1119,11 @@ final class GitHubReleaseService {
 		return ReleaseVersion::normalize( $version );
 	}
 
-	private static function validReleaseUri( mixed $uri, string $locator ): bool {
+	private static function valid_release_uri( mixed $uri, string $locator ): bool {
 		return is_string( $uri ) && hash_equals( 'https://github.com/' . $locator, $uri );
 	}
 
-	private static function validReleasePage( mixed $url, string $locator ): bool {
+	private static function valid_release_page( mixed $url, string $locator ): bool {
 		if (
 			! is_string( $url )
 			|| strlen( $url ) > 2048
@@ -1154,17 +1154,17 @@ final class GitHubReleaseService {
 			&& '' !== $path[3];
 	}
 
-	private static function validZipName( string $name ): bool {
+	private static function valid_zip_name( string $name ): bool {
 		return 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di', $name );
 	}
 
-	private static function validEtag( mixed $value ): bool {
+	private static function valid_etag( mixed $value ): bool {
 		return is_string( $value )
 			&& strlen( $value ) <= 512
 			&& 1 === preg_match( '/\A(?:W\/)?"[\x21\x23-\x7E]*"\z/D', $value );
 	}
 
-	private static function validLastModified( mixed $value ): bool {
+	private static function valid_last_modified( mixed $value ): bool {
 		return is_string( $value )
 			&& strlen( $value ) <= 128
 			&& 1 === preg_match(
@@ -1176,7 +1176,7 @@ final class GitHubReleaseService {
 	}
 
 	/** @param list<string> $keys */
-	private static function exactKeys( mixed $value, array $keys ): bool {
+	private static function exact_keys( mixed $value, array $keys ): bool {
 		if ( ! is_array( $value ) || count( $value ) !== count( $keys ) ) {
 			return false;
 		}
@@ -1202,7 +1202,7 @@ final class GitHubReleaseService {
 	}
 
 	/** @return array{limited:bool,remaining:?int,reset_at:?int,retry_after:int} */
-	private static function emptyRateLimit(): array {
+	private static function empty_rate_limit(): array {
 		return array(
 			'limited'     => false,
 			'remaining'   => null,

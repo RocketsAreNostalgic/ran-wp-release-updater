@@ -90,7 +90,7 @@ $ran_wp_release_updater_provider_catalog = array(
 			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::compose_from_declaration( $d, $resolved, $headers, $identity, network_id: $networkId, selected_runtime_state: $selectedRuntimeState );
 		},
 		'release' => static function ( array $d, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
-			$service = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::fromReleaseDeclaration( $d, $state );
+			$service = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::from_release_declaration( $d, $state );
 			return new \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource( $service, $state );
 		},
 	),

@@ -193,11 +193,11 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 
 	/** @return array<string, mixed> */
 	public function list_releases( array $conditional = array() ): array {
-		return $this->service->listReleases( $conditional );
+		return $this->service->list_releases( $conditional );
 	}
 
 	public function inspect( string $release_identity, ?string $expected_tag = null ): IdentityDescriptor {
-		return $this->service->inspectInstalled(
+		return $this->service->inspect_installed(
 			$this->binding_record->to_array()['installed_package_identity'],
 			$release_identity,
 			$expected_tag
@@ -206,6 +206,6 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 
 	public function acquire( IdentityDescriptor $descriptor ): TemporaryArtifact {
 		BindingRecord::assert_descriptor_binding( $descriptor, $this->binding_record );
-		return $this->service->acquireInstalled( $descriptor );
+		return $this->service->acquire_installed( $descriptor );
 	}
 }

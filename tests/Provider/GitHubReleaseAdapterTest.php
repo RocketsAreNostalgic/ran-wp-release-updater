@@ -412,8 +412,8 @@ namespace Tests\Provider {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'The repository access failure must be structured.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'repository_access_unavailable', $failure->releaseCode );
-				self::assertSame( 'not_applicable', $failure->cleanupStatus );
+				self::assertSame( 'repository_access_unavailable', $failure->release_code );
+				self::assertSame( 'not_applicable', $failure->cleanup_status );
 			}
 
 			$GLOBALS['ran_github_responses'] = array(
@@ -424,8 +424,8 @@ namespace Tests\Provider {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'The exact release failure must be structured.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'release_unavailable', $failure->releaseCode );
-				self::assertSame( 'not_applicable', $failure->cleanupStatus );
+				self::assertSame( 'release_unavailable', $failure->release_code );
+				self::assertSame( 'not_applicable', $failure->cleanup_status );
 			}
 		}
 
@@ -434,7 +434,7 @@ namespace Tests\Provider {
 				$this->publicService()->list( array( 'etag' => 'invalid' ) );
 				self::fail( 'Malformed conditional state must fail before provider work.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'invalid_configuration', $failure->releaseCode );
+				self::assertSame( 'invalid_configuration', $failure->release_code );
 			}
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 		}
@@ -456,9 +456,9 @@ namespace Tests\Provider {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'A streamed rate limit must be structured.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'rate_limited', $failure->releaseCode );
-				self::assertSame( 30, $failure->retryAfter );
-				self::assertSame( 'complete', $failure->cleanupStatus );
+				self::assertSame( 'rate_limited', $failure->release_code );
+				self::assertSame( 30, $failure->retry_after );
+				self::assertSame( 'complete', $failure->cleanup_status );
 			}
 			$this->assertAllTemporaryPathsAbsent();
 
@@ -473,8 +473,8 @@ namespace Tests\Provider {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'Invalid streamed bytes must be structured.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'package_incompatible', $failure->releaseCode );
-				self::assertSame( 'complete', $failure->cleanupStatus );
+				self::assertSame( 'package_incompatible', $failure->release_code );
+				self::assertSame( 'complete', $failure->cleanup_status );
 			}
 			$this->assertAllTemporaryPathsAbsent();
 		}
@@ -494,7 +494,7 @@ namespace Tests\Provider {
 				$service->list();
 				self::fail( 'A revoked runtime must stop before HTTP.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'runtime_unavailable', $failure->releaseCode );
+				self::assertSame( 'runtime_unavailable', $failure->release_code );
 			}
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 		}
@@ -515,7 +515,7 @@ namespace Tests\Provider {
 				$service->list();
 				self::fail( 'A revoked runtime must stop after the current HTTP return.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'runtime_unavailable', $failure->releaseCode );
+				self::assertSame( 'runtime_unavailable', $failure->release_code );
 			}
 			self::assertCount( 1, $GLOBALS['ran_github_requests'] );
 		}
@@ -532,8 +532,8 @@ namespace Tests\Provider {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'Invalid bytes must fail after cleanup retry.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'package_incompatible', $failure->releaseCode );
-				self::assertSame( 'complete', $failure->cleanupStatus );
+				self::assertSame( 'package_incompatible', $failure->release_code );
+				self::assertSame( 'complete', $failure->cleanup_status );
 			}
 			self::assertSame( 0, $GLOBALS['ran_github_unlink_failures'] );
 			$this->assertAllTemporaryPathsAbsent();
@@ -544,8 +544,8 @@ namespace Tests\Provider {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'Invalid bytes must expose an unreleased owned file.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'package_incompatible', $failure->releaseCode );
-				self::assertSame( 'failed', $failure->cleanupStatus );
+				self::assertSame( 'package_incompatible', $failure->release_code );
+				self::assertSame( 'failed', $failure->cleanup_status );
 			}
 			self::assertSame( 0, $GLOBALS['ran_github_unlink_failures'] );
 			self::assertFileExists( $GLOBALS['ran_github_temp_paths'][ count( $GLOBALS['ran_github_temp_paths'] ) - 1 ] );
@@ -561,8 +561,8 @@ namespace Tests\Provider {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'A chmod allocation failure must be structured.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'operation_failed', $failure->releaseCode );
-				self::assertSame( 'complete', $failure->cleanupStatus );
+				self::assertSame( 'operation_failed', $failure->release_code );
+				self::assertSame( 'complete', $failure->cleanup_status );
 			}
 			$this->assertAllTemporaryPathsAbsent();
 
@@ -574,8 +574,8 @@ namespace Tests\Provider {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'An unreleased chmod allocation failure must be structured.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'operation_failed', $failure->releaseCode );
-				self::assertSame( 'failed', $failure->cleanupStatus );
+				self::assertSame( 'operation_failed', $failure->release_code );
+				self::assertSame( 'failed', $failure->cleanup_status );
 			}
 			$unreleasedPath = $GLOBALS['ran_github_temp_paths'][ count( $GLOBALS['ran_github_temp_paths'] ) - 1 ];
 			self::assertFileExists( $unreleasedPath );
@@ -591,8 +591,8 @@ namespace Tests\Provider {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'An identity allocation failure must be structured.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'operation_failed', $failure->releaseCode );
-				self::assertSame( 'complete', $failure->cleanupStatus );
+				self::assertSame( 'operation_failed', $failure->release_code );
+				self::assertSame( 'complete', $failure->cleanup_status );
 			}
 			$this->assertAllTemporaryPathsAbsent();
 
@@ -603,8 +603,8 @@ namespace Tests\Provider {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'An unproven temporary file must be structured.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'operation_failed', $failure->releaseCode );
-				self::assertSame( 'failed', $failure->cleanupStatus );
+				self::assertSame( 'operation_failed', $failure->release_code );
+				self::assertSame( 'failed', $failure->cleanup_status );
 			}
 			self::assertFileExists( $GLOBALS['ran_github_temp_paths'][ count( $GLOBALS['ran_github_temp_paths'] ) - 1 ] );
 		}
@@ -653,8 +653,8 @@ namespace Tests\Provider {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'Runtime loss after package inspection must suppress the inspection.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'runtime_unavailable', $failure->releaseCode );
-				self::assertSame( 'complete', $failure->cleanupStatus );
+				self::assertSame( 'runtime_unavailable', $failure->release_code );
+				self::assertSame( 'complete', $failure->cleanup_status );
 			}
 			$this->assertAllTemporaryPathsAbsent();
 		}
@@ -747,7 +747,7 @@ namespace Tests\Provider {
 			array(
 				static fn (): IdentityDescriptor => $adapter->inspect( 'not-a-release' ),
 				static fn (): TemporaryArtifact => $adapter->acquire( $invalidDescriptor ),
-				static fn (): ProspectiveReleaseInspection => $service->inspectProspective( 'not-a-release' ),
+				static fn (): ProspectiveReleaseInspection => $service->inspect_prospective( 'not-a-release' ),
 			) as $operation
 			) {
 				try {
@@ -791,7 +791,7 @@ namespace Tests\Provider {
 
 			$service = new GitHubReleaseService( $configuration, $resolver );
 			try {
-				$service->inspectProspective( '0' );
+				$service->inspect_prospective( '0' );
 				self::fail( 'GitHub release zero unexpectedly reached provider work.' );
 			} catch ( \InvalidArgumentException ) {
 				self::addToAssertionCount( 1 );
@@ -890,7 +890,7 @@ namespace Tests\Provider {
 				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 				self::fail( 'A malformed release-list member must reject the complete response.' );
 			} catch ( ReleaseFailure $exception ) {
-				self::assertSame( 'operation_failed', $exception->releaseCode );
+				self::assertSame( 'operation_failed', $exception->release_code );
 				self::assertCount( 1, $GLOBALS['ran_github_requests'] );
 			}
 
@@ -901,7 +901,7 @@ namespace Tests\Provider {
 				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 				self::fail( 'An oversized response must stop the operation.' );
 			} catch ( ReleaseFailure $exception ) {
-				self::assertSame( 'operation_failed', $exception->releaseCode );
+				self::assertSame( 'operation_failed', $exception->release_code );
 			}
 		}
 
@@ -911,7 +911,7 @@ namespace Tests\Provider {
 				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 				self::fail( 'A JSON object is not a release listing.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'operation_failed', $failure->releaseCode );
+				self::assertSame( 'operation_failed', $failure->release_code );
 			}
 
 			$GLOBALS['ran_github_responses'] = array(
@@ -922,7 +922,7 @@ namespace Tests\Provider {
 				( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7', 'v1.2.3' );
 				self::fail( 'An empty release object is not a usable candidate.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'package_incompatible', $failure->releaseCode );
+				self::assertSame( 'package_incompatible', $failure->release_code );
 			}
 		}
 
@@ -952,7 +952,7 @@ namespace Tests\Provider {
 				$this->response( 200, $pageTwo ),
 			);
 
-			$result = $service->listReleases(
+			$result = $service->list_releases(
 				array( 'etag' => '"prior"' )
 			);
 
@@ -1005,7 +1005,7 @@ namespace Tests\Provider {
 				$adapter->list_releases();
 				self::fail( 'An over-bound rate-limit delay must stop the operation.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'operation_failed', $failure->releaseCode );
+				self::assertSame( 'operation_failed', $failure->release_code );
 			}
 		}
 
@@ -1029,7 +1029,7 @@ namespace Tests\Provider {
 			try {
 				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 			} catch ( ReleaseFailure $exception ) {
-				self::assertSame( 'operation_failed', $exception->releaseCode );
+				self::assertSame( 'operation_failed', $exception->release_code );
 				throw $exception;
 			}
 		}
@@ -1085,7 +1085,7 @@ namespace Tests\Provider {
 			try {
 				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 			} catch ( ReleaseFailure $exception ) {
-				self::assertSame( 'operation_failed', $exception->releaseCode );
+				self::assertSame( 'operation_failed', $exception->release_code );
 				throw $exception; }
 		}
 
@@ -1137,8 +1137,8 @@ namespace Tests\Provider {
 				( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7', 'v1.2.3' );
 				self::fail( 'Installed inspection failures must be neutral typed failures.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( $expectedCode, $failure->releaseCode );
-				self::assertSame( 'not_applicable', $failure->cleanupStatus );
+				self::assertSame( $expectedCode, $failure->release_code );
+				self::assertSame( 'not_applicable', $failure->cleanup_status );
 			}
 
 			self::assertCount( $expectedRequests, $GLOBALS['ran_github_requests'] );
@@ -1198,8 +1198,8 @@ namespace Tests\Provider {
 				( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7', 'v1.2.3' );
 				self::fail( 'Invalid ZIP metadata must reject the candidate before commit lookup.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'package_incompatible', $failure->releaseCode );
-				self::assertSame( 'not_applicable', $failure->cleanupStatus );
+				self::assertSame( 'package_incompatible', $failure->release_code );
+				self::assertSame( 'not_applicable', $failure->cleanup_status );
 			}
 
 			self::assertSame(
@@ -1228,7 +1228,7 @@ namespace Tests\Provider {
 				( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7', 'v1.2.3' );
 				self::fail( 'A missing concrete release must fail without credential fallback.' );
 			} catch ( ReleaseFailure $exception ) {
-				self::assertSame( 'release_unavailable', $exception->releaseCode );
+				self::assertSame( 'release_unavailable', $exception->release_code );
 			}
 
 			self::assertSame(
@@ -1251,7 +1251,7 @@ namespace Tests\Provider {
 				( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7', 'v1.2.3' );
 				self::fail( 'A missing concrete commit must fail without credential fallback.' );
 			} catch ( ReleaseFailure $exception ) {
-				self::assertSame( 'release_unavailable', $exception->releaseCode );
+				self::assertSame( 'release_unavailable', $exception->release_code );
 			}
 
 			self::assertSame(
@@ -1367,7 +1367,7 @@ namespace Tests\Provider {
 			} catch ( ReleaseFailure $exception ) {
 				self::assertSame(
 					str_contains( $failure, 'repository identity' ) || str_contains( $failure, 'commit identity' ) ? 'operation_failed' : 'package_incompatible',
-					$exception->releaseCode
+					$exception->release_code
 				);
 			}
 		}
@@ -1594,7 +1594,7 @@ namespace Tests\Provider {
 				$archive
 			);
 
-			$facts = $service->inspectProspective( '7', 'v1.2.3' )->to_array();
+			$facts = $service->inspect_prospective( release_identity: '7', expected_tag: 'v1.2.3' )->to_array();
 
 			self::assertSame( '7', $facts['release_identity'] );
 			self::assertSame( 'v1.2.3', $facts['tag'] );
@@ -1621,7 +1621,7 @@ namespace Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( $this->release( 7, 'v1.2.3' ) ) ),
 			);
-			$candidate                       = $service->listReleases()['candidates'][0];
+			$candidate                       = $service->list_releases()['candidates'][0];
 			self::assertSame( 1, $calls );
 			self::assertSame( '7', $candidate['release_identity'] );
 
@@ -1636,7 +1636,7 @@ namespace Tests\Provider {
 				$archive
 			);
 
-			$facts = $service->inspectProspective(
+			$facts = $service->inspect_prospective(
 				$candidate['release_identity'],
 				$candidate['tag']
 			)->to_array();
@@ -1659,7 +1659,7 @@ namespace Tests\Provider {
 			);
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
 
-			$inspection = $this->service( $this->binding() )->inspectProspective( '7', 'v1.2.3' );
+			$inspection = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
 
 			self::assertSame( 'plugin', $inspection->to_array()['target_type'] );
 			foreach ( $GLOBALS['ran_github_requests'] as $request ) {
@@ -1686,7 +1686,7 @@ namespace Tests\Provider {
 
 			$this->expectException( ReleaseFailure::class );
 			try {
-				$service->inspectProspective( '7', 'v1.2.3' );
+				$service->inspect_prospective( '7', 'v1.2.3' );
 			} finally {
 				$this->assertAllTemporaryPathsAbsent();
 			}
@@ -1709,11 +1709,11 @@ namespace Tests\Provider {
 				)
 			);
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
-			$inspection                      = $service->inspectProspective( '7', 'v1.2.3' );
+			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
 			$persisted                       = ProspectiveReleaseInspection::rehydrate( $inspection->to_array() );
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
 
-			$owned = $service->acquireProspective( $persisted, $persisted->fingerprint_value() );
+			$owned = $service->acquire_prospective( $persisted, expected_fingerprint: $persisted->fingerprint_value() );
 
 			self::assertInstanceOf( ProspectiveReleaseArtifact::class, $owned );
 			self::assertSame( $persisted->to_array(), $owned->inspection()->to_array() );
@@ -1742,7 +1742,7 @@ namespace Tests\Provider {
 			);
 			$service                         = $this->service( $this->binding() );
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
-			$inspection                      = $service->inspectProspective( '7', 'v1.2.3' );
+			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
 			$requests                        = count( $GLOBALS['ran_github_requests'] );
 			$calls                           = 0;
 			$service                         = $this->service(
@@ -1755,7 +1755,7 @@ namespace Tests\Provider {
 			);
 
 			try {
-				$service->acquireProspective( $inspection, 'v1:' . str_repeat( '0', 64 ) );
+				$service->acquire_prospective( $inspection, 'v1:' . str_repeat( '0', 64 ) );
 				self::fail( 'A stale fingerprint must fail before provider work.' );
 			} catch ( \InvalidArgumentException ) {
 				self::addToAssertionCount( 1 );
@@ -1781,11 +1781,11 @@ namespace Tests\Provider {
 				)
 			);
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $initial );
-			$inspection                      = $service->inspectProspective( '7', 'v1.2.3' );
+			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $changed );
 
 			try {
-				$service->acquireProspective( $inspection, $inspection->fingerprint_value() );
+				$service->acquire_prospective( $inspection, $inspection->fingerprint_value() );
 				self::fail( 'Changed archive facts must reject reacquisition.' );
 			} catch ( RuntimeException $exception ) {
 				self::assertStringContainsString( 'changed before acquisition', $exception->getMessage() );
@@ -1802,13 +1802,13 @@ namespace Tests\Provider {
 			);
 			$service                         = $this->service( $this->binding() );
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
-			$inspection                      = $service->inspectProspective( '7', 'v1.2.3' );
+			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
 			$responses                       = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
 			$responses[2]                    = $this->response( 200, array( 'sha' => str_repeat( 'b', 40 ) ) );
 			$GLOBALS['ran_github_responses'] = $responses;
 
 			try {
-				$service->acquireProspective( $inspection, $inspection->fingerprint_value() );
+				$service->acquire_prospective( $inspection, $inspection->fingerprint_value() );
 				self::fail( 'Changed release facts must reject reacquisition.' );
 			} catch ( RuntimeException $exception ) {
 				self::assertStringContainsString( 'changed before acquisition', $exception->getMessage() );
@@ -1827,14 +1827,14 @@ namespace Tests\Provider {
 			);
 			$service                         = $this->service( $this->binding() );
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $initial );
-			$inspection                      = $service->inspectProspective( '7', 'v1.2.3' );
+			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $hostile );
 
 			try {
-				$service->acquireProspective( $inspection, $inspection->fingerprint_value() );
+				$service->acquire_prospective( $inspection, $inspection->fingerprint_value() );
 				self::fail( 'A hostile changed archive must reject reacquisition.' );
 			} catch ( ReleaseFailure $exception ) {
-				self::assertSame( 'package_incompatible', $exception->releaseCode );
+				self::assertSame( 'package_incompatible', $exception->release_code );
 			}
 			$this->assertAllTemporaryPathsAbsent();
 		}
@@ -1846,7 +1846,7 @@ namespace Tests\Provider {
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
-			$inspection                      = $this->service( $this->binding() )->inspectProspective( '7', 'v1.2.3' );
+			$inspection                      = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
 			$facts                           = $inspection->to_array();
 			unset( $facts['fingerprint'] );
 			$changedRuntime = ProspectiveReleaseInspection::create( array_replace( $facts, array( 'php_runtime_version' => '8.3' ) ) );
@@ -1867,7 +1867,7 @@ namespace Tests\Provider {
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
-			$inspection                      = $this->service( $this->binding() )->inspectProspective( '7', 'v1.2.3' );
+			$inspection                      = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
 			self::assertSame( '7', $inspection->release_identity() );
 			self::assertSame( 'v1.2.3', $inspection->tag() );
 			$copy                     = $inspection->to_array();
@@ -1895,7 +1895,7 @@ namespace Tests\Provider {
 				)
 			);
 			try {
-				$service->acquireProspective( $opaque, $opaque->fingerprint_value() );
+				$service->acquire_prospective( $opaque, $opaque->fingerprint_value() );
 				self::fail( 'Provider-private numeric validation must reject opaque GitHub IDs.' );
 			} catch ( \InvalidArgumentException ) {
 				self::addToAssertionCount( 1 );
@@ -2011,7 +2011,7 @@ namespace Tests\Provider {
 				$adapter->acquire( $descriptor );
 				self::fail( 'A missing release asset must fail.' );
 			} catch ( ReleaseFailure $exception ) {
-				self::assertSame( 'release_unavailable', $exception->releaseCode );
+				self::assertSame( 'release_unavailable', $exception->release_code );
 				$this->assertAllTemporaryPathsAbsent();
 			}
 
@@ -2055,7 +2055,7 @@ namespace Tests\Provider {
 				$adapter->acquire( $descriptor );
 				self::fail( 'An over-custom downloaded size was accepted.' );
 			} catch ( ReleaseFailure $exception ) {
-				self::assertSame( 'package_incompatible', $exception->releaseCode );
+				self::assertSame( 'package_incompatible', $exception->release_code );
 				self::assertSame( $limit + 1, $GLOBALS['ran_github_requests'][4][1]['limit_response_size'] );
 			} finally {
 				$this->assertAllTemporaryPathsAbsent(); }
@@ -2064,7 +2064,7 @@ namespace Tests\Provider {
 		public function testMaximumIntegerLimitDoesNotOverflowTheDownloadResponseLimit(): void {
 			$service                         = $this->service( $this->binding( maximumArtifactBytes: PHP_INT_MAX ) );
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
-			$service->listReleases();
+			$service->list_releases();
 			self::assertSame( 262145, $GLOBALS['ran_github_requests'][0][1]['limit_response_size'] );
 			// The artifact request is the only request sized from the target limit; invoke its private boundary through acquisition setup below.
 			$adapter                         = new GitHubReleaseAdapter( $this->binding( maximumArtifactBytes: PHP_INT_MAX ) );
@@ -2129,7 +2129,7 @@ namespace Tests\Provider {
 			BindingRecord $binding,
 			?GitHubCredentialResolver $credentials = null
 		): GitHubReleaseService {
-			return new GitHubReleaseService( $this->serviceConfiguration( $binding ), $credentials );
+			return new GitHubReleaseService( $this->serviceConfiguration( $binding ), $credentials, liveness_guard: null );
 		}
 
 		private function publicService(): GitHubReleaseService {
