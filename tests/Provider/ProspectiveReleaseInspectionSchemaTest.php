@@ -11,7 +11,7 @@ final class ProspectiveReleaseInspectionSchemaTest extends TestCase {
 
 	public function testWireSchemaHasFingerprintLastAndItsDigestBindsEveryFact(): void {
 		$inspection = ProspectiveReleaseInspection::create( $this->facts() );
-		$wire       = $inspection->toArray();
+		$wire       = $inspection->to_array();
 		self::assertSame( 'fingerprint', array_key_last( $wire ) );
 		self::assertSame(
 			array(
@@ -46,7 +46,7 @@ final class ProspectiveReleaseInspectionSchemaTest extends TestCase {
 				foreach ( $value as $assurance => $bool ) {
 					$changed                                  = $facts;
 					$changed['assurance_facts'][ $assurance ] = ! $bool;
-					self::assertNotSame( $inspection->fingerprintValue(), ProspectiveReleaseInspection::create( $changed )->fingerprintValue(), $assurance );
+					self::assertNotSame( $inspection->fingerprint_value(), ProspectiveReleaseInspection::create( $changed )->fingerprint_value(), $assurance );
 				}
 				continue;
 			}
@@ -54,17 +54,17 @@ final class ProspectiveReleaseInspectionSchemaTest extends TestCase {
 				$changed                = $facts;
 				$changed['target_type'] = 'theme';
 				$changed['main_file']   = 'style.css';
-				self::assertNotSame( $inspection->fingerprintValue(), ProspectiveReleaseInspection::create( $changed )->fingerprintValue(), $key );
+				self::assertNotSame( $inspection->fingerprint_value(), ProspectiveReleaseInspection::create( $changed )->fingerprint_value(), $key );
 				continue;
 			}
 			$changed         = $facts;
 			$changed[ $key ] = $this->changed( $key, $value );
-			self::assertNotSame( $inspection->fingerprintValue(), ProspectiveReleaseInspection::create( $changed )->fingerprintValue(), $key );
+			self::assertNotSame( $inspection->fingerprint_value(), ProspectiveReleaseInspection::create( $changed )->fingerprint_value(), $key );
 		}
 
 		$reordered                    = array_reverse( $facts, true );
 		$reordered['assurance_facts'] = array_reverse( $facts['assurance_facts'], true );
-		self::assertSame( $inspection->fingerprintValue(), ProspectiveReleaseInspection::create( $reordered )->fingerprintValue() );
+		self::assertSame( $inspection->fingerprint_value(), ProspectiveReleaseInspection::create( $reordered )->fingerprint_value() );
 	}
 
 	/** @return array<string,mixed> */

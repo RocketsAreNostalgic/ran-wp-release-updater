@@ -19,7 +19,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 	}
 
 	public function testInspectionFixtureIsExactAndFingerprintLast(): void {
-		$inspection = ProspectiveReleaseInspection::create( $this->facts() )->toArray();
+		$inspection = ProspectiveReleaseInspection::create( $this->facts() )->to_array();
 		self::assertSame( 'fingerprint', array_key_last( $inspection ) );
 		self::assertArrayNotHasKey( 'path', $inspection );
 		self::assertArrayNotHasKey( 'provider_payload', $inspection );
@@ -83,7 +83,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 			self::assertTrue( mkdir( $directory, 0700, true ) );
 			$file   = $directory . '/proof.php';
 			$script = '<?php define("FS_METHOD","direct");$GLOBALS["wp_version"]="6.8.0";$GLOBALS["wpdb"]=new stdClass();function add_action(string $h,mixed $c,int $p=10,int $a=1):void{}function add_filter(string $h,mixed $c,int $p=10,int $a=1):void{}'
-			. '$root=' . var_export( $root, true ) . ';$mutation=' . var_export( $mutation, true ) . ';$dir=' . var_export( $directory, true ) . ';$path=$dir."/owned.zip";file_put_contents($path,"owned");chmod($path,0600);$stat=lstat($path);$registrar=require $root."/bootstrap.php";$broker=$GLOBALS["ran_wp_release_updater_v1_broker"];$broker->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>4,"wordpress_version"=>"6.8.0"]);$state=(new ReflectionProperty($broker,"selectedRuntimeState"))->getValue($broker);$artifact=new \\RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact($path,hash_file("sha256",$path),["dev"=>$stat["dev"],"ino"=>$stat["ino"],"mode"=>$stat["mode"],"nlink"=>$stat["nlink"],"uid"=>$stat["uid"],"gid"=>$stat["gid"],"size"=>$stat["size"],"mtime"=>$stat["mtime"],"ctime"=>$stat["ctime"]]);$facts=' . var_export( ProspectiveReleaseInspection::create( $this->facts() )->toArray(), true ) . ';$payload=["inspection"=>$facts,"artifact"=>$artifact];if("nested"===$mutation){$payload["inspection"]["extra"]=true;}else{$payload["extra"]=true;}$calls=0;$service=new class($payload,$calls){public function __construct(private array $payload,private int &$calls){}public function acquire(string $a,string $b,string $c):array{$this->calls++;return $this->payload;}};$real=new \\RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseSource($service,$state);$public=$registrar->releases("github","plugin","acme/example","99");(new ReflectionProperty($public,"selected"))->setValue($public,$real);$result=$public->acquire("7","v1.2.3",$facts["fingerprint"]);echo json_encode(["result"=>$result,"calls"=>$calls,"exists"=>file_exists($path)]);';
+			. '$root=' . var_export( $root, true ) . ';$mutation=' . var_export( $mutation, true ) . ';$dir=' . var_export( $directory, true ) . ';$path=$dir."/owned.zip";file_put_contents($path,"owned");chmod($path,0600);$stat=lstat($path);$registrar=require $root."/bootstrap.php";$broker=$GLOBALS["ran_wp_release_updater_v1_broker"];$broker->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>4,"wordpress_version"=>"6.8.0"]);$state=(new ReflectionProperty($broker,"selectedRuntimeState"))->getValue($broker);$artifact=new \\RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact($path,hash_file("sha256",$path),["dev"=>$stat["dev"],"ino"=>$stat["ino"],"mode"=>$stat["mode"],"nlink"=>$stat["nlink"],"uid"=>$stat["uid"],"gid"=>$stat["gid"],"size"=>$stat["size"],"mtime"=>$stat["mtime"],"ctime"=>$stat["ctime"]]);$facts=' . var_export( ProspectiveReleaseInspection::create( $this->facts() )->to_array(), true ) . ';$payload=["inspection"=>$facts,"artifact"=>$artifact];if("nested"===$mutation){$payload["inspection"]["extra"]=true;}else{$payload["extra"]=true;}$calls=0;$service=new class($payload,$calls){public function __construct(private array $payload,private int &$calls){}public function acquire(string $a,string $b,string $c):array{$this->calls++;return $this->payload;}};$real=new \\RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseSource($service,$state);$public=$registrar->releases("github","plugin","acme/example","99");(new ReflectionProperty($public,"selected"))->setValue($public,$real);$result=$public->acquire("7","v1.2.3",$facts["fingerprint"]);echo json_encode(["result"=>$result,"calls"=>$calls,"exists"=>file_exists($path)]);';
 			file_put_contents( $file, $script );
 			$output = array();
 			exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $root . '/.workspaces/p0.3/php-tmp' ) . ' ' . escapeshellarg( $file ), $output, $status );
@@ -100,7 +100,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 
 	/** @return array<string,array{string,array<string,mixed>}> */
 	private function malformedResults(): array {
-		$inspection   = ProspectiveReleaseInspection::create( $this->facts() )->toArray();
+		$inspection   = ProspectiveReleaseInspection::create( $this->facts() )->to_array();
 		$shortVersion = $inspection;
 		unset( $shortVersion['fingerprint'] );
 		$shortVersion['version']     = '1.2';

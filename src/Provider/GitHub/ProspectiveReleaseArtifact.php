@@ -31,7 +31,7 @@ final class ProspectiveReleaseArtifact {
 		return $this->inspection;
 	}
 
-	public function claimTemporaryArtifact(): TemporaryArtifact {
+	public function claim_temporary_artifact(): TemporaryArtifact {
 		if ( $this->claimed || ! $this->artifact instanceof TemporaryArtifact ) {
 			throw new RuntimeException( 'The prospective GitHub release artifact is unavailable.' );
 		}

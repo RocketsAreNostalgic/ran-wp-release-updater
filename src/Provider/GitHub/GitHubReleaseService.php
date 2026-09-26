@@ -155,7 +155,7 @@ final class GitHubReleaseService {
 			$this->assertLive();
 			$result = $this->inspectProspective( $releaseIdentity, $expectedTag );
 			$this->assertLive();
-			return $result->toArray();
+			return $result->to_array();
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \InvalidArgumentException $exception ) {
 			throw new ReleaseFailure( 'invalid_release', null, 'not_applicable', $exception ); } catch ( \Throwable $exception ) {
@@ -171,7 +171,7 @@ final class GitHubReleaseService {
 			$this->assertLive();
 			list($releaseIdentity, $expectedTag) = $this->inspectInput( $releaseIdentity, $expectedTag );
 			list($fresh, $artifact)              = $this->prospectiveProof( $releaseIdentity, $expectedTag, $this->resolveCredentials(), true );
-			if ( ! $artifact instanceof TemporaryArtifact || ! hash_equals( $expectedFingerprint, $fresh->fingerprintValue() ) ) {
+			if ( ! $artifact instanceof TemporaryArtifact || ! hash_equals( $expectedFingerprint, $fresh->fingerprint_value() ) ) {
 				$clean = ! $artifact instanceof TemporaryArtifact || ( $artifact->discard() || $artifact->discard() );
 				throw new ReleaseFailure( 'release_changed', null, $clean ? 'complete' : 'failed' );
 			}
@@ -182,7 +182,7 @@ final class GitHubReleaseService {
 				throw new ReleaseFailure( $failure->releaseCode, $failure->retryAfter, $clean ? 'complete' : 'failed', $failure );
 			}
 			return array(
-				'inspection' => $fresh->toArray(),
+				'inspection' => $fresh->to_array(),
 				'artifact'   => $artifact,
 			);
 		} catch ( ReleaseFailure $failure ) {
@@ -424,15 +424,15 @@ final class GitHubReleaseService {
 	): ProspectiveReleaseArtifact {
 		$this->assertProspectiveInput( $inspection, $expectedFingerprint );
 		list($fresh, $artifact) = $this->prospectiveProof(
-			$inspection->releaseIdentity(),
+			$inspection->release_identity(),
 			$inspection->tag(),
 			$this->resolveCredentials(),
 			true
 		);
 		if (
 			! $artifact instanceof TemporaryArtifact
-			|| ! hash_equals( $expectedFingerprint, $fresh->fingerprintValue() )
-			|| ! hash_equals( $inspection->fingerprintValue(), $fresh->fingerprintValue() )
+			|| ! hash_equals( $expectedFingerprint, $fresh->fingerprint_value() )
+			|| ! hash_equals( $inspection->fingerprint_value(), $fresh->fingerprint_value() )
 		) {
 			if ( $artifact instanceof TemporaryArtifact ) {
 				$artifact->discard();
@@ -639,15 +639,15 @@ final class GitHubReleaseService {
 		ProspectiveReleaseInspection $inspection,
 		string $expectedFingerprint
 	): void {
-		$facts = $inspection->toArray();
+		$facts = $inspection->to_array();
 		if (
 			1 !== preg_match( '/\Av2:[a-f0-9]{64}\z/D', $expectedFingerprint )
-			|| ! hash_equals( $inspection->fingerprintValue(), $expectedFingerprint )
+			|| ! hash_equals( $inspection->fingerprint_value(), $expectedFingerprint )
 			|| ! $this->matchesConfiguration( $facts )
 		) {
 			throw new InvalidArgumentException( 'The prospective GitHub release acquisition is invalid.' );
 		}
-		$this->inspectInput( $inspection->releaseIdentity(), $inspection->tag() );
+		$this->inspectInput( $inspection->release_identity(), $inspection->tag() );
 	}
 
 	/** @param array<string, mixed> $facts */

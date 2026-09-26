@@ -1594,7 +1594,7 @@ namespace Tests\Provider {
 				$archive
 			);
 
-			$facts = $service->inspectProspective( '7', 'v1.2.3' )->toArray();
+			$facts = $service->inspectProspective( '7', 'v1.2.3' )->to_array();
 
 			self::assertSame( '7', $facts['release_identity'] );
 			self::assertSame( 'v1.2.3', $facts['tag'] );
@@ -1639,7 +1639,7 @@ namespace Tests\Provider {
 			$facts = $service->inspectProspective(
 				$candidate['release_identity'],
 				$candidate['tag']
-			)->toArray();
+			)->to_array();
 
 			self::assertSame( 2, $calls );
 			self::assertSame( 'theme', $facts['target_type'] );
@@ -1661,7 +1661,7 @@ namespace Tests\Provider {
 
 			$inspection = $this->service( $this->binding() )->inspectProspective( '7', 'v1.2.3' );
 
-			self::assertSame( 'plugin', $inspection->toArray()['target_type'] );
+			self::assertSame( 'plugin', $inspection->to_array()['target_type'] );
 			foreach ( $GLOBALS['ran_github_requests'] as $request ) {
 				self::assertArrayNotHasKey( 'Authorization', $request[1]['headers'] );
 			}
@@ -1710,17 +1710,23 @@ namespace Tests\Provider {
 			);
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspectProspective( '7', 'v1.2.3' );
-			$persisted                       = ProspectiveReleaseInspection::rehydrate( $inspection->toArray() );
+			$persisted                       = ProspectiveReleaseInspection::rehydrate( $inspection->to_array() );
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
 
-			$owned = $service->acquireProspective( $persisted, $persisted->fingerprintValue() );
+			$owned = $service->acquireProspective( $persisted, $persisted->fingerprint_value() );
 
 			self::assertInstanceOf( ProspectiveReleaseArtifact::class, $owned );
-			self::assertSame( $persisted->toArray(), $owned->inspection()->toArray() );
+			self::assertSame( $persisted->to_array(), $owned->inspection()->to_array() );
 			self::assertSame( 2, $calls );
 			self::assertCount( 12, $GLOBALS['ran_github_requests'] );
-			$artifact = $owned->claimTemporaryArtifact();
-			$path     = $artifact->inspect( static fn ( string $path ): string => $path );
+			$artifact = $owned->claim_temporary_artifact();
+			try {
+				$owned->claim_temporary_artifact();
+				self::fail( 'A second custody claim was accepted.' );
+			} catch ( \RuntimeException $failure ) {
+				self::assertSame( 'The prospective GitHub release artifact is unavailable.', $failure->getMessage() );
+			}
+			$path = $artifact->inspect( static fn ( string $path ): string => $path );
 			self::assertFileExists( $path );
 			unset( $owned );
 			self::assertFileExists( $path );
@@ -1779,7 +1785,7 @@ namespace Tests\Provider {
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $changed );
 
 			try {
-				$service->acquireProspective( $inspection, $inspection->fingerprintValue() );
+				$service->acquireProspective( $inspection, $inspection->fingerprint_value() );
 				self::fail( 'Changed archive facts must reject reacquisition.' );
 			} catch ( RuntimeException $exception ) {
 				self::assertStringContainsString( 'changed before acquisition', $exception->getMessage() );
@@ -1802,7 +1808,7 @@ namespace Tests\Provider {
 			$GLOBALS['ran_github_responses'] = $responses;
 
 			try {
-				$service->acquireProspective( $inspection, $inspection->fingerprintValue() );
+				$service->acquireProspective( $inspection, $inspection->fingerprint_value() );
 				self::fail( 'Changed release facts must reject reacquisition.' );
 			} catch ( RuntimeException $exception ) {
 				self::assertStringContainsString( 'changed before acquisition', $exception->getMessage() );
@@ -1825,7 +1831,7 @@ namespace Tests\Provider {
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $hostile );
 
 			try {
-				$service->acquireProspective( $inspection, $inspection->fingerprintValue() );
+				$service->acquireProspective( $inspection, $inspection->fingerprint_value() );
 				self::fail( 'A hostile changed archive must reject reacquisition.' );
 			} catch ( ReleaseFailure $exception ) {
 				self::assertSame( 'package_incompatible', $exception->releaseCode );
@@ -1841,14 +1847,14 @@ namespace Tests\Provider {
 			);
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
 			$inspection                      = $this->service( $this->binding() )->inspectProspective( '7', 'v1.2.3' );
-			$facts                           = $inspection->toArray();
+			$facts                           = $inspection->to_array();
 			unset( $facts['fingerprint'] );
 			$changedRuntime = ProspectiveReleaseInspection::create( array_replace( $facts, array( 'php_runtime_version' => '8.3' ) ) );
 			$changedRoot    = ProspectiveReleaseInspection::create( array_replace( $facts, array( 'package_root' => 'renamed' ) ) );
 
-			self::assertNotSame( $inspection->fingerprintValue(), $changedRuntime->fingerprintValue() );
-			self::assertNotSame( $inspection->fingerprintValue(), $changedRoot->fingerprintValue() );
-			$tampered              = $inspection->toArray();
+			self::assertNotSame( $inspection->fingerprint_value(), $changedRuntime->fingerprint_value() );
+			self::assertNotSame( $inspection->fingerprint_value(), $changedRoot->fingerprint_value() );
+			$tampered              = $inspection->to_array();
 			$tampered['main_file'] = 'other.php';
 			$this->expectException( \InvalidArgumentException::class );
 			ProspectiveReleaseInspection::rehydrate( $tampered );
@@ -1862,13 +1868,13 @@ namespace Tests\Provider {
 			);
 			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
 			$inspection                      = $this->service( $this->binding() )->inspectProspective( '7', 'v1.2.3' );
-			self::assertSame( '7', $inspection->releaseIdentity() );
+			self::assertSame( '7', $inspection->release_identity() );
 			self::assertSame( 'v1.2.3', $inspection->tag() );
-			$copy                     = $inspection->toArray();
+			$copy                     = $inspection->to_array();
 			$copy['release_identity'] = 'changed';
-			self::assertSame( '7', $inspection->releaseIdentity() );
+			self::assertSame( '7', $inspection->release_identity() );
 
-			$facts = $inspection->toArray();
+			$facts = $inspection->to_array();
 			unset( $facts['fingerprint'] );
 			try {
 				ProspectiveReleaseInspection::create( array_merge( $facts, array( 'unexpected' => true ) ) );
@@ -1889,7 +1895,7 @@ namespace Tests\Provider {
 				)
 			);
 			try {
-				$service->acquireProspective( $opaque, $opaque->fingerprintValue() );
+				$service->acquireProspective( $opaque, $opaque->fingerprint_value() );
 				self::fail( 'Provider-private numeric validation must reject opaque GitHub IDs.' );
 			} catch ( \InvalidArgumentException ) {
 				self::addToAssertionCount( 1 );
