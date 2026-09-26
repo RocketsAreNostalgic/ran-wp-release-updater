@@ -88,7 +88,7 @@ $proof            = array(
 		&& archiveManifest( $themeZip, 'ran-neutral-theme' ) === directoryManifest( get_theme_root() . '/ran-neutral-theme' )
 		&& is_plugin_active( 'ran-neutral-plugin/ran-neutral-plugin.php' ) && 'ran-neutral-theme' === get_stylesheet()
 		&& 2 === ( $diagnostics['candidate_count'] ?? null ) && 2 === ( $diagnostics['logical_target_count'] ?? null )
-		&& 4 === ( $diagnostics['protocol_version'] ?? null )
+		&& 5 === ( $diagnostics['protocol_version'] ?? null )
 		&& array(
 			'plugin' => 0,
 			'theme'  => 0,

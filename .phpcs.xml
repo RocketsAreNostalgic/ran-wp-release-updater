@@ -24,6 +24,12 @@
 
 	<!-- Completed owned-method cohort; expand only with reviewed declaration/caller proof. -->
 	<rule ref="RANOwnedMethods">
+		<include-pattern>/src/Runtime/ReleaseSource.php</include-pattern>
+		<include-pattern>/src/Runtime/RuntimeCopySelector.php</include-pattern>
+		<include-pattern>/src/Runtime/RequestProtocolValidator.php</include-pattern>
+		<include-pattern>/src/Runtime/RequestBroker.php</include-pattern>
+		<include-pattern>/runtime.php</include-pattern>
+		<include-pattern>/bootstrap.php</include-pattern>
 		<include-pattern>/src/Runtime/SelectedRuntimeState.php</include-pattern>
 		<include-pattern>/src/WordPress/StagedPackageManifest.php</include-pattern>
 		<include-pattern>/src/WordPress/PendingInstallState.php</include-pattern>
@@ -61,6 +67,12 @@
 	</rule>
 	<!-- Variable enforcement follows the completed cohorts below only. -->
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
+		<include-pattern>/src/Runtime/ReleaseSource.php</include-pattern>
+		<include-pattern>/src/Runtime/RuntimeCopySelector.php</include-pattern>
+		<include-pattern>/src/Runtime/RequestProtocolValidator.php</include-pattern>
+		<include-pattern>/src/Runtime/RequestBroker.php</include-pattern>
+		<include-pattern>/runtime.php</include-pattern>
+		<include-pattern>/bootstrap.php</include-pattern>
 		<include-pattern>/src/Runtime/SelectedRuntimeState.php</include-pattern>
 		<include-pattern>/src/WordPress/StagedPackageManifest.php</include-pattern>
 		<include-pattern>/src/WordPress/PendingInstallState.php</include-pattern>

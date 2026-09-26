@@ -9,12 +9,12 @@ use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 /** @internal Selected-runtime operations; bootstrap owns the exact wire validator. */
 final class ReleaseSource {
 
-	private bool $terminalUnavailable = false;
+	private bool $terminal_unavailable = false;
 
 	public function __construct( private object $service, private SelectedRuntimeState $state ) {
 	}
 
-	private static function directFilesystemAvailable(): bool {
+	private static function direct_filesystem_available(): bool {
 		// @phpstan-ignore phpstanWP.wpConstant.fetch (The sealed runtime must inspect direct-filesystem policy without invoking filesystem negotiation.)
 		return ( defined( 'FS_METHOD' ) && 'direct' === FS_METHOD )
 			|| ( ! defined( 'FS_METHOD' ) && ( ( $GLOBALS['wp_filesystem'] ?? null ) instanceof \WP_Filesystem_Direct ) );
@@ -36,21 +36,21 @@ final class ReleaseSource {
 	/**
 	 * @return array<string,mixed>
 	 */
-	public function inspect( string $releaseId, string $expectedTag ): array {
-		if ( ! $this->opaque( $releaseId ) || ! $this->opaque( $expectedTag ) ) {
+	public function inspect( string $release_id, string $expected_tag ): array {
+		if ( ! $this->opaque( $release_id ) || ! $this->opaque( $expected_tag ) ) {
 			return $this->invalid( 'invalid_release' );
 		}
-		return $this->operate( 'inspect', array( $releaseId, $expectedTag ) );
+		return $this->operate( 'inspect', array( $release_id, $expected_tag ) );
 	}
 
 	/**
 	 * @return array<string,mixed>
 	 */
-	public function acquire( string $releaseId, string $expectedTag, string $expectedFingerprint ): array {
-		if ( ! $this->opaque( $releaseId ) || ! $this->opaque( $expectedTag ) || 1 !== preg_match( '/\Av2:[a-f0-9]{64}\z/D', $expectedFingerprint ) ) {
+	public function acquire( string $release_id, string $expected_tag, string $expected_fingerprint ): array {
+		if ( ! $this->opaque( $release_id ) || ! $this->opaque( $expected_tag ) || 1 !== preg_match( '/\Av2:[a-f0-9]{64}\z/D', $expected_fingerprint ) ) {
 			return $this->invalid( 'invalid_release' );
 		}
-		return $this->operate( 'acquire', array( $releaseId, $expectedTag, $expectedFingerprint ) );
+		return $this->operate( 'acquire', array( $release_id, $expected_tag, $expected_fingerprint ) );
 	}
 
 	/**
@@ -62,7 +62,7 @@ final class ReleaseSource {
 		if ( null !== $failure ) {
 			return $failure;
 		}
-		if ( ! self::directFilesystemAvailable() ) {
+		if ( ! self::direct_filesystem_available() ) {
 			return $this->failure( new ReleaseFailure( 'filesystem_unsupported' ) );
 		}
 		$artifact = null;
@@ -119,7 +119,7 @@ final class ReleaseSource {
 	 * @return array<string,mixed>|null
 	 */
 	private function readiness(): ?array {
-		if ( $this->terminalUnavailable ) {
+		if ( $this->terminal_unavailable ) {
 			return $this->failure( new ReleaseFailure( 'runtime_unavailable' ) );
 		}
 		$code = $this->state->release_readiness_code();
@@ -131,7 +131,7 @@ final class ReleaseSource {
 	 */
 	private function failure( ReleaseFailure $failure ): array {
 		if ( 'runtime_unavailable' === $failure->release_code ) {
-			$this->terminalUnavailable = true;
+			$this->terminal_unavailable = true;
 		}
 		$code    = $failure->release_code;
 		$cleanup = $failure->cleanup_status;
@@ -155,7 +155,7 @@ final class ReleaseSource {
 	 * @return array<string,mixed>
 	 */
 	private function invalid( string $code ): array {
-		if ( $this->terminalUnavailable || 'runtime_unavailable' === $this->state->release_readiness_code() ) {
+		if ( $this->terminal_unavailable || 'runtime_unavailable' === $this->state->release_readiness_code() ) {
 			return $this->failure( new ReleaseFailure( 'runtime_unavailable' ) );
 		}
 		return $this->failure( new ReleaseFailure( $code ) );

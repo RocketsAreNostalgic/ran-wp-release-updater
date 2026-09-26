@@ -34,11 +34,11 @@ PHP
 $registrar = require $data['bootstrap'];
 do_action('after_setup_theme');
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-echo json_encode(array('protocol' => $broker->protocolVersion(), 'state' => $registrar->diagnostics()['state'], 'candidates' => $broker->diagnostics()['candidate_count']));
+echo json_encode(array('protocol' => $broker->protocol_version(), 'state' => $registrar->diagnostics()['state'], 'candidates' => $broker->diagnostics()['candidate_count']));
 PHP
 		);
 
-		self::assertSame( 4, $result['protocol'] );
+		self::assertSame( 5, $result['protocol'] );
 		self::assertSame( 'active', $result['state'] );
 		self::assertSame( 1, $result['candidates'] );
 	}
@@ -273,7 +273,7 @@ echo json_encode($methods);
 PHP
 		);
 
-		self::assertSame( array( 'activate', 'diagnostics', 'protocolVersion', 'refreshTarget', 'registerCandidate', 'registerTarget', 'releaseSource', 'targetDiagnostics', 'targetStatus' ), $result );
+		self::assertSame( array( 'activate', 'diagnostics', 'protocol_version', 'refresh_target', 'register_candidate', 'register_target', 'release_source', 'target_diagnostics', 'target_status' ), $result );
 	}
 
 	public function testBootstrapStateStaysWithTheFirstProtocolCellWhileTheSelectedRuntimeComesFromTheWinningCopy(): void {
@@ -312,7 +312,7 @@ PHP
 		);
 
 		self::assertTrue( $result['unchanged'] );
-		self::assertSame( 4, $result['protocol'] );
+		self::assertSame( 5, $result['protocol'] );
 		self::assertSame( 'conflict', $result['state'] );
 		self::assertSame( 'protocol_conflict_inactive', $result['code'] );
 		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['diagnostics'] );
@@ -329,14 +329,14 @@ file_put_contents($foreignRoot . '/src/Runtime/RequestBroker.php', <<<'FOREIGN'
 namespace RAN\WPReleaseUpdater\V1\Runtime;
 final class RequestBroker {
 	private function called(string $method): void { $GLOBALS['p02_foreign_calls'][$method] = ($GLOBALS['p02_foreign_calls'][$method] ?? 0) + 1; }
-	public function protocolVersion(): int { $this->called(__FUNCTION__); return 3; }
-	public function registerCandidate(string $copyFile): bool { $this->called(__FUNCTION__); return true; }
+	public function protocol_version(): int { $this->called(__FUNCTION__); return 3; }
+	public function register_candidate(string $copyFile): bool { $this->called(__FUNCTION__); return true; }
 	public function activate(array $environment): array { $this->called(__FUNCTION__); return array(); }
-	public function registerTarget(array $declaration): array { $this->called(__FUNCTION__); return array(); }
-	public function releaseSource(array $declaration): array { $this->called(__FUNCTION__); return array(); }
-	public function targetStatus(int $id): array { $this->called(__FUNCTION__); return array(); }
-	public function targetDiagnostics(int $id): array { $this->called(__FUNCTION__); return array(); }
-	public function refreshTarget(int $id): bool { $this->called(__FUNCTION__); return true; }
+	public function register_target(array $declaration): array { $this->called(__FUNCTION__); return array(); }
+	public function release_source(array $declaration): array { $this->called(__FUNCTION__); return array(); }
+	public function target_status(int $id): array { $this->called(__FUNCTION__); return array(); }
+	public function target_diagnostics(int $id): array { $this->called(__FUNCTION__); return array(); }
+	public function refresh_target(int $id): bool { $this->called(__FUNCTION__); return true; }
 	public function diagnostics(): array { $this->called(__FUNCTION__); return array('state' => 'active'); }
 }
 FOREIGN
@@ -388,7 +388,7 @@ PHP
 	public function testForeignProtocolFirstStaysUntouchedAndScheduledReplacementTerminalizesTheQueuedHandle(): void {
 		$foreign = $this->probe(
 			<<<'PHP'
-final class P02ForeignProtocol { public function protocolVersion(): int { return 1; } }
+final class P02ForeignProtocol { public function protocol_version(): int { return 1; } }
 $foreign = new P02ForeignProtocol();
 $GLOBALS['ran_wp_release_updater_v1_broker'] = $foreign;
 $registrar = require $data['bootstrap'];
@@ -464,7 +464,7 @@ PHP
 					'package_version'  => $version,
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 4,
+					'runtime_protocol' => 5,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR

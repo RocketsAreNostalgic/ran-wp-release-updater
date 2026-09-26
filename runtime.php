@@ -86,8 +86,8 @@ $ran_wp_release_updater_broker_origin = static function ( mixed $broker, mixed $
 /* The sealed catalog is deliberately local to this selected runtime. */
 $ran_wp_release_updater_provider_catalog = array(
 	'github' => array(
-		'native'  => static function ( array $d, array $resolved, array $headers, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
-			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::compose_from_declaration( $d, $resolved, $headers, $identity, network_id: $networkId, selected_runtime_state: $selectedRuntimeState );
+		'native'  => static function ( array $d, array $resolved, array $headers, string $identity, int $network_id, mixed $selected_runtime_state ): array {
+			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::compose_from_declaration( $d, $resolved, $headers, $identity, network_id: $network_id, selected_runtime_state: $selected_runtime_state );
 		},
 		'release' => static function ( array $d, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
 			$service = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::from_release_declaration( $d, $state );
@@ -105,21 +105,21 @@ return new class(
 ) {
 	/** @var array<string,array{declaration:array<string,mixed>,handle:object}> */
 	private array $targets = array();
-	private ?int $networkId;
+	private ?int $network_id;
 
-	/** @param array<string,array{native:Closure,release:Closure}> $providerCatalog */
-	public function __construct( private mixed $broker, private mixed $brokerProvenance, private mixed $selectedRuntimeState, private array $providerCatalog, private Closure $brokerOrigin ) {
-		$this->networkId = $this->networkId();
+	/** @param array<string,array{native:Closure,release:Closure}> $provider_catalog */
+	public function __construct( private mixed $broker, private mixed $broker_provenance, private mixed $selected_runtime_state, private array $provider_catalog, private Closure $broker_origin ) {
+		$this->network_id = $this->network_id();
 	}
 	private function live(): bool {
 		if (
-			! ( $this->brokerOrigin )( $this->broker, $this->brokerProvenance )
+			! ( $this->broker_origin )( $this->broker, $this->broker_provenance )
 			||
 			! $this->broker instanceof \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
-			|| ! is_callable( array( $this->broker, 'protocolVersion' ) )
+			|| ! is_callable( array( $this->broker, 'protocol_version' ) )
 			|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-			|| 4 !== $this->broker->protocolVersion()
+			|| 5 !== $this->broker->protocol_version()
 		) {
 			return false;
 		}
@@ -137,7 +137,7 @@ return new class(
 		}
 		$results = array();
 		foreach ( $submissions as $submission ) {
-			$results[] = $this->registerTarget( $submission );
+			$results[] = $this->register_target( $submission );
 		}
 		return array(
 			'accepted' => true,
@@ -149,7 +149,7 @@ return new class(
 	 * @param array<string,mixed> $submission
 	 * @return array<string,mixed>
 	 */
-	public function registerTarget( array $submission ): array {
+	public function register_target( array $submission ): array {
 		if ( ! $this->live() ) {
 			throw new RuntimeException( 'Inactive runtime handoff.' );
 		}
@@ -158,7 +158,7 @@ return new class(
 		if ( ! is_int( $id ) || 0 >= $id || ! is_array( $d ) ) {
 			throw new RuntimeException( 'Invalid target submission.' );
 		}
-		if ( null === $this->networkId ) {
+		if ( null === $this->network_id ) {
 			return $this->failure( $id, 'runtime_environment_invalid' );
 		}
 		$installed = new \RAN\WPReleaseUpdater\V1\WordPress\InstalledPackageResolver(
@@ -175,51 +175,51 @@ return new class(
 		$identity = $resolved['installed_package_identity'];
 		$key      = \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
 			array(
-				'network_id'                 => $this->networkId,
+				'network_id'                 => $this->network_id,
 				'target_type'                => $type,
 				'installed_package_identity' => $identity,
 			)
 		);
 		if ( isset( $this->targets[ $key ] ) ) {
 			$target = $this->targets[ $key ];
-			if ( $this->sameDeclaration( $target['declaration'], $d ) ) {
+			if ( $this->same_declaration( $target['declaration'], $d ) ) {
 				return $this->accepted( $id, 'target_duplicate', $key, $target['handle'] );
 			}
 			return $this->failure( $id, 'target_declaration_conflict' );
 		}
-		$provider = $this->providerCatalog[ $d['provider_code'] ?? '' ]['native'] ?? null;
+		$provider = $this->provider_catalog[ $d['provider_code'] ?? '' ]['native'] ?? null;
 		if ( ! $provider instanceof Closure ) {
 			return $this->failure( $id, 'unsupported_provider' );
 		}
 		if (
-			is_object( $this->selectedRuntimeState )
-			&& is_callable( array( $this->selectedRuntimeState, 'operation_started' ) )
-			&& true === $this->selectedRuntimeState->operation_started( $type )
+			is_object( $this->selected_runtime_state )
+			&& is_callable( array( $this->selected_runtime_state, 'operation_started' ) )
+			&& true === $this->selected_runtime_state->operation_started( $type )
 		) {
-			$handle                = $this->deferredHandle();
+			$handle                = $this->deferred_handle();
 			$this->targets[ $key ] = array(
 				'declaration' => $d,
 				'handle'      => $handle,
 			);
 			return $this->accepted( $id, 'declaration_deferred_operation_started', $key, $handle );
 		}
-		$composition = $provider( $d, $resolved, $headers, $identity, $this->networkId, $this->selectedRuntimeState );
+		$composition = $provider( $d, $resolved, $headers, $identity, $this->network_id, $this->selected_runtime_state );
 		$native      = is_array( $composition ) ? ( $composition['native'] ?? null ) : null;
 		if ( ! $native instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater ) {
 			return $this->failure( $id, is_string( $composition['code'] ?? null ) ? $composition['code'] : 'target_composition_failed' );
 		}
-		$handle                = new class( $native, $this->broker, $this->brokerProvenance, $this->selectedRuntimeState, $this->brokerOrigin ) {
-			public function __construct( private object $native, private mixed $broker, private mixed $brokerProvenance, private mixed $selectedRuntimeState, private Closure $brokerOrigin ) {
+		$handle                = new class( $native, $this->broker, $this->broker_provenance, $this->selected_runtime_state, $this->broker_origin ) {
+			public function __construct( private object $native, private mixed $broker, private mixed $broker_provenance, private mixed $selected_runtime_state, private Closure $broker_origin ) {
 			}
 			private function live(): bool {
 				if (
-					! ( $this->brokerOrigin )( $this->broker, $this->brokerProvenance )
+					! ( $this->broker_origin )( $this->broker, $this->broker_provenance )
 					||
 					! is_object( $this->broker )
 					|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
-					|| ! is_callable( array( $this->broker, 'protocolVersion' ) )
+					|| ! is_callable( array( $this->broker, 'protocol_version' ) )
 					|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-					|| 4 !== $this->broker->protocolVersion()
+					|| 5 !== $this->broker->protocol_version()
 				) {
 					return false;
 				}
@@ -244,7 +244,7 @@ return new class(
 					'state'                => 'inactive',
 					'declaration_accepted' => true,
 					'hooks_registered'     => true,
-					'code'                 => $this->livenessCode(),
+					'code'                 => $this->liveness_code(),
 					'native'               => $this->native->status(),
 				);
 			}
@@ -253,7 +253,7 @@ return new class(
 				if ( ! $this->live() ) {
 					return array(
 						'state'       => 'inactive',
-						'diagnostics' => array( array( 'code' => $this->livenessCode() ) ),
+						'diagnostics' => array( array( 'code' => $this->liveness_code() ) ),
 					);
 				}
 				if ( ! is_callable( array( $this->native, 'diagnostics' ) ) ) {
@@ -273,9 +273,9 @@ return new class(
 				}
 				return $this->native->refresh();
 			}
-			private function livenessCode(): string {
-				if ( is_object( $this->selectedRuntimeState ) && is_callable( array( $this->selectedRuntimeState, 'liveness_code' ) ) ) {
-					$code = $this->selectedRuntimeState->liveness_code();
+			private function liveness_code(): string {
+				if ( is_object( $this->selected_runtime_state ) && is_callable( array( $this->selected_runtime_state, 'liveness_code' ) ) ) {
+					$code = $this->selected_runtime_state->liveness_code();
 					if ( is_string( $code ) ) {
 						return $code;
 					}
@@ -293,28 +293,28 @@ return new class(
 	 * @param array<string,mixed> $declaration
 	 * @return array{accepted:bool,code:string,source_handle:object|null}
 	 */
-	public function releaseSource( array $declaration ): array {
+	public function release_source( array $declaration ): array {
 		if ( ! $this->live() ) {
-			return $this->releaseFailure( 'runtime_unavailable' );
+			return $this->release_failure( 'runtime_unavailable' );
 		}
-		$state = $this->selectedRuntimeState;
+		$state = $this->selected_runtime_state;
 		if ( ! $state instanceof \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState ) {
-			return $this->releaseFailure( 'runtime_unavailable' );
+			return $this->release_failure( 'runtime_unavailable' );
 		}
 		$readiness = $state->release_readiness_code();
 		if ( null !== $readiness ) {
-			return $this->releaseFailure( $readiness );
+			return $this->release_failure( $readiness );
 		}
-		$compose = $this->providerCatalog[ $declaration['provider_code'] ?? '' ]['release'] ?? null;
+		$compose = $this->provider_catalog[ $declaration['provider_code'] ?? '' ]['release'] ?? null;
 		if ( ! $compose instanceof Closure ) {
-			return $this->releaseFailure( 'provider_unavailable' );
+			return $this->release_failure( 'provider_unavailable' );
 		}
 		try {
 			$source = $compose( $declaration, $state );
 		} catch ( \InvalidArgumentException ) {
-			return $this->releaseFailure( 'invalid_configuration' );
+			return $this->release_failure( 'invalid_configuration' );
 		} catch ( Throwable ) {
-			return $this->releaseFailure( 'runtime_unavailable' );
+			return $this->release_failure( 'runtime_unavailable' );
 		}
 		return $source instanceof \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource
 			? array(
@@ -322,28 +322,28 @@ return new class(
 				'code'          => 'release_source_ready',
 				'source_handle' => $source,
 			)
-			: $this->releaseFailure( 'runtime_unavailable' );
+			: $this->release_failure( 'runtime_unavailable' );
 	}
 	/** @return array{accepted:false,code:string,source_handle:null} */
-	private function releaseFailure( string $code ): array {
+	private function release_failure( string $code ): array {
 		return array(
 			'accepted'      => false,
 			'code'          => $code,
 			'source_handle' => null,
 		); }
-	private function networkId(): ?int {
+	private function network_id(): ?int {
 		try {
-			$networkId = function_exists( 'get_current_network_id' ) ? get_current_network_id() : 1;
+			$network_id = function_exists( 'get_current_network_id' ) ? get_current_network_id() : 1;
 		} catch ( Throwable ) {
 			return null;
 		}
-		return is_int( $networkId ) && 0 < $networkId ? $networkId : null;
+		return is_int( $network_id ) && 0 < $network_id ? $network_id : null;
 	}
 	/**
 	 * @param array<string,mixed> $first
 	 * @param array<string,mixed> $next
 	 */
-	private function sameDeclaration( array $first, array $next ): bool {
+	private function same_declaration( array $first, array $next ): bool {
 		foreach ( array( 'target_type', 'provider_code', 'repository_locator', 'repository_identity', 'channel', 'update_policy', 'credential_resolver', 'maximum_artifact_bytes' ) as $fact ) {
 			if ( $first[ $fact ] !== $next[ $fact ] ) {
 				return false;
@@ -351,7 +351,7 @@ return new class(
 		}
 		return true;
 	}
-	private function deferredHandle(): object {
+	private function deferred_handle(): object {
 		return new class() {
 			/** @return array<string,mixed> */
 			public function status(): array {

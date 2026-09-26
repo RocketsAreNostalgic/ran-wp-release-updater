@@ -19,9 +19,54 @@ final class RequestBrokerTest extends TestCase {
 		$this->remove( $this->parent );
 	}
 
+	public function test_protocol_four_and_five_copies_refuse_each_other_in_both_load_orders(): void {
+		$current = $this->copy( 'current', '0.1.0-beta.2', 'current' );
+		$legacy  = $this->copy( 'legacy', '0.1.0-beta.1', 'legacy' );
+		// A purpose-built protocol-4 interface fixture, not a historical release snapshot.
+		$names = array(
+			'protocol_version'   => 'protocolVersion',
+			'register_candidate' => 'registerCandidate',
+			'register_target'    => 'registerTarget',
+			'release_source'     => 'releaseSource',
+			'target_status'      => 'targetStatus',
+			'target_diagnostics' => 'targetDiagnostics',
+			'refresh_target'     => 'refreshTarget',
+		);
+		foreach ( array( 'bootstrap.php', 'runtime.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RequestProtocolValidator.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' ) as $file ) {
+			$source = (string) file_get_contents( $legacy . '/' . $file );
+			foreach ( $names as $snake => $camel ) {
+				$source = str_replace( array( 'function ' . $snake . '(', '->' . $snake . '(', "'" . $snake . "'" ), array( 'function ' . $camel . '(', '->' . $camel . '(', "'" . $camel . "'" ), $source );
+			}
+			// Keep diagnostic wire keys unchanged while changing the interface generation.
+			$source = str_replace( "'protocolVersion'", "'protocol_version'", $source );
+			$source = str_replace( "array( \$ran_wp_release_updater_broker, 'protocol_version' )", "array( \$ran_wp_release_updater_broker, 'protocolVersion' )", $source );
+			$source = preg_replace( '/(runtime_protocol|protocol_version)(\x27\s*=>\s*)5\b/', '$1${2}4', $source );
+			$source = str_replace( array( 'return 5;', '5 !==', '5 ===' ), array( 'return 4;', '4 !==', '4 ===' ), $source );
+			file_put_contents( $legacy . '/' . $file, $source );
+		}
+		$manifest                     = json_decode( (string) file_get_contents( $legacy . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		$manifest['runtime_protocol'] = 4;
+		$manifest['package_revision'] = $this->identity( $legacy );
+		file_put_contents( $legacy . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );
+		foreach ( array( array( $legacy, $current ), array( $current, $legacy ) ) as $order ) {
+			$result = $this->probe(
+				'$first=require $data["first"]."/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $before=$broker->diagnostics(); $second=require $data["second"]."/bootstrap.php"; $handle=$second->plugin("github","/missing.php","acme/example","123"); $handle->register(); echo json_encode(array("same"=>$broker===$GLOBALS["ran_wp_release_updater_v1_broker"],"before"=>$before,"after"=>$broker->diagnostics(),"second"=>$second->diagnostics(),"status"=>$handle->status()));',
+				array(
+					'first'  => $order[0],
+					'second' => $order[1],
+				)
+			);
+			self::assertTrue( $result['same'] );
+			self::assertSame( 1, $result['before']['candidate_count'] );
+			self::assertSame( $result['before'], $result['after'] );
+			self::assertSame( 'conflict', $result['second']['state'] );
+			self::assertSame( 'protocol_conflict_inactive', $result['status']['code'] );
+		}
+	}
+
 	public function testDeclarationPathsAcceptPosixDriveQualifiedAndUncAbsoluteForms(): void {
-		$broker      = new \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker();
-		$method      = new \ReflectionMethod( $broker, 'declarationCode' );
+		$broker      = new \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker( activation_boundary_missed: false, selected_runtime_state: null );
+		$method      = new \ReflectionMethod( $broker, 'declaration_code' );
 		$declaration = array(
 			'target_type'            => 'plugin',
 			'installed_file'         => '/plugins/example/example.php',
@@ -50,14 +95,14 @@ final class RequestBrokerTest extends TestCase {
 		$new = $this->copy( 'new', '0.1.0-beta.2', 'b' );
 		foreach ( array( array( $old, $new ), array( $new, $old ) ) as $order ) {
 			$result = $this->probe(
-				'require $data["first"] . "/bootstrap.php"; require $data["second"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); echo json_encode(array("protocol"=>$broker->protocolVersion(),"result"=>$result,"marker"=>file_get_contents($data["marker"])));',
+				'require $data["first"] . "/bootstrap.php"; require $data["second"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); echo json_encode(array("protocol"=>$broker->protocol_version(),"result"=>$result,"marker"=>file_get_contents($data["marker"])));',
 				array(
 					'first'  => $order[0],
 					'second' => $order[1],
 					'marker' => $this->parent . '/selected.txt',
 				)
 			);
-			self::assertSame( 4, $result['protocol'] );
+			self::assertSame( 5, $result['protocol'] );
 			self::assertTrue( $result['result']['loaded'] );
 			self::assertSame( array(), $result['result']['diagnostics'] );
 			self::assertSame( 'new', $result['marker'] );
@@ -80,7 +125,7 @@ final class RequestBrokerTest extends TestCase {
 
 		foreach ( $orders as $order ) {
 			$result = $this->probe(
-				'foreach ($data["copies"] as $copy) require $copy . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $activation=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); echo json_encode(array("activation"=>$activation,"candidates"=>$broker->diagnostics()["candidate_count"],"marker"=>file_get_contents($data["marker"])));',
+				'foreach ($data["copies"] as $copy) require $copy . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $activation=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); echo json_encode(array("activation"=>$activation,"candidates"=>$broker->diagnostics()["candidate_count"],"marker"=>file_get_contents($data["marker"])));',
 				array(
 					'copies' => $order,
 					'marker' => $this->parent . '/selected.txt',
@@ -100,7 +145,7 @@ final class RequestBrokerTest extends TestCase {
 			$copies[] = $this->copy( 'copy-' . $index, '0.1.0-beta.' . $index, 'a' );
 		}
 		$result = $this->probe(
-			'foreach ($data["copies"] as $copy) require $copy . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); echo json_encode(array("result"=>$result,"diagnostics"=>$broker->diagnostics(),"marker"=>file_get_contents($data["marker"])));',
+			'foreach ($data["copies"] as $copy) require $copy . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); echo json_encode(array("result"=>$result,"diagnostics"=>$broker->diagnostics(),"marker"=>file_get_contents($data["marker"])));',
 			array(
 				'copies' => $copies,
 				'marker' => $this->parent . '/selected.txt',
@@ -115,7 +160,7 @@ final class RequestBrokerTest extends TestCase {
 	public function testTwoPartWordPressRuntimeVersionSelectsACompatibleCopy(): void {
 		$copy   = $this->copy( 'copy', '0.1.0-beta.2', 'a' );
 		$result = $this->probe(
-			'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"7.0")); echo json_encode(array("result"=>$result,"marker"=>file_exists($data["marker"])));',
+			'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"7.0")); echo json_encode(array("result"=>$result,"marker"=>file_exists($data["marker"])));',
 			array(
 				'copy'   => $copy,
 				'marker' => $this->parent . '/selected.txt',
@@ -132,7 +177,7 @@ final class RequestBrokerTest extends TestCase {
 		$right = $this->copy( 'right', '0.1.0-beta.2', 'b' );
 		foreach ( array( array( $left, $right ), array( $right, $left ) ) as $order ) {
 			$result = $this->probe(
-				'require $data["first"] . "/bootstrap.php"; require $data["second"] . "/bootstrap.php"; $result=$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); echo json_encode(array("result"=>$result,"marker"=>file_exists($data["marker"])));',
+				'require $data["first"] . "/bootstrap.php"; require $data["second"] . "/bootstrap.php"; $result=$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); echo json_encode(array("result"=>$result,"marker"=>file_exists($data["marker"])));',
 				array(
 					'first'  => $order[0],
 					'second' => $order[1],
@@ -147,7 +192,7 @@ final class RequestBrokerTest extends TestCase {
 
 	public function testInvalidAndLateCopiesRemainPassiveAndOneShot(): void {
 		$copy    = $this->copy( 'copy', '0.1.0-beta.2', 'a' );
-		$invalid = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $duplicate=$broker->registerCandidate($data["copy"] . "/runtime-copy.json"); $bad=$broker->registerCandidate($data["copy"] . "/wrong.json"); $first=$broker->activate(array("php_version"=>"8.0.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); $late=$broker->registerCandidate($data["copy"] . "/runtime-copy.json"); $second=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); echo json_encode(array("duplicate"=>$duplicate,"bad"=>$bad,"late"=>$late,"first"=>$first,"second"=>$second));', array( 'copy' => $copy ) );
+		$invalid = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $duplicate=$broker->register_candidate($data["copy"] . "/runtime-copy.json"); $bad=$broker->register_candidate($data["copy"] . "/wrong.json"); $first=$broker->activate(array("php_version"=>"8.0.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $late=$broker->register_candidate($data["copy"] . "/runtime-copy.json"); $second=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); echo json_encode(array("duplicate"=>$duplicate,"bad"=>$bad,"late"=>$late,"first"=>$first,"second"=>$second));', array( 'copy' => $copy ) );
 		self::assertTrue( $invalid['duplicate'] );
 		self::assertFalse( $invalid['bad'] );
 		self::assertFalse( $invalid['late'] );
@@ -158,7 +203,7 @@ final class RequestBrokerTest extends TestCase {
 
 	public function testDiagnosticsAreBoundedForRepeatedInvalidAndLateRegistrations(): void {
 		$copy   = $this->copy( 'copy', '0.1.0-beta.2', 'a' );
-		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; for ($index=0; $index<17; ++$index) $broker->registerCandidate($data["copy"] . "/wrong.json"); $invalid=$broker->diagnostics(); $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); for ($index=0; $index<17; ++$index) $broker->registerCandidate($data["copy"] . "/runtime-copy.json"); echo json_encode(array("invalid"=>$invalid,"late"=>$broker->diagnostics()));', array( 'copy' => $copy ) );
+		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; for ($index=0; $index<17; ++$index) $broker->register_candidate($data["copy"] . "/wrong.json"); $invalid=$broker->diagnostics(); $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); for ($index=0; $index<17; ++$index) $broker->register_candidate($data["copy"] . "/runtime-copy.json"); echo json_encode(array("invalid"=>$invalid,"late"=>$broker->diagnostics()));', array( 'copy' => $copy ) );
 		self::assertCount( 16, $result['invalid']['diagnostics'] );
 		self::assertSame( array( 'candidate_invalid' ), array_values( array_unique( array_column( $result['invalid']['diagnostics'], 'code' ) ) ) );
 		self::assertSame( $result['invalid']['diagnostics'], $result['late']['diagnostics'] );
@@ -173,7 +218,7 @@ final class RequestBrokerTest extends TestCase {
 			<<<'PHP'
 <?php
 namespace RAN\WPReleaseUpdater\V1\Runtime {
-	final class RequestBroker { public function protocolVersion(): int { return 1; } }
+	final class RequestBroker { public function protocol_version(): int { return 1; } }
 }
 namespace { $GLOBALS['ran_wp_release_updater_v1_broker'] = new \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker(); }
 PHP
@@ -186,7 +231,7 @@ PHP
 			)
 		);
 		self::assertTrue( $result['unchanged'] );
-		self::assertSame( 4, $result['protocol'] );
+		self::assertSame( 5, $result['protocol'] );
 		self::assertSame( 'conflict', $result['state'] );
 		self::assertSame( 'protocol_conflict_inactive', $result['code'] );
 	}
@@ -205,7 +250,7 @@ PHP
 		self::assertSame( 'runtime_handoff_invalid', $invalid['code'] );
 
 		$foreignFile = $this->parent . '/foreign-handoff.php';
-		file_put_contents( $foreignFile, "<?php class P0ForeignHandoff { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function registerTarget(array \$submission): array { return array(); } }\n" );
+		file_put_contents( $foreignFile, "<?php class P0ForeignHandoff { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array(); } }\n" );
 		$foreign = $this->copy( 'foreign-handoff', '0.1.0-beta.2', 'c' );
 		$this->replaceRuntime( $foreign, "<?php\nrequire_once " . var_export( $foreignFile, true ) . ";\nreturn new P0ForeignHandoff();\n" );
 		$wrongOrigin = $this->activate( $foreign );
@@ -217,8 +262,8 @@ PHP
 		$foreignFile = $this->parent . '/foreign-target.php';
 		file_put_contents( $foreignFile, "<?php class P0ForeignTarget { public function status(): array { return array(); } public function diagnostics(): array { return array(); } public function refresh(): bool { return true; } }\n" );
 		$copy = $this->copy( 'foreign-target', '0.1.0-beta.2', 'a' );
-		$this->replaceRuntime( $copy, "<?php\nrequire_once " . var_export( $foreignFile, true ) . ";\nreturn new class { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(static fn(array \$submission): array => array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()), \$submissions)); } public function registerTarget(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()); } };\n" );
-		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->registerTarget(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode($broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")));', array( 'copy' => $copy ) );
+		$this->replaceRuntime( $copy, "<?php\nrequire_once " . var_export( $foreignFile, true ) . ";\nreturn new class { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(static fn(array \$submission): array => array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()), \$submissions)); } public function register_target(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()); } };\n" );
+		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode($broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")));', array( 'copy' => $copy ) );
 		self::assertFalse( $result['loaded'] );
 		self::assertSame( 'runtime_handoff_invalid', $result['code'] );
 	}
@@ -229,8 +274,8 @@ PHP
 			'magic'     => 'class P0Target { public function status(): array { $GLOBALS["ran_test_target_called"] = true; return array(); } public function diagnostics(): array { return array(); } public function refresh(): bool { return true; } public function __call(string $name, array $arguments): mixed { return null; } }',
 		) as $mode => $target ) {
 			$copy = $this->copy( 'reject-' . $mode, '0.1.0-beta.2', substr( $mode, 0, 1 ) );
-			$this->replaceRuntime( $copy, "<?php\n" . $target . "\nreturn new class { public function boot(array \$environment, array \$submissions): array { \$GLOBALS['ran_test_target_checked'] = true; return array('accepted' => true, 'code' => 'runtime_active', 'results' => array_map(static fn(array \$submission): array => array('submission_id' => \$submission['submission_id'], 'accepted' => true, 'code' => 'target_active', 'target_key' => str_repeat('a', 64), 'target_handle' => new P0Target()), \$submissions)); } public function registerTarget(array \$submission): array { return array('submission_id' => \$submission['submission_id'], 'accepted' => true, 'code' => 'target_active', 'target_key' => str_repeat('a', 64), 'target_handle' => new P0Target()); } public function releaseSource(array \$declaration): array { return array(); } };\n" );
-			$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->registerTarget(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); $result["booted"]=$GLOBALS["ran_test_target_checked"]??false; $result["target_called"]=$GLOBALS["ran_test_target_called"]??false; echo json_encode($result);', array( 'copy' => $copy ) );
+			$this->replaceRuntime( $copy, "<?php\n" . $target . "\nreturn new class { public function boot(array \$environment, array \$submissions): array { \$GLOBALS['ran_test_target_checked'] = true; return array('accepted' => true, 'code' => 'runtime_active', 'results' => array_map(static fn(array \$submission): array => array('submission_id' => \$submission['submission_id'], 'accepted' => true, 'code' => 'target_active', 'target_key' => str_repeat('a', 64), 'target_handle' => new P0Target()), \$submissions)); } public function register_target(array \$submission): array { return array('submission_id' => \$submission['submission_id'], 'accepted' => true, 'code' => 'target_active', 'target_key' => str_repeat('a', 64), 'target_handle' => new P0Target()); } public function release_source(array \$declaration): array { return array(); } };\n" );
+			$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $result["booted"]=$GLOBALS["ran_test_target_checked"]??false; $result["target_called"]=$GLOBALS["ran_test_target_called"]??false; echo json_encode($result);', array( 'copy' => $copy ) );
 			self::assertTrue( $result['booted'], $mode );
 			self::assertFalse( $result['target_called'], $mode );
 			self::assertFalse( $result['loaded'], $mode );
@@ -254,12 +299,12 @@ return new class {
 		return array('submission_id' => $submission['submission_id'], 'accepted' => true, 'code' => 'declaration_deferred_operation_started', 'target_key' => str_repeat('a', 64), 'target_handle' => $handle);
 	}
 	public function boot(array $environment, array $submissions): array { return array('accepted' => true, 'code' => 'runtime_active', 'results' => array_map(fn(array $submission): array => $this->result($submission), $submissions)); }
-	public function registerTarget(array $submission): array { return $this->result($submission); }
-	public function releaseSource(array $declaration): array { unset($declaration); return array('accepted' => false, 'code' => 'provider_unavailable', 'source_handle' => null); }
+	public function register_target(array $submission): array { return $this->result($submission); }
+	public function release_source(array $declaration): array { unset($declaration); return array('accepted' => false, 'code' => 'provider_unavailable', 'source_handle' => null); }
 };
 PHP
 		);
-		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); echo json_encode($broker->registerTarget(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)));', array( 'copy' => $copy ) );
+		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); echo json_encode($broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)));', array( 'copy' => $copy ) );
 		self::assertTrue( $result['accepted'] );
 		self::assertSame( 'declaration_deferred_operation_started', $result['code'] );
 	}
@@ -267,7 +312,7 @@ PHP
 	public function testSelectedRuntimeHandoffRejectsBrokerLivenessChanges(): void {
 		foreach ( array( 'replacement', 'protocol' ) as $mode ) {
 			$result = $this->probe(
-				'$broker=new class { public int $protocol=4; public function protocolVersion(): int { return $this->protocol; } }; $GLOBALS["ran_wp_release_updater_v1_broker"]=$broker; $handoff=require $data["runtime"]; if ("replacement"===$data["mode"]) $GLOBALS["ran_wp_release_updater_v1_broker"]=new stdClass(); if ("protocol"===$data["mode"]) $broker->protocol=1; try { $handoff->boot(array(),array()); echo json_encode(array("failed"=>false)); } catch (Throwable) { echo json_encode(array("failed"=>true)); }',
+				'$broker=new class { public int $protocol=5; public function protocol_version(): int { return $this->protocol; } }; $GLOBALS["ran_wp_release_updater_v1_broker"]=$broker; $handoff=require $data["runtime"]; if ("replacement"===$data["mode"]) $GLOBALS["ran_wp_release_updater_v1_broker"]=new stdClass(); if ("protocol"===$data["mode"]) $broker->protocol=1; try { $handoff->boot(array(),array()); echo json_encode(array("failed"=>false)); } catch (Throwable) { echo json_encode(array("failed"=>true)); }',
 				array(
 					'runtime' => dirname( __DIR__, 2 ) . '/runtime.php',
 					'mode'    => $mode,
@@ -279,8 +324,8 @@ PHP
 
 	public function testInvalidActiveCompositionResultFailsClosedAndTerminatesTheHandle(): void {
 		$copy = $this->copy( 'invalid-active-result', '0.1.0-beta.2', 'a' );
-		$this->replaceRuntime( $copy, "<?php\nreturn new class { public function boot(array \$environment,array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function registerTarget(array \$submission): array { return array(); } public function releaseSource(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); } };\n" );
-		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $active=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); $registered=$broker->registerTarget(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); $status=$broker->targetStatus($registered["submission_id"]); $again=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); echo json_encode(array("active"=>$active,"registered"=>$registered,"status"=>$status,"again"=>$again));', array( 'copy' => $copy ) );
+		$this->replaceRuntime( $copy, "<?php\nreturn new class { public function boot(array \$environment,array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array(); } public function release_source(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); } };\n" );
+		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $active=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $registered=$broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); $status=$broker->target_status($registered["submission_id"]); $again=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); echo json_encode(array("active"=>$active,"registered"=>$registered,"status"=>$status,"again"=>$again));', array( 'copy' => $copy ) );
 
 		self::assertTrue( $result['active']['loaded'] );
 		self::assertSame( 'runtime_handoff_invalid', $result['registered']['code'] );
@@ -306,12 +351,12 @@ return new class {
 		return array('submission_id' => $submission['submission_id'], 'accepted' => true, 'code' => 'target_active', 'target_key' => str_repeat('a', 64), 'target_handle' => $handle);
 	}
 	public function boot(array $environment, array $submissions): array { return array('accepted' => true, 'code' => 'runtime_active', 'results' => array_map(fn(array $submission): array => $this->result($submission), $submissions)); }
-	public function registerTarget(array $submission): array { return $this->result($submission); }
-	public function releaseSource(array $declaration): array { unset($declaration); return array('accepted' => false, 'code' => 'provider_unavailable', 'source_handle' => null); }
+	public function register_target(array $submission): array { return $this->result($submission); }
+	public function release_source(array $declaration): array { unset($declaration); return array('accepted' => false, 'code' => 'provider_unavailable', 'source_handle' => null); }
 };
 PHP
 		);
-		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); $registered=$broker->registerTarget(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode(array("registered"=>$registered,"status"=>$broker->targetStatus($registered["submission_id"]),"diagnostics"=>$broker->targetDiagnostics($registered["submission_id"])));', array( 'copy' => $copy ) );
+		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $registered=$broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode(array("registered"=>$registered,"status"=>$broker->target_status($registered["submission_id"]),"diagnostics"=>$broker->target_diagnostics($registered["submission_id"])));', array( 'copy' => $copy ) );
 
 		self::assertTrue( $result['registered']['accepted'] );
 		self::assertSame( 'runtime_liveness_lost', $result['status']['native']['failure_code'] );
@@ -326,20 +371,20 @@ PHP
 <?php
 return new class {
 	public function boot(array $environment, array $submissions): array { return array('accepted' => true, 'code' => 'runtime_active', 'results' => array()); }
-	public function registerTarget(array $submission): array { return array('submission_id' => $submission['submission_id'] + 1, 'accepted' => false, 'code' => 'target_composition_failed', 'target_key' => null, 'target_handle' => null); }
-	public function releaseSource(array $declaration): array { unset($declaration); return array('accepted' => false, 'code' => 'provider_unavailable', 'source_handle' => null); }
+	public function register_target(array $submission): array { return array('submission_id' => $submission['submission_id'] + 1, 'accepted' => false, 'code' => 'target_composition_failed', 'target_key' => null, 'target_handle' => null); }
+	public function release_source(array $declaration): array { unset($declaration); return array('accepted' => false, 'code' => 'provider_unavailable', 'source_handle' => null); }
 };
 PHP
 		);
-		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $active=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); $registered=$broker->registerTarget(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode(array("active"=>$active,"registered"=>$registered));', array( 'copy' => $copy ) );
+		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $active=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $registered=$broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode(array("active"=>$active,"registered"=>$registered));', array( 'copy' => $copy ) );
 		self::assertTrue( $result['active']['loaded'] );
 		self::assertSame( 'runtime_handoff_invalid', $result['registered']['code'] );
 	}
 
 	public function testReleaseSourceRejectsUnknownOperationalOutcomeFromTheCurrentHandoff(): void {
 		$copy = $this->copy( 'unknown-release-outcome', '0.1.0-beta.2', 'a' );
-		$this->replaceRuntime( $copy, "<?php\nreturn new class { public function boot(array \$environment,array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function registerTarget(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null); } public function releaseSource(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'future_release_outcome','source_handle'=>null); } };\n" );
-		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); $source=$broker->releaseSource(array("provider_code"=>"github","target_type"=>"plugin","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode(array("source"=>$source,"diagnostics"=>$broker->diagnostics()));', array( 'copy' => $copy ) );
+		$this->replaceRuntime( $copy, "<?php\nreturn new class { public function boot(array \$environment,array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null); } public function release_source(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'future_release_outcome','source_handle'=>null); } };\n" );
+		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $source=$broker->release_source(array("provider_code"=>"github","target_type"=>"plugin","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode(array("source"=>$source,"diagnostics"=>$broker->diagnostics()));', array( 'copy' => $copy ) );
 
 		self::assertSame(
 			array(
@@ -370,12 +415,12 @@ return new class {
 		return array('submission_id'=>$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>$handle);
 	}
 	public function boot(array $environment,array $submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(fn(array $submission): array=>$this->result($submission),$submissions)); }
-	public function registerTarget(array $submission): array { return $this->result($submission); }
-	public function releaseSource(array $declaration): array { unset($declaration); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); }
+	public function register_target(array $submission): array { return $this->result($submission); }
+	public function release_source(array $declaration): array { unset($declaration); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); }
 };
 PHP
 		);
-		$result = $this->probe( '$GLOBALS["p03_additive_diagnostic_reads"]=0; require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $queued=$broker->registerTarget(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); $activation=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")); $diagnostics=$broker->diagnostics(); echo json_encode(array("queued"=>$queued["accepted"],"activation_loaded"=>$activation["loaded"],"activation_code"=>$activation["code"],"state"=>$diagnostics["state"],"codes"=>array_column($diagnostics["diagnostics"],"code"),"reads"=>$GLOBALS["p03_additive_diagnostic_reads"]));', array( 'copy' => $copy ) );
+		$result = $this->probe( '$GLOBALS["p03_additive_diagnostic_reads"]=0; require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $queued=$broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); $activation=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $diagnostics=$broker->diagnostics(); echo json_encode(array("queued"=>$queued["accepted"],"activation_loaded"=>$activation["loaded"],"activation_code"=>$activation["code"],"state"=>$diagnostics["state"],"codes"=>array_column($diagnostics["diagnostics"],"code"),"reads"=>$GLOBALS["p03_additive_diagnostic_reads"]));', array( 'copy' => $copy ) );
 
 		self::assertTrue( $result['queued'] );
 		self::assertSame( 1, $result['reads'] );
@@ -402,7 +447,7 @@ PHP
 		foreach ( array( 'bootstrap.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RequestProtocolValidator.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' ) as $file ) {
 			copy( dirname( __DIR__, 2 ) . '/' . $file, $root . '/' . $file );
 		}
-		file_put_contents( $root . '/runtime.php', "<?php\n// " . $revision . "\nfile_put_contents('" . addslashes( $this->parent . '/selected.txt' ) . "', basename(__DIR__));\nreturn new class { public function boot(array \$environment,array \$submissions): array { unset( \$environment ); return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(static fn(array \$submission): array => array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null), \$submissions)); } public function registerTarget(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null); } public function releaseSource(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); } };\n" );
+		file_put_contents( $root . '/runtime.php', "<?php\n// " . $revision . "\nfile_put_contents('" . addslashes( $this->parent . '/selected.txt' ) . "', basename(__DIR__));\nreturn new class { public function boot(array \$environment,array \$submissions): array { unset( \$environment ); return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(static fn(array \$submission): array => array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null), \$submissions)); } public function register_target(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null); } public function release_source(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); } };\n" );
 		file_put_contents(
 			$root . '/runtime-copy.json',
 			json_encode(
@@ -411,7 +456,7 @@ PHP
 					'package_version'  => $version,
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 4,
+					'runtime_protocol' => 5,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR
@@ -430,7 +475,7 @@ PHP
 
 	/** @return array<string,mixed> */
 	private function activate( string $copy ): array {
-		return $this->probe( 'require $data["copy"] . "/bootstrap.php"; echo json_encode($GLOBALS["ran_wp_release_updater_v1_broker"]->activate(array("php_version"=>"8.2.0","runtime_protocol"=>4,"wordpress_version"=>"6.8.0")));', array( 'copy' => $copy ) );
+		return $this->probe( 'require $data["copy"] . "/bootstrap.php"; echo json_encode($GLOBALS["ran_wp_release_updater_v1_broker"]->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")));', array( 'copy' => $copy ) );
 	}
 
 	private function identity( string $root ): string {

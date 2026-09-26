@@ -55,7 +55,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		self::assertFileDoesNotExist( $root . '/src/Runtime/Composition/Github.php' );
 		$broker  = (string) file_get_contents( $root . '/src/Runtime/RequestBroker.php' );
 		$runtime = (string) file_get_contents( $root . '/runtime.php' );
-		self::assertStringContainsString( 'registerTarget', $broker );
+		self::assertStringContainsString( 'register_target', $broker );
 		self::assertStringContainsString( 'public function boot', $runtime );
 		self::assertStringNotContainsString( 'bitbucket', $runtime );
 		self::assertStringNotContainsString( 'gitlab', $runtime );

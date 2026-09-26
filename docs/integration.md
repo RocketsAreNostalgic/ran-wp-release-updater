@@ -34,11 +34,11 @@ $registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';
 
 $releaseUpdater = $registrar->plugin(
     provider: 'github',
-    pluginFile: __FILE__,
+    plugin_file: __FILE__,
     repository: 'acme/example-plugin',
-    repositoryId: '123456789',
+    repository_id: '123456789',
     channel: 'stable',
-    updatePolicy: 'manual'
+    update_policy: 'manual'
 );
 
 $releaseUpdater->register();
@@ -51,9 +51,9 @@ $registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';
 
 $releaseUpdater = $registrar->theme(
     provider: 'github',
-    stylesheetFile: __DIR__ . '/style.css',
+    stylesheet_file: __DIR__ . '/style.css',
     repository: 'acme/example-theme',
-    repositoryId: '987654321'
+    repository_id: '987654321'
 );
 
 $releaseUpdater->register();
@@ -86,11 +86,11 @@ This election mechanism is deliberate: independently distributed plugins/themes 
 | `provider` | Built-in provider code; currently `github` |
 | installed file | Plugin main file or theme `style.css` |
 | `repository` | GitHub `owner/repository` |
-| `repositoryId` | Positive numeric GitHub repository ID represented as a string |
+| `repository_id` | Positive numeric GitHub repository ID represented as a string |
 | `channel` | `stable` or `prerelease`; defaults to `stable` |
-| `updatePolicy` | `manual`, `automatic`, `forced-off`, or `disabled`; defaults to `manual` |
+| `update_policy` | `manual`, `automatic`, `forced-off`, or `disabled`; defaults to `manual` |
 | `credentials` | Optional request-local callable returning a token string or `null` |
-| `maximumArtifactBytes` | Positive compressed-ZIP byte ceiling; defaults to 52,428,800 bytes |
+| `maximum_artifact_bytes` | Positive compressed-ZIP byte ceiling; defaults to 52,428,800 bytes |
 
 The repository ID is GitHub's numeric repository `id`, not the `owner/repository` string. For example:
 
@@ -165,9 +165,9 @@ A plugin or theme may pass a request-local credentials callback:
 ```php
 $releaseUpdater = $registrar->plugin(
     provider: 'github',
-    pluginFile: __FILE__,
+    plugin_file: __FILE__,
     repository: 'acme/example-plugin',
-    repositoryId: '123456789',
+    repository_id: '123456789',
     credentials: static fn (): ?string => getenv('EXAMPLE_PLUGIN_GITHUB_TOKEN') ?: null
 );
 

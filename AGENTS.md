@@ -51,6 +51,14 @@ Completed result/proof cohorts also enforce owned methods and variable naming in
 `src/WordPress/StagedPackageManifest.php`,
 `src/Runtime/SelectedRuntimeState.php`.
 
+Completed result/proof cohorts also enforce owned methods and variable naming in
+`bootstrap.php`,
+`runtime.php`,
+`src/Runtime/RequestBroker.php`,
+`src/Runtime/RequestProtocolValidator.php`,
+`src/Runtime/RuntimeCopySelector.php`,
+`src/Runtime/ReleaseSource.php`.
+
 Keep release-updater identity and product constraints local: the
 `RAN\WPReleaseUpdater\V1` namespace, WordPress 6.5 floor, PHP `^8.2` range,
 source paths, provider/runtime rules, security-sensitive native-primitive

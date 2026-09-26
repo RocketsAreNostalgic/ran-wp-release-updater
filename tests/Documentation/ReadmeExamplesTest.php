@@ -92,11 +92,11 @@ final class ReadmeExamplesTest extends TestCase {
 		$registrar = require $root . '/bootstrap.php';
 		foreach ( array( 'plugin', 'theme' ) as $method ) {
 			$parameter = ( new \ReflectionMethod( $registrar, $method ) )->getParameters()[7];
-			self::assertSame( 'maximumArtifactBytes', $parameter->getName(), $method );
+			self::assertSame( 'maximum_artifact_bytes', $parameter->getName(), $method );
 			self::assertTrue( $parameter->isDefaultValueAvailable(), $method );
 			self::assertSame( 52_428_800, $parameter->getDefaultValue(), $method );
 		}
-		self::assertStringContainsString( 'maximumArtifactBytes', $readme );
+		self::assertStringContainsString( 'maximum_artifact_bytes', $readme );
 		self::assertStringContainsString( '52,428,800 bytes', $readme );
 	}
 
@@ -154,7 +154,7 @@ final class ReadmeExamplesTest extends TestCase {
 
 	public function testReleaseFenceCannotPassWhenItsCallbackDoesNoOperation(): void {
 		$script  = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
-		$fence   = '$source = $registrar->releases(provider: "github", packageType: "plugin", repository: "acme/consumer", repositoryId: "99"); add_action("init", static function (): void {});';
+		$fence   = '$source = $registrar->releases(provider: "github", package_type: "plugin", repository: "acme/consumer", repository_id: "99"); add_action("init", static function (): void {});';
 		$command = $this->childPhpCommand( $script, array( 'plugin', 'fence-list', base64_encode( $fence ) ) );
 		exec( $command, $output, $status );
 		self::assertNotSame( 0, $status, 'A release fence without an operation must fail its proof.' );

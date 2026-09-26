@@ -468,7 +468,7 @@ function verifyRuntime( string $source ): array {
 		$payload .= $file . "\0" . hash_file( 'sha256', $source . '/' . $file ) . "\n";
 	}
 	requireFact(
-		4 === ( $runtime['runtime_protocol'] ?? null )
+		5 === ( $runtime['runtime_protocol'] ?? null )
 		&& hash( 'sha256', $payload ) === ( $runtime['package_revision'] ?? null ),
 		'Runtime manifest does not match the Protocol 4 source bytes.'
 	);

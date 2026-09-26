@@ -24,8 +24,8 @@ final class RuntimeCopySelector {
 	private const SHA256    = '/\A[a-f0-9]{64}\z/D';
 
 	/** @return array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string} */
-	public function candidate( string $copyFile ): array {
-		$file = 'runtime-copy.json' === basename( $copyFile ) && ! is_link( $copyFile ) && is_file( $copyFile ) ? realpath( $copyFile ) : false;
+	public function candidate( string $copy_file ): array {
+		$file = 'runtime-copy.json' === basename( $copy_file ) && ! is_link( $copy_file ) && is_file( $copy_file ) ? realpath( $copy_file ) : false;
 		$root = false === $file ? false : realpath( dirname( $file ) );
 		if ( false === $file || false === $root || $file !== $root . DIRECTORY_SEPARATOR . 'runtime-copy.json' ) {
 			throw new RuntimeException( 'Invalid runtime copy.' );
@@ -38,13 +38,13 @@ final class RuntimeCopySelector {
 		if (
 			! is_array( $facts )
 			|| array_is_list( $facts )
-			|| ! $this->exactKeys( $facts, self::COPY_KEYS )
+			|| ! $this->exact_keys( $facts, self::COPY_KEYS )
 			|| ! is_string( $facts['package_revision'] )
 			|| 1 !== preg_match( self::SHA256, $facts['package_revision'] )
 			|| ! is_string( $facts['package_version'] )
 			|| ! is_string( $facts['php_floor'] )
 			|| 'runtime.php' !== $facts['runtime_file']
-			|| 4 !== $facts['runtime_protocol']
+			|| 5 !== $facts['runtime_protocol']
 			|| ! is_string( $facts['wordpress_floor'] )
 		) {
 			throw new RuntimeException( 'Invalid runtime copy.' );
@@ -52,8 +52,8 @@ final class RuntimeCopySelector {
 		$this->version( $facts['package_version'] );
 		$this->version( $facts['php_floor'] );
 		$this->version( $facts['wordpress_floor'] );
-		$runtime = $this->regularFile( $root, 'runtime.php' );
-		if ( ! hash_equals( $facts['package_revision'], $this->packageRevision( $root ) ) ) {
+		$runtime = $this->regular_file( $root, 'runtime.php' );
+		if ( ! hash_equals( $facts['package_revision'], $this->package_revision( $root ) ) ) {
 			throw new RuntimeException( 'Runtime package identity mismatch.' );
 		}
 		return array(
@@ -67,10 +67,10 @@ final class RuntimeCopySelector {
 	}
 
 	/** @param array<string,mixed> $environment */
-	public function validEnvironment( array $environment ): bool {
+	public function valid_environment( array $environment ): bool {
 		if (
-			! $this->exactKeys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
-			|| 4 !== $environment['runtime_protocol']
+			! $this->exact_keys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
+			|| 5 !== $environment['runtime_protocol']
 			|| ! is_string( $environment['php_version'] )
 			|| ! is_string( $environment['wordpress_version'] )
 		) {
@@ -78,7 +78,7 @@ final class RuntimeCopySelector {
 		}
 		try {
 			$this->version( $environment['php_version'] );
-			$this->wordpressVersion( $environment['wordpress_version'] );
+			$this->wordpress_version( $environment['wordpress_version'] );
 			return true;
 		} catch ( \Throwable ) {
 			return false;
@@ -91,15 +91,15 @@ final class RuntimeCopySelector {
 	 * @return array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string}
 	 */
 	public function select( array $candidates, array $environment ): array {
-		if ( array() === $candidates || ! $this->validEnvironment( $environment ) ) {
+		if ( array() === $candidates || ! $this->valid_environment( $environment ) ) {
 			throw new RuntimeException( 'Invalid runtime environment.' );
 		}
-		$wordpressVersion = $this->wordpressVersion( $environment['wordpress_version'] );
-		$compatible       = array_values(
+		$wordpress_version = $this->wordpress_version( $environment['wordpress_version'] );
+		$compatible        = array_values(
 			array_filter(
 				$candidates,
 				fn ( array $candidate ): bool => $this->compare( $candidate['php_floor'], $environment['php_version'] ) <= 0
-					&& $this->compare( $candidate['wordpress_floor'], $wordpressVersion ) <= 0
+					&& $this->compare( $candidate['wordpress_floor'], $wordpress_version ) <= 0
 			)
 		);
 		if ( array() === $compatible ) {
@@ -122,10 +122,10 @@ final class RuntimeCopySelector {
 		return $compatible[0];
 	}
 
-	private function packageRevision( string $root ): string {
+	private function package_revision( string $root ): string {
 		$files = array( 'bootstrap.php', 'runtime.php' );
 		foreach ( $files as $file ) {
-			$this->regularFile( $root, $file );
+			$this->regular_file( $root, $file );
 		}
 
 		$source = $root . DIRECTORY_SEPARATOR . 'src';
@@ -142,13 +142,13 @@ final class RuntimeCopySelector {
 			}
 			$path     = $entry->getPathname();
 			$relative = str_replace( '\\', '/', substr( $path, strlen( $root ) + 1 ) );
-			$this->regularFile( $root, $relative );
+			$this->regular_file( $root, $relative );
 			$files[] = $relative;
 		}
 		sort( $files, SORT_STRING );
 		$payload = '';
 		foreach ( $files as $file ) {
-			$digest = hash_file( 'sha256', $this->regularFile( $root, $file ) );
+			$digest = hash_file( 'sha256', $this->regular_file( $root, $file ) );
 			if ( false === $digest ) {
 				throw new RuntimeException( 'Unreadable runtime source.' );
 			}
@@ -158,7 +158,7 @@ final class RuntimeCopySelector {
 		return hash( 'sha256', $payload );
 	}
 
-	private function regularFile( string $root, string $relative ): string {
+	private function regular_file( string $root, string $relative ): string {
 		if ( '' === $relative || str_contains( $relative, "\0" ) || str_starts_with( $relative, '/' ) || preg_match( '#(?:\\A|/)\.\.(?:/|\\z)#', $relative ) ) {
 			throw new RuntimeException( 'Invalid runtime source.' );
 		}
@@ -171,7 +171,7 @@ final class RuntimeCopySelector {
 		return $actual;
 	}
 
-	private function wordpressVersion( string $value ): string {
+	private function wordpress_version( string $value ): string {
 		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\z/D', $value ) ) {
 			$value .= '.0';
 		}
@@ -217,8 +217,8 @@ final class RuntimeCopySelector {
 			}
 			return -1;
 		}
-		$prereleaseLength = max( count( $left['prerelease'] ), count( $right['prerelease'] ) );
-		for ( $index = 0; $index < $prereleaseLength; ++$index ) {
+		$prerelease_length = max( count( $left['prerelease'] ), count( $right['prerelease'] ) );
+		for ( $index = 0; $index < $prerelease_length; ++$index ) {
 			if ( ! isset( $left['prerelease'][ $index ] ) ) {
 				return -1;
 			}
@@ -230,14 +230,14 @@ final class RuntimeCopySelector {
 			if ( $a === $b ) {
 				continue;
 			}
-			$aNumeric = 1 === preg_match( '/\A[0-9]+\z/D', $a );
-			$bNumeric = 1 === preg_match( '/\A[0-9]+\z/D', $b );
-			if ( $aNumeric && $bNumeric ) {
+			$a_numeric = 1 === preg_match( '/\A[0-9]+\z/D', $a );
+			$b_numeric = 1 === preg_match( '/\A[0-9]+\z/D', $b );
+			if ( $a_numeric && $b_numeric ) {
 				$comparison = strlen( $a ) <=> strlen( $b );
 				return 0 !== $comparison ? $comparison : strcmp( $a, $b );
 			}
-			if ( $aNumeric !== $bNumeric ) {
-				return $aNumeric ? -1 : 1;
+			if ( $a_numeric !== $b_numeric ) {
+				return $a_numeric ? -1 : 1;
 			}
 			return strcmp( $a, $b );
 		}
@@ -248,7 +248,7 @@ final class RuntimeCopySelector {
 	 * @param array<string,mixed> $value
 	 * @param list<string> $keys
 	 */
-	private function exactKeys( array $value, array $keys ): bool {
+	private function exact_keys( array $value, array $keys ): bool {
 		return array_keys( $value ) === $keys;
 	}
 

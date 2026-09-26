@@ -24,16 +24,16 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 	if ( ! is_string( $root ) ) {
 		return null;
 	}
-	$brokerSource = $root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RequestBroker.php';
-	$copyFile     = $root . DIRECTORY_SEPARATOR . 'runtime-copy.json';
+	$broker_source = $root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RequestBroker.php';
+	$copy_file     = $root . DIRECTORY_SEPARATOR . 'runtime-copy.json';
 	if ( ! is_string( $source ) ) {
-		$source = realpath( $brokerSource );
+		$source = realpath( $broker_source );
 	}
-	if ( ! is_string( $source ) || realpath( $brokerSource ) !== $source || ! is_file( $copyFile ) || is_link( $copyFile ) ) {
+	if ( ! is_string( $source ) || realpath( $broker_source ) !== $source || ! is_file( $copy_file ) || is_link( $copy_file ) ) {
 		return null;
 	}
 	try {
-		$copy = json_decode( (string) file_get_contents( $copyFile ), true, 512, JSON_THROW_ON_ERROR );
+		$copy = json_decode( (string) file_get_contents( $copy_file ), true, 512, JSON_THROW_ON_ERROR );
 		$keys = array( 'package_revision', 'package_version', 'php_floor', 'runtime_file', 'runtime_protocol', 'wordpress_floor' );
 		if (
 			! is_array( $copy )
@@ -46,7 +46,7 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['package_version'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['php_floor'] )
 			|| 'runtime.php' !== $copy['runtime_file']
-			|| 4 !== $copy['runtime_protocol']
+			|| 5 !== $copy['runtime_protocol']
 			|| ! is_string( $copy['wordpress_floor'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['wordpress_floor'] )
 		) {
@@ -63,11 +63,11 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 				return null;
 			}
 		}
-		$sourceDirectory = $root . DIRECTORY_SEPARATOR . 'src';
-		if ( is_link( $sourceDirectory ) || ! is_dir( $sourceDirectory ) || realpath( $sourceDirectory ) !== $sourceDirectory ) {
+		$source_directory = $root . DIRECTORY_SEPARATOR . 'src';
+		if ( is_link( $source_directory ) || ! is_dir( $source_directory ) || realpath( $source_directory ) !== $source_directory ) {
 			return null;
 		}
-		$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $sourceDirectory, FilesystemIterator::SKIP_DOTS ) );
+		$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $source_directory, FilesystemIterator::SKIP_DOTS ) );
 		foreach ( $iterator as $file ) {
 			if ( $file->isLink() ) {
 				return null;
@@ -83,11 +83,11 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 		sort( $files, SORT_STRING );
 		$payload = '';
 		foreach ( $files as $file ) {
-			$regularFile = $regular( $file );
-			if ( ! is_string( $regularFile ) ) {
+			$regular_file = $regular( $file );
+			if ( ! is_string( $regular_file ) ) {
 				return null;
 			}
-			$hash = hash_file( 'sha256', $regularFile );
+			$hash = hash_file( 'sha256', $regular_file );
 			if ( ! is_string( $hash ) ) {
 				return null;
 			}
@@ -220,18 +220,18 @@ $ran_wp_release_updater_broker_provenance = $ran_wp_release_updater_created_brok
 		: ( is_object( $ran_wp_release_updater_broker ) ? $ran_wp_release_updater_broker_origin( $ran_wp_release_updater_broker ) : null ) );
 $ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_broker_provenance )
 	&& $ran_wp_release_updater_broker instanceof RequestBroker
-	&& is_callable( array( $ran_wp_release_updater_broker, 'protocolVersion' ) )
-	&& is_callable( array( $ran_wp_release_updater_broker, 'registerCandidate' ) )
+	&& is_callable( array( $ran_wp_release_updater_broker, 'protocol_version' ) )
+	&& is_callable( array( $ran_wp_release_updater_broker, 'register_candidate' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'activate' ) )
-		&& is_callable( array( $ran_wp_release_updater_broker, 'registerTarget' ) )
-		&& is_callable( array( $ran_wp_release_updater_broker, 'releaseSource' ) )
-	&& is_callable( array( $ran_wp_release_updater_broker, 'targetStatus' ) )
-	&& is_callable( array( $ran_wp_release_updater_broker, 'targetDiagnostics' ) )
-	&& is_callable( array( $ran_wp_release_updater_broker, 'refreshTarget' ) )
+		&& is_callable( array( $ran_wp_release_updater_broker, 'register_target' ) )
+		&& is_callable( array( $ran_wp_release_updater_broker, 'release_source' ) )
+	&& is_callable( array( $ran_wp_release_updater_broker, 'target_status' ) )
+	&& is_callable( array( $ran_wp_release_updater_broker, 'target_diagnostics' ) )
+	&& is_callable( array( $ran_wp_release_updater_broker, 'refresh_target' ) )
 	&& is_callable( array( $ran_wp_release_updater_broker, 'diagnostics' ) );
 if ( $ran_wp_release_updater_broker_compatible ) {
 	try {
-		$ran_wp_release_updater_broker_compatible = 4 === $ran_wp_release_updater_broker->protocolVersion();
+		$ran_wp_release_updater_broker_compatible = 5 === $ran_wp_release_updater_broker->protocol_version();
 	} catch ( Throwable ) {
 		$ran_wp_release_updater_broker_compatible = false;
 	}
@@ -248,12 +248,12 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		/** @var list<array{code:string}> */
 		private array $diagnostics = array( array( 'code' => 'protocol_conflict_inactive' ) );
 
-		public function protocolVersion(): int {
-			return 4;
+		public function protocol_version(): int {
+			return 5;
 		}
 
-		public function registerCandidate( string $copyFile ): bool {
-			unset( $copyFile );
+		public function register_candidate( string $copy_file ): bool {
+			unset( $copy_file );
 			return false;
 		}
 
@@ -274,7 +274,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		/** @return array<string,mixed> */
 		public function diagnostics(): array {
 			return array(
-				'protocol_version'     => 4,
+				'protocol_version'     => 5,
 				'state'                => 'conflict',
 				'activation_attempted' => false,
 				'candidate_count'      => 0,
@@ -288,7 +288,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		 * @param array<string,mixed> $declaration
 		 * @return array{accepted:false,submission_id:0,code:string}
 		 */
-		public function registerTarget( array $declaration ): array {
+		public function register_target( array $declaration ): array {
 			unset( $declaration );
 			return array(
 				'accepted'      => false,
@@ -301,7 +301,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		 * @param array<string,mixed> $declaration
 		 * @return array{accepted:false,code:string,source_handle:null}
 		 */
-		public function releaseSource( array $declaration ): array {
+		public function release_source( array $declaration ): array {
 			unset( $declaration );
 			return array(
 				'accepted'      => false,
@@ -311,7 +311,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		}
 
 		/** @return array<string,mixed> */
-		public function targetStatus( int $id ): array {
+		public function target_status( int $id ): array {
 			unset( $id );
 			return array(
 				'state'                => 'inactive',
@@ -323,7 +323,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		}
 
 		/** @return array<string,mixed> */
-		public function targetDiagnostics( int $id ): array {
+		public function target_diagnostics( int $id ): array {
 			unset( $id );
 			return array(
 				'state'       => 'inactive',
@@ -331,7 +331,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 			);
 		}
 
-		public function refreshTarget( int $id ): bool {
+		public function refresh_target( int $id ): bool {
 			unset( $id );
 			return false;
 		}
@@ -339,7 +339,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 }
 
 if ( $ran_wp_release_updater_broker_compatible ) {
-	$ran_wp_release_updater_broker->registerCandidate( __DIR__ . '/runtime-copy.json' );
+	$ran_wp_release_updater_broker->register_candidate( __DIR__ . '/runtime-copy.json' );
 
 	if ( $ran_wp_release_updater_created_broker && $ran_wp_release_updater_can_schedule ) {
 		add_action(
@@ -357,23 +357,23 @@ return new class( $ran_wp_release_updater_broker ) {
 	public function __construct( private object $broker ) {
 	}
 
-	public function plugin( string $provider, string $pluginFile, string $repository, string $repositoryId, string $channel = 'stable', string $updatePolicy = 'manual', ?callable $credentials = null, mixed $maximumArtifactBytes = 52428800 ): object {
-		return $this->target( 'plugin', $pluginFile, $provider, $repository, $repositoryId, $channel, $updatePolicy, $credentials, $maximumArtifactBytes );
+	public function plugin( string $provider, string $plugin_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800 ): object {
+		return $this->target( 'plugin', $plugin_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
 	}
 
-	public function theme( string $provider, string $stylesheetFile, string $repository, string $repositoryId, string $channel = 'stable', string $updatePolicy = 'manual', ?callable $credentials = null, mixed $maximumArtifactBytes = 52428800 ): object {
-		return $this->target( 'theme', $stylesheetFile, $provider, $repository, $repositoryId, $channel, $updatePolicy, $credentials, $maximumArtifactBytes );
+	public function theme( string $provider, string $stylesheet_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800 ): object {
+		return $this->target( 'theme', $stylesheet_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
 	}
 
-	public function releases( string $provider, string $packageType, string $repository, string $repositoryId, string $channel = 'stable', ?callable $credentials = null, mixed $maximumArtifactBytes = 52428800 ): object {
+	public function releases( string $provider, string $package_type, string $repository, string $repository_id, string $channel = 'stable', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800 ): object {
 		$declaration = array(
 			'provider_code'          => $provider,
-			'target_type'            => $packageType,
+			'target_type'            => $package_type,
 			'repository_locator'     => $repository,
-			'repository_identity'    => $repositoryId,
+			'repository_identity'    => $repository_id,
 			'channel'                => $channel,
 			'credential_resolver'    => $credentials,
-			'maximum_artifact_bytes' => $maximumArtifactBytes,
+			'maximum_artifact_bytes' => $maximum_artifact_bytes,
 		);
 		return new class( $this->broker, $declaration ) {
 			private ?object $selected = null;
@@ -388,35 +388,35 @@ return new class( $ran_wp_release_updater_broker ) {
 			 * @return array<string,mixed>
 			 */
 			public function list( array $conditional = array() ): array {
-				if ( $this->terminalNow() ) {
+				if ( $this->terminal_now() ) {
 					return $this->failure( 'runtime_unavailable' );
 				}
-				if ( ! $this->validConditional( $conditional ) ) {
+				if ( ! $this->valid_conditional( $conditional ) ) {
 					return $this->failure( 'invalid_configuration' );
 				}
 				return $this->call( 'list', array( $conditional ) );
 			}
 
 			/** @return array<string,mixed> */
-			public function inspect( string $releaseId, string $expectedTag ): array {
-				if ( $this->terminalNow() ) {
+			public function inspect( string $release_id, string $expected_tag ): array {
+				if ( $this->terminal_now() ) {
 					return $this->failure( 'runtime_unavailable' );
 				}
-				if ( ! $this->opaque( $releaseId, 191 ) || ! $this->opaque( $expectedTag, 191 ) ) {
+				if ( ! $this->opaque( $release_id, 191 ) || ! $this->opaque( $expected_tag, 191 ) ) {
 					return $this->failure( 'invalid_release' );
 				}
-				return $this->call( 'inspect', array( $releaseId, $expectedTag ) );
+				return $this->call( 'inspect', array( $release_id, $expected_tag ) );
 			}
 
 			/** @return array<string,mixed> */
-			public function acquire( string $releaseId, string $expectedTag, string $expectedFingerprint ): array {
-				if ( $this->terminalNow() ) {
+			public function acquire( string $release_id, string $expected_tag, string $expected_fingerprint ): array {
+				if ( $this->terminal_now() ) {
 					return $this->failure( 'runtime_unavailable' );
 				}
-				if ( ! $this->opaque( $releaseId, 191 ) || ! $this->opaque( $expectedTag, 191 ) || 1 !== preg_match( '/\\Av2:[a-f0-9]{64}\\z/D', $expectedFingerprint ) ) {
+				if ( ! $this->opaque( $release_id, 191 ) || ! $this->opaque( $expected_tag, 191 ) || 1 !== preg_match( '/\\Av2:[a-f0-9]{64}\\z/D', $expected_fingerprint ) ) {
 					return $this->failure( 'invalid_release' );
 				}
-				return $this->call( 'acquire', array( $releaseId, $expectedTag, $expectedFingerprint ) );
+				return $this->call( 'acquire', array( $release_id, $expected_tag, $expected_fingerprint ) );
 			}
 
 			/**
@@ -426,15 +426,15 @@ return new class( $ran_wp_release_updater_broker ) {
 			private function call( string $method, array $arguments ): array {
 				if ( ! is_object( $this->selected ) ) {
 					try {
-						if ( ! is_callable( array( $this->broker, 'releaseSource' ) ) ) {
+						if ( ! is_callable( array( $this->broker, 'release_source' ) ) ) {
 							throw new RuntimeException( 'Invalid broker handle.' );
 						}
-						$resolved = $this->broker->releaseSource( $this->declaration );
+						$resolved = $this->broker->release_source( $this->declaration );
 					} catch ( Throwable ) {
 						$this->terminal = true;
 						return $this->failure( 'runtime_unavailable' );
 					}
-					if ( ! $this->validResolution( $resolved ) ) {
+					if ( ! $this->valid_resolution( $resolved ) ) {
 						$this->terminal = true;
 						return $this->failure( 'runtime_unavailable' );
 					}
@@ -453,13 +453,13 @@ return new class( $ran_wp_release_updater_broker ) {
 					return $this->failure( 'runtime_unavailable' );
 				}
 				try {
-					$valid = $this->validResult( $method, $result ) && ! $this->terminalNow();
+					$valid = $this->valid_result( $method, $result ) && ! $this->terminal_now();
 				} catch ( Throwable ) {
 					$valid = false;
 				}
 				if ( ! $valid ) {
 					$this->terminal = true;
-					return $this->failure( 'runtime_unavailable', $this->discardMalformedArtifact( $method, $result ) );
+					return $this->failure( 'runtime_unavailable', $this->discard_malformed_artifact( $method, $result ) );
 				}
 				if ( 'runtime_unavailable' === $result['code'] ) {
 					$this->terminal = true;
@@ -467,7 +467,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				return $result;
 			}
 
-			private function validResolution( mixed $value ): bool {
+			private function valid_resolution( mixed $value ): bool {
 				if ( ! is_array( $value ) || array_keys( $value ) !== array( 'accepted', 'code', 'source_handle' ) || ! is_bool( $value['accepted'] ) || ! is_string( $value['code'] ) ) {
 					return false;
 				}
@@ -477,7 +477,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				return null === $value['source_handle'] && in_array( $value['code'], array( 'invalid_configuration', 'runtime_not_ready', 'runtime_unavailable', 'provider_unavailable', 'filesystem_unsupported' ), true );
 			}
 
-			private function terminalNow(): bool {
+			private function terminal_now(): bool {
 				if ( $this->terminal ) {
 					return true;
 				}
@@ -493,7 +493,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				return $this->terminal;
 			}
 
-			private function validResult( string $operation, mixed $result ): bool {
+			private function valid_result( string $operation, mixed $result ): bool {
 				if ( ! $this->keys( $result, array( 'ok', 'code', 'value', 'retry_after', 'cleanup_status' ) )
 					|| ! is_bool( $result['ok'] ) || ! is_string( $result['code'] ) ) {
 					return false;
@@ -504,12 +504,12 @@ return new class( $ran_wp_release_updater_broker ) {
 						return false;
 					}
 					return match ( $operation ) {
-						'list' => 'not_applicable' === $cleanup && $this->validListing( $result['value'] )
+						'list' => 'not_applicable' === $cleanup && $this->valid_listing( $result['value'] )
 							&& ( $result['value']['not_modified'] ? 'releases_not_modified' : 'releases_listed' ) === $result['code'],
-						'inspect' => 'release_inspected' === $result['code'] && 'complete' === $cleanup && $this->validInspection( $result['value'] ),
+						'inspect' => 'release_inspected' === $result['code'] && 'complete' === $cleanup && $this->valid_inspection( $result['value'] ),
 						'acquire' => 'release_acquired' === $result['code'] && 'retained' === $cleanup
 							&& $this->keys( $result['value'], array( 'inspection', 'artifact' ) )
-							&& $this->validInspection( $result['value']['inspection'] ) && $this->ownedArtifact( $result['value']['artifact'] ),
+							&& $this->valid_inspection( $result['value']['inspection'] ) && $this->owned_artifact( $result['value']['artifact'] ),
 						default => false,
 					};
 				}
@@ -542,7 +542,7 @@ return new class( $ran_wp_release_updater_broker ) {
 					: null === $result['retry_after'];
 			}
 
-			private function validListing( mixed $value ): bool {
+			private function valid_listing( mixed $value ): bool {
 				if ( ! $this->keys( $value, array( 'candidates', 'conditional', 'not_modified', 'rate_limit', 'search_exhausted' ) )
 					|| ! is_array( $value['candidates'] ) || ! array_is_list( $value['candidates'] ) || count( $value['candidates'] ) > 8
 					|| ! is_bool( $value['not_modified'] ) || ! is_bool( $value['search_exhausted'] )
@@ -571,11 +571,11 @@ return new class( $ran_wp_release_updater_broker ) {
 				}
 				foreach ( $value['candidates'] as $candidate ) {
 					if ( ! $this->keys( $candidate, array( 'details_url', 'expected_asset_names', 'prerelease', 'publication_immutable', 'published_at', 'release_identity', 'tag', 'version' ) )
-						|| ! $this->publicUrl( $candidate['details_url'] ) || ! is_array( $candidate['expected_asset_names'] )
+						|| ! $this->public_url( $candidate['details_url'] ) || ! is_array( $candidate['expected_asset_names'] )
 						|| ! array_is_list( $candidate['expected_asset_names'] ) || 2 < count( $candidate['expected_asset_names'] )
 						|| ! is_bool( $candidate['prerelease'] ) || ! is_bool( $candidate['publication_immutable'] )
 						|| ! $this->matches( $candidate['published_at'], '/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\z/D' )
-						|| ! $this->boundedIdentity( $candidate['release_identity'] ) || ! $this->boundedIdentity( $candidate['tag'] )
+						|| ! $this->bounded_identity( $candidate['release_identity'] ) || ! $this->bounded_identity( $candidate['tag'] )
 						|| ! is_string( $candidate['version'] ) || null === \RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion::normalize( $candidate['version'] ) ) {
 						return false;
 					}
@@ -588,7 +588,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				return true;
 			}
 
-			private function validInspection( mixed $value ): bool {
+			private function valid_inspection( mixed $value ): bool {
 				$keys      = array(
 					'artifact_filename',
 					'artifact_identity',
@@ -635,7 +635,7 @@ return new class( $ran_wp_release_updater_broker ) {
 					}
 				}
 				foreach ( array( 'artifact_identity', 'commit_identity', 'release_identity', 'repository_identity', 'tag' ) as $key ) {
-					if ( ! $this->boundedIdentity( $value[ $key ] ) ) {
+					if ( ! $this->bounded_identity( $value[ $key ] ) ) {
 						return false;
 					}
 				}
@@ -645,7 +645,7 @@ return new class( $ran_wp_release_updater_broker ) {
 					}
 				}
 				if ( ! is_string( $value['version'] ) || null === \RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion::normalize( $value['version'] )
-					|| ! $this->boundedIdentity( $value['repository_locator'], 255 )
+					|| ! $this->bounded_identity( $value['repository_locator'], 255 )
 					|| ! $this->matches( $value['provider_code'], '/\A[a-z][a-z0-9_-]{0,31}\z/D' )
 					|| ! $this->matches( $value['artifact_filename'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di' )
 					|| ! $this->matches( $value['artifact_sha256'], '/\A[a-f0-9]{64}\z/D' )
@@ -670,12 +670,12 @@ return new class( $ran_wp_release_updater_broker ) {
 				return is_string( $value ) && 1 === preg_match( $pattern, $value );
 			}
 
-			private function boundedIdentity( mixed $value, int $limit = 191 ): bool {
+			private function bounded_identity( mixed $value, int $limit = 191 ): bool {
 				return is_string( $value ) && $this->opaque( $value, $limit );
 			}
 
-			private function publicUrl( mixed $value ): bool {
-				if ( ! $this->boundedIdentity( $value, 2048 ) || str_contains( $value, '\\' ) ) {
+			private function public_url( mixed $value ): bool {
+				if ( ! $this->bounded_identity( $value, 2048 ) || str_contains( $value, '\\' ) ) {
 					return false;
 				}
 				$parts = parse_url( $value );
@@ -685,7 +685,7 @@ return new class( $ran_wp_release_updater_broker ) {
 			}
 
 			/** @phpstan-assert-if-true \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact $artifact */
-			private function ownedArtifact( mixed $artifact ): bool {
+			private function owned_artifact( mixed $artifact ): bool {
 				if ( ! is_object( $this->selected ) || ! is_object( $artifact ) || 'RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact' !== $artifact::class ) {
 					return false;
 				}
@@ -695,13 +695,13 @@ return new class( $ran_wp_release_updater_broker ) {
 					&& realpath( $file ) === realpath( dirname( $source, 2 ) . '/Archive/TemporaryArtifact.php' );
 			}
 
-			private function discardMalformedArtifact( string $operation, mixed $result ): string {
+			private function discard_malformed_artifact( string $operation, mixed $result ): string {
 				if ( 'list' === $operation ) {
 					return 'not_applicable';
 				}
 				$artifact = is_array( $result ) && is_array( $result['value'] ?? null ) ? ( $result['value']['artifact'] ?? null ) : null;
 				try {
-					if ( 'acquire' === $operation && $this->ownedArtifact( $artifact ) ) {
+					if ( 'acquire' === $operation && $this->owned_artifact( $artifact ) ) {
 						return $artifact->discard() || $artifact->discard() ? 'complete' : 'failed';
 					}
 				} catch ( Throwable ) {
@@ -712,7 +712,7 @@ return new class( $ran_wp_release_updater_broker ) {
 			}
 
 			/** @param array<array-key,mixed> $value */
-			private function validConditional( array $value ): bool {
+			private function valid_conditional( array $value ): bool {
 				foreach ( $value as $key => $item ) {
 					if ( ! in_array( $key, array( 'etag', 'last_modified' ), true ) || ( null !== $item && ! is_string( $item ) ) ) {
 						return false;
@@ -746,23 +746,23 @@ return new class( $ran_wp_release_updater_broker ) {
 		return $this->broker->diagnostics();
 	}
 
-	private function target( string $type, string $file, string $provider, string $repository, string $repositoryId, string $channel, string $policy, ?callable $credentials, mixed $maximumArtifactBytes ): object {
+	private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes ): object {
 		$declaration = array(
 			'target_type'            => $type,
 			'installed_file'         => $file,
 			'provider_code'          => $provider,
 			'repository_locator'     => $repository,
-			'repository_identity'    => $repositoryId,
+			'repository_identity'    => $repository_id,
 			'channel'                => $channel,
 			'update_policy'          => $policy,
 			'credential_resolver'    => $credentials,
-			'maximum_artifact_bytes' => $maximumArtifactBytes,
+			'maximum_artifact_bytes' => $maximum_artifact_bytes,
 		);
 		return new class( $this->broker, $declaration ) {
-			private int $submissionId = 0;
-			private bool $submitted   = false;
-			private bool $accepted    = false;
-			private ?string $code     = null;
+			private int $submission_id = 0;
+			private bool $submitted    = false;
+			private bool $accepted     = false;
+			private ?string $code      = null;
 
 			/** @param array<string,mixed> $declaration */
 			public function __construct( private object $broker, private array $declaration ) {
@@ -770,32 +770,32 @@ return new class( $ran_wp_release_updater_broker ) {
 
 			public function register(): bool {
 				if ( $this->submitted ) {
-					if ( ! $this->accepted || 0 === $this->submissionId ) {
+					if ( ! $this->accepted || 0 === $this->submission_id ) {
 						return false;
 					}
-					if ( ! is_callable( array( $this->broker, 'targetStatus' ) ) ) {
+					if ( ! is_callable( array( $this->broker, 'target_status' ) ) ) {
 						throw new RuntimeException( 'Invalid broker handle.' );
 					}
-					return 'inactive' !== ( $this->broker->targetStatus( $this->submissionId )['state'] ?? null );
+					return 'inactive' !== ( $this->broker->target_status( $this->submission_id )['state'] ?? null );
 				}
 				$this->submitted = true;
-				if ( ! is_callable( array( $this->broker, 'registerTarget' ) ) ) {
+				if ( ! is_callable( array( $this->broker, 'register_target' ) ) ) {
 					throw new RuntimeException( 'Invalid broker handle.' );
 				}
-				$result             = $this->broker->registerTarget( $this->declaration );
-				$this->submissionId = $result['submission_id'];
-				$this->accepted     = $result['accepted'];
-				$this->code         = $result['code'];
+				$result              = $this->broker->register_target( $this->declaration );
+				$this->submission_id = $result['submission_id'];
+				$this->accepted      = $result['accepted'];
+				$this->code          = $result['code'];
 				return $this->accepted;
 			}
 
 			/** @return array<string,mixed> */
 			public function status(): array {
-				if ( 0 < $this->submissionId ) {
-					if ( ! is_callable( array( $this->broker, 'targetStatus' ) ) ) {
+				if ( 0 < $this->submission_id ) {
+					if ( ! is_callable( array( $this->broker, 'target_status' ) ) ) {
 						throw new RuntimeException( 'Invalid broker handle.' );
 					}
-					return $this->broker->targetStatus( $this->submissionId );
+					return $this->broker->target_status( $this->submission_id );
 				}
 				if ( $this->submitted ) {
 					return array(
@@ -817,11 +817,11 @@ return new class( $ran_wp_release_updater_broker ) {
 
 			/** @return array<string,mixed> */
 			public function diagnostics(): array {
-				if ( 0 < $this->submissionId ) {
-					if ( ! is_callable( array( $this->broker, 'targetDiagnostics' ) ) ) {
+				if ( 0 < $this->submission_id ) {
+					if ( ! is_callable( array( $this->broker, 'target_diagnostics' ) ) ) {
 						throw new RuntimeException( 'Invalid broker handle.' );
 					}
-					return $this->broker->targetDiagnostics( $this->submissionId );
+					return $this->broker->target_diagnostics( $this->submission_id );
 				}
 				if ( $this->submitted ) {
 					return array(
@@ -836,13 +836,13 @@ return new class( $ran_wp_release_updater_broker ) {
 			}
 
 			public function refresh(): bool {
-				if ( 0 >= $this->submissionId ) {
+				if ( 0 >= $this->submission_id ) {
 					return false;
 				}
-				if ( ! is_callable( array( $this->broker, 'refreshTarget' ) ) ) {
+				if ( ! is_callable( array( $this->broker, 'refresh_target' ) ) ) {
 					throw new RuntimeException( 'Invalid broker handle.' );
 				}
-				return $this->broker->refreshTarget( $this->submissionId );
+				return $this->broker->refresh_target( $this->submission_id );
 			}
 		};
 	}

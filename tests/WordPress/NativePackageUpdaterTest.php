@@ -844,7 +844,7 @@ namespace Tests\WordPress {
 				if ( 'stale_global' === $failure ) {
 					$GLOBALS['ran_wp_release_updater_v1_broker'] = new \stdClass();
 				} elseif ( 'wrong_protocol' === $failure ) {
-					$GLOBALS['ran_wp_release_updater_v1_broker'] = new class() { public function protocolVersion(): int {
+					$GLOBALS['ran_wp_release_updater_v1_broker'] = new class() { public function protocol_version(): int {
 							return 1;
 					} };
 				}
