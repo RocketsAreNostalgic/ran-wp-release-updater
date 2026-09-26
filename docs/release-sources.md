@@ -13,9 +13,9 @@ $registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';
 
 $source = $registrar->releases(
     provider: 'github',
-    packageType: 'plugin',
+    package_type: 'plugin',
     repository: 'acme/example-plugin',
-    repositoryId: '123456789'
+    repository_id: '123456789'
 );
 
 add_action('init', static function () use ($source): void {
@@ -37,7 +37,7 @@ add_action('init', static function () use ($source): void {
 
 The source adds no native update hooks, does not schedule retries, and never installs the acquired archive.
 
-The optional `releases()` arguments are the same release-read policies used by native targets, without an update policy: `channel` accepts `stable` or `prerelease` and defaults to `stable`; `credentials` is an optional request-local callable returning a token string or `null` and defaults to anonymous access; `maximumArtifactBytes` is a positive compressed-ZIP byte ceiling and defaults to 52,428,800 bytes.
+The optional `releases()` arguments are the same release-read policies used by native targets, without an update policy: `channel` accepts `stable` or `prerelease` and defaults to `stable`; `credentials` is an optional request-local callable returning a token string or `null` and defaults to anonymous access; `maximum_artifact_bytes` is a positive compressed-ZIP byte ceiling and defaults to 52,428,800 bytes.
 
 Release-source operations require WordPress's `direct` filesystem implementation. On a normal request where `FS_METHOD` is not explicitly configured, initialize the WordPress Filesystem API before the operation as shown above and continue only when `$GLOBALS['wp_filesystem']` is a `WP_Filesystem_Direct`. If the host resolves to FTP/SSH or initialization fails, do not force `FS_METHOD` from plugin code; the source returns `filesystem_unsupported` and does not prompt for filesystem credentials or perform provider work. A site that explicitly configures `FS_METHOD` as `direct` already satisfies the source's direct-method gate.
 
@@ -60,8 +60,8 @@ A failure has `value: null`. Only rate-limited results carry a non-null retry de
 | Operation | Successful code | What it does |
 | --- | --- | --- |
 | `list($conditional = array())` | `releases_listed` or `releases_not_modified` | Lists bounded candidate metadata, optionally using caller-supplied conditional metadata |
-| `inspect($releaseId, $expectedTag)` | `release_inspected` | Freshly verifies the selected provider release and returns an opaque fingerprint plus release facts |
-| `acquire($releaseId, $expectedTag, $expectedFingerprint)` | `release_acquired` | Re-inspects the release, requires the same fingerprint, and returns a controlled temporary artifact |
+| `inspect($release_id, $expected_tag)` | `release_inspected` | Freshly verifies the selected provider release and returns an opaque fingerprint plus release facts |
+| `acquire($release_id, $expected_tag, $expected_fingerprint)` | `release_acquired` | Re-inspects the release, requires the same fingerprint, and returns a controlled temporary artifact |
 
 The public value path is deliberate. `list()` returns candidate entries carrying the provider `release_identity` and `tag` that identify the release to inspect. Pass those values to `inspect()`. A successful inspection returns the opaque `fingerprint` for that exact inspected release; pass the same release identity/tag together with that fingerprint to `acquire()`.
 
@@ -105,9 +105,9 @@ Copy bytes inside `inspect()` if the application needs a durable copy, verify th
 
 ```php
 $acquisition = $source->acquire(
-    releaseId: $releaseId,
-    expectedTag: $tag,
-    expectedFingerprint: $fingerprint
+    release_id: $release_id,
+    expected_tag: $tag,
+    expected_fingerprint: $fingerprint
 );
 
 if (!$acquisition['ok']) {

@@ -23,20 +23,20 @@ final class KernelPerformanceTest extends TestCase {
 	public function testWarmNeutralKernelTupleHasGenerousLocalResourceBudgets(): void {
 		$binding  = BindingRecord::create( $this->bindingFacts() );
 		$database = new FakeOptionDatabase( 100 );
-		$claimed  = BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 600 );
+		$claimed  = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 600 );
 		self::assertSame( 'claimed', $claimed['result'] );
 		$state = $claimed['current'];
 		$claim = $this->claim( $state );
 		for ( $index = 0; $index < 100; ++$index ) {
 			CanonicalUpdateUri::canonicalize_boundaries( $this->boundaries() );
-			BindingFenceCoordinator::verifyPersistentBindingState( $database, $state, $claim );
+			BindingFenceCoordinator::verify_persistent_binding_state( $database, $state, $claim );
 		}
 		$memoryBefore = memory_get_usage( true );
 		$cpuBefore    = $this->cpuNanoseconds();
 		$started      = hrtime( true );
 		for ( $index = 0; $index < 1000; ++$index ) {
 			$uri          = CanonicalUpdateUri::canonicalize_boundaries( $this->boundaries() );
-			$verifyResult = BindingFenceCoordinator::verifyPersistentBindingState( $database, $state, $claim );
+			$verifyResult = BindingFenceCoordinator::verify_persistent_binding_state( $database, $state, $claim );
 		}
 		$elapsedNanoseconds    = hrtime( true ) - $started;
 		$cpuElapsedNanoseconds = $this->cpuNanoseconds() - $cpuBefore;
@@ -115,10 +115,10 @@ final class KernelPerformanceTest extends TestCase {
 	/** @return array<string,mixed> */
 	private function claim( BindingState $state ): array {
 		return array(
-			'binding_generation' => $state->bindingGeneration(),
+			'binding_generation' => $state->binding_generation(),
 			'binding_hash'       => $state->binding()->binding_hash(),
-			'lease_deadline'     => $state->leaseDeadline(),
-			'owner_token'        => $state->ownerToken(),
+			'lease_deadline'     => $state->lease_deadline(),
+			'owner_token'        => $state->owner_token(),
 		);
 	}
 }

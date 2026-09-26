@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\Runtime;
 
 /**
- * Request-local ownership of the selected protocol-4 broker.
+ * Request-local ownership of the selected protocol-5 broker.
  */
 final class SelectedRuntimeState {
 
@@ -21,12 +21,12 @@ final class SelectedRuntimeState {
 		$this->broker = $broker;
 	}
 
-	public function brokerIsLive(): bool {
-		return null === $this->livenessCode();
+	public function broker_is_live(): bool {
+		return null === $this->liveness_code();
 	}
 
 	/** @internal */
-	public function livenessCode(): ?string {
+	public function liveness_code(): ?string {
 		if (
 			! $this->broker instanceof RequestBroker
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
@@ -36,7 +36,7 @@ final class SelectedRuntimeState {
 
 		try {
 			$diagnostics = $this->broker->diagnostics();
-			if ( 4 !== $this->broker->protocolVersion() ) {
+			if ( 5 !== $this->broker->protocol_version() ) {
 				return 'protocol_conflict_inactive';
 			}
 			return in_array( $diagnostics['state'] ?? null, array( 'activating', 'active' ), true )
@@ -48,8 +48,8 @@ final class SelectedRuntimeState {
 	}
 
 	/** @internal */
-	public function releaseReadinessCode(): ?string {
-		$liveness = $this->livenessCode();
+	public function release_readiness_code(): ?string {
+		$liveness = $this->liveness_code();
 		if ( null !== $liveness ) {
 			return 'runtime_unavailable';
 		}
@@ -71,14 +71,14 @@ final class SelectedRuntimeState {
 			);
 		}
 		try {
-			if ( 4 !== $this->broker->protocolVersion() ) {
+			if ( 5 !== $this->broker->protocol_version() ) {
 				throw new \RuntimeException( 'Inactive broker.' );
 			}
 			return $this->broker->activate(
 				array(
 					'php_version'       => PHP_VERSION,
-					'runtime_protocol'  => 4,
-					'wordpress_version' => self::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null ),
+					'runtime_protocol'  => 5,
+					'wordpress_version' => self::normalize_word_press_version( $GLOBALS['wp_version'] ?? null ),
 				)
 			);
 		} catch ( \Throwable ) {
@@ -91,18 +91,18 @@ final class SelectedRuntimeState {
 		}
 	}
 
-	public function operationStarted( string $type ): bool {
-		return $this->validType( $type ) && isset( $this->operations[ $type ] );
+	public function operation_started( string $type ): bool {
+		return $this->valid_type( $type ) && isset( $this->operations[ $type ] );
 	}
 
-	public function beginOperation( string $type ): void {
-		if ( $this->validType( $type ) ) {
+	public function begin_operation( string $type ): void {
+		if ( $this->valid_type( $type ) ) {
 			$this->operations[ $type ] = true;
 		}
 	}
 
 	/** @internal Normalizes WordPress core's bounded development-version forms. */
-	public static function normalizeWordPressVersion( mixed $value ): ?string {
+	public static function normalize_word_press_version( mixed $value ): ?string {
 		if ( ! is_string( $value ) || self::MAX_WORDPRESS_VERSION_LENGTH < strlen( $value ) ) {
 			return null;
 		}
@@ -127,7 +127,7 @@ final class SelectedRuntimeState {
 		return 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?\z/D', $value ) ? $value : null;
 	}
 
-	private function validType( string $type ): bool {
+	private function valid_type( string $type ): bool {
 		return 'plugin' === $type || 'theme' === $type;
 	}
 }

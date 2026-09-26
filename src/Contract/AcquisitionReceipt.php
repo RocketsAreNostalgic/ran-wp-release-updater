@@ -17,7 +17,7 @@ final readonly class AcquisitionReceipt {
 	private function __construct( private array $facts ) {}
 
 	public static function issue( BindingState $state, IdentityDescriptor $descriptor, PackageIdentityValidator $validator, ValidatedPackage $package, int $now ): self {
-		if ( $now < 0 || $now > BindingState::MAX_SAFE_INTEGER || $now > $state->leaseDeadline() ) {
+		if ( $now < 0 || $now > BindingState::MAX_SAFE_INTEGER || $now > $state->lease_deadline() ) {
 			throw new InvalidArgumentException( 'The acquisition receipt is invalid.' );
 		}
 		try {
@@ -30,7 +30,7 @@ final readonly class AcquisitionReceipt {
 		$descriptor_facts          = $descriptor->to_array();
 		$facts                     = array(
 			'archive_identity_verified' => true,
-			'binding_generation'        => $state->bindingGeneration(),
+			'binding_generation'        => $state->binding_generation(),
 			'binding_hash'              => $binding->binding_hash(),
 			'descriptor_fingerprint'    => $descriptor->fingerprint_value(),
 			'local_sha256'              => $proof['sha256'],
@@ -42,11 +42,11 @@ final readonly class AcquisitionReceipt {
 		);
 		$receipt                   = new self( $facts );
 		self::issued()[ $receipt ] = array(
-			'lease_deadline'          => $state->leaseDeadline(),
+			'lease_deadline'          => $state->lease_deadline(),
 			'manifest_entry_count'    => $proof['manifest_entry_count'],
 			'manifest_expanded_bytes' => $proof['manifest_expanded_bytes'],
 			'manifest_hash'           => $proof['manifest_hash'],
-			'owner_token'             => $state->ownerToken(),
+			'owner_token'             => $state->owner_token(),
 		);
 		return $receipt;
 	}
@@ -56,7 +56,7 @@ final readonly class AcquisitionReceipt {
 			throw new InvalidArgumentException( 'The acquisition receipt is stale.' );
 		}
 		$incarnation = self::issued()[ $receipt ];
-		if ( ! hash_equals( $incarnation['owner_token'], $state->ownerToken() ) || $incarnation['lease_deadline'] !== $state->leaseDeadline() ) {
+		if ( ! hash_equals( $incarnation['owner_token'], $state->owner_token() ) || $incarnation['lease_deadline'] !== $state->lease_deadline() ) {
 			throw new InvalidArgumentException( 'The acquisition receipt is stale.' );
 		}
 		if ( ! self::valid( $receipt->facts, $state, $descriptor, $now ) ) {
@@ -72,7 +72,7 @@ final readonly class AcquisitionReceipt {
 			throw new InvalidArgumentException( 'The acquisition receipt is stale.' );
 		}
 		$incarnation = self::issued()[ $receipt ];
-		if ( ! hash_equals( $incarnation['owner_token'], $state->ownerToken() ) || $incarnation['lease_deadline'] !== $state->leaseDeadline() || ! self::valid( $receipt->facts, $state, $descriptor, $now ) ) {
+		if ( ! hash_equals( $incarnation['owner_token'], $state->owner_token() ) || $incarnation['lease_deadline'] !== $state->lease_deadline() || ! self::valid( $receipt->facts, $state, $descriptor, $now ) ) {
 			throw new InvalidArgumentException( 'The acquisition receipt is invalid.' );
 		}
 		return $receipt;
@@ -89,7 +89,7 @@ final readonly class AcquisitionReceipt {
 	}
 
 	private static function valid( mixed $value, BindingState $state, IdentityDescriptor $descriptor, int $now ): bool {
-		if ( ! self::exact_keys( $value ) || $now < 0 || $now > BindingState::MAX_SAFE_INTEGER || $now > $state->leaseDeadline() || 1 !== $value['receipt_schema'] || true !== $value['archive_identity_verified'] || true !== $value['package_identity_verified'] || ! self::sha256( $value['local_sha256'] ) ) {
+		if ( ! self::exact_keys( $value ) || $now < 0 || $now > BindingState::MAX_SAFE_INTEGER || $now > $state->lease_deadline() || 1 !== $value['receipt_schema'] || true !== $value['archive_identity_verified'] || true !== $value['package_identity_verified'] || ! self::sha256( $value['local_sha256'] ) ) {
 			return false;
 		}
 		try {
@@ -98,7 +98,7 @@ final readonly class AcquisitionReceipt {
 		} catch ( InvalidArgumentException ) {
 			return false;
 		}
-		return $value['binding_generation'] === $state->bindingGeneration()
+		return $value['binding_generation'] === $state->binding_generation()
 			&& self::equal( $value['binding_hash'], $binding->binding_hash() )
 			&& self::equal( $value['descriptor_fingerprint'], $descriptor->fingerprint_value() )
 			&& $value['provider_code'] === $descriptor->to_array()['provider_code']

@@ -75,7 +75,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				'code'   => 'target_composition_failed',
 			);
 		}
-		$wordpress_version = SelectedRuntimeState::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null );
+		$wordpress_version = SelectedRuntimeState::normalize_word_press_version( $GLOBALS['wp_version'] ?? null );
 		if ( ! is_string( $wordpress_version ) ) {
 			return array(
 				'native' => null,
@@ -161,7 +161,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		} catch ( InvalidArgumentException ) {
 			return null;
 		}
-		$updater = NativePackageUpdater::fromConfiguration( $configuration, $binding, $adapter, $wpdb, $archive_policy, $validator, $selected_runtime_state, $native_discovery_reuse );
+		$updater = NativePackageUpdater::from_configuration( $configuration, $binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse );
 		if ( $updater instanceof NativePackageUpdater ) {
 			$updater->register();
 		}

@@ -14,7 +14,7 @@ final class BindingFenceCoordinator {
 	private const CLAIM    = array( 'binding_generation', 'binding_hash', 'lease_deadline', 'owner_token' );
 	private const MAX_JSON = 16384;
 	/** @return array{current:BindingState|null,result:string} */
-	public static function claimPersistentBindingState( object $wpdb, BindingRecord $binding, mixed $owner, mixed $seconds ): array {
+	public static function claim_persistent_binding_state( object $wpdb, BindingRecord $binding, mixed $owner, mixed $seconds ): array {
 		if ( ! self::database( $wpdb ) || ! self::hash( $owner ) || ! is_int( $seconds ) || $seconds < 1 ) {
 			return self::lost();
 		}
@@ -25,19 +25,19 @@ final class BindingFenceCoordinator {
 		$name = self::name( $binding );
 		$raw  = self::read( $wpdb, $name );
 		if ( null === $raw ) {
-			return self::insertClaim( $wpdb, $name, $binding, $owner, $now + $seconds );
+			return self::insert_claim( $wpdb, $name, $binding, $owner, $now + $seconds );
 		}
 		$current = self::state( $raw );
-		if ( null === $current || ! self::sameTarget( $binding, $current->binding() ) || $now <= $current->leaseDeadline() || self::atLimit( $current ) ) {
+		if ( null === $current || ! self::same_target( $binding, $current->binding() ) || $now <= $current->lease_deadline() || self::at_limit( $current ) ) {
 			return self::lost( $current );
 		}
 		try {
-			$next = BindingState::create( $binding, $owner, $now + $seconds, $current->bindingGeneration() + 1, $current->fenceEpoch() + 1 );
+			$next = BindingState::create( $binding, $owner, $now + $seconds, $current->binding_generation() + 1, $current->fence_epoch() + 1 );
 		} catch ( InvalidArgumentException ) {
 			return self::lost( $current );
 		}
-		$json = self::json( $next->toArray() );
-		if ( null === $json || ! self::cas( $wpdb, $name, $raw, $json, $current->leaseDeadline(), true ) || ! self::sameRaw( $wpdb, $name, $json ) ) {
+		$json = self::json( $next->to_array() );
+		if ( null === $json || ! self::cas( $wpdb, $name, $raw, $json, $current->lease_deadline(), true ) || ! self::same_raw( $wpdb, $name, $json ) ) {
 			return self::lost( $current );
 		}
 		return array(
@@ -46,15 +46,15 @@ final class BindingFenceCoordinator {
 		);
 	}
 	/** @return array{current:BindingState|null,result:string} */
-	public static function renewPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim, int $seconds ): array {
-		return self::transitionPersistentBindingState( $wpdb, $expected, $claim, $seconds, 'renewed' );
+	public static function renew_persistent_binding_state( object $wpdb, BindingState $expected, mixed $claim, int $seconds ): array {
+		return self::transition_persistent_binding_state( $wpdb, $expected, $claim, $seconds, 'renewed' );
 	}
 	/** @return array{current:BindingState|null,result:string} */
-	public static function releasePersistentBindingState( object $wpdb, BindingState $expected, mixed $claim ): array {
-		return self::transitionPersistentBindingState( $wpdb, $expected, $claim, null, 'released' );
+	public static function release_persistent_binding_state( object $wpdb, BindingState $expected, mixed $claim ): array {
+		return self::transition_persistent_binding_state( $wpdb, $expected, $claim, null, 'released' );
 	}
 	/** @return array{current:BindingState,now:int,result:'verified'}|array{current:BindingState|null,result:'binding_fence_lost'} */
-	public static function verifyPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim ): array {
+	public static function verify_persistent_binding_state( object $wpdb, BindingState $expected, mixed $claim ): array {
 		if ( ! self::database( $wpdb ) ) {
 			return self::lost();
 		}
@@ -63,8 +63,8 @@ final class BindingFenceCoordinator {
 		$raw     = self::read( $wpdb, $name );
 		$current = null === $raw ? null : self::state( $raw );
 		if ( null === $now || null === $current || ! self::same( $current, $expected )
-			|| ! self::claim( $current, $claim ) || $now > $current->leaseDeadline()
-			|| ! self::sameRaw( $wpdb, $name, $raw ) ) {
+			|| ! self::claim( $current, $claim ) || $now > $current->lease_deadline()
+			|| ! self::same_raw( $wpdb, $name, $raw ) ) {
 			return self::lost( $current );
 		}
 		return array(
@@ -74,8 +74,8 @@ final class BindingFenceCoordinator {
 		);
 	}
 	/** @return array{current:BindingState|null,now?:int,receipt?:AcquisitionReceipt,result:string} */
-	public static function completePersistentInstall( object $wpdb, BindingState $expected, mixed $claim, mixed $receipt, IdentityDescriptor $descriptor ): array {
-		$first = self::verifyPersistentBindingState( $wpdb, $expected, $claim );
+	public static function complete_persistent_install( object $wpdb, BindingState $expected, mixed $claim, mixed $receipt, IdentityDescriptor $descriptor ): array {
+		$first = self::verify_persistent_binding_state( $wpdb, $expected, $claim );
 		if ( 'verified' !== $first['result'] ) {
 			return $first;
 		}
@@ -84,11 +84,11 @@ final class BindingFenceCoordinator {
 		} catch ( InvalidArgumentException ) {
 			return self::lost( $first['current'] );
 		}
-		$last = self::verifyPersistentBindingState( $wpdb, $expected, $claim );
+		$last = self::verify_persistent_binding_state( $wpdb, $expected, $claim );
 		if ( 'verified' !== $last['result'] ) {
 			return self::lost( $last['current'] );
 		}
-		$released = self::releasePersistentBindingState( $wpdb, $expected, $claim );
+		$released = self::release_persistent_binding_state( $wpdb, $expected, $claim );
 		if ( 'released' !== $released['result'] ) {
 			return self::lost( $released['current'] );
 		}
@@ -110,13 +110,13 @@ final class BindingFenceCoordinator {
 		);
 	}
 	/** @return array{current:BindingState|null,result:string} */
-	private static function insertClaim( object $wpdb, string $name, BindingRecord $binding, string $owner, int $deadline ): array {
+	private static function insert_claim( object $wpdb, string $name, BindingRecord $binding, string $owner, int $deadline ): array {
 		try {
 			$state = BindingState::create( $binding, $owner, $deadline );
 		} catch ( InvalidArgumentException ) {
 			return self::lost(); }
-		$json = self::json( $state->toArray() );
-		if ( null === $json || ! self::insert( $wpdb, $name, $json ) || ! self::sameRaw( $wpdb, $name, $json ) ) {
+		$json = self::json( $state->to_array() );
+		if ( null === $json || ! self::insert( $wpdb, $name, $json ) || ! self::same_raw( $wpdb, $name, $json ) ) {
 			return self::lost();
 		}
 		return array(
@@ -125,7 +125,7 @@ final class BindingFenceCoordinator {
 		);
 	}
 	/** @return array{current:BindingState|null,result:string} */
-	private static function transitionPersistentBindingState( object $wpdb, BindingState $expected, mixed $claim, ?int $seconds, string $result ): array {
+	private static function transition_persistent_binding_state( object $wpdb, BindingState $expected, mixed $claim, ?int $seconds, string $result ): array {
 		if ( ! self::database( $wpdb ) || ( null !== $seconds && $seconds < 1 ) ) {
 			return self::lost();
 		}
@@ -137,20 +137,20 @@ final class BindingFenceCoordinator {
 		$raw     = self::read( $wpdb, $name );
 		$current = null === $raw ? null : self::state( $raw );
 		if ( null === $current || ! self::same( $current, $expected ) || ! self::claim( $current, $claim )
-			|| $now > $current->leaseDeadline() || BindingState::MAX_SAFE_INTEGER === $current->fenceEpoch() ) {
+			|| $now > $current->lease_deadline() || BindingState::MAX_SAFE_INTEGER === $current->fence_epoch() ) {
 			return self::lost( $current );
 		}
-		if ( null !== $seconds && BindingState::MAX_SAFE_INTEGER === $current->leaseDeadline() ) {
+		if ( null !== $seconds && BindingState::MAX_SAFE_INTEGER === $current->lease_deadline() ) {
 			return self::lost( $current );
 		}
-		$deadline = null === $seconds ? 1 : max( $current->leaseDeadline() + 1, $now + $seconds );
+		$deadline = null === $seconds ? 1 : max( $current->lease_deadline() + 1, $now + $seconds );
 		try {
-			$next = BindingState::create( $current->binding(), $current->ownerToken(), $deadline, $current->bindingGeneration(), $current->fenceEpoch() + 1 );
+			$next = BindingState::create( $current->binding(), $current->owner_token(), $deadline, $current->binding_generation(), $current->fence_epoch() + 1 );
 		} catch ( InvalidArgumentException ) {
 			return self::lost( $current );
 		}
-		$json = self::json( $next->toArray() );
-		if ( null === $json || ! self::cas( $wpdb, $name, $raw, $json, $current->leaseDeadline() ) || ! self::sameRaw( $wpdb, $name, $json ) ) {
+		$json = self::json( $next->to_array() );
+		if ( null === $json || ! self::cas( $wpdb, $name, $raw, $json, $current->lease_deadline() ) || ! self::same_raw( $wpdb, $name, $json ) ) {
 			return self::lost( $current );
 		}
 		return array(
@@ -165,27 +165,27 @@ final class BindingFenceCoordinator {
 			return null; }
 	}
 	private static function same( BindingState $left, BindingState $right ): bool {
-		return hash_equals( self::json( $left->toArray() ) ?? '', self::json( $right->toArray() ) ?? '' );
+		return hash_equals( self::json( $left->to_array() ) ?? '', self::json( $right->to_array() ) ?? '' );
 	}
-	private static function sameTarget( BindingRecord $left, BindingRecord $right ): bool {
-		$leftFacts  = $left->to_array();
-		$rightFacts = $right->to_array();
-		return $leftFacts['network_id'] === $rightFacts['network_id']
-			&& hash_equals( $leftFacts['target_type'], $rightFacts['target_type'] )
-			&& hash_equals( $leftFacts['installed_package_identity'], $rightFacts['installed_package_identity'] );
+	private static function same_target( BindingRecord $left, BindingRecord $right ): bool {
+		$left_facts  = $left->to_array();
+		$right_facts = $right->to_array();
+		return $left_facts['network_id'] === $right_facts['network_id']
+			&& hash_equals( $left_facts['target_type'], $right_facts['target_type'] )
+			&& hash_equals( $left_facts['installed_package_identity'], $right_facts['installed_package_identity'] );
 	}
-	private static function atLimit( BindingState $state ): bool {
-		return BindingState::MAX_SAFE_INTEGER === $state->bindingGeneration()
-			|| BindingState::MAX_SAFE_INTEGER === $state->fenceEpoch();
+	private static function at_limit( BindingState $state ): bool {
+		return BindingState::MAX_SAFE_INTEGER === $state->binding_generation()
+			|| BindingState::MAX_SAFE_INTEGER === $state->fence_epoch();
 	}
 	private static function claim( BindingState $state, mixed $claim ): bool {
 		return is_array( $claim ) && array_keys( $claim ) === self::CLAIM
 			&& is_int( $claim['binding_generation'] ) && is_string( $claim['binding_hash'] )
 			&& is_int( $claim['lease_deadline'] ) && is_string( $claim['owner_token'] )
-			&& $claim['binding_generation'] === $state->bindingGeneration()
-			&& $claim['lease_deadline'] === $state->leaseDeadline()
+			&& $claim['binding_generation'] === $state->binding_generation()
+			&& $claim['lease_deadline'] === $state->lease_deadline()
 			&& hash_equals( $claim['binding_hash'], $state->binding()->binding_hash() )
-			&& hash_equals( $claim['owner_token'], $state->ownerToken() );
+			&& hash_equals( $claim['owner_token'], $state->owner_token() );
 	}
 	private static function time( object $wpdb ): ?int {
 		if ( ! is_callable( array( $wpdb, 'get_var' ) ) ) {
@@ -201,7 +201,7 @@ final class BindingFenceCoordinator {
 		if ( ! is_callable( array( $wpdb, 'prepare' ) ) || ! is_callable( array( $wpdb, 'get_var' ) ) ) {
 			return null;
 		}
-		$table = self::optionsTable( $wpdb );
+		$table = self::options_table( $wpdb );
 		if ( null === $table ) {
 			return null;
 		}
@@ -209,7 +209,7 @@ final class BindingFenceCoordinator {
 		$value = $wpdb->get_var( $sql );
 		return is_string( $value ) && strlen( $value ) <= self::MAX_JSON ? $value : null;
 	}
-	private static function sameRaw( object $wpdb, string $name, string $expected ): bool {
+	private static function same_raw( object $wpdb, string $name, string $expected ): bool {
 		$actual = self::read( $wpdb, $name );
 		return is_string( $actual ) && hash_equals( $expected, $actual );
 	}
@@ -217,7 +217,7 @@ final class BindingFenceCoordinator {
 		if ( ! is_callable( array( $wpdb, 'prepare' ) ) || ! is_callable( array( $wpdb, 'query' ) ) ) {
 			return false;
 		}
-		$table = self::optionsTable( $wpdb );
+		$table = self::options_table( $wpdb );
 		if ( null === $table ) {
 			return false;
 		} $sql = "INSERT INTO {$table} (option_name,option_value,autoload) VALUES (%s,%s,'no')";
@@ -227,7 +227,7 @@ final class BindingFenceCoordinator {
 		if ( ! is_callable( array( $wpdb, 'prepare' ) ) || ! is_callable( array( $wpdb, 'query' ) ) ) {
 			return false;
 		}
-		$table = self::optionsTable( $wpdb );
+		$table = self::options_table( $wpdb );
 		if ( null === $table ) {
 			return false;
 		} $operator = $expired ? '>' : '<=';
@@ -242,11 +242,11 @@ final class BindingFenceCoordinator {
 			return strlen( $json ) <= self::MAX_JSON ? $json : null;
 	}
 	private static function database( object $wpdb ): bool {
-		return null !== self::optionsTable( $wpdb )
+		return null !== self::options_table( $wpdb )
 			&& is_callable( array( $wpdb, 'prepare' ) ) && is_callable( array( $wpdb, 'query' ) )
 			&& is_callable( array( $wpdb, 'get_var' ) );
 	}
-	private static function optionsTable( object $wpdb ): ?string {
+	private static function options_table( object $wpdb ): ?string {
 		if ( property_exists( $wpdb, 'base_prefix' ) ) {
 			return is_string( $wpdb->base_prefix ) && 1 === preg_match( '/\A[A-Za-z0-9_]*\z/D', $wpdb->base_prefix ) ? $wpdb->base_prefix . 'options' : null;
 		}

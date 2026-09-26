@@ -51,7 +51,7 @@ final class ReleaseSourceContractDocumentationTest extends TestCase {
 			$releaseSources
 		);
 		self::assertStringContainsString(
-			'`maximumArtifactBytes` is a positive compressed-ZIP byte ceiling and defaults to 52,428,800 bytes',
+			'`maximum_artifact_bytes` is a positive compressed-ZIP byte ceiling and defaults to 52,428,800 bytes',
 			$releaseSources
 		);
 		self::assertStringContainsString(
@@ -84,7 +84,7 @@ final class ReleaseSourceContractDocumentationTest extends TestCase {
 		self::assertSame( 'stable', $parameters[4]->getDefaultValue() );
 		self::assertSame( 'credentials', $parameters[5]->getName() );
 		self::assertNull( $parameters[5]->getDefaultValue() );
-		self::assertSame( 'maximumArtifactBytes', $parameters[6]->getName() );
+		self::assertSame( 'maximum_artifact_bytes', $parameters[6]->getName() );
 		self::assertSame( 52_428_800, $parameters[6]->getDefaultValue() );
 	}
 }

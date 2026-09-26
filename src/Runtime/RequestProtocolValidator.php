@@ -92,7 +92,7 @@ final class RequestProtocolValidator {
 	);
 	private const RELATIONSHIPS              = array( 'invalid', 'newer', 'older', 'same' );
 
-	public static function ownedBy( object $value, string $root ): bool {
+	public static function owned_by( object $value, string $root ): bool {
 		try {
 			$file = ( new \ReflectionClass( $value ) )->getFileName();
 		} catch ( \ReflectionException ) {
@@ -102,7 +102,7 @@ final class RequestProtocolValidator {
 	}
 
 	/** @param list<string> $expected */
-	public static function exactPublicMethods( object $value, array $expected ): bool {
+	public static function exact_public_methods( object $value, array $expected ): bool {
 		$methods = array();
 		foreach ( ( new \ReflectionClass( $value ) )->getMethods( \ReflectionMethod::IS_PUBLIC ) as $method ) {
 			if ( ! $method->isConstructor() ) {
@@ -114,10 +114,10 @@ final class RequestProtocolValidator {
 		return $expected === $methods;
 	}
 
-	public static function validStatus( mixed $status ): bool {
+	public static function valid_status( mixed $status ): bool {
 		if (
 			! is_array( $status )
-			|| ! self::exactKeys( $status, array( 'state', 'declaration_accepted', 'hooks_registered', 'code', 'native' ) )
+			|| ! self::exact_keys( $status, array( 'state', 'declaration_accepted', 'hooks_registered', 'code', 'native' ) )
 			|| ! is_string( $status['code'] )
 			|| ! is_bool( $status['declaration_accepted'] )
 			|| ! is_bool( $status['hooks_registered'] )
@@ -125,7 +125,7 @@ final class RequestProtocolValidator {
 		) {
 			return false;
 		}
-		if ( ! self::validNativeStatus( $status['native'] ) ) {
+		if ( ! self::valid_native_status( $status['native'] ) ) {
 			return false;
 		}
 
@@ -154,7 +154,7 @@ final class RequestProtocolValidator {
 		};
 	}
 
-	public static function validNativeStatus( mixed $native ): bool {
+	public static function valid_native_status( mixed $native ): bool {
 		$keys = array(
 			'candidate_header_version',
 			'candidate_tag',
@@ -170,7 +170,7 @@ final class RequestProtocolValidator {
 		if ( null === $native ) {
 			return true;
 		}
-		if ( ! is_array( $native ) || ! self::exactKeys( $native, $keys ) ) {
+		if ( ! is_array( $native ) || ! self::exact_keys( $native, $keys ) ) {
 			return false;
 		}
 		foreach ( array( 'candidate_header_version', 'candidate_tag', 'candidate_version', 'installed_version', 'offered_version' ) as $key ) {
@@ -188,10 +188,10 @@ final class RequestProtocolValidator {
 			&& ( null === $native['offered_release_identity'] ) === ( null === $native['offered_version'] );
 	}
 
-	public static function validDiagnostics( mixed $diagnostics, string $state ): bool {
+	public static function valid_diagnostics( mixed $diagnostics, string $state ): bool {
 		if (
 			! is_array( $diagnostics )
-			|| ! self::exactKeys( $diagnostics, array( 'state', 'diagnostics' ) )
+			|| ! self::exact_keys( $diagnostics, array( 'state', 'diagnostics' ) )
 			|| $state !== $diagnostics['state']
 			|| ! is_array( $diagnostics['diagnostics'] )
 			|| self::MAX_DIAGNOSTICS < count( $diagnostics['diagnostics'] )
@@ -201,9 +201,9 @@ final class RequestProtocolValidator {
 		foreach ( $diagnostics['diagnostics'] as $diagnostic ) {
 			if (
 				! is_array( $diagnostic )
-				|| ! self::exactKeys( $diagnostic, array( 'code' ) )
+				|| ! self::exact_keys( $diagnostic, array( 'code' ) )
 				|| ! is_string( $diagnostic['code'] )
-				|| ! self::validDiagnosticCode( $diagnostic['code'] )
+				|| ! self::valid_diagnostic_code( $diagnostic['code'] )
 			) {
 				return false;
 			}
@@ -211,8 +211,8 @@ final class RequestProtocolValidator {
 		return true;
 	}
 
-	public static function validDiagnosticCode( string $code ): bool {
-		$runtimeCodes = array(
+	public static function valid_diagnostic_code( string $code ): bool {
+		$runtime_codes = array(
 			'activation_in_progress',
 			'late_candidate_rejected',
 			'runtime_active',
@@ -224,13 +224,13 @@ final class RequestProtocolValidator {
 		);
 		return in_array(
 			$code,
-			array_merge( self::TERMINAL_CODES, self::CANDIDATE_VALIDATION_CODES, self::FAILURE_CODES, $runtimeCodes ),
+			array_merge( self::TERMINAL_CODES, self::CANDIDATE_VALIDATION_CODES, self::FAILURE_CODES, $runtime_codes ),
 			true
 		);
 	}
 
 	/** @param array<string,mixed> $value */
-	public static function declarationCode( array $value ): ?string {
+	public static function declaration_code( array $value ): ?string {
 		$keys = array(
 			'target_type',
 			'installed_file',
@@ -243,25 +243,25 @@ final class RequestProtocolValidator {
 			'maximum_artifact_bytes',
 		);
 		if (
-			! self::exactKeys( $value, $keys )
+			! self::exact_keys( $value, $keys )
 			|| ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true )
 		) {
 			return 'declaration_invalid';
 		}
-		$file       = $value['installed_file'];
-		$normalized = is_string( $file ) ? str_replace( '\\', '/', $file ) : '';
-		$isAbsolute = str_starts_with( $normalized, '/' ) || 1 === preg_match( '/\A[A-Za-z]:\//D', $normalized );
-		$isUnc      = str_starts_with( $normalized, '//' );
-		$uncParts   = $isUnc ? explode( '/', substr( $normalized, 2 ) ) : array();
+		$file        = $value['installed_file'];
+		$normalized  = is_string( $file ) ? str_replace( '\\', '/', $file ) : '';
+		$is_absolute = str_starts_with( $normalized, '/' ) || 1 === preg_match( '/\A[A-Za-z]:\//D', $normalized );
+		$is_unc      = str_starts_with( $normalized, '//' );
+		$unc_parts   = $is_unc ? explode( '/', substr( $normalized, 2 ) ) : array();
 		if (
 			! is_string( $file )
 			|| '' === $file
 			|| 4096 < strlen( $file )
-			|| ! $isAbsolute
+			|| ! $is_absolute
 			|| 1 === preg_match( '/[\x00-\x1f\x7f]/', $file )
-			|| ( ! $isUnc && str_contains( $normalized, '//' ) )
-			|| ( $isUnc && ( 2 > count( $uncParts ) || in_array( '', $uncParts, true ) ) )
-			|| 1 === preg_match( '#/(?:\.?\.?)(?:/|$)#', $isUnc ? substr( $normalized, 1 ) : $normalized )
+			|| ( ! $is_unc && str_contains( $normalized, '//' ) )
+			|| ( $is_unc && ( 2 > count( $unc_parts ) || in_array( '', $unc_parts, true ) ) )
+			|| 1 === preg_match( '#/(?:\.?\.?)(?:/|$)#', $is_unc ? substr( $normalized, 1 ) : $normalized )
 		) {
 			return 'installed_file_invalid';
 		}
@@ -290,9 +290,9 @@ final class RequestProtocolValidator {
 	}
 
 	/** @param array<string,mixed> $value */
-	public static function releaseDeclarationCode( array $value ): ?string {
+	public static function release_declaration_code( array $value ): ?string {
 		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes' );
-		if ( ! self::exactKeys( $value, $keys ) || ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true ) ) {
+		if ( ! self::exact_keys( $value, $keys ) || ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true ) ) {
 			return 'invalid_configuration';
 		}
 		if ( ! is_string( $value['provider_code'] ) || 1 !== preg_match( '/\\A[a-z][a-z0-9_-]{0,31}\\z/D', $value['provider_code'] ) ) {
@@ -319,11 +319,11 @@ final class RequestProtocolValidator {
 	 * @param array<string,mixed> $value
 	 * @param list<string> $keys
 	 */
-	public static function exactKeys( array $value, array $keys ): bool {
+	public static function exact_keys( array $value, array $keys ): bool {
 		return array_keys( $value ) === $keys;
 	}
 
-	public static function isTerminalCode( string $code ): bool {
+	public static function is_terminal_code( string $code ): bool {
 		return in_array( $code, self::TERMINAL_CODES, true );
 	}
 }

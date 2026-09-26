@@ -59,11 +59,11 @@ $registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';
 
 $releaseUpdater = $registrar->plugin(
     provider: 'github',
-    pluginFile: __FILE__,
+    plugin_file: __FILE__,
     repository: 'acme/example-plugin',
-    repositoryId: '123456789',
+    repository_id: '123456789',
     channel: 'stable',
-    updatePolicy: 'manual'
+    update_policy: 'manual'
 );
 
 $releaseUpdater->register();
@@ -92,7 +92,7 @@ Themes use the same model via `$registrar->theme(...)`. See [Integrating the rel
 | Channel | `stable` or `prerelease`; defaults to `stable` |
 | Update policy | `manual`, `automatic`, `forced-off`, or `disabled`; defaults to `manual` |
 | Credentials | Optional request-local callable returning a token string or `null` |
-| Maximum artifact bytes (`maximumArtifactBytes`) | Positive compressed-ZIP limit; defaults to 52,428,800 bytes |
+| Maximum artifact bytes (`maximum_artifact_bytes`) | Positive compressed-ZIP limit; defaults to 52,428,800 bytes |
 
 `manual` publishes a verified native offer. `automatic` additionally permits automatic installation only when the release satisfies the package's stronger immutable/provenance requirements. `forced-off` and `disabled` suppress the native offer.
 
@@ -142,9 +142,9 @@ Pass an optional request-local callback when a private repository or authenticat
 ```php
 $releaseUpdater = $registrar->plugin(
     provider: 'github',
-    pluginFile: __FILE__,
+    plugin_file: __FILE__,
     repository: 'acme/example-plugin',
-    repositoryId: '123456789',
+    repository_id: '123456789',
     credentials: static fn (): ?string => getenv('EXAMPLE_PLUGIN_GITHUB_TOKEN') ?: null
 );
 
@@ -160,9 +160,9 @@ For prospective release metadata/bytes, create a request-local source:
 ```php
 $source = $registrar->releases(
     provider: 'github',
-    packageType: 'plugin',
+    package_type: 'plugin',
     repository: 'acme/example-plugin',
-    repositoryId: '123456789'
+    repository_id: '123456789'
 );
 
 add_action('init', static function () use ($source): void {
