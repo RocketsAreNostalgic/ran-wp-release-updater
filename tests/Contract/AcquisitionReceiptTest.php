@@ -92,7 +92,7 @@ final class AcquisitionReceiptTest extends TestCase {
 	public function testReceiptIsBoundToClaimIncarnationAndExpiry(): void {
 		list( $validator, $descriptor, $state, $package ) = $this->ready();
 		$receipt   = AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, 10 );
-		$successor = BindingState::create( $state->binding(), str_repeat( 'b', 64 ), 30, $state->bindingGeneration() + 1, $state->fenceEpoch() + 1 );
+		$successor = BindingState::create( $state->binding(), str_repeat( 'b', 64 ), 30, $state->binding_generation() + 1, $state->fence_epoch() + 1 );
 		try {
 			AcquisitionReceipt::accept_fresh( $receipt, $successor, $descriptor, 21 );
 			self::fail( 'Old claim receipt was accepted.' );
@@ -111,7 +111,7 @@ final class AcquisitionReceiptTest extends TestCase {
 	public function testCompletionRechecksAConcurrentCompetingOwnerAfterConsumingTheReceipt(): void {
 		list( $validator, $descriptor, $prototype, $package ) = $this->ready();
 		$database = new FakeOptionDatabase( 10 );
-		$claimed  = BindingFenceCoordinator::claimPersistentBindingState( $database, $prototype->binding(), str_repeat( 'a', 64 ), 10 );
+		$claimed  = BindingFenceCoordinator::claim_persistent_binding_state( $database, $prototype->binding(), str_repeat( 'a', 64 ), 10 );
 		self::assertSame( 'claimed', $claimed['result'] );
 		$state     = $claimed['current'];
 		$claim     = $this->claim( $state );
@@ -124,15 +124,15 @@ final class AcquisitionReceiptTest extends TestCase {
 				'installed_package_identity' => 'x/x.php',
 			)
 		);
-		$successor = BindingState::create( $next, str_repeat( 'b', 64 ), $state->leaseDeadline(), $state->bindingGeneration() + 1, $state->fenceEpoch() + 1 );
+		$successor = BindingState::create( $next, str_repeat( 'b', 64 ), $state->lease_deadline(), $state->binding_generation() + 1, $state->fence_epoch() + 1 );
 		$database->mutateOnTimeRead(
 			1,
 			static function ( FakeOptionDatabase $database ) use ( $name, $successor ): void {
-				$database->forceOptionValue( $name, json_encode( $successor->toArray(), JSON_THROW_ON_ERROR ) );
+				$database->forceOptionValue( $name, json_encode( $successor->to_array(), JSON_THROW_ON_ERROR ) );
 			}
 		);
 
-		$completed = BindingFenceCoordinator::completePersistentInstall( $database, $state, $claim, $receipt, $descriptor );
+		$completed = BindingFenceCoordinator::complete_persistent_install( $database, $state, $claim, $receipt, $descriptor );
 		self::assertSame( 'binding_fence_lost', $completed['result'] );
 		try {
 			AcquisitionReceipt::accept_fresh( $receipt, $state, $descriptor, 10 );
@@ -186,10 +186,10 @@ final class AcquisitionReceiptTest extends TestCase {
 	/** @return array<string,mixed> */
 	private function claim( BindingState $state ): array {
 		return array(
-			'binding_generation' => $state->bindingGeneration(),
+			'binding_generation' => $state->binding_generation(),
 			'binding_hash'       => $state->binding()->binding_hash(),
-			'lease_deadline'     => $state->leaseDeadline(),
-			'owner_token'        => $state->ownerToken(),
+			'lease_deadline'     => $state->lease_deadline(),
+			'owner_token'        => $state->owner_token(),
 		); }
 	/** @return array<string,mixed> */
 	private function bindingFacts(): array {

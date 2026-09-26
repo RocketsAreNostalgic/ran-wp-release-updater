@@ -126,7 +126,7 @@ function nativeCallbacks( string $hook ): array {
 	foreach ( $registered->callbacks as $priority ) {
 		foreach ( $priority as $entry ) {
 			$callback = $entry['function'] ?? null;
-			if ( is_array( $callback ) && is_object( $callback[0] ) && 'filterUpdate' === ( $callback[1] ?? null ) ) {
+			if ( is_array( $callback ) && is_object( $callback[0] ) && 'filter_update' === ( $callback[1] ?? null ) ) {
 				$found[] = $callback[0];
 			}
 		}

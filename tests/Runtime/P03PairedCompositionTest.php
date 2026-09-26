@@ -154,10 +154,10 @@ if (! $explicit instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdat
 }
 $conciseBinding = (new ReflectionProperty($concise, 'binding'))->getValue($concise)->to_array();
 $conciseHeaders = (new ReflectionProperty($concise, 'headers'))->getValue($concise);
-$concisePolicy = (new ReflectionProperty($concise, 'archivePolicy'))->getValue($concise);
+$concisePolicy = (new ReflectionProperty($concise, 'archive_policy'))->getValue($concise);
 $explicitBinding = (new ReflectionProperty($explicit, 'binding'))->getValue($explicit)->to_array();
 $explicitHeaders = (new ReflectionProperty($explicit, 'headers'))->getValue($explicit);
-$explicitPolicy = (new ReflectionProperty($explicit, 'archivePolicy'))->getValue($explicit);
+$explicitPolicy = (new ReflectionProperty($explicit, 'archive_policy'))->getValue($explicit);
 if ($conciseBinding !== $explicitBinding || $conciseHeaders !== $explicitHeaders || $concisePolicy !== $explicitPolicy) {
 	throw new RuntimeException('Real GitHub compositions diverged.');
 }
@@ -234,11 +234,11 @@ if ($data['invalidate']) {
 	return;
 }
 $extra = array($data['type'] => $identity, 'action' => 'update', 'type' => $data['type']);
-$conciseArchive = $concise->filterPreDownload(false, $conciseOffer['package'], null, $extra);
-$explicitArchive = $explicit->filterPreDownload(false, $explicitOffer['package'], null, $extra);
+$conciseArchive = $concise->filter_pre_download(false, $conciseOffer['package'], null, $extra);
+$explicitArchive = $explicit->filter_pre_download(false, $explicitOffer['package'], null, $extra);
 if (! is_string($conciseArchive) || ! is_string($explicitArchive)) throw new RuntimeException('Receipt fixture failed.');
 $receiptFacts = static function (object $native): array {
-	$pending = (new ReflectionProperty($native, 'pendingInstall'))->getValue($native);
+	$pending = (new ReflectionProperty($native, 'pending_install'))->getValue($native);
 	$receipt = $pending->receipt();
 	if (! $receipt instanceof \RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt) {
 		throw new RuntimeException('Pending receipt fixture failed.');

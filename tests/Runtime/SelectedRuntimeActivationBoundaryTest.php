@@ -192,10 +192,10 @@ PHP,
 			'6.9.3-src'           => '6.9.3-src',
 			'6.9.0-beta.1'        => '6.9.0-beta.1',
 		) as $input => $expected ) {
-			self::assertSame( $expected, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalizeWordPressVersion( $input ), $input );
+			self::assertSame( $expected, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_word_press_version( $input ), $input );
 		}
-		self::assertNull( \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalizeWordPressVersion( '6.9-beta1-60740-unsafe' ) );
-		self::assertNull( \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalizeWordPressVersion( str_repeat( '1', 101 ) ) );
+		self::assertNull( \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_word_press_version( '6.9-beta1-60740-unsafe' ) );
+		self::assertNull( \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_word_press_version( str_repeat( '1', 101 ) ) );
 	}
 
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'supportedWordPressDevelopmentVersions' )]

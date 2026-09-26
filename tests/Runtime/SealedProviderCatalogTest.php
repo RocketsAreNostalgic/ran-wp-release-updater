@@ -332,7 +332,7 @@ PHP;
 				throw new \RuntimeException( 'Synthetic acquisition must not run.' );
 			}
 		};
-		$native = \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater::fromConfiguration(
+		$native = \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater::from_configuration(
 			$config,
 			$binding,
 			$adapter,

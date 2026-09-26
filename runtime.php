@@ -193,8 +193,8 @@ return new class(
 		}
 		if (
 			is_object( $this->selectedRuntimeState )
-			&& is_callable( array( $this->selectedRuntimeState, 'operationStarted' ) )
-			&& true === $this->selectedRuntimeState->operationStarted( $type )
+			&& is_callable( array( $this->selectedRuntimeState, 'operation_started' ) )
+			&& true === $this->selectedRuntimeState->operation_started( $type )
 		) {
 			$handle                = $this->deferredHandle();
 			$this->targets[ $key ] = array(
@@ -274,8 +274,8 @@ return new class(
 				return $this->native->refresh();
 			}
 			private function livenessCode(): string {
-				if ( is_object( $this->selectedRuntimeState ) && is_callable( array( $this->selectedRuntimeState, 'livenessCode' ) ) ) {
-					$code = $this->selectedRuntimeState->livenessCode();
+				if ( is_object( $this->selectedRuntimeState ) && is_callable( array( $this->selectedRuntimeState, 'liveness_code' ) ) ) {
+					$code = $this->selectedRuntimeState->liveness_code();
 					if ( is_string( $code ) ) {
 						return $code;
 					}
@@ -301,7 +301,7 @@ return new class(
 		if ( ! $state instanceof \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState ) {
 			return $this->releaseFailure( 'runtime_unavailable' );
 		}
-		$readiness = $state->releaseReadinessCode();
+		$readiness = $state->release_readiness_code();
 		if ( null !== $readiness ) {
 			return $this->releaseFailure( $readiness );
 		}

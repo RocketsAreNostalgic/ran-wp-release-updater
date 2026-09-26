@@ -122,7 +122,7 @@ final class ReleaseSource {
 		if ( $this->terminalUnavailable ) {
 			return $this->failure( new ReleaseFailure( 'runtime_unavailable' ) );
 		}
-		$code = $this->state->releaseReadinessCode();
+		$code = $this->state->release_readiness_code();
 		return null === $code ? null : $this->failure( new ReleaseFailure( $code ) );
 	}
 
@@ -155,7 +155,7 @@ final class ReleaseSource {
 	 * @return array<string,mixed>
 	 */
 	private function invalid( string $code ): array {
-		if ( $this->terminalUnavailable || 'runtime_unavailable' === $this->state->releaseReadinessCode() ) {
+		if ( $this->terminalUnavailable || 'runtime_unavailable' === $this->state->release_readiness_code() ) {
 			return $this->failure( new ReleaseFailure( 'runtime_unavailable' ) );
 		}
 		return $this->failure( new ReleaseFailure( $code ) );

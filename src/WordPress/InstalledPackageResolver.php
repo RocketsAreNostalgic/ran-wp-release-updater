@@ -14,11 +14,11 @@ final class InstalledPackageResolver {
 
 	/** @var null|\Closure(string):void Tests inject a deterministic race by Reflection. */
 	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
-	private ?\Closure $beforeFirstStat = null;
+	private ?\Closure $before_first_stat = null;
 
 	/** @var null|\Closure(string):void Tests inject a deterministic race by Reflection. */
 	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
-	private ?\Closure $afterFirstRead = null;
+	private ?\Closure $after_first_read = null;
 
 	/** @var (\Closure(resource,int):(string|false))|null Tests inject bounded read failures by Reflection. */
 	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
@@ -32,13 +32,13 @@ final class InstalledPackageResolver {
 	private ?\Closure $rewind = null;
 
 	/**
-	 * @param array<string,mixed> $pluginPaths Registered logical-to-physical plugin paths.
-	 * @param list<mixed>         $themeDirectories Registered theme directories.
+	 * @param array<string,mixed> $plugin_paths Registered logical-to-physical plugin paths.
+	 * @param list<mixed>         $theme_directories Registered theme directories.
 	 */
 	public function __construct(
-		private readonly string $pluginDirectory,
-		private readonly array $pluginPaths,
-		private readonly array $themeDirectories,
+		private readonly string $plugin_directory,
+		private readonly array $plugin_paths,
+		private readonly array $theme_directories,
 	) {
 	}
 
@@ -49,7 +49,7 @@ final class InstalledPackageResolver {
 	public function resolve( array $declaration ): array {
 		$file = $declaration['installed_file'] ?? null;
 		$type = $declaration['target_type'] ?? null;
-		if ( ! is_string( $file ) || ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! $this->validPath( $file ) ) {
+		if ( ! is_string( $file ) || ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! $this->valid_path( $file ) ) {
 			return array( 'code' => 'installed_file_invalid' );
 		}
 
@@ -70,20 +70,20 @@ final class InstalledPackageResolver {
 		if ( ! is_string( $real ) ) {
 			return array( 'code' => 'installed_file_unreadable' );
 		}
-		$root = $this->rootFor( $type, $file, $real );
+		$root = $this->root_for( $type, $file, $real );
 		if ( null === $root ) {
 			return array( 'code' => 'installed_file_outside_root' );
 		}
 		if ( false === $root ) {
 			return array( 'code' => 'installed_file_root_ambiguous' );
 		}
-		$linkRoot = $this->inside( $file, $root['logical'] ) ? $root['logical'] : $root['real'];
-		if ( $this->hasInternalLink( $file, $linkRoot ) ) {
+		$link_root = $this->inside( $file, $root['logical'] ) ? $root['logical'] : $root['real'];
+		if ( $this->has_internal_link( $file, $link_root ) ) {
 			return array( 'code' => 'installed_file_outside_root' );
 		}
 
-		$identityRoot = 'plugin' === $type ? rtrim( str_replace( '\\', '/', $this->pluginDirectory ), '/' ) : $root['logical'];
-		$identity     = $this->identity( $type, $root['file'], $identityRoot );
+		$identity_root = 'plugin' === $type ? rtrim( str_replace( '\\', '/', $this->plugin_directory ), '/' ) : $root['logical'];
+		$identity      = $this->identity( $type, $root['file'], $identity_root );
 		if ( is_string( $identity ) ) {
 			return array( 'code' => $identity );
 		}
@@ -93,19 +93,19 @@ final class InstalledPackageResolver {
 		}
 
 		clearstatcache( true, $file );
-		$last     = @lstat( $file );
-		$lastReal = @realpath( $file );
-		$lastRoot = is_string( $lastReal ) ? $this->rootFor( $type, $file, $lastReal ) : null;
-		if ( ! $this->sameStat( $initial, $last ) || $real !== $lastReal || ! is_array( $lastRoot ) || $root !== $lastRoot ) {
+		$last      = @lstat( $file );
+		$last_real = @realpath( $file );
+		$last_root = is_string( $last_real ) ? $this->root_for( $type, $file, $last_real ) : null;
+		if ( ! $this->same_stat( $initial, $last ) || $real !== $last_real || ! is_array( $last_root ) || $root !== $last_root ) {
 			return array( 'code' => 'installed_file_changed' );
 		}
 
-		$headerResult = PackageIdentityValidator::parse_header( $captured[0], $type );
-		if ( 'installed_header_verified' !== $headerResult['code'] || ! isset( $headerResult['headers'] ) ) {
-			return array( 'code' => $headerResult['code'] );
+		$header_result = PackageIdentityValidator::parse_header( $captured[0], $type );
+		if ( 'installed_header_verified' !== $header_result['code'] || ! isset( $header_result['headers'] ) ) {
+			return array( 'code' => $header_result['code'] );
 		}
-		$headers = $headerResult['headers'];
-		if ( $this->requirementsIncompatible( $headers ) ) {
+		$headers = $header_result['headers'];
+		if ( $this->requirements_incompatible( $headers ) ) {
 			return array( 'code' => 'installed_requirement_incompatible' );
 		}
 
@@ -118,7 +118,7 @@ final class InstalledPackageResolver {
 		);
 	}
 
-	private function validPath( string $path ): bool {
+	private function valid_path( string $path ): bool {
 		$path  = str_replace( '\\', '/', $path );
 		$drive = 1 === preg_match( '/\A[A-Za-z]:\//', $path );
 		$unc   = str_starts_with( $path, '//' );
@@ -138,40 +138,40 @@ final class InstalledPackageResolver {
 	}
 
 	/** @return array{logical:string,real:string,file:string}|false|null */
-	private function rootFor( string $type, string $file, string $real ): array|false|null {
+	private function root_for( string $type, string $file, string $real ): array|false|null {
 		$roots = array();
 		if ( 'plugin' === $type ) {
-			$this->addRoot( $roots, $this->pluginDirectory, $this->pluginDirectory );
-			foreach ( $this->pluginPaths as $logical => $actual ) {
+			$this->add_root( $roots, $this->plugin_directory, $this->plugin_directory );
+			foreach ( $this->plugin_paths as $logical => $actual ) {
 				if ( ! is_string( $logical ) || ! is_string( $actual ) ) {
 					continue;
 				}
-				if ( $this->inside( rtrim( str_replace( '\\', '/', $logical ), '/' ), rtrim( str_replace( '\\', '/', $this->pluginDirectory ), '/' ) ) ) {
-					$this->addRoot( $roots, $logical, $actual, true );
+				if ( $this->inside( rtrim( str_replace( '\\', '/', $logical ), '/' ), rtrim( str_replace( '\\', '/', $this->plugin_directory ), '/' ) ) ) {
+					$this->add_root( $roots, $logical, $actual, true );
 				}
 			}
 		} else {
-			foreach ( $this->themeDirectories as $directory ) {
+			foreach ( $this->theme_directories as $directory ) {
 				if ( is_string( $directory ) ) {
-					$this->addRoot( $roots, $directory, $directory );
+					$this->add_root( $roots, $directory, $directory );
 				}
 			}
 		}
 
 		$matches = array();
 		foreach ( $roots as $root ) {
-			$logicalFile = null;
+			$logical_file = null;
 			if ( $this->inside( $file, $root['logical'] ) && $this->inside( $real, $root['real'] ) ) {
-				$logicalFile = $file;
+				$logical_file = $file;
 			}
 			if ( $this->inside( $file, $root['real'] ) && $this->inside( $real, $root['real'] ) ) {
-				$logicalFile = $root['logical'] . substr( $file, strlen( $root['real'] ) );
+				$logical_file = $root['logical'] . substr( $file, strlen( $root['real'] ) );
 			}
-			if ( is_string( $logicalFile ) ) {
-				$matches[ $logicalFile ] = array(
+			if ( is_string( $logical_file ) ) {
+				$matches[ $logical_file ] = array(
 					'logical'  => $root['logical'],
 					'real'     => $root['real'],
-					'file'     => $logicalFile,
+					'file'     => $logical_file,
 					'explicit' => $root['explicit'],
 				);
 			}
@@ -179,9 +179,9 @@ final class InstalledPackageResolver {
 		if ( 0 === count( $matches ) ) {
 			return null;
 		}
-		$explicitMatches = array_filter( $matches, static fn ( array $candidate ): bool => $candidate['explicit'] );
-		if ( 0 !== count( $explicitMatches ) ) {
-			$matches = $explicitMatches;
+		$explicit_matches = array_filter( $matches, static fn ( array $candidate ): bool => $candidate['explicit'] );
+		if ( 0 !== count( $explicit_matches ) ) {
+			$matches = $explicit_matches;
 		}
 		if ( 1 !== count( $matches ) ) {
 			return false;
@@ -195,10 +195,10 @@ final class InstalledPackageResolver {
 	}
 
 	/** @param array<string,array{logical:string,real:string,explicit:bool}> $roots */
-	private function addRoot( array &$roots, string $logical, string $actual, bool $explicit = false ): void {
+	private function add_root( array &$roots, string $logical, string $actual, bool $explicit = false ): void {
 		$logical = rtrim( str_replace( '\\', '/', $logical ), '/' );
 		$actual  = rtrim( str_replace( '\\', '/', $actual ), '/' );
-		if ( ! $this->validPath( $logical ) || ! $this->validPath( $actual ) ) {
+		if ( ! $this->valid_path( $logical ) || ! $this->valid_path( $actual ) ) {
 			return;
 		}
 		$real = @realpath( $actual );
@@ -223,7 +223,7 @@ final class InstalledPackageResolver {
 		return str_starts_with( $path, $root . '/' );
 	}
 
-	private function hasInternalLink( string $file, string $root ): bool {
+	private function has_internal_link( string $file, string $root ): bool {
 		$relative = substr( $file, strlen( $root ) + 1 );
 		$path     = $root;
 		foreach ( explode( '/', $relative ) as $part ) {
@@ -280,11 +280,11 @@ final class InstalledPackageResolver {
 		}
 
 		try {
-			if ( null !== $this->beforeFirstStat ) {
-				( $this->beforeFirstStat )( $file );
+			if ( null !== $this->before_first_stat ) {
+				( $this->before_first_stat )( $file );
 			}
 			$first = @fstat( $stream );
-			if ( ! $this->sameStat( $initial, $first ) ) {
+			if ( ! $this->same_stat( $initial, $first ) ) {
 				return 'installed_file_changed';
 			}
 			$locked = null === $this->lock ? @flock( $stream, LOCK_SH | LOCK_NB ) : ( $this->lock )( $stream );
@@ -296,15 +296,15 @@ final class InstalledPackageResolver {
 			if ( ! is_string( $one ) || ! $rewound ) {
 				return 'installed_file_unreadable';
 			}
-			if ( null !== $this->afterFirstRead ) {
-				( $this->afterFirstRead )( $file );
+			if ( null !== $this->after_first_read ) {
+				( $this->after_first_read )( $file );
 			}
 			$two  = null === $this->read ? fread( $stream, self::MAX_HEADER_BYTES ) : ( $this->read )( $stream, 2 );
 			$last = @fstat( $stream );
 			if ( ! is_string( $two ) ) {
 				return 'installed_file_unreadable';
 			}
-			if ( $one !== $two || ! $this->sameStat( $initial, $last ) ) {
+			if ( $one !== $two || ! $this->same_stat( $initial, $last ) ) {
 				return 'installed_file_changed';
 			}
 			return array( $one, $last );
@@ -314,14 +314,14 @@ final class InstalledPackageResolver {
 	}
 
 	/** @param array<string,string> $headers */
-	private function requirementsIncompatible( array $headers ): bool {
+	private function requirements_incompatible( array $headers ): bool {
 		if ( null === ReleaseVersion::normalize_header( $headers['Version'] ) ) {
 			return true;
 		}
 		if ( '' !== $headers['RequiresPHP'] && ( null === ReleaseVersion::normalize_header( $headers['RequiresPHP'] ) || ReleaseVersion::compare( PHP_VERSION, $headers['RequiresPHP'] ) < 0 ) ) {
 			return true;
 		}
-		$wordpress  = \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null );
+		$wordpress  = \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_word_press_version( $GLOBALS['wp_version'] ?? null );
 		$comparison = is_string( $wordpress ) ? ReleaseVersion::compare( $wordpress, $headers['RequiresWP'] ) : null;
 		return '' !== $headers['RequiresWP'] && ( null === ReleaseVersion::normalize_header( $headers['RequiresWP'] ) || null === $comparison || $comparison < 0 );
 	}
@@ -330,7 +330,7 @@ final class InstalledPackageResolver {
 	 * @param array<int|string,int> $one Initial file metadata.
 	 * @phpstan-assert-if-true =array<mixed> $two
 	 */
-	private function sameStat( array $one, mixed $two ): bool {
+	private function same_stat( array $one, mixed $two ): bool {
 		if ( ! is_array( $two ) ) {
 			return false;
 		}

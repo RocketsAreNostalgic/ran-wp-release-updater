@@ -24,6 +24,14 @@
 
 	<!-- Completed owned-method cohort; expand only with reviewed declaration/caller proof. -->
 	<rule ref="RANOwnedMethods">
+		<include-pattern>/src/Runtime/SelectedRuntimeState.php</include-pattern>
+		<include-pattern>/src/WordPress/StagedPackageManifest.php</include-pattern>
+		<include-pattern>/src/WordPress/PendingInstallState.php</include-pattern>
+		<include-pattern>/src/WordPress/OwnedArchiveStore.php</include-pattern>
+		<include-pattern>/src/WordPress/NativePackageUpdater.php</include-pattern>
+		<include-pattern>/src/WordPress/InstalledPackageResolver.php</include-pattern>
+		<include-pattern>/src/WordPress/BindingState.php</include-pattern>
+		<include-pattern>/src/WordPress/BindingFenceCoordinator.php</include-pattern>
 		<include-pattern>/src/Runtime/ReleaseFailure.php</include-pattern>
 		<include-pattern>/src/Provider/GitHub/GitHubReleaseService.php</include-pattern>
 		<include-pattern>/src/Provider/GitHub/GitHubReleaseReadUnavailable.php</include-pattern>
@@ -53,6 +61,14 @@
 	</rule>
 	<!-- Variable enforcement follows the completed cohorts below only. -->
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
+		<include-pattern>/src/Runtime/SelectedRuntimeState.php</include-pattern>
+		<include-pattern>/src/WordPress/StagedPackageManifest.php</include-pattern>
+		<include-pattern>/src/WordPress/PendingInstallState.php</include-pattern>
+		<include-pattern>/src/WordPress/OwnedArchiveStore.php</include-pattern>
+		<include-pattern>/src/WordPress/NativePackageUpdater.php</include-pattern>
+		<include-pattern>/src/WordPress/InstalledPackageResolver.php</include-pattern>
+		<include-pattern>/src/WordPress/BindingState.php</include-pattern>
+		<include-pattern>/src/WordPress/BindingFenceCoordinator.php</include-pattern>
 		<include-pattern>/src/Runtime/ReleaseFailure.php</include-pattern>
 		<include-pattern>/src/Provider/GitHub/GitHubReleaseService.php</include-pattern>
 		<include-pattern>/src/Provider/GitHub/GitHubReleaseReadUnavailable.php</include-pattern>

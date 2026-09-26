@@ -134,7 +134,7 @@ final class OwnedArchiveStore {
 	}
 
 	/** @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity */
-	public function sameIdentity( string $path, IdentityDescriptor $descriptor, array $identity ): bool {
+	public function same_identity( string $path, IdentityDescriptor $descriptor, array $identity ): bool {
 		$current = $this->identity( $path, $descriptor );
 		if ( ! is_array( $current ) ) {
 			return false;
