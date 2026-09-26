@@ -9,27 +9,27 @@ final readonly class ArchiveScanResult {
 
 	/** @param list<array{name:string,path:string,directory:bool,size:int,compressed_size:int}> $entries */
 	private function __construct(
-		private ?string $failureCode,
+		private ?string $failure_code,
 		private ?string $root,
 		private array $entries,
-		private int $expandedBytes
+		private int $expanded_bytes
 	) {}
 
-	public static function blocked( string $failureCode ): self {
-		return new self( $failureCode, null, array(), 0 );
+	public static function blocked( string $failure_code ): self {
+		return new self( $failure_code, null, array(), 0 );
 	}
 
 	/** @param list<array{name:string,path:string,directory:bool,size:int,compressed_size:int}> $entries */
-	public static function ready( string $root, array $entries, int $expandedBytes ): self {
-		return new self( null, $root, $entries, $expandedBytes );
+	public static function ready( string $root, array $entries, int $expanded_bytes ): self {
+		return new self( null, $root, $entries, $expanded_bytes );
 	}
 
-	public function isValid(): bool {
-		return null === $this->failureCode;
+	public function is_valid(): bool {
+		return null === $this->failure_code;
 	}
 
-	public function failureCode(): ?string {
-		return $this->failureCode;
+	public function failure_code(): ?string {
+		return $this->failure_code;
 	}
 
 	public function root(): ?string {
@@ -41,7 +41,7 @@ final readonly class ArchiveScanResult {
 		return $this->entries;
 	}
 
-	public function expandedBytes(): int {
-		return $this->expandedBytes;
+	public function expanded_bytes(): int {
+		return $this->expanded_bytes;
 	}
 }

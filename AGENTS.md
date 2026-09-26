@@ -20,6 +20,9 @@ Variable naming enforcement is enabled only for `ReleaseVersion.php`,
 `src/Provider/GitHub/GitHubReleaseAdapter.php`. Expand these completed scopes
 only with reviewed declaration/caller and enforcement proof.
 
+Completed result/proof cohorts also enforce owned methods and variable naming in
+`src/Archive/ArchiveScanResult.php`.
+
 Keep release-updater identity and product constraints local: the
 `RAN\WPReleaseUpdater\V1` namespace, WordPress 6.5 floor, PHP `^8.2` range,
 source paths, provider/runtime rules, security-sensitive native-primitive
