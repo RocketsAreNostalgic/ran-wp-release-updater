@@ -105,9 +105,9 @@ final class ReleaseSource {
 			if ( $failure instanceof ReleaseFailure ) {
 				return $this->failure(
 					new ReleaseFailure(
-						$failure->releaseCode,
-						$failure->retryAfter,
-						null !== $artifact ? $cleanup : $failure->cleanupStatus
+						$failure->release_code,
+						$failure->retry_after,
+						null !== $artifact ? $cleanup : $failure->cleanup_status
 					)
 				);
 			}
@@ -130,13 +130,13 @@ final class ReleaseSource {
 	 * @return array<string,mixed>
 	 */
 	private function failure( ReleaseFailure $failure ): array {
-		if ( 'runtime_unavailable' === $failure->releaseCode ) {
+		if ( 'runtime_unavailable' === $failure->release_code ) {
 			$this->terminalUnavailable = true;
 		}
-		$code    = $failure->releaseCode;
-		$cleanup = $failure->cleanupStatus;
-		$retry   = $failure->retryAfter;
-		if ( ! ReleaseFailure::validCode( $code ) || ! in_array( $cleanup, array( 'not_applicable', 'complete', 'failed' ), true )
+		$code    = $failure->release_code;
+		$cleanup = $failure->cleanup_status;
+		$retry   = $failure->retry_after;
+		if ( ! ReleaseFailure::valid_code( $code ) || ! in_array( $cleanup, array( 'not_applicable', 'complete', 'failed' ), true )
 			|| ( 'rate_limited' === $code ? null === $retry || $retry < 1 || $retry > 86400 : null !== $retry ) ) {
 			$code    = 'operation_failed';
 			$retry   = null;

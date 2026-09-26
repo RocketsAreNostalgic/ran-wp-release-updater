@@ -20,16 +20,16 @@ final class GitHubArtifactStore {
 		if ( ! is_string( $path ) || '' === $path ) {
 			throw new RuntimeException( 'A private temporary file could not be created.' );
 		}
-		$createdIdentity = $this->identity( $path );
-		if ( null === $createdIdentity || ! @chmod( $path, 0600 ) ) {
-			$clean = is_array( $createdIdentity )
-				? $this->remove( $path, $createdIdentity )
+		$created_identity = $this->identity( $path );
+		if ( null === $created_identity || ! @chmod( $path, 0600 ) ) {
+			$clean = is_array( $created_identity )
+				? $this->remove( $path, $created_identity )
 				: ! file_exists( $path ) && ! is_link( $path );
 			throw new GitHubArtifactCustodyFailure( $clean, 'A private temporary file could not be created.' );
 		}
 		$identity = $this->identity( $path );
 		if ( null === $identity || 1 !== $identity['nlink'] ) {
-			$clean = $this->remove( $path, $createdIdentity );
+			$clean = $this->remove( $path, $created_identity );
 			throw new GitHubArtifactCustodyFailure( $clean, 'The private temporary file is invalid.' );
 		}
 		return array( $path, $identity );

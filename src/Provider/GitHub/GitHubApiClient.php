@@ -18,8 +18,8 @@ final class GitHubApiClient {
 		'release-assets.githubusercontent.com',
 	);
 
-	/** @param null|callable():void $livenessGuard */
-	public function __construct( private $livenessGuard = null ) {}
+	/** @param null|callable():void $liveness_guard */
+	public function __construct( private $liveness_guard = null ) {}
 
 	public function api( string $path ): string {
 		return self::API_ORIGIN . $path;
@@ -48,13 +48,13 @@ final class GitHubApiClient {
 			$headers['Authorization'] = 'Bearer ' . $token;
 		}
 
-		$currentUrl       = $url;
-		$credentialsBound = true;
+		$current_url       = $url;
+		$credentials_bound = true;
 		for ( $redirects = 0; ; ++$redirects ) {
-			$this->assertLive();
-			$response = self::send( $currentUrl, $headers, $limit, $filename );
-			$this->assertLive();
-			$status = self::responseCode( $response );
+			$this->assert_live();
+			$response = self::send( $current_url, $headers, $limit, $filename );
+			$this->assert_live();
+			$status = self::response_code( $response );
 			if ( ! in_array( $status, array( 301, 302, 303, 307, 308 ), true ) ) {
 				return $response;
 			}
@@ -62,23 +62,23 @@ final class GitHubApiClient {
 				throw new RuntimeException( 'The GitHub redirect limit was exceeded.' );
 			}
 
-			$nextUrl = self::validatedRedirectUrl( self::responseHeader( $response, 'location' ) );
-			if ( null === $nextUrl ) {
+			$next_url = self::validated_redirect_url( self::response_header( $response, 'location' ) );
+			if ( null === $next_url ) {
 				throw new RuntimeException( 'The GitHub redirect is unsafe.' );
 			}
-			$nextHost = strtolower( (string) parse_url( $nextUrl, PHP_URL_HOST ) );
-			if ( self::API_HOST !== $nextHost ) {
-				$credentialsBound = false;
+			$next_host = strtolower( (string) parse_url( $next_url, PHP_URL_HOST ) );
+			if ( self::API_HOST !== $next_host ) {
+				$credentials_bound = false;
 			}
-			if ( ! $credentialsBound ) {
+			if ( ! $credentials_bound ) {
 				unset( $headers['Authorization'] );
 			}
-			$currentUrl = $nextUrl;
+			$current_url = $next_url;
 		}
 	}
 
 	/** @param array<string,mixed> $response */
-	public static function responseCode( array $response ): int {
+	public static function response_code( array $response ): int {
 		if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
 			throw new GitHubReleaseReadUnavailable( 'The WordPress HTTP response API is unavailable.' );
 		}
@@ -93,7 +93,7 @@ final class GitHubApiClient {
 	}
 
 	/** @param array<string,mixed> $response */
-	public static function responseHeader( array $response, string $name ): ?string {
+	public static function response_header( array $response, string $name ): ?string {
 		if ( ! function_exists( 'wp_remote_retrieve_header' ) ) {
 			throw new GitHubReleaseReadUnavailable( 'The WordPress HTTP response API is unavailable.' );
 		}
@@ -102,7 +102,7 @@ final class GitHubApiClient {
 	}
 
 	/** @param array<string,mixed> $response */
-	public static function responseBody( array $response, int $limit ): string {
+	public static function response_body( array $response, int $limit ): string {
 		if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
 			throw new GitHubReleaseReadUnavailable( 'The WordPress HTTP response API is unavailable.' );
 		}
@@ -113,9 +113,9 @@ final class GitHubApiClient {
 		return $body;
 	}
 
-	private function assertLive(): void {
-		if ( null !== $this->livenessGuard ) {
-			( $this->livenessGuard )();
+	private function assert_live(): void {
+		if ( null !== $this->liveness_guard ) {
+			( $this->liveness_guard )();
 		}
 	}
 
@@ -141,14 +141,14 @@ final class GitHubApiClient {
 		if ( is_wp_error( $response ) || ! is_array( $response ) ) {
 			throw new GitHubReleaseReadUnavailable( 'The GitHub request failed.' );
 		}
-		self::responseCode( $response );
+		self::response_code( $response );
 		if ( null === $filename ) {
-			self::responseBody( $response, $limit );
+			self::response_body( $response, $limit );
 		}
 		return $response;
 	}
 
-	private static function validatedRedirectUrl( ?string $url ): ?string {
+	private static function validated_redirect_url( ?string $url ): ?string {
 		if (
 			null === $url
 			|| '' === $url
@@ -175,28 +175,28 @@ final class GitHubApiClient {
 		if (
 			false !== filter_var( $host, FILTER_VALIDATE_IP )
 			|| ( self::API_HOST !== $host && ! in_array( $host, self::RELEASE_ASSET_HOSTS, true ) )
-			|| self::signedUrlExpired( (string) ( $parts['query'] ?? '' ) )
+			|| self::signed_url_expired( (string) ( $parts['query'] ?? '' ) )
 		) {
 			return null;
 		}
 		return $url;
 	}
 
-	private static function signedUrlExpired( string $query ): bool {
+	private static function signed_url_expired( string $query ): bool {
 		if ( '' === $query ) {
 			return false;
 		}
 		$values = array();
 		foreach ( explode( '&', $query ) as $pair ) {
-			list( $rawKey, $rawValue ) = array_pad( explode( '=', $pair, 2 ), 2, '' );
-			$key                       = strtolower( rawurldecode( $rawKey ) );
+			list( $raw_key, $raw_value ) = array_pad( explode( '=', $pair, 2 ), 2, '' );
+			$key                         = strtolower( rawurldecode( $raw_key ) );
 			if ( ! in_array( $key, array( 'se', 'expires', 'x-amz-date', 'x-amz-expires' ), true ) ) {
 				continue;
 			}
 			if ( array_key_exists( $key, $values ) ) {
 				return true;
 			}
-			$values[ $key ] = rawurldecode( $rawValue );
+			$values[ $key ] = rawurldecode( $raw_value );
 		}
 		if ( array() === $values ) {
 			return false;
@@ -211,9 +211,9 @@ final class GitHubApiClient {
 			if ( 1 !== preg_match( '/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?Z\z/D', $values['se'] ) ) {
 				return true;
 			}
-			$base      = substr( $values['se'], 0, 19 ) . 'Z';
-			$expiresAt = self::exactUtcDate( '!Y-m-d\TH:i:s\Z', $base );
-			return null === $expiresAt || $expiresAt <= time();
+			$base       = substr( $values['se'], 0, 19 ) . 'Z';
+			$expires_at = self::exact_utc_date( '!Y-m-d\TH:i:s\Z', $base );
+			return null === $expires_at || $expires_at <= time();
 		}
 		if ( array_key_exists( 'expires', $values ) ) {
 			return 1 !== preg_match( '/\A\d{1,12}\z/D', $values['expires'] ) || (int) $values['expires'] <= time();
@@ -225,11 +225,11 @@ final class GitHubApiClient {
 		) {
 			return true;
 		}
-		$issuedAt = self::exactUtcDate( '!Ymd\THis\Z', $values['x-amz-date'] );
-		return null === $issuedAt || $issuedAt + (int) $values['x-amz-expires'] <= time();
+		$issued_at = self::exact_utc_date( '!Ymd\THis\Z', $values['x-amz-date'] );
+		return null === $issued_at || $issued_at + (int) $values['x-amz-expires'] <= time();
 	}
 
-	private static function exactUtcDate( string $format, string $value ): ?int {
+	private static function exact_utc_date( string $format, string $value ): ?int {
 		$date   = \DateTimeImmutable::createFromFormat( $format, $value, new \DateTimeZone( 'UTC' ) );
 		$errors = \DateTimeImmutable::getLastErrors();
 		if (

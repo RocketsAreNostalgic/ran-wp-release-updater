@@ -224,11 +224,11 @@ namespace Tests\Provider {
 				$this->rateLimit( 429, $headers, 1000 );
 				self::fail( 'Expected bounded rate-limit timing to be rejected.' );
 			} catch ( \RuntimeException $exception ) {
-				$method  = new \ReflectionMethod( GitHubReleaseService::class, 'operationFailure' );
+				$method  = new \ReflectionMethod( GitHubReleaseService::class, 'operation_failure' );
 				$failure = $method->invoke( $this->service(), $exception );
 				self::assertInstanceOf( ReleaseFailure::class, $failure );
-				self::assertSame( 'operation_failed', $failure->releaseCode );
-				self::assertNull( $failure->retryAfter );
+				self::assertSame( 'operation_failed', $failure->release_code );
+				self::assertNull( $failure->retry_after );
 			}
 		}
 		/** @return array<string,array{array<string,string>}> */
@@ -246,7 +246,7 @@ namespace Tests\Provider {
 		}
 		/** @param array<string,string> $headers @return array{limited:bool,remaining:?int,reset_at:?int,retry_after:int} */
 		private function rateLimit( int $status, array $headers, int $now ): array {
-			$method = new \ReflectionMethod( GitHubReleaseService::class, 'rateLimit' );
+			$method = new \ReflectionMethod( GitHubReleaseService::class, 'rate_limit' );
 			return $method->invoke(
 				null,
 				array(
