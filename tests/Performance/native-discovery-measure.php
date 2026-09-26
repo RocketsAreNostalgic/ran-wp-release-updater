@@ -284,7 +284,7 @@ namespace Tests\Performance {
 		foreach ( array_values( $all ) as $index => $submission ) {
 			$native    = ( new \ReflectionProperty( $submission ['handle'], 'native' ) )->getValue( $submission ['handle'] );
 			$validator = ( new \ReflectionProperty( $native, 'validator' ) )->getValue( $native );
-			( new \ReflectionProperty( $validator, 'afterOpen' ) )->setValue(
+			( new \ReflectionProperty( $validator, 'after_open' ) )->setValue(
 				$validator,
 				static function ( string $path ) use ( &$opens ): void {
 					unset( $path );

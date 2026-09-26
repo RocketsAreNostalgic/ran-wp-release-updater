@@ -13,24 +13,24 @@ final class ArchiveScanner {
 	public const MAX_ENTRIES                = 10000;
 	private const MAX_COMPRESSION_RATIO     = 100;
 
-	public static function scan( \ZipArchive $zip, ?string $expectedRoot = null ): ArchiveScanResult {
-		if ( $zip->numFiles < 1 || $zip->numFiles > self::MAX_ENTRIES ) {
+	public static function scan( \ZipArchive $zip, ?string $expected_root = null ): ArchiveScanResult {
+		if ( $zip->numFiles < 1 || $zip->numFiles > self::MAX_ENTRIES ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- ZipArchive exposes this native extension property.
 			return ArchiveScanResult::blocked( 'archive_entry_limit' );
 		}
 
-		$root             = null;
-		$seen             = array();
-		$entries          = array();
-		$collisionEntries = array();
-		$expanded         = 0;
+		$root              = null;
+		$seen              = array();
+		$entries           = array();
+		$collision_entries = array();
+		$expanded          = 0;
 
-		for ( $index = 0; $index < $zip->numFiles; ++$index ) {
-			$name        = $zip->getNameIndex( $index, \ZipArchive::FL_UNCHANGED );
-			$stat        = $zip->statIndex( $index, \ZipArchive::FL_UNCHANGED );
-			$path        = is_string( $name ) ? ArchiveSafety::normalize_path( $name ) : null;
-			$origin      = 0;
-			$attributes  = 0;
-			$typeFailure = null === $path || ! $zip->getExternalAttributesIndex( $index, $origin, $attributes, \ZipArchive::FL_UNCHANGED )
+		for ( $index = 0; $index < $zip->numFiles; ++$index ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- ZipArchive exposes this native extension property.
+			$name         = $zip->getNameIndex( $index, \ZipArchive::FL_UNCHANGED );
+			$stat         = $zip->statIndex( $index, \ZipArchive::FL_UNCHANGED );
+			$path         = is_string( $name ) ? ArchiveSafety::normalize_path( $name ) : null;
+			$origin       = 0;
+			$attributes   = 0;
+			$type_failure = null === $path || ! $zip->getExternalAttributesIndex( $index, $origin, $attributes, \ZipArchive::FL_UNCHANGED )
 				? ArchiveSafety::entry_type_failure( null, null, false )
 				: ArchiveSafety::entry_type_failure( $origin, $attributes, $path['directory'] );
 			if (
@@ -40,7 +40,7 @@ final class ArchiveScanner {
 				|| ! is_int( $stat['comp_size'] ?? null )
 				|| $stat['size'] < 0
 				|| $stat['comp_size'] < 0
-				|| null !== $typeFailure
+				|| null !== $type_failure
 			) {
 				return ArchiveScanResult::blocked( 'archive_path_unsafe' );
 			}
@@ -66,24 +66,24 @@ final class ArchiveScanner {
 			$parts  = explode( '/', $path['path'] );
 			$root ??= $parts[0];
 			if (
-				( null !== $expectedRoot && ! hash_equals( $expectedRoot, $parts[0] ) )
+				( null !== $expected_root && ! hash_equals( $expected_root, $parts[0] ) )
 				|| ! hash_equals( $root, $parts[0] )
 				|| ( 1 === count( $parts ) && ! $path['directory'] )
 			) {
 				return ArchiveScanResult::blocked( 'archive_root_mismatch' );
 			}
 
-			$entries[]          = array(
+			$entries[]           = array(
 				'name'            => $name,
 				'path'            => $path['path'],
 				'directory'       => $path['directory'],
 				'size'            => $stat['size'],
 				'compressed_size' => $stat['comp_size'],
 			);
-			$collisionEntries[] = $path;
+			$collision_entries[] = $path;
 		}
 
-		$collision = ArchiveSafety::collision_failure( $collisionEntries );
+		$collision = ArchiveSafety::collision_failure( $collision_entries );
 		if ( 'path_duplicate' === $collision ) {
 			return ArchiveScanResult::blocked( 'archive_path_duplicate' );
 		}

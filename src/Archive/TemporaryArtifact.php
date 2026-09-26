@@ -11,25 +11,25 @@ final class TemporaryArtifact {
 
 	private bool $constructed = false;
 
-	private bool $discardAttempted = false;
+	private bool $discard_attempted = false;
 
 	private bool $discarded = false;
 
 	private bool $busy = false;
 
-	private readonly ?\Closure $livenessGuard;
+	private readonly ?\Closure $liveness_guard;
 
 	/** @param array<string, int> $identity */
 	public function __construct(
 		private string $path,
 		private string $sha256,
 		private array $identity,
-		?callable $livenessGuard = null
+		?callable $liveness_guard = null
 	) {
-		$this->livenessGuard = null === $livenessGuard ? null : \Closure::fromCallable( $livenessGuard );
+		$this->liveness_guard = null === $liveness_guard ? null : \Closure::fromCallable( $liveness_guard );
 		if (
 			1 !== preg_match( '/\A[a-f0-9]{64}\z/D', $sha256 )
-			|| ! $this->isUnchanged()
+			|| ! $this->is_unchanged()
 		) {
 			throw new \InvalidArgumentException( 'The temporary archive is invalid.' );
 		}
@@ -58,10 +58,10 @@ final class TemporaryArtifact {
 	/** Inspect the exact bytes without transferring cleanup ownership. */
 	public function inspect( callable $inspector ): mixed {
 		if ( $this->busy ) {
-			throw self::busyException();
+			throw self::busy_exception();
 		}
-		$this->assertAvailable();
-		$this->assertRuntimeLive();
+		$this->assert_available();
+		$this->assert_runtime_live();
 
 		$this->busy = true;
 		try {
@@ -70,8 +70,8 @@ final class TemporaryArtifact {
 			$this->busy = false;
 		}
 
-		$this->assertAvailable();
-		$this->assertRuntimeLive();
+		$this->assert_available();
+		$this->assert_runtime_live();
 
 		return $result;
 	}
@@ -85,14 +85,14 @@ final class TemporaryArtifact {
 	 */
 	public function discard(): bool {
 		if ( $this->busy ) {
-			throw self::busyException();
+			throw self::busy_exception();
 		}
 		if ( $this->discarded ) {
 			return true;
 		}
 
-		$this->discardAttempted = true;
-		if ( ! $this->isUnchanged() ) {
+		$this->discard_attempted = true;
+		if ( ! $this->is_unchanged() ) {
 			return false;
 		}
 
@@ -102,19 +102,19 @@ final class TemporaryArtifact {
 		return $this->discarded;
 	}
 
-	private function assertAvailable(): void {
-		if ( $this->discardAttempted || ! $this->isUnchanged() ) {
+	private function assert_available(): void {
+		if ( $this->discard_attempted || ! $this->is_unchanged() ) {
 			throw new RuntimeException( 'The temporary archive is unavailable.', 1001 );
 		}
 	}
 
-	private function assertRuntimeLive(): void {
-		if ( null === $this->livenessGuard ) {
+	private function assert_runtime_live(): void {
+		if ( null === $this->liveness_guard ) {
 			return;
 		}
 
 		try {
-			$revocation = ( $this->livenessGuard )();
+			$revocation = ( $this->liveness_guard )();
 		} catch ( \Throwable ) {
 			$revocation = true;
 		}
@@ -123,13 +123,13 @@ final class TemporaryArtifact {
 		}
 	}
 
-	private static function busyException(): RuntimeException {
+	private static function busy_exception(): RuntimeException {
 		return new RuntimeException( 'The temporary archive is busy.', 1003 );
 	}
 
-	private function isUnchanged(): bool {
+	private function is_unchanged(): bool {
 		clearstatcache( true, $this->path );
-		$identity = self::fileIdentity( $this->path );
+		$identity = self::file_identity( $this->path );
 		$sha256   = is_file( $this->path ) ? hash_file( 'sha256', $this->path ) : false;
 
 		return null !== $identity
@@ -139,7 +139,7 @@ final class TemporaryArtifact {
 	}
 
 	/** @return array<string, int>|null */
-	private static function fileIdentity( string $path ): ?array {
+	private static function file_identity( string $path ): ?array {
 		$stat = @lstat( $path );
 		if ( ! is_array( $stat ) || is_link( $path ) || 0100000 !== ( (int) $stat['mode'] & 0170000 )
 			|| 1 !== (int) $stat['nlink'] || 0600 !== ( (int) $stat['mode'] & 0777 ) ) {
