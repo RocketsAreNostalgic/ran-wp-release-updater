@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.0-beta.9](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.8...v1.0.0-beta.9) (2026-09-26)
+
+
+### Bug Fixes
+
+* enforce level-8 analysis for GitHub release service ([#69](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/69)) ([528a682](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/528a682aa3f5f1f19ba9528f7f0813f93dd908d2))
+* enforce level-8 analysis for native package updater ([#71](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/71)) ([6f42683](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/6f42683660c4d70e066f1ea4b71aac596f8cd0e8))
+
 ## [1.0.0-beta.8](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v0.1.0-beta.8...v1.0.0-beta.8) (2026-09-23)
 
 
