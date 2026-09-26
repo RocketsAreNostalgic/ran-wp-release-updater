@@ -80,7 +80,7 @@ final class PackageIdentityValidator {
 			}
 			$scan = ArchiveScanner::scan( $zip );
 			$root = $scan->root();
-			if ( ! $scan->isValid() || ! is_string( $root ) ) {
+			if ( ! $scan->is_valid() || ! is_string( $root ) ) {
 				return null;
 			}
 			$candidate = null;
@@ -165,8 +165,8 @@ final class PackageIdentityValidator {
 				return ValidatedPackage::blocked( 'archive_file_identity_mismatch' );
 			}
 			$scan = ArchiveScanner::scan( $zip, $policy['archive_root'] );
-			if ( ! $scan->isValid() ) {
-				return ValidatedPackage::blocked( $scan->failureCode() ?? 'archive_path_unsafe' );
+			if ( ! $scan->is_valid() ) {
+				return ValidatedPackage::blocked( $scan->failure_code() ?? 'archive_path_unsafe' );
 			}
 			$header        = null;
 			$manifest      = array();
