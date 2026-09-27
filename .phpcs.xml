@@ -22,85 +22,26 @@
 
 	<rule ref="RANWordPressLibrary"/>
 
-	<!-- Completed owned-method cohort; expand only with reviewed declaration/caller proof. -->
+	<!-- All maintained production/entrypoint/tool PHP, including future files. Generated code is excluded above. -->
 	<rule ref="RANOwnedMethods">
-		<include-pattern>/src/Runtime/ReleaseSource.php</include-pattern>
-		<include-pattern>/src/Runtime/RuntimeCopySelector.php</include-pattern>
-		<include-pattern>/src/Runtime/RequestProtocolValidator.php</include-pattern>
-		<include-pattern>/src/Runtime/RequestBroker.php</include-pattern>
-		<include-pattern>/runtime.php</include-pattern>
+		<include-pattern>/src/</include-pattern>
 		<include-pattern>/bootstrap.php</include-pattern>
-		<include-pattern>/src/Runtime/SelectedRuntimeState.php</include-pattern>
-		<include-pattern>/src/WordPress/StagedPackageManifest.php</include-pattern>
-		<include-pattern>/src/WordPress/PendingInstallState.php</include-pattern>
-		<include-pattern>/src/WordPress/OwnedArchiveStore.php</include-pattern>
-		<include-pattern>/src/WordPress/NativePackageUpdater.php</include-pattern>
-		<include-pattern>/src/WordPress/InstalledPackageResolver.php</include-pattern>
-		<include-pattern>/src/WordPress/BindingState.php</include-pattern>
-		<include-pattern>/src/WordPress/BindingFenceCoordinator.php</include-pattern>
-		<include-pattern>/src/Runtime/ReleaseFailure.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubReleaseService.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubReleaseReadUnavailable.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubCredentialResolver.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubArtifactStore.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubArtifactCustodyFailure.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubApiClient.php</include-pattern>
-		<include-pattern>/src/Archive/TemporaryArtifact.php</include-pattern>
-		<include-pattern>/src/Archive/PackageIdentityValidator.php</include-pattern>
-		<include-pattern>/src/Archive/ArchiveScanner.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/ProspectiveReleaseArtifact.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/ProspectiveReleaseInspection.php</include-pattern>
-		<include-pattern>/src/Archive/ValidatedPackage.php</include-pattern>
-		<include-pattern>/src/Archive/ArchiveScanResult.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubReleaseAdapter.php</include-pattern>
-		<include-pattern>/src/Contract/CanonicalUpdateUri.php</include-pattern>
-		<include-pattern>/src/Contract/ReleaseVersion.php</include-pattern>
-		<include-pattern>/src/Contract/AcquisitionReceipt.php</include-pattern>
-		<include-pattern>/src/Contract/BindingRecord.php</include-pattern>
-		<include-pattern>/src/Contract/IdentityDescriptor.php</include-pattern>
-		<include-pattern>/src/Contract/ReleaseAdapter.php</include-pattern>
+		<include-pattern>/runtime.php</include-pattern>
+		<include-pattern>/scripts/</include-pattern>
+		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 
-	<!-- Unmigrated methods retain their existing names; completed scopes use RANOwnedMethods above. -->
+	<!-- Purpose-built test harness/fixture names stay outside production naming normalization. -->
 	<rule ref="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid">
-		<severity>0</severity>
+		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
-	<!-- Variable enforcement follows the completed cohorts below only. -->
+	<!-- Match owned-method scope; no production variable-naming suppression remains. -->
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
-		<include-pattern>/src/Runtime/ReleaseSource.php</include-pattern>
-		<include-pattern>/src/Runtime/RuntimeCopySelector.php</include-pattern>
-		<include-pattern>/src/Runtime/RequestProtocolValidator.php</include-pattern>
-		<include-pattern>/src/Runtime/RequestBroker.php</include-pattern>
-		<include-pattern>/runtime.php</include-pattern>
+		<include-pattern>/src/</include-pattern>
 		<include-pattern>/bootstrap.php</include-pattern>
-		<include-pattern>/src/Runtime/SelectedRuntimeState.php</include-pattern>
-		<include-pattern>/src/WordPress/StagedPackageManifest.php</include-pattern>
-		<include-pattern>/src/WordPress/PendingInstallState.php</include-pattern>
-		<include-pattern>/src/WordPress/OwnedArchiveStore.php</include-pattern>
-		<include-pattern>/src/WordPress/NativePackageUpdater.php</include-pattern>
-		<include-pattern>/src/WordPress/InstalledPackageResolver.php</include-pattern>
-		<include-pattern>/src/WordPress/BindingState.php</include-pattern>
-		<include-pattern>/src/WordPress/BindingFenceCoordinator.php</include-pattern>
-		<include-pattern>/src/Runtime/ReleaseFailure.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubReleaseService.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubReleaseReadUnavailable.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubCredentialResolver.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubArtifactStore.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubArtifactCustodyFailure.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubApiClient.php</include-pattern>
-		<include-pattern>/src/Archive/TemporaryArtifact.php</include-pattern>
-		<include-pattern>/src/Archive/PackageIdentityValidator.php</include-pattern>
-		<include-pattern>/src/Archive/ArchiveScanner.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/ProspectiveReleaseArtifact.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/ProspectiveReleaseInspection.php</include-pattern>
-		<include-pattern>/src/Archive/ValidatedPackage.php</include-pattern>
-		<include-pattern>/src/Archive/ArchiveScanResult.php</include-pattern>
-		<include-pattern>/src/Provider/GitHub/GitHubReleaseAdapter.php</include-pattern>
-		<include-pattern>/src/Contract/ReleaseVersion.php</include-pattern>
-		<include-pattern>/src/Contract/AcquisitionReceipt.php</include-pattern>
-		<include-pattern>/src/Contract/BindingRecord.php</include-pattern>
-		<include-pattern>/src/Contract/IdentityDescriptor.php</include-pattern>
-		<include-pattern>/src/Contract/ReleaseAdapter.php</include-pattern>
+		<include-pattern>/runtime.php</include-pattern>
+		<include-pattern>/scripts/</include-pattern>
+		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 	<!-- Synthetic WordPress/SQL and performance fixtures retain their purpose-built conditions. -->
 	<rule ref="WordPress.PHP.YodaConditions">

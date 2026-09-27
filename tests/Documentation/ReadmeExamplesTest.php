@@ -39,7 +39,7 @@ final class ReadmeExamplesTest extends TestCase {
 		self::assertCount( 5, $examples, 'Update this proof when materially changing the README public examples.' );
 		self::assertStringContainsString( 'Plugin Name: Example Plugin', $examples[0] );
 		self::assertStringContainsString( '$registrar->plugin(', $examples[1] );
-		self::assertStringContainsString( '$releaseUpdater->diagnostics()', $examples[2] );
+		self::assertStringContainsString( '$release_updater->diagnostics()', $examples[2] );
 		self::assertStringContainsString( 'EXAMPLE_PLUGIN_GITHUB_TOKEN', $examples[3] );
 		self::assertStringContainsString( '$registrar->releases(', $examples[4] );
 		self::assertStringContainsString( 'instanceof \\WP_Filesystem_Direct', $examples[4] );
@@ -55,7 +55,7 @@ final class ReadmeExamplesTest extends TestCase {
 		self::assertStringContainsString( '$registrar->plugin(', $integration[0] );
 		self::assertStringContainsString( '$registrar->theme(', $integration[1] );
 		self::assertStringContainsString( 'EXAMPLE_PLUGIN_GITHUB_TOKEN', $integration[2] );
-		self::assertStringContainsString( '$releaseUpdater->status()', $integration[3] );
+		self::assertStringContainsString( '$release_updater->status()', $integration[3] );
 		$this->assertPlugin( $integration[0], false );
 		$this->assertTheme( $integration[1] );
 		$this->assertPlugin( $integration[2], true );
@@ -211,8 +211,8 @@ final class ReadmeExamplesTest extends TestCase {
 			$example = '$registrar = require __DIR__ . \'/vendor/ran/wp-release-updater/bootstrap.php\';' . "\n\n" . $instrumented;
 		}
 		$body   = $this->pluginHeader() . "\n" . $example . "\n"
-			. '$before=readmeSnapshot($registrar);$status=$releaseUpdater->status();$diagnostics=$releaseUpdater->diagnostics();$refresh=$releaseUpdater->refresh();'
-			. 'runAfterSetupTheme();echo json_encode(["before"=>$before,"registered"=>$releaseUpdater->register(),"status"=>$releaseUpdater->status(),"diagnostics"=>$releaseUpdater->diagnostics(),"refresh"=>$refresh,"credential_calls"=>$GLOBALS["readme_credential_calls"]]);';
+			. '$before=readmeSnapshot($registrar);$status=$release_updater->status();$diagnostics=$release_updater->diagnostics();$refresh=$release_updater->refresh();'
+			. 'runAfterSetupTheme();echo json_encode(["before"=>$before,"registered"=>$release_updater->register(),"status"=>$release_updater->status(),"diagnostics"=>$release_updater->diagnostics(),"refresh"=>$refresh,"credential_calls"=>$GLOBALS["readme_credential_calls"]]);';
 		$result = $this->executeExample( 'example-plugin.php', $body, $this->root . '/plugins/example-plugin' );
 		self::assertTrue( $result['registered'] );
 		self::assertSame( 'target_active', $result['status']['code'] );
@@ -224,7 +224,7 @@ final class ReadmeExamplesTest extends TestCase {
 
 	private function assertTheme( string $example ): void {
 		$body   = $example . "\n"
-			. '$before=readmeSnapshot($registrar);runAfterSetupTheme();echo json_encode(["before"=>$before,"registered"=>$releaseUpdater->register(),"status"=>$releaseUpdater->status(),"diagnostics"=>$releaseUpdater->diagnostics()]);';
+			. '$before=readmeSnapshot($registrar);runAfterSetupTheme();echo json_encode(["before"=>$before,"registered"=>$release_updater->register(),"status"=>$release_updater->status(),"diagnostics"=>$release_updater->diagnostics()]);';
 		$result = $this->executeExample( 'active-theme.php', $body, $this->root . '/themes/example-theme' );
 		self::assertTrue( $result['registered'] );
 		self::assertSame( 'target_active', $result['status']['code'] );
@@ -234,7 +234,7 @@ final class ReadmeExamplesTest extends TestCase {
 
 	private function assertStatusMethods( string $registration, string $example ): void {
 		$body   = $this->pluginHeader() . "\n" . $registration . "\n" . $example . "\n"
-			. '$before=readmeSnapshot($registrar);runAfterSetupTheme();echo json_encode(["before"=>$before,"status"=>$releaseUpdater->status(),"diagnostics"=>$releaseUpdater->diagnostics(),"refresh"=>$releaseUpdater->refresh()]);';
+			. '$before=readmeSnapshot($registrar);runAfterSetupTheme();echo json_encode(["before"=>$before,"status"=>$release_updater->status(),"diagnostics"=>$release_updater->diagnostics(),"refresh"=>$release_updater->refresh()]);';
 		$result = $this->executeExample( 'example-plugin.php', $body, $this->root . '/plugins/example-plugin' );
 		self::assertSame( 'target_active', $result['status']['code'] );
 		self::assertSame( 'active', $result['diagnostics']['state'] );
