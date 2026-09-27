@@ -13,21 +13,21 @@ final class StagedPackageManifest {
 
 	/** @return array<string,array{sha256:string,size:int}>|null */
 	public function build( string $root ): ?array {
-		$root     = rtrim( $root, '/\\' );
-		$rootStat = @lstat( $root );
-		if ( ! is_array( $rootStat ) || 0040000 !== ( $rootStat['mode'] & 0170000 ) ) {
+		$root      = rtrim( $root, '/\\' );
+		$root_stat = @lstat( $root );
+		if ( ! is_array( $root_stat ) || 0040000 !== ( $root_stat['mode'] & 0170000 ) ) {
 			return null;
 		}
 
-		$queue       = array(
+		$queue        = array(
 			array(
 				'path'     => $root,
 				'relative' => '',
 			),
 		);
-		$manifest    = array();
-		$total       = 0;
-		$entriesSeen = 0;
+		$manifest     = array();
+		$total        = 0;
+		$entries_seen = 0;
 		while ( array() !== $queue ) {
 			$next    = array_pop( $queue );
 			$entries = @scandir( $next['path'] );
@@ -38,7 +38,7 @@ final class StagedPackageManifest {
 				if ( '.' === $entry || '..' === $entry ) {
 					continue;
 				}
-				if ( ++$entriesSeen > self::MAX_ENTRIES ) {
+				if ( ++$entries_seen > self::MAX_ENTRIES ) {
 					return null;
 				}
 				$path     = $next['path'] . DIRECTORY_SEPARATOR . $entry;
@@ -93,7 +93,7 @@ final class StagedPackageManifest {
 	}
 
 	/** @param array<string,array{sha256:string,size:int}> $manifest */
-	public function expandedBytes( array $manifest ): int {
+	public function expanded_bytes( array $manifest ): int {
 		$total = 0;
 		foreach ( $manifest as $entry ) {
 			$total += $entry['size'];

@@ -199,7 +199,7 @@ namespace Tests\Provider {
 				$broker->activate(
 					array(
 						'php_version'       => '8.2.0',
-						'runtime_protocol'  => 4,
+						'runtime_protocol'  => 5,
 						'wordpress_version' => '6.8.0',
 					)
 				)
@@ -274,7 +274,7 @@ namespace Tests\Provider {
 				$broker->activate(
 					array(
 						'php_version'       => PHP_VERSION,
-						'runtime_protocol'  => 4,
+						'runtime_protocol'  => 5,
 						'wordpress_version' => '6.8.0',
 					)
 				)['code']
@@ -360,7 +360,7 @@ namespace Tests\Provider {
 				$broker->activate(
 					array(
 						'php_version'       => PHP_VERSION,
-						'runtime_protocol'  => 4,
+						'runtime_protocol'  => 5,
 						'wordpress_version' => '6.8.0',
 					)
 				)['code']

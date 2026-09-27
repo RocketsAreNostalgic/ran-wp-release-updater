@@ -88,7 +88,7 @@ $proof            = array(
 		&& archiveManifest( $themeZip, 'ran-neutral-theme' ) === directoryManifest( get_theme_root() . '/ran-neutral-theme' )
 		&& is_plugin_active( 'ran-neutral-plugin/ran-neutral-plugin.php' ) && 'ran-neutral-theme' === get_stylesheet()
 		&& 2 === ( $diagnostics['candidate_count'] ?? null ) && 2 === ( $diagnostics['logical_target_count'] ?? null )
-		&& 4 === ( $diagnostics['protocol_version'] ?? null )
+		&& 5 === ( $diagnostics['protocol_version'] ?? null )
 		&& array(
 			'plugin' => 0,
 			'theme'  => 0,
@@ -126,7 +126,7 @@ function nativeCallbacks( string $hook ): array {
 	foreach ( $registered->callbacks as $priority ) {
 		foreach ( $priority as $entry ) {
 			$callback = $entry['function'] ?? null;
-			if ( is_array( $callback ) && is_object( $callback[0] ) && 'filterUpdate' === ( $callback[1] ?? null ) ) {
+			if ( is_array( $callback ) && is_object( $callback[0] ) && 'filter_update' === ( $callback[1] ?? null ) ) {
 				$found[] = $callback[0];
 			}
 		}

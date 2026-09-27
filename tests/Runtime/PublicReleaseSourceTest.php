@@ -18,9 +18,9 @@ $registrar = require $data['bootstrap'];
 $source = $registrar->releases('github', 'plugin', 'acme/example', '123456789', 'stable', static function () use (&$calls): string { ++$calls; return 'secret'; });
 $early = $source->list();
 $conditional = $source->list(array('bad' => 'value'));
-$release = $source->inspect('', 'v1.0.0');
+$release = $source->inspect(release_id: '', expected_tag: 'v1.0.0');
 $tag = $source->inspect('1', "bad\nvalue");
-$fingerprint = $source->acquire('1', 'v1.0.0', 'v1:wrong');
+$fingerprint = $source->acquire(release_id: '1', expected_tag: 'v1.0.0', expected_fingerprint: 'v1:wrong');
 $GLOBALS['ran_wp_release_updater_v1_broker'] = new stdClass();
 $terminal = $source->inspect('', '');
 echo json_encode(array('early' => $early, 'conditional' => $conditional, 'release' => $release, 'tag' => $tag, 'fingerprint' => $fingerprint, 'terminal' => $terminal, 'calls' => $calls));
@@ -59,7 +59,7 @@ PHP
 $registrar = require $data['bootstrap'];
 $source = $registrar->releases('github', 'plugin', 'acme/example', '123456789');
 $before = $source->list();
-$activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'));
+$activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 5, 'wordpress_version' => '6.8.0'));
 $after = $source->list();
 echo json_encode(array('before' => $before, 'activation' => $activation, 'after' => $after, 'hooks' => $GLOBALS['release_source_hooks'], 'filesystem_gate_calls' => $GLOBALS['release_source_filesystem_gate_calls']));
 PHP
@@ -80,7 +80,7 @@ PHP
 $registrar = require $data['bootstrap'];
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
 $before = $broker->diagnostics();
-$activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'));
+$activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 5, 'wordpress_version' => '6.8.0'));
 $source = $registrar->releases('github', 'theme', 'acme/example', '123456789');
 $result = $source->list();
 $after = $broker->diagnostics();
@@ -104,7 +104,7 @@ PHP
 $credentials = 0;
 $registrar = require $data['bootstrap'];
 $source = $registrar->releases('github', 'plugin', 'acme/example', '123456789', 'stable', static function () use (&$credentials): string { ++$credentials; return 'secret'; });
-$GLOBALS['ran_wp_release_updater_v1_broker']->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'));
+$GLOBALS['ran_wp_release_updater_v1_broker']->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 5, 'wordpress_version' => '6.8.0'));
 $result = $source->list();
 echo json_encode(array('result' => $result, 'credentials' => $credentials, 'filesystem_gate_calls' => $GLOBALS['release_source_filesystem_gate_calls'], 'http_calls' => $GLOBALS['release_source_http_calls'], 'hooks' => $GLOBALS['release_source_hooks']));
 PHP,
@@ -125,7 +125,7 @@ PHP,
 $GLOBALS['wp_filesystem'] = new WP_Filesystem_Direct();
 $credentials = 0;
 $registrar = require $data['bootstrap'];
-$GLOBALS['ran_wp_release_updater_v1_broker']->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'));
+$GLOBALS['ran_wp_release_updater_v1_broker']->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 5, 'wordpress_version' => '6.8.0'));
 $source = $registrar->releases('github', 'plugin', 'acme/example', '123456789', 'stable', static function () use (&$credentials): string { ++$credentials; return 'secret'; });
 $first = $source->list();
 $before = array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']);
@@ -158,7 +158,7 @@ PHP,
 $registrar = require $data['bootstrap'];
 $source = $registrar->releases('github', 'plugin', 'acme/example', '123456789');
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'));
+$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 5, 'wordpress_version' => '6.8.0'));
 $first = $source->list();
 $GLOBALS['ran_wp_release_updater_v1_broker'] = new stdClass();
 $lost = $source->list();
