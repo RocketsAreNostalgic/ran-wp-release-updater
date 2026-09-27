@@ -29,7 +29,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 	}
 	public function testListingRateFactsStopOnTheFirstAndSecondPage(): void {
 		$GLOBALS['ran_github_responses'] = array( $this->response( 429, null, array( 'retry-after' => '12' ) ) );
-		$first                           = $this->service()->listReleases();
+		$first                           = $this->service()->list_releases();
 		self::assertSame( array(), $first['candidates'] );
 		self::assertSame(
 			array(
@@ -50,7 +50,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 			$page[]           = $release; }
 		$GLOBALS['ran_github_requests']  = array();
 		$GLOBALS['ran_github_responses'] = array( $this->response( 200, $page ), $this->response( 429, null, array( 'retry-after' => '13' ) ) );
-		$second                          = $this->service()->listReleases();
+		$second                          = $this->service()->list_releases();
 		self::assertTrue( $second['rate_limit']['limited'] );
 		self::assertSame( 13, $second['rate_limit']['retry_after'] );
 		self::assertCount( 2, $GLOBALS['ran_github_requests'] );
@@ -60,7 +60,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'inspectionRateProvider' )]
 	public function testInstalledInspectionRateFailuresStopAtTheirEndpoint( string $endpoint, int $requests ): void {
 		$GLOBALS['ran_github_responses'] = $this->inspectionRateResponses( $endpoint );
-		$this->assertFailure( fn() => $this->service()->inspectInstalled( 'repository/repository.php', '7', 'v1.2.3' ), 'rate_limited', $requests, 60 );
+		$this->assertFailure( fn() => $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' ), 'rate_limited', $requests, 60 );
 	}
 	/** @return array<string,array{string,int}> */
 	public static function inspectionRateProvider(): array {
@@ -75,7 +75,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 		$descriptor                      = $this->descriptor();
 		$GLOBALS['ran_github_requests']  = array();
 		$GLOBALS['ran_github_responses'] = $this->acquisitionRateResponses( $endpoint );
-		$this->assertFailure( fn() => $this->service()->acquireInstalled( $descriptor ), 'rate_limited', $requests, 60, 'complete' );
+		$this->assertFailure( fn() => $this->service()->acquire_installed( $descriptor ), 'rate_limited', $requests, 60, 'complete' );
 		$this->assertTemporaryPathsAbsent();
 	}
 	/** @return array<string,array{string,int}> */
@@ -88,25 +88,25 @@ final class GitHubResponseRoutingTest extends TestCase {
 	}
 	public function testInstalledResponseAcceptanceAndPartialAssetCleanup(): void {
 		$GLOBALS['ran_github_responses'] = array( $this->response( 201, array( 'id' => 99 ) ), $this->response( 201, $this->release( 7, 'v1.2.3' ) ), $this->response( 201, array( 'sha' => str_repeat( 'a', 40 ) ) ) );
-		self::assertInstanceOf( IdentityDescriptor::class, $this->service()->inspectInstalled( 'repository/repository.php', '7', 'v1.2.3' ) );
+		self::assertInstanceOf( IdentityDescriptor::class, $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' ) );
 		self::assertCount( 3, $GLOBALS['ran_github_requests'] );
 
 		$GLOBALS['ran_github_requests']  = array();
 		$GLOBALS['ran_github_responses'] = array( $this->response( 204, null ) );
-		$this->assertFailure( fn() => $this->service()->inspectInstalled( 'repository/repository.php', '7', 'v1.2.3' ), 'operation_failed', 1 );
+		$this->assertFailure( fn() => $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' ), 'operation_failed', 1 );
 
 		$descriptor                      = $this->descriptor();
 		$GLOBALS['ran_github_requests']  = array();
 		$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 206, null, array(), 'zip' ) );
-		$this->assertFailure( fn() => $this->service()->acquireInstalled( $descriptor ), 'package_incompatible', 2, null, 'complete' );
+		$this->assertFailure( fn() => $this->service()->acquire_installed( $descriptor ), 'package_incompatible', 2, null, 'complete' );
 		$this->assertTemporaryPathsAbsent();
 	}
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'endpointFailureProvider' )]
 	public function testEndpointFailuresUseNeutralCodesAndMakeNoLaterRequest( string $operation, string $scenario, string $code, int $requests ): void {
 		$GLOBALS['ran_github_responses'] = $this->endpointResponses( $scenario );
 		$call                            = 'list' === $operation
-			? fn() => $this->service()->listReleases()
-			: fn() => $this->service()->inspectInstalled( 'repository/repository.php', '7', 'v1.2.3' );
+			? fn() => $this->service()->list_releases()
+			: fn() => $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' );
 		$this->assertFailure( $call, $code, $requests );
 	}
 	/** @return array<string,array{string,string,string,int}> */
@@ -159,7 +159,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 	}
 	private function descriptor(): IdentityDescriptor {
 		$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 200, $this->release( 7, 'v1.2.3' ) ), $this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ) );
-		return $this->service()->inspectInstalled( 'repository/repository.php', '7', 'v1.2.3' );
+		return $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' );
 	}
 	private function service(): GitHubReleaseService {
 		return new GitHubReleaseService(
@@ -212,9 +212,9 @@ final class GitHubResponseRoutingTest extends TestCase {
 		try {
 			$call();
 			self::fail( 'Expected a typed provider failure.' ); } catch ( ReleaseFailure $failure ) {
-			self::assertSame( $code, $failure->releaseCode );
-			self::assertSame( $retry, $failure->retryAfter );
-			self::assertSame( $cleanup, $failure->cleanupStatus ); }
+			self::assertSame( $code, $failure->release_code );
+			self::assertSame( $retry, $failure->retry_after );
+			self::assertSame( $cleanup, $failure->cleanup_status ); }
 			self::assertCount( $requests, $GLOBALS['ran_github_requests'] );
 			self::assertSame( array(), $GLOBALS['ran_github_responses'] );
 	}

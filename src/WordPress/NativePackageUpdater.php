@@ -815,8 +815,8 @@ final class NativePackageUpdater {
 		return null;
 	}
 	private static function canRejectCandidate( ReleaseFailure $failure ): bool {
-		return in_array( $failure->releaseCode, array( 'release_unavailable', 'package_incompatible' ), true )
-			&& in_array( $failure->cleanupStatus, array( 'not_applicable', 'complete' ), true );
+		return in_array( $failure->release_code, array( 'release_unavailable', 'package_incompatible' ), true )
+			&& in_array( $failure->cleanup_status, array( 'not_applicable', 'complete' ), true );
 	}
 	private function reusableDiscovery( string $installed ): ?IdentityDescriptor {
 		if ( ! $this->nativeDiscoveryReuse || ! is_array( $this->discoverySnapshot ) || ! is_array( $this->claim ) || $this->discoverySnapshot['installed'] !== $installed || $this->discoverySnapshot['claim'] !== $this->claim ) {

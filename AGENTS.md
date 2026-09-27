@@ -30,6 +30,17 @@ Completed result/proof cohorts also enforce owned methods and variable naming in
 `src/Archive/PackageIdentityValidator.php`,
 `src/Archive/TemporaryArtifact.php`.
 
+Completed result/proof cohorts also enforce owned methods and variable naming in
+`src/Provider/GitHub/GitHubApiClient.php`,
+`src/Provider/GitHub/GitHubArtifactCustodyFailure.php`,
+`src/Provider/GitHub/GitHubArtifactStore.php`,
+`src/Provider/GitHub/GitHubCredentialResolver.php`,
+`src/Provider/GitHub/GitHubReleaseReadUnavailable.php`,
+`src/Provider/GitHub/GitHubReleaseService.php`.
+
+Completed result/proof cohorts also enforce owned methods and variable naming in
+`src/Runtime/ReleaseFailure.php`.
+
 Keep release-updater identity and product constraints local: the
 `RAN\WPReleaseUpdater\V1` namespace, WordPress 6.5 floor, PHP `^8.2` range,
 source paths, provider/runtime rules, security-sensitive native-primitive
