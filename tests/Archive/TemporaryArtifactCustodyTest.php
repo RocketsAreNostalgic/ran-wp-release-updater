@@ -191,7 +191,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 				'mtime' => (int) $stat['mtime'],
 				'ctime' => (int) $stat['ctime'],
 			),
-			$livenessGuard
+			liveness_guard: $livenessGuard
 		);
 	}
 

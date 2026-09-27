@@ -456,7 +456,7 @@ final class GitHubReleaseService {
 		try {
 			$validator = new PackageIdentityValidator();
 			$package   = $artifact->inspect(
-				fn ( string $path ): ?array => $validator->inspectProspective(
+				fn ( string $path ): ?array => $validator->inspect_prospective(
 					array(
 						'artifact_sha256'           => $release['artifact_sha256'],
 						'artifact_size'             => $release['artifact_size'],

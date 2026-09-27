@@ -108,13 +108,13 @@ final class InstalledPackageResolverTest extends TestCase {
 
 	public function testParserUsesBoundedNormalizedHeaderValuesOnly(): void {
 		$header = "<?php /* Plugin Name: caf\xc3\xa9 */ trailing\rVersion: 1.0.0\rUpdate URI: https://github.com/acme/example\r";
-		$result = PackageIdentityValidator::parseHeader( $header . "\x00", 'plugin' );
+		$result = PackageIdentityValidator::parse_header( $header . "\x00", 'plugin' );
 		self::assertSame( 'installed_header_verified', $result['code'] );
 		self::assertSame( 'café', $result['headers']['Name'] );
-		self::assertSame( 'installed_header_ambiguous', PackageIdentityValidator::parseHeader( $this->pluginHeader() . "<?php /* Version: 1.0.0 */\n", 'plugin' )['code'] );
-		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parseHeader( "<?php /* Plugin Name: Example */\n", 'plugin' )['code'] );
-		self::assertSame( 'installed_header_invalid', PackageIdentityValidator::parseHeader( "<?php /* Plugin Name: bad\x00 */\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n", 'plugin' )['code'] );
-		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parseHeader( str_repeat( 'x', 8192 ) . "\nPlugin Name: Example\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example", 'plugin' )['code'] );
+		self::assertSame( 'installed_header_ambiguous', PackageIdentityValidator::parse_header( $this->pluginHeader() . "<?php /* Version: 1.0.0 */\n", 'plugin' )['code'] );
+		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parse_header( "<?php /* Plugin Name: Example */\n", 'plugin' )['code'] );
+		self::assertSame( 'installed_header_invalid', PackageIdentityValidator::parse_header( "<?php /* Plugin Name: bad\x00 */\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n", 'plugin' )['code'] );
+		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parse_header( str_repeat( 'x', 8192 ) . "\nPlugin Name: Example\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example", 'plugin' )['code'] );
 	}
 
 	public function testPathTraversalAndLaterHeaderColonAreRejectedOrParsedExactly(): void {
@@ -123,9 +123,9 @@ final class InstalledPackageResolverTest extends TestCase {
 			self::assertSame( 'installed_file_invalid', $resolver->resolve( $this->declaration( 'plugin', $this->root . '/plugins/' . $suffix ) )['code'], $suffix );
 		}
 		$header = "<?php\n/*\nPlugin Name: Example\nVersion: 1.0.0\nSomething else: value\nUpdate URI: https://github.com/acme/example\n*/\n";
-		self::assertSame( 'installed_header_verified', PackageIdentityValidator::parseHeader( $header, 'plugin' )['code'] );
+		self::assertSame( 'installed_header_verified', PackageIdentityValidator::parse_header( $header, 'plugin' )['code'] );
 		$splitColon = "<?php\n/*\nPlugin Name: Example\nVersion: 1.0.0\nUpdate URI\n: https://github.com/acme/example\n*/\n";
-		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parseHeader( $splitColon, 'plugin' )['code'] );
+		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parse_header( $splitColon, 'plugin' )['code'] );
 	}
 
 	public function testPathLexiconAcceptsPosixDriveQualifiedAndUncPaths(): void {
@@ -163,8 +163,8 @@ final class InstalledPackageResolverTest extends TestCase {
 		self::assertSame( 'installed_header_ambiguous', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/duplicate/main.php', $this->pluginHeader() . "Plugin Name: Again\n" ) ) )['code'] ); // H02.
 		self::assertSame( 'installed_header_missing', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/missing/main.php', "<?php\n/* Version: 1.0.0 */" ) ) )['code'] ); // H03.
 		self::assertSame( 'installed_header_invalid', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/invalid-version/main.php', "<?php\n/*\nPlugin Name: Example\nVersion: broken\nUpdate URI: https://github.com/acme/example\n*/\n" ) ) )['code'] );
-		self::assertSame( 'installed_header_verified', PackageIdentityValidator::parseHeader( $this->pluginHeader() . "\x00", 'plugin' )['code'] );
-		self::assertSame( 'installed_header_invalid', PackageIdentityValidator::parseHeader( $this->themeHeader( 'Template: ../parent' ), 'theme' )['code'] );
+		self::assertSame( 'installed_header_verified', PackageIdentityValidator::parse_header( $this->pluginHeader() . "\x00", 'plugin' )['code'] );
+		self::assertSame( 'installed_header_invalid', PackageIdentityValidator::parse_header( $this->themeHeader( 'Template: ../parent' ), 'theme' )['code'] );
 		self::assertSame( 'installed_requirement_incompatible', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/requirements/main.php', $this->pluginHeader( "\nRequires PHP: 99.0\n" ) ) ) )['code'] );
 		$GLOBALS['wp_version'] = '6.9-beta1-60740';
 		self::assertSame( 'installed_requirement_incompatible', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/requires-newer-wordpress/main.php', $this->pluginHeader( "\nRequires at least: 6.10\n" ) ) ) )['code'] );

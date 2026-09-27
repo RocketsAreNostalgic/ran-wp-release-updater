@@ -23,7 +23,7 @@ final readonly class AcquisitionReceipt {
 		try {
 			$binding = $state->binding();
 			BindingRecord::assert_descriptor_binding( $descriptor, $binding );
-			$proof = $validator->consumeReceiptProof( $package, $descriptor );
+			$proof = $validator->consume_receipt_proof( $package, $descriptor );
 		} catch ( InvalidArgumentException ) {
 			throw new InvalidArgumentException( 'The acquisition receipt is invalid.' );
 		}

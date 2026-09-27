@@ -127,7 +127,7 @@ namespace Tests\WordPress {
 		public function testReentrantMatchingInstallAttemptPreventsDiscoveryFromPublishingASnapshot(): void {
 			$validator                 = new PackageIdentityValidator();
 			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true, $validator );
-			$afterOpen                 = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen                 = new \ReflectionProperty( $validator, 'after_open' );
 			$afterOpen->setValue(
 				$validator,
 				static function ( string $path ) use ( $updater ): void {
@@ -142,7 +142,7 @@ namespace Tests\WordPress {
 		public function testReentrantRefreshPreventsDiscoveryFromPublishingASnapshot(): void {
 			$validator                 = new PackageIdentityValidator();
 			list( $updater, $adapter ) = $this->subject( 'manual', null, 'stable', false, null, true, $validator );
-			$afterOpen                 = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen                 = new \ReflectionProperty( $validator, 'after_open' );
 			$afterOpen->setValue(
 				$validator,
 				static function ( string $path ) use ( $updater ): void {
@@ -559,7 +559,7 @@ namespace Tests\WordPress {
 		}
 		public function testFailedArtifactCleanupStopsDiscoveryBeforeALaterCandidate(): void {
 			$validator = new PackageIdentityValidator();
-			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen = new \ReflectionProperty( $validator, 'after_open' );
 			$afterOpen->setValue(
 				$validator,
 				static function ( string $path ): void {
@@ -589,7 +589,7 @@ namespace Tests\WordPress {
 		}
 		public function testUnexpectedValidationFailureDiscardsAnUnchangedArtifactAndStopsDiscovery(): void {
 			$validator = new PackageIdentityValidator();
-			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen = new \ReflectionProperty( $validator, 'after_open' );
 			$afterOpen->setValue(
 				$validator,
 				static function ( string $path ): void {
@@ -621,7 +621,7 @@ namespace Tests\WordPress {
 		}
 		public function testUnexpectedValidationFailurePreservesChangedArtifactAndStopsDiscovery(): void {
 			$validator = new PackageIdentityValidator();
-			$afterOpen = new \ReflectionProperty( $validator, 'afterOpen' );
+			$afterOpen = new \ReflectionProperty( $validator, 'after_open' );
 			$afterOpen->setValue(
 				$validator,
 				static function ( string $path ): void {

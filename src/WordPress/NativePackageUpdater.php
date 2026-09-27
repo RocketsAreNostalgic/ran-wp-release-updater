@@ -666,7 +666,7 @@ final class NativePackageUpdater {
 			return false;
 		}
 
-		$parsed = PackageIdentityValidator::parseHeader( $contents, $this->targetType );
+		$parsed = PackageIdentityValidator::parse_header( $contents, $this->targetType );
 		if ( 'installed_header_verified' !== $parsed['code'] || ! isset( $parsed['headers'] ) ) {
 			return false;
 		}
