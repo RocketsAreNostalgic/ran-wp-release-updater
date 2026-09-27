@@ -294,7 +294,7 @@ namespace Tests\Performance {
 			);
 			$natives [] = array(
 				'native'   => $native,
-				'identity' => ( new \ReflectionProperty( $native, 'installedIdentity' ) )->getValue( $native ),
+				'identity' => ( new \ReflectionProperty( $native, 'installed_identity' ) )->getValue( $native ),
 				'fixture'  => $targetFixtures [ $index ],
 			);
 		}
@@ -305,7 +305,7 @@ namespace Tests\Performance {
 				$GLOBALS ['native_measure'] ['repository'] = $item ['fixture'] ['repository'];
 				$GLOBALS ['native_measure'] ['zip']        = $item ['fixture'] ['zip'];
 				$beforeStep                                = native_measure_counters();
-				$offer                                     = $item ['native']->filterUpdate(
+				$offer                                     = $item ['native']->filter_update(
 					false,
 					array(
 						'Version'   => '1.0.0',
@@ -335,7 +335,7 @@ namespace Tests\Performance {
 				$GLOBALS ['native_measure'] ['repository'] = $item ['fixture'] ['repository'];
 				$GLOBALS ['native_measure'] ['zip']        = $item ['fixture'] ['zip'];
 				$beforeStep                                = native_measure_counters();
-				$again                                     = $item ['native']->filterUpdate(
+				$again                                     = $item ['native']->filter_update(
 					false,
 					array(
 						'Version'   => '1.0.0',
@@ -352,7 +352,7 @@ namespace Tests\Performance {
 							$steps [ 'repeated_discovery_' . $index ] = native_measure_delta( $beforeStep );
 				if ( 'plugin' === $targetType && ! $callbackRevoked ) {
 					$beforeStep                        = native_measure_counters();
-					$information                       = $item ['native']->filterPluginInformation( false, 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', 'plugin' . "\0" . $item ['identity'] ), 0, 24 ) ) );
+					$information                       = $item ['native']->filter_plugin_information( false, 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', 'plugin' . "\0" . $item ['identity'] ), 0, 24 ) ) );
 					$steps [ 'information_' . $index ] = native_measure_delta( $beforeStep );
 					native_measure_assert( is_object( $information ) && '2.0.0' === ( $information->version ?? null ), 'Plugin information did not return the expected version.' );
 				}
@@ -366,7 +366,7 @@ namespace Tests\Performance {
 				$beforeStep                                = native_measure_counters();
 				native_measure_assert(
 					is_array(
-						$item ['native']->filterUpdate(
+						$item ['native']->filter_update(
 							false,
 							array(
 								'Version'   => '1.0.0',
@@ -396,7 +396,7 @@ namespace Tests\Performance {
 					'type'   => $targetType,
 					'plugin' === $targetType ? 'plugin' : 'theme' => $item ['identity'],
 				);
-				$reply      = $item ['native']->filterPreDownload( false, $offers [ $index ] ['package'], null, $extra );
+				$reply      = $item ['native']->filter_pre_download( false, $offers [ $index ] ['package'], null, $extra );
 				if ( 'install' === $scenario ) {
 					native_measure_assert( is_string( $reply ) && is_file( $reply ), 'Fresh installation preparation failed.' );
 				} else {
@@ -418,7 +418,7 @@ namespace Tests\Performance {
 		);
 		$ownedPaths      = array();
 		foreach ( $natives as $item ) {
-			$pending = ( new \ReflectionProperty( $item ['native'], 'pendingInstall' ) )->getValue( $item ['native'] );
+			$pending = ( new \ReflectionProperty( $item ['native'], 'pending_install' ) )->getValue( $item ['native'] );
 			$path    = $pending instanceof \RAN\WPReleaseUpdater\V1\WordPress\PendingInstallState ? $pending->archive() : null;
 			if ( is_string( $path ) && is_file( $path ) ) {
 				$ownedPaths [] = $path;

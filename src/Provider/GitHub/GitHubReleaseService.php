@@ -109,7 +109,7 @@ final class GitHubReleaseService {
 		if ( ! self::exact_keys( $declaration, $keys ) || 'github' !== $declaration['provider_code'] ) {
 			throw new InvalidArgumentException( 'The release declaration is invalid.' );
 		}
-		$wordpress = SelectedRuntimeState::normalizeWordPressVersion( $GLOBALS['wp_version'] ?? null );
+		$wordpress = SelectedRuntimeState::normalize_word_press_version( $GLOBALS['wp_version'] ?? null );
 		if ( ! is_string( $wordpress ) ) {
 			throw new \RuntimeException( 'The release runtime is unavailable.' );
 		}
@@ -125,7 +125,7 @@ final class GitHubReleaseService {
 				'wordpress_runtime_version'    => $wordpress,
 			),
 			new GitHubCredentialResolver( $declaration['credential_resolver'] ),
-			static fn (): ?string => $state->releaseReadinessCode()
+			static fn (): ?string => $state->release_readiness_code()
 		);
 	}
 

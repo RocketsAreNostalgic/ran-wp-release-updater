@@ -333,7 +333,7 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 		'UpdateURI'   => $uri,
 		'Version'     => '1.0.0',
 	);
-	$updater            = NativePackageUpdater::fromConfiguration(
+	$updater            = NativePackageUpdater::from_configuration(
 		array(
 			'headers'                    => $headers,
 			'installed_package_identity' => $identity,

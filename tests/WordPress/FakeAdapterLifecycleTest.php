@@ -98,7 +98,7 @@ namespace Tests\WordPress {
 					$this->policy( $targetType, $uri )
 				);
 				self::assertInstanceOf( NativePackageUpdater::class, $updater );
-				$matches = new \ReflectionMethod( NativePackageUpdater::class, 'matchesStagedMetadata' );
+				$matches = new \ReflectionMethod( NativePackageUpdater::class, 'matches_staged_metadata' );
 				$staged  = $this->tree( $targetType, $uri, 'optional', '2.0.0' );
 				self::assertTrue( $matches->invoke( $updater, $staged, '2.0.0' ) );
 
@@ -116,7 +116,7 @@ namespace Tests\WordPress {
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$staged = $this->tree( 'theme', $uri, 'template-added', '2.0.0' );
 			file_put_contents( $staged . '/style.css', "\nTemplate: parent-theme", FILE_APPEND );
-			$matches = new \ReflectionMethod( NativePackageUpdater::class, 'matchesStagedMetadata' );
+			$matches = new \ReflectionMethod( NativePackageUpdater::class, 'matches_staged_metadata' );
 			self::assertFalse( $matches->invoke( $updater, $staged, '2.0.0' ) );
 		}
 
@@ -150,7 +150,7 @@ namespace Tests\WordPress {
 
 			$binding     = $this->binding( $targetType, $uri, $channel );
 			$database    = new FakeOptionDatabase( 100 );
-			$claimResult = BindingFenceCoordinator::claimPersistentBindingState( $database, $binding, str_repeat( 'a', 64 ), 20 );
+			$claimResult = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
 			self::assertSame( 'claimed', $claimResult['result'] );
 			$state             = $claimResult['current'];
 			$claim             = $this->claim( $state );
@@ -173,7 +173,7 @@ namespace Tests\WordPress {
 			self::assertSame( $this->expectedTargetHooks( $targetType ), array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ) );
 
 			$identity = 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release';
-			$offer    = $updater->filterUpdate(
+			$offer    = $updater->filter_update(
 				false,
 				array(
 					'Version'   => '1.0.0',
@@ -187,7 +187,7 @@ namespace Tests\WordPress {
 			self::assertFalse( $offer['autoupdate'] );
 			self::assertSame(
 				false,
-				$updater->filterUpdate(
+				$updater->filter_update(
 					false,
 					array(
 						'Version'   => '1.0.0',
@@ -199,14 +199,14 @@ namespace Tests\WordPress {
 			);
 
 			$extra = array( 'plugin' === $targetType ? 'plugin' : 'theme' => $identity );
-			$owned = $updater->filterPreDownload( false, $offer['package'], null, $extra );
+			$owned = $updater->filter_pre_download( false, $offer['package'], null, $extra );
 			self::assertIsString( $owned );
 			$shutdown = array_values( array_filter( $GLOBALS['ran_wp_release_updater_test_hooks'], static fn ( array $hook ): bool => 'shutdown' === $hook[1] ) );
 			self::assertCount( 1, $shutdown );
-			self::assertSame( array( 'action', 'shutdown', array( $updater, 'finalizePendingInstall' ), PHP_INT_MAX, 0 ), $shutdown[0] );
-			self::assertNull( $updater->filterPreUnzipFile( null, $owned, sys_get_temp_dir(), array(), 0.0 ) );
+			self::assertSame( array( 'action', 'shutdown', array( $updater, 'finalize_pending_install' ), PHP_INT_MAX, 0 ), $shutdown[0] );
+			self::assertNull( $updater->filter_pre_unzip_file( null, $owned, sys_get_temp_dir(), array(), 0.0 ) );
 			unlink( $owned ); // Core deletes the archive after successful extraction.
-			self::assertTrue( $updater->filterPreInstall( true, $extra ) );
+			self::assertTrue( $updater->filter_pre_install( true, $extra ) );
 
 			$staged = $this->tree(
 				$targetType,
@@ -216,7 +216,7 @@ namespace Tests\WordPress {
 				$lineEnding,
 				$closingCommentMarkers
 			);
-			self::assertSame( $staged, $updater->filterSourceSelection( $staged, sys_get_temp_dir(), null, $extra ) );
+			self::assertSame( $staged, $updater->filter_source_selection( $staged, sys_get_temp_dir(), null, $extra ) );
 			$destination = $this->tree(
 				$targetType,
 				$uri,
@@ -225,8 +225,8 @@ namespace Tests\WordPress {
 				$lineEnding,
 				$closingCommentMarkers
 			);
-			self::assertSame( array( 'destination' => $destination ), $updater->captureInstallPackageResult( array( 'destination' => $destination ), $extra ) );
-			$updater->observeCompletion(
+			self::assertSame( array( 'destination' => $destination ), $updater->capture_install_package_result( array( 'destination' => $destination ), $extra ) );
+			$updater->observe_completion(
 				null,
 				array(
 					'action' => 'update',
@@ -234,7 +234,7 @@ namespace Tests\WordPress {
 					'plugin' === $targetType ? 'plugins' : 'themes' => array( $identity ),
 				)
 			);
-			$updater->finalizePendingInstall();
+			$updater->finalize_pending_install();
 
 			$diagnostics = $updater->diagnostics();
 			self::assertSame( 'update_completed', end( $diagnostics ) );
@@ -246,7 +246,7 @@ namespace Tests\WordPress {
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$identity = 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release';
 			$extra    = array( 'plugin' === $targetType ? 'plugin' : 'theme' => $identity );
-			$offer    = $updater->filterUpdate(
+			$offer    = $updater->filter_update(
 				false,
 				array(
 					'Version'   => '1.0.0',
@@ -255,13 +255,13 @@ namespace Tests\WordPress {
 				$identity,
 				array()
 			);
-			$owned    = $updater->filterPreDownload( false, $offer['package'], null, $extra );
+			$owned    = $updater->filter_pre_download( false, $offer['package'], null, $extra );
 			self::assertIsString( $owned );
-			self::assertNull( $updater->filterPreUnzipFile( null, $owned, sys_get_temp_dir(), array(), 0.0 ) );
+			self::assertNull( $updater->filter_pre_unzip_file( null, $owned, sys_get_temp_dir(), array(), 0.0 ) );
 			unlink( $owned );
-			self::assertTrue( $updater->filterPreInstall( true, $extra ) );
+			self::assertTrue( $updater->filter_pre_install( true, $extra ) );
 			$staged = $this->tree( $targetType, 'https://updates.example.test/owner/other-path', 'staged-header-mismatch', $version );
-			self::assertInstanceOf( \WP_Error::class, $updater->filterSourceSelection( $staged, sys_get_temp_dir(), null, $extra ) );
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_source_selection( $staged, sys_get_temp_dir(), null, $extra ) );
 			self::assertDirectoryDoesNotExist( $destinationParent );
 		}
 
@@ -300,7 +300,7 @@ namespace Tests\WordPress {
 					)
 				);
 			} };
-			return NativePackageUpdater::fromConfiguration( $configuration, $binding, $adapter, $database, $policy ); }
+			return NativePackageUpdater::from_configuration( $configuration, $binding, $adapter, $database, $policy ); }
 
 		/** @return list<string> */
 		private function expectedTargetHooks( string $targetType ): array {
@@ -476,10 +476,10 @@ namespace Tests\WordPress {
 		/** @return array<string,mixed> */
 		private function claim( BindingState $state ): array {
 			return array(
-				'binding_generation' => $state->bindingGeneration(),
+				'binding_generation' => $state->binding_generation(),
 				'binding_hash'       => $state->binding()->binding_hash(),
-				'lease_deadline'     => $state->leaseDeadline(),
-				'owner_token'        => $state->ownerToken(),
+				'lease_deadline'     => $state->lease_deadline(),
+				'owner_token'        => $state->owner_token(),
 			);
 		}
 

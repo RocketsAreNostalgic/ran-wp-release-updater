@@ -93,7 +93,7 @@ final class WindowsPortabilityProofTest extends TestCase {
 					'package_version'  => $checkedIn['package_version'],
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 4,
+					'runtime_protocol' => 5,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR
@@ -148,7 +148,7 @@ $GLOBALS['wp_theme_directories'] = array($data['themes']);
 $GLOBALS['wp_version'] = '6.8.0';
 $registrar = require $data['package'] . '/bootstrap.php';
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 4, 'wordpress_version' => '6.8.0'));
+$activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 5, 'wordpress_version' => '6.8.0'));
 $plugin = $registrar->plugin('github', $data['plugin'], 'acme/example-plugin', '123456789');
 $theme = $registrar->theme('github', $data['theme'], 'acme/example-theme', '987654321');
 $plugin->register();

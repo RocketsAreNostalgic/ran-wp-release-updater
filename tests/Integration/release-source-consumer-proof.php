@@ -203,7 +203,7 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 		$queueProof();
 		$inspection = $source->inspect( '7', 'v1.2.3' );
 		rs_assert( $inspection['ok'], 'Fence prerequisite inspection failed.' );
-		$releaseId            = '7';
+		$release_id           = '7';
 		$tag                  = 'v1.2.3';
 		$fingerprint          = $inspection['value']['fingerprint'];
 		$applicationOwnedPath = $root . '/fence-prepared.zip';
