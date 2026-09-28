@@ -41,7 +41,7 @@ final class InstalledPackageResolverTest extends TestCase {
 		file_put_contents( $actual . '/main.php', $this->pluginHeader() );
 		$logical = $this->root . '/plugins/slug';
 		symlink( $actual, $logical );
-		$mapped = new InstalledPackageResolver( $this->root . '/plugins', array( $logical => $actual ), array() );
+		$mapped = new InstalledPackageResolver( plugin_directory: $this->root . '/plugins', plugin_paths: array( $logical => $actual ), theme_directories: array() );
 		self::assertSame( 'slug/main.php', $mapped->resolve( $this->declaration( 'plugin', $logical . '/main.php' ) )['installed_package_identity'] );
 		self::assertSame( 'slug/main.php', $mapped->resolve( $this->declaration( 'plugin', $actual . '/main.php' ) )['installed_package_identity'] ); // P06.
 		$ambiguous = new InstalledPackageResolver(
@@ -129,7 +129,7 @@ final class InstalledPackageResolverTest extends TestCase {
 	}
 
 	public function testPathLexiconAcceptsPosixDriveQualifiedAndUncPaths(): void {
-		$method   = new \ReflectionMethod( InstalledPackageResolver::class, 'validPath' );
+		$method   = new \ReflectionMethod( InstalledPackageResolver::class, 'valid_path' );
 		$resolver = $this->resolver();
 		foreach ( array( '/srv/wordpress/wp-content/plugins/example/main.php', 'C:/WordPress/wp-content/plugins/example/main.php', 'D:\\WordPress\\wp-content\\themes\\example\\style.css', '//server/share/plugins/example/main.php', '\\\\server\\share\\plugins\\example\\main.php' ) as $path ) {
 			self::assertTrue( $method->invoke( $resolver, $path ), $path );
@@ -169,7 +169,7 @@ final class InstalledPackageResolverTest extends TestCase {
 		$GLOBALS['wp_version'] = '6.9-beta1-60740';
 		self::assertSame( 'installed_requirement_incompatible', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/requires-newer-wordpress/main.php', $this->pluginHeader( "\nRequires at least: 6.10\n" ) ) ) )['code'] );
 		$changed  = $this->file( 'plugins/changed/main.php', $this->pluginHeader() );
-		$property = new \ReflectionProperty( InstalledPackageResolver::class, 'afterFirstRead' );
+		$property = new \ReflectionProperty( InstalledPackageResolver::class, 'after_first_read' );
 		$property->setValue(
 			$resolver,
 			static function ( string $file ): void {
@@ -178,7 +178,7 @@ final class InstalledPackageResolverTest extends TestCase {
 		);
 		self::assertSame( 'installed_file_changed', $resolver->resolve( $this->declaration( 'plugin', $changed ) )['code'] ); // R01.
 		$initialDrift = $this->file( 'plugins/initial-drift/main.php', $this->pluginHeader() );
-		$before       = new \ReflectionProperty( InstalledPackageResolver::class, 'beforeFirstStat' );
+		$before       = new \ReflectionProperty( InstalledPackageResolver::class, 'before_first_stat' );
 		$before->setValue(
 			$resolver,
 			static function ( string $file ): void {

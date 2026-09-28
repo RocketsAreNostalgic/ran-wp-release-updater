@@ -41,17 +41,17 @@ if ( is_link( $target ) ) {
 	fwrite( STDERR, "Generated updater-support runtime copy is unsafe.\n" );
 	exit( 1 );
 }
-$targetDirectory = dirname( $target );
-if ( is_link( $targetDirectory ) ) {
+$target_directory = dirname( $target );
+if ( is_link( $target_directory ) ) {
 	fwrite( STDERR, "Generated dependency directory is unsafe.\n" );
 	exit( 1 );
 }
-if ( ! is_dir( $targetDirectory ) && ! mkdir( $targetDirectory, 0755, true ) ) {
+if ( ! is_dir( $target_directory ) && ! mkdir( $target_directory, 0755, true ) ) {
 	fwrite( STDERR, "Generated dependency directory could not be created.\n" );
 	exit( 1 );
 }
-$temporary = tempnam( $targetDirectory, '.updater-support-' );
-if ( ! is_string( $temporary ) || is_link( $temporary ) || ! is_file( $temporary ) || realpath( dirname( $temporary ) ) !== realpath( $targetDirectory ) ) {
+$temporary = tempnam( $target_directory, '.updater-support-' );
+if ( ! is_string( $temporary ) || is_link( $temporary ) || ! is_file( $temporary ) || realpath( dirname( $temporary ) ) !== realpath( $target_directory ) ) {
 	if ( is_string( $temporary ) && is_file( $temporary ) && ! is_link( $temporary ) ) {
 		@unlink( $temporary );
 	}

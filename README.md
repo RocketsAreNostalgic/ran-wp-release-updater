@@ -57,16 +57,16 @@ Require the updater from the plugin's main file, before `plugins_loaded`, then c
 
 $registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';
 
-$releaseUpdater = $registrar->plugin(
+$release_updater = $registrar->plugin(
     provider: 'github',
-    pluginFile: __FILE__,
+    plugin_file: __FILE__,
     repository: 'acme/example-plugin',
-    repositoryId: '123456789',
+    repository_id: '123456789',
     channel: 'stable',
-    updatePolicy: 'manual'
+    update_policy: 'manual'
 );
 
-$releaseUpdater->register();
+$release_updater->register();
 ```
 
 The repository ID is GitHub's numeric repository `id`, represented as a string—not `owner/repository`:
@@ -92,7 +92,7 @@ Themes use the same model via `$registrar->theme(...)`. See [Integrating the rel
 | Channel | `stable` or `prerelease`; defaults to `stable` |
 | Update policy | `manual`, `automatic`, `forced-off`, or `disabled`; defaults to `manual` |
 | Credentials | Optional request-local callable returning a token string or `null` |
-| Maximum artifact bytes (`maximumArtifactBytes`) | Positive compressed-ZIP limit; defaults to 52,428,800 bytes |
+| Maximum artifact bytes (`maximum_artifact_bytes`) | Positive compressed-ZIP limit; defaults to 52,428,800 bytes |
 
 `manual` publishes a verified native offer. `automatic` additionally permits automatic installation only when the release satisfies the package's stronger immutable/provenance requirements. `forced-off` and `disabled` suppress the native offer.
 
@@ -124,9 +124,9 @@ The updater freshly rechecks the selected release before installation and verifi
 Keep the target handle if your product needs request-local inspection:
 
 ```php
-$releaseUpdater->status();
-$releaseUpdater->diagnostics();
-$releaseUpdater->refresh();
+$release_updater->status();
+$release_updater->diagnostics();
+$release_updater->refresh();
 ```
 
 `status()` returns a target envelope with `state`, `declaration_accepted`, `hooks_registered`, `code`, and `native`. When the target is active, installed/candidate/offered release fields live under `status()['native']`, not at the top level. `diagnostics()` returns an envelope with `state` and a nested `diagnostics` list of machine-readable entries. Native admission failures use `WP_Error` codes prefixed with `ran_wp_release_updater_` and a deliberately generic fallback English message. Map those codes to your own localized product messages rather than parsing the fallback string.
@@ -140,15 +140,15 @@ See [Integrating the release updater](docs/integration.md#status-diagnostics-and
 Pass an optional request-local callback when a private repository or authenticated GitHub quota is needed:
 
 ```php
-$releaseUpdater = $registrar->plugin(
+$release_updater = $registrar->plugin(
     provider: 'github',
-    pluginFile: __FILE__,
+    plugin_file: __FILE__,
     repository: 'acme/example-plugin',
-    repositoryId: '123456789',
+    repository_id: '123456789',
     credentials: static fn (): ?string => getenv('EXAMPLE_PLUGIN_GITHUB_TOKEN') ?: null
 );
 
-$releaseUpdater->register();
+$release_updater->register();
 ```
 
 Registration does not invoke the callback. Tokens should remain outside plugin source/release ZIPs. The updater does not persist them in target state, diagnostics or URLs. A `null` callback result selects anonymous access; credential/access failures do not silently retry anonymously.
@@ -160,9 +160,9 @@ For prospective release metadata/bytes, create a request-local source:
 ```php
 $source = $registrar->releases(
     provider: 'github',
-    packageType: 'plugin',
+    package_type: 'plugin',
     repository: 'acme/example-plugin',
-    repositoryId: '123456789'
+    repository_id: '123456789'
 );
 
 add_action('init', static function () use ($source): void {

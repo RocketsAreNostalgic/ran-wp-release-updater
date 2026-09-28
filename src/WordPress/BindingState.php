@@ -31,15 +31,15 @@ final readonly class BindingState {
 	}
 	public function binding(): BindingRecord {
 		return $this->binding; }
-	public function bindingGeneration(): int {
+	public function binding_generation(): int {
 		return $this->generation; }
-	public function fenceEpoch(): int {
+	public function fence_epoch(): int {
 		return $this->epoch; }
-	public function leaseDeadline(): int {
+	public function lease_deadline(): int {
 		return $this->deadline; }
-	public function ownerToken(): string {
+	public function owner_token(): string {
 		return $this->owner; }
-	/** @return array<string,mixed> */ public function toArray(): array {
+	/** @return array<string,mixed> */ public function to_array(): array {
 		return array(
 			'binding'            => $this->binding->to_array(),
 			'binding_generation' => $this->generation,

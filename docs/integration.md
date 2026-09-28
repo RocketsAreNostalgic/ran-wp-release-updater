@@ -32,16 +32,16 @@ Require `bootstrap.php` from the plugin's main file before `plugins_loaded`, cre
 ```php
 $registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';
 
-$releaseUpdater = $registrar->plugin(
+$release_updater = $registrar->plugin(
     provider: 'github',
-    pluginFile: __FILE__,
+    plugin_file: __FILE__,
     repository: 'acme/example-plugin',
-    repositoryId: '123456789',
+    repository_id: '123456789',
     channel: 'stable',
-    updatePolicy: 'manual'
+    update_policy: 'manual'
 );
 
-$releaseUpdater->register();
+$release_updater->register();
 ```
 
 An active theme can do the same from `functions.php`:
@@ -49,14 +49,14 @@ An active theme can do the same from `functions.php`:
 ```php
 $registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';
 
-$releaseUpdater = $registrar->theme(
+$release_updater = $registrar->theme(
     provider: 'github',
-    stylesheetFile: __DIR__ . '/style.css',
+    stylesheet_file: __DIR__ . '/style.css',
     repository: 'acme/example-theme',
-    repositoryId: '987654321'
+    repository_id: '987654321'
 );
 
-$releaseUpdater->register();
+$release_updater->register();
 ```
 
 An inactive theme cannot execute its own PHP. Register it from an active plugin or another manager that runs early enough to participate in runtime selection.
@@ -86,11 +86,11 @@ This election mechanism is deliberate: independently distributed plugins/themes 
 | `provider` | Built-in provider code; currently `github` |
 | installed file | Plugin main file or theme `style.css` |
 | `repository` | GitHub `owner/repository` |
-| `repositoryId` | Positive numeric GitHub repository ID represented as a string |
+| `repository_id` | Positive numeric GitHub repository ID represented as a string |
 | `channel` | `stable` or `prerelease`; defaults to `stable` |
-| `updatePolicy` | `manual`, `automatic`, `forced-off`, or `disabled`; defaults to `manual` |
+| `update_policy` | `manual`, `automatic`, `forced-off`, or `disabled`; defaults to `manual` |
 | `credentials` | Optional request-local callable returning a token string or `null` |
-| `maximumArtifactBytes` | Positive compressed-ZIP byte ceiling; defaults to 52,428,800 bytes |
+| `maximum_artifact_bytes` | Positive compressed-ZIP byte ceiling; defaults to 52,428,800 bytes |
 
 The repository ID is GitHub's numeric repository `id`, not the `owner/repository` string. For example:
 
@@ -163,15 +163,15 @@ The default compressed-artifact limit is 50 MiB (52,428,800 bytes) per target. R
 A plugin or theme may pass a request-local credentials callback:
 
 ```php
-$releaseUpdater = $registrar->plugin(
+$release_updater = $registrar->plugin(
     provider: 'github',
-    pluginFile: __FILE__,
+    plugin_file: __FILE__,
     repository: 'acme/example-plugin',
-    repositoryId: '123456789',
+    repository_id: '123456789',
     credentials: static fn (): ?string => getenv('EXAMPLE_PLUGIN_GITHUB_TOKEN') ?: null
 );
 
-$releaseUpdater->register();
+$release_updater->register();
 ```
 
 The callback is not invoked during registration. Each top-level provider operation resolves it when needed.
@@ -189,9 +189,9 @@ This is a product limitation, not merely a test limitation. Hosts that require F
 Keep the target handle for request-local inspection:
 
 ```php
-$releaseUpdater->status();
-$releaseUpdater->diagnostics();
-$releaseUpdater->refresh();
+$release_updater->status();
+$release_updater->diagnostics();
+$release_updater->refresh();
 ```
 
 `status()` returns an outer target envelope with `state`, `declaration_accepted`, `hooks_registered`, `code`, and `native`. For an active target, the installed/candidate/offered versions, candidate validation state, last check, release identity, relationship, and native failure code are under `status()['native']`; they are not top-level fields. `diagnostics()` returns an envelope with `state` plus a nested `diagnostics` list of machine-readable entries. `refresh()` clears request-local native state when the selected runtime is live.
