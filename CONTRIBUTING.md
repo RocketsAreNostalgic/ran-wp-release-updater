@@ -1,8 +1,6 @@
 # Contributing
 
-The package is in a fresh, pre-release development line. Keep every commit safe
-for public review and use Conventional Commits (`feat:`, `fix:`, `docs:`,
-`test:`, or `chore:`).
+The package is in a pre-release development line. Keep every change safe for public review. Use a Conventional Commit pull-request title: for an ordinary squash merge, that title becomes the final subject consumed by Release Please, rather than the individual branch commit subjects. Use [this repository's release configuration](release-please-config.json) for classification; bot-owned proposals retain their generated version/changelog and the repository's approved merge requirements. A deliberately approved merge commit preserves individual commits, so their Conventional Commit subjects remain release inputs.
 
 Before proposing a change, run the default Composer quality gate:
 
