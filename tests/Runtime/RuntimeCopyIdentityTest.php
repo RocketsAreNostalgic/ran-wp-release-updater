@@ -14,22 +14,24 @@ final class RuntimeCopyIdentityTest extends TestCase {
 
 	private string $parent;
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->parent = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/neutral-runtime-copy-' . bin2hex( random_bytes( 8 ) );
 		mkdir( $this->parent, 0700, true );
 	}
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function tearDown(): void {
 		$this->remove( $this->parent );
 	}
 
-	public function testCheckedInRuntimeCopyClaimsTheCanonicalRuntimeContentIdentity(): void {
+	public function test_checked_in_runtime_copy_claims_the_canonical_runtime_content_identity(): void {
 		$copy = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 
 		self::assertSame( $this->identity( dirname( __DIR__, 2 ) ), $copy['package_revision'] );
 	}
 
-	public function testPosixIdentityPayloadIsUnchangedBySeparatorNormalization(): void {
+	public function test_posix_identity_payload_is_unchanged_by_separator_normalization(): void {
 		if ( 'Windows' === PHP_OS_FAMILY ) {
 			self::markTestSkipped( 'Windows paths require separator normalization.' );
 		}
@@ -47,14 +49,14 @@ final class RuntimeCopyIdentityTest extends TestCase {
 		sort( $native, SORT_STRING );
 		sort( $normalized, SORT_STRING );
 		self::assertSame( $native, $normalized );
-		self::assertSame( $this->identityFromFiles( $root, $native ), $this->identityFromFiles( $root, $normalized ) );
+		self::assertSame( $this->identity_from_files( $root, $native ), $this->identity_from_files( $root, $normalized ) );
 	}
 
-	public function testEqualVersionPackageShapedCopiesWithDivergentContentFailClosed(): void {
-		$left  = $this->packageCopy( 'left' );
-		$right = $this->packageCopy( 'right' );
+	public function test_equal_version_package_shaped_copies_with_divergent_content_fail_closed(): void {
+		$left  = $this->package_copy( 'left' );
+		$right = $this->package_copy( 'right' );
 		file_put_contents( $right . '/src/Runtime/RequestBroker.php', (string) file_get_contents( $right . '/src/Runtime/RequestBroker.php' ) . "\n// Divergent physical package copy.\n" );
-		$this->writeRuntimeCopy( $right );
+		$this->write_runtime_copy( $right );
 
 		$result = $this->probe(
 			'require $data["left"] . "/bootstrap.php"; require $data["right"] . "/bootstrap.php"; $result=$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); echo json_encode($result);',
@@ -68,11 +70,11 @@ final class RuntimeCopyIdentityTest extends TestCase {
 		self::assertSame( array( 'runtime_selection_inactive' ), array_column( $result['diagnostics'], 'code' ) );
 	}
 
-	public function testSelectedRuntimeSymbolsAlwaysComeFromTheHighestWinnerRoot(): void {
+	public function test_selected_runtime_symbols_always_come_from_the_highest_winner_root(): void {
 		$copies = array(
-			$this->packageCopy( 'beta-one', '0.1.0-beta.1' ),
-			$this->packageCopy( 'beta-two', '0.1.0-beta.2' ),
-			$this->packageCopy( 'beta-three', '0.1.0-beta.3' ),
+			$this->package_copy( 'beta-one', '0.1.0-beta.1' ),
+			$this->package_copy( 'beta-two', '0.1.0-beta.2' ),
+			$this->package_copy( 'beta-three', '0.1.0-beta.3' ),
 		);
 		$orders = array(
 			$copies,
@@ -100,9 +102,9 @@ PHP,
 		}
 	}
 
-	public function testSelectedRuntimeAcceptsPluginAndThemeDeclarationsAfterBootWithoutReopeningCopyIntake(): void {
-		$old       = $this->packageCopy( 'old', '0.1.0-beta.1' );
-		$new       = $this->packageCopy( 'new', '0.1.0-beta.2' );
+	public function test_selected_runtime_accepts_plugin_and_theme_declarations_after_boot_without_reopening_copy_intake(): void {
+		$old       = $this->package_copy( 'old', '0.1.0-beta.1' );
+		$new       = $this->package_copy( 'new', '0.1.0-beta.2' );
 		$installed = $this->parent . '/installed';
 		mkdir( $installed, 0700, true );
 
@@ -123,9 +125,9 @@ PHP,
 		self::assertSame( 19, $result['hooks'] );
 	}
 
-	public function testLaterGenuineCopyReusesVerifiedBrokerProvenanceWithoutRehashingItsEstablishedRoot(): void {
-		$first     = $this->packageCopy( 'first', '0.1.0-beta.1' );
-		$second    = $this->packageCopy( 'second', '0.1.0-beta.2' );
+	public function test_later_genuine_copy_reuses_verified_broker_provenance_without_rehashing_its_established_root(): void {
+		$first     = $this->package_copy( 'first', '0.1.0-beta.1' );
+		$second    = $this->package_copy( 'second', '0.1.0-beta.2' );
 		$installed = $this->parent . '/installed';
 		mkdir( $installed . '/plugin', 0700, true );
 		file_put_contents( $installed . '/plugin/main.php', "<?php\n/*\nPlugin Name: Provenance Probe\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/provenance-probe\n*/\n" );
@@ -146,8 +148,8 @@ PHP,
 		self::assertSame( 10, $result['hooks'] );
 	}
 
-	public function testCopiedSourceChangeWithoutManifestUpdateIsRejectedBeforeSelection(): void {
-		$copy = $this->packageCopy( 'changed-without-manifest' );
+	public function test_copied_source_change_without_manifest_update_is_rejected_before_selection(): void {
+		$copy = $this->package_copy( 'changed-without-manifest' );
 		file_put_contents( $copy . '/src/Runtime/RequestBroker.php', (string) file_get_contents( $copy . '/src/Runtime/RequestBroker.php' ) . "\n// Changed without updating the manifest.\n" );
 
 		$result = $this->probe( '$registrar = require $data["copy"] . "/bootstrap.php"; echo json_encode(array("diagnostics" => $registrar->diagnostics(), "published" => array_key_exists("ran_wp_release_updater_v1_broker", $GLOBALS), "broker_class" => class_exists("RAN\\WPReleaseUpdater\\V1\\Runtime\\RequestBroker", false), "state_class" => class_exists("RAN\\WPReleaseUpdater\\V1\\Runtime\\SelectedRuntimeState", false)));', array( 'copy' => $copy ) );
@@ -159,8 +161,8 @@ PHP,
 		self::assertSame( array( 'protocol_conflict_inactive' ), array_column( $result['diagnostics']['diagnostics'], 'code' ) );
 	}
 
-	public function testInvalidCopyDoesNotInvokeAnAutoloaderForTheBroker(): void {
-		$copy = $this->packageCopy( 'invalid-autoload' );
+	public function test_invalid_copy_does_not_invoke_an_autoloader_for_the_broker(): void {
+		$copy = $this->package_copy( 'invalid-autoload' );
 		file_put_contents( $copy . '/runtime-copy.json', '{' );
 		$result = $this->probe(
 			'$autoloads=array();spl_autoload_register(static function(string $class)use(&$autoloads):void{$autoloads[]=$class;});$registrar=require $data["copy"]."/bootstrap.php";echo json_encode(array("autoloads"=>$autoloads,"state"=>$registrar->diagnostics()["state"],"published"=>array_key_exists("ran_wp_release_updater_v1_broker",$GLOBALS)));',
@@ -171,9 +173,9 @@ PHP,
 		self::assertFalse( $result['published'] );
 	}
 
-	public function testInvalidFirstCopyCannotDefineSharedRuntimeClassesBeforeAValidLaterCopyBoots(): void {
-		$invalid = $this->packageCopy( 'invalid-first' );
-		$valid   = $this->packageCopy( 'valid-later' );
+	public function test_invalid_first_copy_cannot_define_shared_runtime_classes_before_a_valid_later_copy_boots(): void {
+		$invalid = $this->package_copy( 'invalid-first' );
+		$valid   = $this->package_copy( 'valid-later' );
 		file_put_contents( $invalid . '/runtime-copy.json', '{' );
 
 		$result = $this->probe(
@@ -192,25 +194,25 @@ PHP,
 		self::assertTrue( $result['activation']['loaded'] );
 	}
 
-	#[DataProvider( 'malformedRuntimeCopyProvider' )]
-	public function testMalformedRuntimeCopyIsRejectedBeforeBrokerPublicationOrHooks( string $manifest ): void {
-		$copy = $this->packageCopy( 'malformed-runtime-copy' );
+	#[DataProvider( 'malformed_runtime_copy_provider' )]
+	public function test_malformed_runtime_copy_is_rejected_before_broker_publication_or_hooks( string $manifest ): void {
+		$copy = $this->package_copy( 'malformed-runtime-copy' );
 		file_put_contents( $copy . '/runtime-copy.json', $manifest );
 
-		$this->assertProvenanceRejected( $copy );
+		$this->assert_provenance_rejected( $copy );
 	}
 
-	public function testSemanticallyInvalidRuntimeVersionIsRejectedBeforeSharedRuntimeClassesLoad(): void {
-		$copy                        = $this->packageCopy( 'invalid-runtime-version' );
+	public function test_semantically_invalid_runtime_version_is_rejected_before_shared_runtime_classes_load(): void {
+		$copy                        = $this->package_copy( 'invalid-runtime-version' );
 		$manifest                    = json_decode( (string) file_get_contents( $copy . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 		$manifest['package_version'] = 'not-a-version';
 		file_put_contents( $copy . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );
 
-		$this->assertProvenanceRejected( $copy );
+		$this->assert_provenance_rejected( $copy );
 	}
 
 	/** @return array<string,array{string}> */
-	public static function malformedRuntimeCopyProvider(): array {
+	public static function malformed_runtime_copy_provider(): array {
 		return array(
 			'invalid JSON'      => array( '{' ),
 			'list'              => array( '[]' ),
@@ -219,7 +221,7 @@ PHP,
 		);
 	}
 
-	public function testSymlinkedProvenanceShapesAreRejectedBeforeBrokerPublicationOrHooks(): void {
+	public function test_symlinked_provenance_shapes_are_rejected_before_broker_publication_or_hooks(): void {
 		$cases = array(
 			'manifest'         => static function ( string $copy, string $outside ): void {
 				copy( $copy . '/runtime-copy.json', $outside . '/runtime-copy.json' );
@@ -237,19 +239,19 @@ PHP,
 		);
 
 		foreach ( $cases as $name => $shape ) {
-			$copy    = $this->packageCopy( 'symlink-' . str_replace( ' ', '-', $name ) );
+			$copy    = $this->package_copy( 'symlink-' . str_replace( ' ', '-', $name ) );
 			$outside = $this->parent . '/outside-' . str_replace( ' ', '-', $name );
 			mkdir( $outside, 0700, true );
 			$shape( $copy, $outside );
 			if ( ! is_link( $copy . ( 'manifest' === $name ? '/runtime-copy.json' : ( 'source directory' === $name ? '/src' : '/src/Runtime/RequestBroker.php' ) ) ) ) {
 				self::markTestSkipped( 'Symlinks are unavailable on this platform.' );
 			}
-			$this->assertProvenanceRejected( $copy );
+			$this->assert_provenance_rejected( $copy );
 		}
 	}
 
-	public function testSelectedRuntimeRejectsAnInterfaceLoadedFromAnotherRootBeforeRequire(): void {
-		$selected = $this->packageCopy( 'selected' );
+	public function test_selected_runtime_rejects_an_interface_loaded_from_another_root_before_require(): void {
+		$selected = $this->package_copy( 'selected' );
 		$foreign  = $this->parent . '/foreign';
 		mkdir( $foreign . '/src/Contract', 0700, true );
 		file_put_contents( $foreign . '/src/Contract/ReleaseAdapter.php', "<?php\nnamespace RAN\\WPReleaseUpdater\\V1\\Contract; interface ReleaseAdapter {}\n" );
@@ -266,19 +268,19 @@ PHP,
 		self::assertSame( 'A lifecycle symbol was loaded outside the selected runtime root.', $result['message'] );
 	}
 
-	private function packageCopy( string $name, ?string $version = null ): string {
+	private function package_copy( string $name, ?string $version = null ): string {
 		$root = $this->parent . '/' . $name;
 		mkdir( $root, 0700, true );
 		foreach ( array( 'bootstrap.php', 'runtime.php' ) as $file ) {
 			copy( dirname( __DIR__, 2 ) . '/' . $file, $root . '/' . $file );
 		}
-		$this->copyDirectory( dirname( __DIR__, 2 ) . '/src', $root . '/src' );
-		$this->writeRuntimeCopy( $root, $version );
+		$this->copy_directory( dirname( __DIR__, 2 ) . '/src', $root . '/src' );
+		$this->write_runtime_copy( $root, $version );
 
 		return $root;
 	}
 
-	private function assertProvenanceRejected( string $copy ): void {
+	private function assert_provenance_rejected( string $copy ): void {
 		$result = $this->probe( 'function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["provenance_hooks"][]=$hook;} $GLOBALS["provenance_hooks"]=array(); $registrar=require $data["copy"] . "/bootstrap.php"; echo json_encode(array("diagnostics"=>$registrar->diagnostics(),"hooks"=>$GLOBALS["provenance_hooks"],"published"=>array_key_exists("ran_wp_release_updater_v1_broker",$GLOBALS),"provenance"=>array_key_exists("ran_wp_release_updater_v1_broker_provenance",$GLOBALS)));', array( 'copy' => $copy ) );
 
 		self::assertFalse( $result['published'] );
@@ -288,14 +290,14 @@ PHP,
 		self::assertSame( array( 'protocol_conflict_inactive' ), array_column( $result['diagnostics']['diagnostics'], 'code' ) );
 	}
 
-	private function writeRuntimeCopy( string $root, ?string $version = null ): void {
-		$checkedIn = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+	private function write_runtime_copy( string $root, ?string $version = null ): void {
+		$checked_in = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 		file_put_contents(
 			$root . '/runtime-copy.json',
 			json_encode(
 				array(
 					'package_revision' => $this->identity( $root ),
-					'package_version'  => $version ?? $checkedIn['package_version'],
+					'package_version'  => $version ?? $checked_in['package_version'],
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
 					'runtime_protocol' => 5,
@@ -324,7 +326,7 @@ PHP,
 	}
 
 	/** @param list<string> $files */
-	private function identityFromFiles( string $root, array $files ): string {
+	private function identity_from_files( string $root, array $files ): string {
 		$payload = '';
 		foreach ( $files as $file ) {
 			$payload .= $file . "\0" . hash_file( 'sha256', $root . '/' . $file ) . "\n";
@@ -333,7 +335,7 @@ PHP,
 		return hash( 'sha256', $payload );
 	}
 
-	private function copyDirectory( string $source, string $destination ): void {
+	private function copy_directory( string $source, string $destination ): void {
 		mkdir( $destination, 0700, true );
 		foreach ( scandir( $source ) ?: array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
@@ -341,7 +343,7 @@ PHP,
 			}
 			$from = $source . '/' . $name;
 			$to   = $destination . '/' . $name;
-			is_dir( $from ) ? $this->copyDirectory( $from, $to ) : copy( $from, $to );
+			is_dir( $from ) ? $this->copy_directory( $from, $to ) : copy( $from, $to );
 		}
 	}
 

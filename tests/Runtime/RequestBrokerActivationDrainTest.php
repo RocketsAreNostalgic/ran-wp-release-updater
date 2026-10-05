@@ -13,12 +13,13 @@ final class RequestBrokerActivationDrainTest extends TestCase {
 
 	private string $root;
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/request-broker-activation-' . bin2hex( random_bytes( 6 ) );
 		mkdir( $this->root, 0700, true );
 	}
 
-	public function testReentrantActivationAndAppendedInitialBootSubmissionDrainExactlyOnce(): void {
+	public function test_reentrant_activation_and_appended_initial_boot_submission_drain_exactly_once(): void {
 		$copy   = $this->package(
 			'drain',
 			<<<'PHP'
@@ -59,7 +60,7 @@ PHP,
 		self::assertSame( 'runtime_active', $result['again']['code'] );
 	}
 
-	public function testActiveCandidateIdempotencyAndTerminalInactiveTargetAndActivationRemainPassive(): void {
+	public function test_active_candidate_idempotency_and_terminal_inactive_target_and_activation_remain_passive(): void {
 		$copy   = $this->package( 'active', $this->runtime() );
 		$unseen = $this->package( 'unseen', $this->runtime() );
 		$result = $this->probe(
@@ -102,9 +103,9 @@ PHP,
 		self::assertSame( array( array( 'code' => 'runtime_environment_invalid' ) ), $result['inactive_diagnostics'] );
 	}
 
-	public function testRuntimeLoadFailureHasStableTerminalStateAndProjection(): void {
-		$load       = $this->package( 'load-failure', "<?php\nthrow new RuntimeException('load');\n" );
-		$loadResult = $this->probe(
+	public function test_runtime_load_failure_has_stable_terminal_state_and_projection(): void {
+		$load        = $this->package( 'load-failure', "<?php\nthrow new RuntimeException('load');\n" );
+		$load_result = $this->probe(
 			<<<'PHP'
 require $data['load'] . '/bootstrap.php';
 $load=$GLOBALS['ran_wp_release_updater_v1_broker'];
@@ -117,12 +118,12 @@ echo json_encode(array('first_load'=>$firstLoad,'status_load'=>$statusLoad,'agai
 PHP,
 			array( 'load' => $load )
 		);
-		self::assertSame( 'runtime_load_failed', $loadResult['first_load']['code'] );
-		self::assertSame( 'runtime_load_failed', $loadResult['status_load']['code'] );
-		self::assertSame( 'runtime_load_failed', $loadResult['again_load']['code'] );
+		self::assertSame( 'runtime_load_failed', $load_result['first_load']['code'] );
+		self::assertSame( 'runtime_load_failed', $load_result['status_load']['code'] );
+		self::assertSame( 'runtime_load_failed', $load_result['again_load']['code'] );
 	}
 
-	public function testQueuedRegistrarHandleDoesNotResubmitAfterTerminalCompositionFailure(): void {
+	public function test_queued_registrar_handle_does_not_resubmit_after_terminal_composition_failure(): void {
 		$copy   = $this->package( 'terminal-handle', $this->runtime() );
 		$result = $this->probe(
 			<<<'PHP'
@@ -143,7 +144,7 @@ PHP,
 		self::assertSame( 1, $result['submissions'] );
 	}
 
-	public function testRegistrarHandleRegistersOnlyOneSubmission(): void {
+	public function test_registrar_handle_registers_only_one_submission(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $registrar=require $data['bootstrap'];
@@ -160,12 +161,12 @@ PHP,
 		self::assertSame( 1, $result['submissions'] );
 	}
 
-	public function testRetainedBrokerAndHandleArePassiveAfterReplacementAndOtherTerminalStatesStayTruthful(): void {
-		$active              = $this->package( 'retained-active', $this->activeRuntime() );
-		$unseen              = $this->package( 'retained-unseen', $this->runtime() );
-		$load                = $this->package( 'retained-load', "<?php\nthrow new RuntimeException('load');\n" );
-		$composition         = $this->package( 'retained-composition', $this->runtime() );
-		$stale               = $this->probe(
+	public function test_retained_broker_and_handle_are_passive_after_replacement_and_other_terminal_states_stay_truthful(): void {
+		$active               = $this->package( 'retained-active', $this->active_runtime() );
+		$unseen               = $this->package( 'retained-unseen', $this->runtime() );
+		$load                 = $this->package( 'retained-load', "<?php\nthrow new RuntimeException('load');\n" );
+		$composition          = $this->package( 'retained-composition', $this->runtime() );
+		$stale                = $this->probe(
 			<<<'PHP'
 $environment=array('php_version'=>'8.2.0','runtime_protocol' => 5,'wordpress_version'=>'6.8.0');
 $registrar=require $data['active'] . '/bootstrap.php';$handle=$registrar->plugin('github','/active.php','acme/active','1');$handle->register();$broker=$GLOBALS['ran_wp_release_updater_v1_broker'];$broker->activate($environment);$before=$broker->diagnostics();$GLOBALS['ran_wp_release_updater_v1_broker']=new stdClass();$stale=array('known'=>$broker->register_candidate($data['active'].'/runtime-copy.json'),'unseen'=>$broker->register_candidate($data['unseen'].'/runtime-copy.json'),'target'=>$broker->register_target(array('target_type'=>'plugin','installed_file'=>'/late.php','provider_code'=>'github','repository_locator'=>'acme/late','repository_identity'=>'2','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null)),'refresh'=>$handle->refresh(),'status'=>$handle->status(),'diagnostics'=>$handle->diagnostics(),'again'=>$broker->activate($environment),'counts'=>$broker->diagnostics());
@@ -176,7 +177,7 @@ PHP,
 				'unseen' => $unseen,
 			)
 		);
-		$loadTerminal        = $this->probe(
+		$load_terminal        = $this->probe(
 			<<<'PHP'
 $environment=array('php_version'=>'8.2.0','runtime_protocol' => 5,'wordpress_version'=>'6.8.0');
 $loadRegistrar=require $data['load'].'/bootstrap.php';$loadHandle=$loadRegistrar->plugin('github','/load.php','acme/load','3');$loadHandle->register();$loadBroker=$GLOBALS['ran_wp_release_updater_v1_broker'];$loadBroker->activate($environment);$terminal=array('candidate'=>$loadBroker->register_candidate($data['load'].'/runtime-copy.json'),'target'=>$loadBroker->register_target(array('target_type'=>'plugin','installed_file'=>'/after-load.php','provider_code'=>'github','repository_locator'=>'acme/after-load','repository_identity'=>'4','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null)),'again'=>$loadBroker->activate($environment),'status'=>$loadHandle->status(),'counts'=>$loadBroker->diagnostics());
@@ -184,7 +185,7 @@ echo json_encode($terminal);
 PHP,
 			array( 'load' => $load )
 		);
-		$compositionTerminal = $this->probe(
+		$composition_terminal = $this->probe(
 			<<<'PHP'
 $environment=array('php_version'=>'8.2.0','runtime_protocol' => 5,'wordpress_version'=>'6.8.0');
 $compositionRegistrar=require $data['composition'].'/bootstrap.php';$compositionHandle=$compositionRegistrar->plugin('github','/composition.php','acme/composition','5');$compositionHandle->register();$compositionBroker=$GLOBALS['ran_wp_release_updater_v1_broker'];$compositionBroker->activate($environment);$terminal=array('again'=>$compositionHandle->register(),'status'=>$compositionHandle->status(),'diagnostics'=>$compositionHandle->diagnostics(),'candidate'=>$compositionBroker->register_candidate($data['composition'].'/runtime-copy.json'),'activation'=>$compositionBroker->activate($environment),'counts'=>$compositionBroker->diagnostics());
@@ -204,18 +205,18 @@ PHP,
 		self::assertSame( 'protocol_conflict_inactive', $stale['stale']['again']['code'] );
 		self::assertSame( $stale['before']['candidate_count'], $stale['stale']['counts']['candidate_count'] );
 		self::assertSame( $stale['before']['submission_count'], $stale['stale']['counts']['submission_count'] );
-		self::assertSame( 'runtime_load_failed', $loadTerminal['status']['code'] );
-		self::assertFalse( $loadTerminal['candidate'] );
-		self::assertSame( 'runtime_load_failed', $loadTerminal['target']['code'] );
-		self::assertSame( 'runtime_load_failed', $loadTerminal['again']['code'] );
-		self::assertSame( 'target_composition_failed', $compositionTerminal['status']['code'] );
-		self::assertFalse( $compositionTerminal['again'] );
-		self::assertTrue( $compositionTerminal['candidate'] );
-		self::assertTrue( $compositionTerminal['activation']['loaded'] );
+		self::assertSame( 'runtime_load_failed', $load_terminal['status']['code'] );
+		self::assertFalse( $load_terminal['candidate'] );
+		self::assertSame( 'runtime_load_failed', $load_terminal['target']['code'] );
+		self::assertSame( 'runtime_load_failed', $load_terminal['again']['code'] );
+		self::assertSame( 'target_composition_failed', $composition_terminal['status']['code'] );
+		self::assertFalse( $composition_terminal['again'] );
+		self::assertTrue( $composition_terminal['candidate'] );
+		self::assertTrue( $composition_terminal['activation']['loaded'] );
 	}
 
-	public function testActiveHandleProjectsUpdateCompletedDiagnosticsWithoutTerminalisingTheBroker(): void {
-		$copy   = $this->package( 'update-completed-diagnostics', $this->updateCompletedRuntime() );
+	public function test_active_handle_projects_update_completed_diagnostics_without_terminalising_the_broker(): void {
+		$copy   = $this->package( 'update-completed-diagnostics', $this->update_completed_runtime() );
 		$result = $this->probe(
 			<<<'PHP'
 $registrar = require $data['copy'] . '/bootstrap.php';
@@ -238,7 +239,7 @@ PHP,
 		self::assertNotContains( array( 'code' => 'runtime_handoff_invalid' ), $result['broker']['diagnostics'] );
 	}
 
-	private function activeRuntime(): string {
+	private function active_runtime(): string {
 		return <<<'PHP'
 <?php
 final class P02ActiveHandle { public function status(): array { return array('state'=>'active','declaration_accepted'=>true,'hooks_registered'=>true,'code'=>'target_active','native'=>array('candidate_header_version'=>null,'candidate_tag'=>null,'candidate_validation_code'=>null,'candidate_version'=>null,'failure_code'=>null,'installed_version'=>null,'last_check'=>null,'offered_release_identity'=>null,'offered_version'=>null,'relationship'=>null)); } public function diagnostics(): array { return array('state'=>'active','diagnostics'=>array()); } public function refresh(): bool { return true; } }
@@ -246,7 +247,7 @@ return new class { private function result(array $s): array { return array('subm
 PHP;
 	}
 
-	private function updateCompletedRuntime(): string {
+	private function update_completed_runtime(): string {
 		return <<<'PHP'
 <?php
 final class P02UpdateCompletedHandle

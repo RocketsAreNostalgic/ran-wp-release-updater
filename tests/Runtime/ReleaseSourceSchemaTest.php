@@ -10,22 +10,22 @@ use RAN\WPReleaseUpdater\V1\Provider\GitHub\ProspectiveReleaseInspection;
 
 final class ReleaseSourceSchemaTest extends TestCase {
 
-	public function testPublicHandleFailsClosedForMalformedSameProtocolResults(): void {
-		foreach ( $this->malformedResults() as $name => [$operation, $result] ) {
+	public function test_public_handle_fails_closed_for_malformed_same_protocol_results(): void {
+		foreach ( $this->malformed_results() as $name => [$operation, $result] ) {
 			$projection = $this->projection( $operation, $result );
 			self::assertSame( 'runtime_unavailable', $projection['code'], $name );
 			self::assertNull( $projection['value'], $name );
 		}
 	}
 
-	public function testInspectionFixtureIsExactAndFingerprintLast(): void {
+	public function test_inspection_fixture_is_exact_and_fingerprint_last(): void {
 		$inspection = ProspectiveReleaseInspection::create( $this->facts() )->to_array();
 		self::assertSame( 'fingerprint', array_key_last( $inspection ) );
 		self::assertArrayNotHasKey( 'path', $inspection );
 		self::assertArrayNotHasKey( 'provider_payload', $inspection );
 	}
 
-	public function testActivatedSyntheticCallbackCanReturnTheExactValidListingShape(): void {
+	public function test_activated_synthetic_callback_can_return_the_exact_valid_listing_shape(): void {
 		$result = $this->projection(
 			'list',
 			$this->envelope(
@@ -52,7 +52,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 		self::assertTrue( $result['ok'] );
 	}
 
-	public function testFailureCleanupCombinationsAreOperationScoped(): void {
+	public function test_failure_cleanup_combinations_are_operation_scoped(): void {
 		$invalid = array(
 			'ok'             => false,
 			'code'           => 'invalid_configuration',
@@ -73,12 +73,12 @@ final class ReleaseSourceSchemaTest extends TestCase {
 		self::assertSame( 'complete', $result['cleanup_status'] );
 	}
 
-	public function testMalformedAcquisitionCleansTheRealOwnedArtifactBeforeReturn(): void {
+	public function test_malformed_acquisition_cleans_the_real_owned_artifact_before_return(): void {
 		$root = dirname( __DIR__, 2 );
 		foreach ( array(
 			'nested' => 'runtime_unavailable',
 			'outer'  => 'operation_failed',
-		) as $mutation => $expectedCode ) {
+		) as $mutation => $expected_code ) {
 			$directory = $root . '/.workspaces/p0.3/php-tmp/schema-artifact-' . bin2hex( random_bytes( 6 ) );
 			self::assertTrue( mkdir( $directory, 0700, true ) );
 			$file   = $directory . '/proof.php';
@@ -92,21 +92,21 @@ final class ReleaseSourceSchemaTest extends TestCase {
 			self::assertSame( 0, $status, implode( "\n", $output ) );
 			$result = json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
 			self::assertSame( 1, $result['calls'] );
-			self::assertSame( $expectedCode, $result['result']['code'] );
+			self::assertSame( $expected_code, $result['result']['code'] );
 			self::assertSame( 'complete', $result['result']['cleanup_status'] );
 			self::assertFalse( $result['exists'] );
 		}
 	}
 
 	/** @return array<string,array{string,array<string,mixed>}> */
-	private function malformedResults(): array {
-		$inspection   = ProspectiveReleaseInspection::create( $this->facts() )->to_array();
-		$shortVersion = $inspection;
-		unset( $shortVersion['fingerprint'] );
-		$shortVersion['version']     = '1.2';
-		$shortVersion['fingerprint'] = 'v2:' . hash( 'sha256', json_encode( $shortVersion, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
+	private function malformed_results(): array {
+		$inspection    = ProspectiveReleaseInspection::create( $this->facts() )->to_array();
+		$short_version = $inspection;
+		unset( $short_version['fingerprint'] );
+		$short_version['version']     = '1.2';
+		$short_version['fingerprint'] = 'v2:' . hash( 'sha256', json_encode( $short_version, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
 		return array(
-			'package-version-short'         => array( 'inspect', $this->envelope( 'release_inspected', $shortVersion, 'complete' ) ),
+			'package-version-short'         => array( 'inspect', $this->envelope( 'release_inspected', $short_version, 'complete' ) ),
 			'changed-without-proof-cleanup' => array(
 				'acquire',
 				array(

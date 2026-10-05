@@ -11,25 +11,26 @@ final class P03PairedCompositionTest extends TestCase {
 
 	private string $root;
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/p03-paired-' . bin2hex( random_bytes( 6 ) );
 		mkdir( $this->root, 0700, true );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'targetTypes' )]
-	public function testConciseGithubCompositionMatchesTheExplicitNativePath( string $type ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'target_types' )]
+	public function test_concise_github_composition_matches_the_explicit_native_path( string $type ): void {
 		$result = $this->probe( $type );
 
 		self::assertSame( $result['concise']['binding'], $result['explicit']['binding'] );
 		self::assertSame( $result['concise']['binding']['binding_hash'], $result['explicit']['binding']['binding_hash'] );
 		self::assertSame( $result['concise']['archive_policy'], $result['explicit']['archive_policy'] );
 		self::assertSame( $result['concise']['receipt'], $result['explicit']['receipt'] );
-		$conciseStatus  = $result['concise']['status'];
-		$explicitStatus = $result['explicit']['status'];
-		self::assertIsInt( $conciseStatus['last_check'] );
-		self::assertIsInt( $explicitStatus['last_check'] );
-		unset( $conciseStatus['last_check'], $explicitStatus['last_check'] );
-		self::assertSame( $conciseStatus, $explicitStatus );
+		$concise_status  = $result['concise']['status'];
+		$explicit_status = $result['explicit']['status'];
+		self::assertIsInt( $concise_status['last_check'] );
+		self::assertIsInt( $explicit_status['last_check'] );
+		unset( $concise_status['last_check'], $explicit_status['last_check'] );
+		self::assertSame( $concise_status, $explicit_status );
 		self::assertSame( $result['concise']['offer'], $result['explicit']['offer'] );
 		self::assertSame( $result['concise']['hook_names'], $result['explicit']['hook_names'] );
 		self::assertSame( $result['concise']['hook_count'], $result['explicit']['hook_count'] );
@@ -49,8 +50,8 @@ final class P03PairedCompositionTest extends TestCase {
 		self::assertSame( 'plugin' === $type ? 10 : 9, $result['concise']['hook_count'] );
 	}
 
-	#[DataProvider( 'targetTypes' )]
-	public function testPublicHandleClearsAnOfferedIdentityAfterRuntimeOwnershipIsLost( string $type ): void {
+	#[DataProvider( 'target_types' )]
+	public function test_public_handle_clears_an_offered_identity_after_runtime_ownership_is_lost( string $type ): void {
 		$result = $this->probe( $type, true );
 
 		self::assertSame( '7', $result['public_status']['native']['offered_release_identity'] );
@@ -60,7 +61,7 @@ final class P03PairedCompositionTest extends TestCase {
 	}
 
 	/** @return array<string,array{string}> */
-	public static function targetTypes(): array {
+	public static function target_types(): array {
 		return array(
 			'plugin' => array( 'plugin' ),
 			'theme'  => array( 'theme' ),
@@ -69,7 +70,7 @@ final class P03PairedCompositionTest extends TestCase {
 
 	/** @return array<string,mixed> */
 	private function probe( string $type, bool $invalidate = false ): array {
-		$runtime   = $this->packageCopy();
+		$runtime   = $this->package_copy();
 		$installed = $this->installed( $type );
 		$probe     = $this->root . '/probe-' . bin2hex( random_bytes( 6 ) ) . '.php';
 		$data      = array(
@@ -286,13 +287,13 @@ PHP;
 		return $file;
 	}
 
-	private function packageCopy(): string {
+	private function package_copy(): string {
 		$source = dirname( __DIR__, 2 );
 		$copy   = $this->root . '/runtime-' . bin2hex( random_bytes( 6 ) );
 		mkdir( $copy, 0700, true );
 		copy( $source . '/bootstrap.php', $copy . '/bootstrap.php' );
 		copy( $source . '/runtime.php', $copy . '/runtime.php' );
-		$this->copyDirectory( $source . '/src', $copy . '/src' );
+		$this->copy_directory( $source . '/src', $copy . '/src' );
 		$files = array( 'bootstrap.php', 'runtime.php' );
 		foreach ( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $copy . '/src', \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
 			if ( $file->isFile() && 'php' === $file->getExtension() ) {
@@ -321,14 +322,14 @@ PHP;
 		return $copy;
 	}
 
-	private function copyDirectory( string $source, string $destination ): void {
+	private function copy_directory( string $source, string $destination ): void {
 		mkdir( $destination, 0700, true );
 		foreach ( scandir( $source ) ?: array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
 				continue;
 			}
 			$from = $source . '/' . $name;
-			is_dir( $from ) ? $this->copyDirectory( $from, $destination . '/' . $name ) : copy( $from, $destination . '/' . $name );
+			is_dir( $from ) ? $this->copy_directory( $from, $destination . '/' . $name ) : copy( $from, $destination . '/' . $name );
 		}
 	}
 }

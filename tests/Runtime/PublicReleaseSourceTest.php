@@ -10,7 +10,7 @@ use PHPUnit\Framework\TestCase;
 final class PublicReleaseSourceTest extends TestCase {
 
 	#[Test]
-	public function constructionAndInvalidOperationsAreInertAndPrecedeReadiness(): void {
+	public function construction_and_invalid_operations_are_inert_and_precede_readiness(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $calls = 0;
@@ -37,7 +37,7 @@ PHP
 	}
 
 	#[Test]
-	public function releaseOnlyConstructionRegistersNoNativeHooks(): void {
+	public function release_only_construction_registers_no_native_hooks(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $registrar = require $data['bootstrap'];
@@ -53,7 +53,7 @@ PHP
 	}
 
 	#[Test]
-	public function aSourceThatWasNotReadyDuringActivationCanBeUsedAfterTheSameBrokerLoads(): void {
+	public function a_source_that_was_not_ready_during_activation_can_be_used_after_the_same_broker_loads(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $registrar = require $data['bootstrap'];
@@ -74,7 +74,7 @@ PHP
 	}
 
 	#[Test]
-	public function releaseOnlyUseCreatesNoNativeBindingsAndARegistrarCanCreateItAfterActivation(): void {
+	public function release_only_use_creates_no_native_bindings_and_a_registrar_can_create_it_after_activation(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $registrar = require $data['bootstrap'];
@@ -98,7 +98,7 @@ PHP
 	}
 
 	#[Test]
-	public function unsupportedFilesystemFailsBeforeProviderOrCredentialUse(): void {
+	public function unsupported_filesystem_fails_before_provider_or_credential_use(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $credentials = 0;
@@ -119,7 +119,7 @@ PHP,
 	}
 
 	#[Test]
-	public function cachedSourceRechecksAnUndefinedFilesystemMethodBeforeEveryOperation(): void {
+	public function cached_source_rechecks_an_undefined_filesystem_method_before_every_operation(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $GLOBALS['wp_filesystem'] = new WP_Filesystem_Direct();
@@ -152,7 +152,7 @@ PHP,
 	}
 
 	#[Test]
-	public function cachedSourceDoesNotResumeAfterTerminalReplacementEvenIfTheOriginalBrokerReturns(): void {
+	public function cached_source_does_not_resume_after_terminal_replacement_even_if_the_original_broker_returns(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $registrar = require $data['bootstrap'];
@@ -176,17 +176,17 @@ PHP
 
 	/** @return array<string,mixed> */
 	private function probe( string $body, array $data = array() ): array {
-		$file                 = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/release-source-' . bin2hex( random_bytes( 6 ) ) . '.php';
-		$filesystemMethod     = array_key_exists( 'filesystem_method', $data ) ? $data['filesystem_method'] : 'direct';
-		$filesystemDefinition = null === $filesystemMethod ? '' : 'define("FS_METHOD",' . var_export( $filesystemMethod, true ) . '); ';
-		$filesystemClass      = null === $filesystemMethod ? 'class WP_Filesystem_Direct{} ' : '';
-		$prefix               = '<?php '
+		$file                  = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/release-source-' . bin2hex( random_bytes( 6 ) ) . '.php';
+		$filesystem_method     = array_key_exists( 'filesystem_method', $data ) ? $data['filesystem_method'] : 'direct';
+		$filesystem_definition = null === $filesystem_method ? '' : 'define("FS_METHOD",' . var_export( $filesystem_method, true ) . '); ';
+		$filesystem_class      = null === $filesystem_method ? 'class WP_Filesystem_Direct{} ' : '';
+		$prefix                = '<?php '
 			. '$GLOBALS["release_source_hooks"]=array(); '
-			. $filesystemClass
+			. $filesystem_class
 			. 'function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["release_source_hooks"][]=$hook;} '
 			. 'function add_filter(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["release_source_hooks"][]=$hook;} '
 			. 'function wp_safe_remote_get():mixed{++$GLOBALS["release_source_http_calls"];return false;} function is_wp_error():bool{return false;} '
-			. '$GLOBALS["release_source_filesystem_gate_calls"]=0;$GLOBALS["release_source_http_calls"]=0;$GLOBALS["wp_version"]="6.8.0";' . $filesystemDefinition
+			. '$GLOBALS["release_source_filesystem_gate_calls"]=0;$GLOBALS["release_source_http_calls"]=0;$GLOBALS["wp_version"]="6.8.0";' . $filesystem_definition
 			. '$data=' . var_export( array_merge( array( 'bootstrap' => dirname( __DIR__, 2 ) . '/bootstrap.php' ), $data ), true ) . '; ';
 		file_put_contents( $file, $prefix . $body );
 		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp' ) . ' ' . escapeshellarg( $file ), $output, $status );

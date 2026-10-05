@@ -14,7 +14,7 @@ Core dependency update. The native-operation refinement below was delivered sepa
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
 | Generated `src/Dependency/ArchiveSafety.php` | PHPCS excluded; namespace-only byte parity against the locked `ran/updater-support` source and direct level-8 analysis remain required. Never hand-edit this file. |
-| `tests/Archive`, `tests/Contract`, `tests/Dependency`, `tests/Provider` | Owned method and variable naming now cover these four roots, including future files. Ten PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
+| `tests/Archive`, `tests/Contract`, `tests/Dependency`, `tests/Provider`, `tests/Runtime` | Owned method and variable naming now cover these five roots, including future files. Twenty-three PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
 | Other `tests/` roots | The separate purpose-built fixture/harness naming boundary remains. Production callers, named arguments, callbacks and Reflection seams follow the production API. This cohort does not certify every fixture-local identifier as snake_case. |
 
 `composer check` retains strict validation, generated-copy parity, live advisory
@@ -157,3 +157,30 @@ are introduced. Production, scripts, dependencies, runtime identity and workflow
 inputs are outside this cohort; other test roots remain separate work. The final
 proposal is integrated onto main `cbed2d1a856d3ed8e98d6494a54cbf72495921e6`
 after PR #95, retaining its native-operation protections and acceptance record.
+
+
+## Runtime test naming cohort
+
+Provider naming landed in PR #98 at
+`52acceaf5c3d3f195756ce5f31f30408b89a09dd`. From that exact main, the
+13 Runtime test files expose 207 naming diagnostics: 136 owned method
+declarations, 58 variable occurrences and 13 required PHPUnit lifecycle
+overrides. Owned methods, callers, variables and nine DataProvider reference
+strings are normalized together. Lifecycle overrides retain exact declaration-local
+exceptions. Embedded PHP payloads, intentional `protocolVersion` controls,
+Reflection targets, production named arguments, foreign APIs, `$GLOBALS` and
+by-reference observations are preserved.
+
+The existing Dependency checker regression adds current and future Runtime
+paths and moves its outside-cohort control to WordPress. It now exercises
+11 paths with clean, inherited-method and variable controls (132 assertions).
+Restoring the old scope fails the Runtime control. All 477 test/dataset
+identities remain after explicit owned-name mapping; Runtime retains exactly
+130 tests / 1,155 assertions. The canonical Composer aggregate passes with
+477 tests / 25,100 assertions, including level 8, live advisory audit and the
+installed no-dev consumer. No new test framework or test is added.
+
+This proposal changes tests, checker scope and guidance only. Production,
+scripts, runtime identity, dependencies, public APIs, JavaScript and workflows
+remain unchanged. Other test roots and retained-exception acceptance remain
+separate work under organisation #65/#128; no release is authorized.

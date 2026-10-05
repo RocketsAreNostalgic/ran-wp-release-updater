@@ -10,6 +10,7 @@ final class SealedProviderCatalogTest extends TestCase {
 
 	private string $root;
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 )
 			. '/.workspaces/p0.2/php-tmp/sealed-catalog-'
@@ -17,7 +18,7 @@ final class SealedProviderCatalogTest extends TestCase {
 		mkdir( $this->root, 0700, true );
 	}
 
-	public function testRuntimeShipsOnlyThePrivateGithubCatalogAndNoCatalogExtensionSeam(): void {
+	public function test_runtime_ships_only_the_private_github_catalog_and_no_catalog_extension_seam(): void {
 		$runtime = (string) file_get_contents( dirname( __DIR__, 2 ) . '/runtime.php' );
 
 		self::assertStringContainsString( "'github' => array(", $runtime );
@@ -43,19 +44,19 @@ final class SealedProviderCatalogTest extends TestCase {
 		}
 	}
 
-	public function testHigherVersionSyntheticCatalogWinsInEitherPhysicalLoadOrderAndOwnsOnlyItsResolver(): void {
-		$shipped         = $this->package( 'shipped', '0.1.0-beta.98', false );
-		$synthetic       = $this->package( 'synthetic', '0.1.0-beta.99', true );
-		$github          = $this->plugin( 'github', 'https://github.com/acme/github' );
-		$syntheticPlugin = $this->plugin( 'synthetic', 'https://synthetic.invalid/acme/synthetic' );
+	public function test_higher_version_synthetic_catalog_wins_in_either_physical_load_order_and_owns_only_its_resolver(): void {
+		$shipped          = $this->package( 'shipped', '0.1.0-beta.98', false );
+		$synthetic        = $this->package( 'synthetic', '0.1.0-beta.99', true );
+		$github           = $this->plugin( 'github', 'https://github.com/acme/github' );
+		$synthetic_plugin = $this->plugin( 'synthetic', 'https://synthetic.invalid/acme/synthetic' );
 
 		foreach ( array( array( $shipped, $synthetic ), array( $synthetic, $shipped ) ) as $copies ) {
 			$result = $this->probe(
-				$this->syntheticProbe(),
+				$this->synthetic_probe(),
 				array(
 					'copies'    => $copies,
 					'github'    => $github,
-					'synthetic' => $syntheticPlugin,
+					'synthetic' => $synthetic_plugin,
 				)
 			);
 
@@ -77,13 +78,13 @@ final class SealedProviderCatalogTest extends TestCase {
 		}
 	}
 
-	public function testShippedCatalogRejectsSyntheticBeforeAndAfterSameTypeCutoffAndInFreshProcess(): void {
+	public function test_shipped_catalog_rejects_synthetic_before_and_after_same_type_cutoff_and_in_fresh_process(): void {
 		$shipped = $this->package( 'shipped-only', '0.1.0-beta.98', false );
 		$plugin  = $this->plugin( 'synthetic', 'https://synthetic.invalid/acme/synthetic' );
 
 		foreach ( array( false, true ) as $cutoff ) {
 			$result = $this->probe(
-				$this->shippedProbe(),
+				$this->shipped_probe(),
 				array(
 					'copy'   => $shipped,
 					'plugin' => $plugin,
@@ -98,7 +99,7 @@ final class SealedProviderCatalogTest extends TestCase {
 		}
 	}
 
-	public function testSelectedSyntheticCatalogDispatchesAnIsolatedReleaseSourceForOpaqueIdentifiersInEitherLoadOrder(): void {
+	public function test_selected_synthetic_catalog_dispatches_an_isolated_release_source_for_opaque_identifiers_in_either_load_order(): void {
 		$shipped   = $this->package( 'release-shipped', '0.1.0-beta.98', false );
 		$synthetic = $this->package( 'release-synthetic', '0.1.0-beta.99', true );
 		foreach ( array( array( $shipped, $synthetic ), array( $synthetic, $shipped ) ) as $copies ) {
@@ -118,7 +119,7 @@ PHP,
 		}
 	}
 
-	private function syntheticProbe(): string {
+	private function synthetic_probe(): string {
 		return <<<'PHP'
 $githubCalls = 0;
 $syntheticCalls = 0;
@@ -179,7 +180,7 @@ echo json_encode( array(
 PHP;
 	}
 
-	private function shippedProbe(): string {
+	private function shipped_probe(): string {
 		return <<<'PHP'
 $calls = 0;
 $registrar = require $data['copy'] . '/bootstrap.php';
@@ -246,7 +247,7 @@ PHP;
 		$runtime = (string) file_get_contents( $source . '/runtime.php' );
 		if ( $synthetic ) {
 			$needle      = "\n);\n\nreturn new class(";
-			$replacement = "\n" . $this->syntheticCatalogEntry() . $needle;
+			$replacement = "\n" . $this->synthetic_catalog_entry() . $needle;
 			$runtime     = str_replace( $needle, $replacement, $runtime, $count );
 			self::assertSame( 1, $count, 'The synthetic fixture must replace exactly one catalog literal.' );
 		}
@@ -264,7 +265,7 @@ PHP;
 		return $root;
 	}
 
-	private function syntheticCatalogEntry(): string {
+	private function synthetic_catalog_entry(): string {
 		return <<<'PHP'
 	'synthetic' => array(
 	'native' => static function( array $d, array $resolved, array $headers, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
