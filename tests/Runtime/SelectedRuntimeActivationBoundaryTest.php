@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 
 final class SelectedRuntimeActivationBoundaryTest extends TestCase {
 
-	public function testCreatorSchedulesOnceBeforeTheActivationBoundaryAndActivatesAtMaximumPriority(): void {
+	public function test_creator_schedules_once_before_the_activation_boundary_and_activates_at_maximum_priority(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $registrar = require $data['bootstrap'];
@@ -28,7 +28,7 @@ PHP
 		self::assertSame( array(), $result['code'] );
 	}
 
-	public function testSeparateCleanProtocolFourRequestSelectsOnlyItsOwnBroker(): void {
+	public function test_separate_clean_protocol_four_request_selects_only_its_own_broker(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $registrar = require $data['bootstrap'];
@@ -43,7 +43,7 @@ PHP
 		self::assertSame( 1, $result['candidates'] );
 	}
 
-	public function testBootstrapDuringALowerPrioritySchedulesForThisHookRun(): void {
+	public function test_bootstrap_during_a_lower_priority_schedules_for_this_hook_run(): void {
 		$result = $this->probe(
 			<<<'PHP'
 add_action('after_setup_theme', static function () use ($data): void { $GLOBALS['p02_registrar'] = require $data['bootstrap']; }, 10, 0);
@@ -58,8 +58,8 @@ PHP
 		self::assertSame( array(), $result['diagnostics'] );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'missedBoundaryCases' )]
-	public function testMissedOrMalformedActivationBoundariesFailClosedWithoutScheduling( string $scenario ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'missed_boundary_cases' )]
+	public function test_missed_or_malformed_activation_boundaries_fail_closed_without_scheduling( string $scenario ): void {
 		$result = $this->probe(
 			match ( $scenario ) {
 			'current_maximum' => <<<'PHP'
@@ -108,7 +108,7 @@ PHP,
 	}
 
 	/** @return array<string,array{string}> */
-	public static function missedBoundaryCases(): array {
+	public static function missed_boundary_cases(): array {
 		return array(
 			'current maximum priority'     => array( 'current_maximum' ),
 			'completed hook'               => array( 'completed' ),
@@ -118,7 +118,7 @@ PHP,
 		);
 	}
 
-	public function testCompatibleExistingBrokerDoesNotScheduleAnotherActivationCallback(): void {
+	public function test_compatible_existing_broker_does_not_schedule_another_activation_callback(): void {
 		$result = $this->probe(
 			<<<'PHP'
 require_once dirname($data['bootstrap']) . '/src/Runtime/RequestBroker.php';
@@ -132,7 +132,7 @@ PHP
 		self::assertFalse( $result['hooks'] );
 	}
 
-	public function testMissedBoundaryMakesTheRegistrarHandleInertWithAnExactDiagnostic(): void {
+	public function test_missed_boundary_makes_the_registrar_handle_inert_with_an_exact_diagnostic(): void {
 		$result = $this->probe(
 			<<<'PHP'
 do_action('after_setup_theme');
@@ -151,8 +151,8 @@ PHP
 		self::assertSame( array( array( 'code' => 'activation_boundary_missed' ) ), $result['diagnostics']['diagnostics'] );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'invalidWordPressVersions' )]
-	public function testMissingOrMalformedWordPressVersionFailsAtScheduledActivation( mixed $version ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'invalid_word_press_versions' )]
+	public function test_missing_or_malformed_word_press_version_fails_at_scheduled_activation( mixed $version ): void {
 		$result = $this->probe(
 			<<<'PHP'
 if ('missing' === $data['version']) { unset($GLOBALS['wp_version']); } else { $GLOBALS['wp_version'] = $data['version']; }
@@ -170,7 +170,7 @@ PHP,
 	}
 
 	/** @return array<string,array{mixed}> */
-	public static function invalidWordPressVersions(): array {
+	public static function invalid_word_press_versions(): array {
 		return array(
 			'missing'                         => array( 'missing' ),
 			'array'                           => array( array() ),
@@ -179,7 +179,7 @@ PHP,
 		);
 	}
 
-	public function testWordPressVersionNormalizerAcceptsOnlySupportedCoreAndExistingSemVerForms(): void {
+	public function test_word_press_version_normalizer_accepts_only_supported_core_and_existing_sem_ver_forms(): void {
 		require_once dirname( __DIR__, 2 ) . '/src/Runtime/RequestBroker.php';
 		require_once dirname( __DIR__, 2 ) . '/src/Runtime/SelectedRuntimeState.php';
 		foreach ( array(
@@ -198,8 +198,8 @@ PHP,
 		self::assertNull( \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_word_press_version( str_repeat( '1', 101 ) ) );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'supportedWordPressDevelopmentVersions' )]
-	public function testScheduledActivationNormalizesSupportedWordPressDevelopmentVersions( string $version ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'supported_word_press_development_versions' )]
+	public function test_scheduled_activation_normalizes_supported_word_press_development_versions( string $version ): void {
 		$result = $this->probe(
 			<<<'PHP'
 $GLOBALS['wp_version'] = $data['version'];
@@ -215,7 +215,7 @@ PHP,
 	}
 
 	/** @return array<string,array{string}> */
-	public static function supportedWordPressDevelopmentVersions(): array {
+	public static function supported_word_press_development_versions(): array {
 		return array(
 			'beta revision'                  => array( '6.9-beta1-60740' ),
 			'beta package'                   => array( '6.9-beta1' ),
@@ -225,7 +225,7 @@ PHP,
 		);
 	}
 
-	public function testScheduledActivationKeepsWordPressReleaseCandidateBelowTheStableFloor(): void {
+	public function test_scheduled_activation_keeps_word_press_release_candidate_below_the_stable_floor(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $GLOBALS['wp_version'] = '6.5-RC1-60740';
@@ -239,7 +239,7 @@ PHP
 		self::assertSame( array( array( 'code' => 'runtime_selection_inactive' ) ), $result['diagnostics'] );
 	}
 
-	public function testScheduledActivationRegistersATargetOnAWordPressBetaBuild(): void {
+	public function test_scheduled_activation_registers_a_target_on_a_word_press_beta_build(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $plugins = dirname(__FILE__) . '/plugins';
@@ -262,7 +262,7 @@ PHP
 		self::assertSame( 'target_active', $result['status']['code'] );
 	}
 
-	public function testRequestBrokerPublicAbiHasCurrentMethods(): void {
+	public function test_request_broker_public_abi_has_current_methods(): void {
 		$result = $this->probe(
 			<<<'PHP'
 require_once dirname($data['bootstrap']) . '/src/Runtime/RequestBroker.php';
@@ -276,9 +276,9 @@ PHP
 		self::assertSame( array( 'activate', 'diagnostics', 'protocol_version', 'refresh_target', 'register_candidate', 'register_target', 'release_source', 'target_diagnostics', 'target_status' ), $result );
 	}
 
-	public function testBootstrapStateStaysWithTheFirstProtocolCellWhileTheSelectedRuntimeComesFromTheWinningCopy(): void {
-		$first  = $this->packageCopy( 'first', '0.1.0-beta.1' );
-		$winner = $this->packageCopy( 'winner', '0.1.0-beta.2' );
+	public function test_bootstrap_state_stays_with_the_first_protocol_cell_while_the_selected_runtime_comes_from_the_winning_copy(): void {
+		$first  = $this->package_copy( 'first', '0.1.0-beta.1' );
+		$winner = $this->package_copy( 'winner', '0.1.0-beta.2' );
 		$result = $this->probe(
 			<<<'PHP'
 require $data['first'] . '/bootstrap.php';
@@ -299,7 +299,7 @@ PHP,
 		self::assertSame( 'active', $result['broker_state'] );
 	}
 
-	public function testIncompatibleExistingBrokerIsUntouchedAndReturnsAnInactiveConflictRegistrar(): void {
+	public function test_incompatible_existing_broker_is_untouched_and_returns_an_inactive_conflict_registrar(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $existing = new stdClass();
@@ -319,7 +319,7 @@ PHP
 		self::assertFalse( $result['hooks'] );
 	}
 
-	public function testLookalikeBrokerWithTheCompleteAbiIsRejectedFailClosed(): void {
+	public function test_lookalike_broker_with_the_complete_abi_is_rejected_fail_closed(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $foreignRoot = dirname(__FILE__) . '/foreign-package';
@@ -362,7 +362,7 @@ PHP
 		self::assertSame( array(), $result['foreign_calls'] );
 	}
 
-	public function testPreloadedForeignBrokerClassCannotCreateTheSharedBroker(): void {
+	public function test_preloaded_foreign_broker_class_cannot_create_the_shared_broker(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $foreign = dirname(__FILE__) . '/foreign-broker-class.php';
@@ -385,7 +385,7 @@ PHP
 		self::assertTrue( $result['runtime_failed'] );
 	}
 
-	public function testForeignProtocolFirstStaysUntouchedAndScheduledReplacementTerminalizesTheQueuedHandle(): void {
+	public function test_foreign_protocol_first_stays_untouched_and_scheduled_replacement_terminalizes_the_queued_handle(): void {
 		$foreign = $this->probe(
 			<<<'PHP'
 final class P02ForeignProtocol { public function protocol_version(): int { return 1; } }
@@ -438,12 +438,12 @@ PHP
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
 	}
 
-	private function packageCopy( string $name, string $version ): string {
+	private function package_copy( string $name, string $version ): string {
 		$root = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/' . $name . '-' . bin2hex( random_bytes( 6 ) );
 		mkdir( $root, 0700, true );
 		copy( dirname( __DIR__, 2 ) . '/bootstrap.php', $root . '/bootstrap.php' );
 		copy( dirname( __DIR__, 2 ) . '/runtime.php', $root . '/runtime.php' );
-		$this->copyDirectory( dirname( __DIR__, 2 ) . '/src', $root . '/src' );
+		$this->copy_directory( dirname( __DIR__, 2 ) . '/src', $root . '/src' );
 		$files    = array( 'bootstrap.php', 'runtime.php' );
 		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/src', \FilesystemIterator::SKIP_DOTS ) );
 		foreach ( $iterator as $file ) {
@@ -473,7 +473,7 @@ PHP
 		return $root;
 	}
 
-	private function copyDirectory( string $source, string $destination ): void {
+	private function copy_directory( string $source, string $destination ): void {
 		mkdir( $destination, 0700, true );
 		foreach ( scandir( $source ) ?: array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
@@ -481,7 +481,7 @@ PHP
 			}
 			$from = $source . '/' . $name;
 			$to   = $destination . '/' . $name;
-			is_dir( $from ) ? $this->copyDirectory( $from, $to ) : copy( $from, $to );
+			is_dir( $from ) ? $this->copy_directory( $from, $to ) : copy( $from, $to );
 		}
 	}
 }

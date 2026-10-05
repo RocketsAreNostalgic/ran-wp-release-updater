@@ -10,16 +10,17 @@ final class P03NegativeCompositionTest extends TestCase {
 
 	private string $root;
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/p03-negative-' . bin2hex( random_bytes( 6 ) );
 		mkdir( $this->root, 0700, true );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'malformedInstalledPackageCases' )]
-	public function testMalformedInstalledFactsFailBeforeSelectedGitHubComposition(
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'malformed_installed_package_cases' )]
+	public function test_malformed_installed_facts_fail_before_selected_git_hub_composition(
 		string $type,
 		string $headers,
-		string $expectedCode
+		string $expected_code
 	): void {
 		$file   = 'plugin' === $type ? $this->plugin( $headers ) : $this->theme( $headers );
 		$result = $this->probe(
@@ -52,7 +53,7 @@ PHP,
 
 		self::assertSame( 'runtime_active', $result['activation'] );
 		self::assertTrue( $result['registered'] );
-		self::assertSame( $expectedCode, $result['status']['code'] );
+		self::assertSame( $expected_code, $result['status']['code'] );
 		self::assertFalse( $result['status']['hooks_registered'] );
 		self::assertNull( $result['status']['native'] );
 		self::assertSame( 0, $result['hooks'] );
@@ -62,7 +63,7 @@ PHP,
 	}
 
 	/** @return array<string,array{string,string,string}> */
-	public static function malformedInstalledPackageCases(): array {
+	public static function malformed_installed_package_cases(): array {
 		return array(
 			'plugin missing Update URI'   => array( 'plugin', "Plugin Name: Broken\nVersion: 1.0.0\n", 'installed_header_missing' ),
 			'plugin ambiguous Update URI' => array(
@@ -83,8 +84,8 @@ PHP,
 		);
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'unsupportedFilesystemMethods' )]
-	public function testEveryUnsupportedFilesystemMethodIsPassiveAcrossNativeCallbacks( string $method ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'unsupported_filesystem_methods' )]
+	public function test_every_unsupported_filesystem_method_is_passive_across_native_callbacks( string $method ): void {
 		$result = $this->probe(
 			<<<'PHP'
 $credentials = 0;
@@ -153,7 +154,7 @@ PHP,
 	}
 
 	/** @return array<string,array{string}> */
-	public static function unsupportedFilesystemMethods(): array {
+	public static function unsupported_filesystem_methods(): array {
 		return array(
 			'ftpext'     => array( 'ftpext' ),
 			'ftpsockets' => array( 'ftpsockets' ),
@@ -179,7 +180,7 @@ PHP,
 
 	/** @param array<string,mixed> $data @return array<string,mixed> */
 	private function probe( string $body, array $data ): array {
-		$runtime           = $this->packageCopy();
+		$runtime           = $this->package_copy();
 		$probe             = $this->root . '/probe-' . bin2hex( random_bytes( 6 ) ) . '.php';
 		$data['bootstrap'] = $runtime . '/bootstrap.php';
 		$prefix            = '<?php define("WP_PLUGIN_DIR", ' . var_export( $this->root, true ) . '); '
@@ -201,13 +202,13 @@ PHP,
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
 	}
 
-	private function packageCopy(): string {
+	private function package_copy(): string {
 		$source = dirname( __DIR__, 2 );
 		$copy   = $this->root . '/runtime-' . bin2hex( random_bytes( 6 ) );
 		mkdir( $copy, 0700, true );
 		copy( $source . '/bootstrap.php', $copy . '/bootstrap.php' );
 		copy( $source . '/runtime.php', $copy . '/runtime.php' );
-		$this->copyDirectory( $source . '/src', $copy . '/src' );
+		$this->copy_directory( $source . '/src', $copy . '/src' );
 		$files    = array( 'bootstrap.php', 'runtime.php' );
 		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $copy . '/src', \FilesystemIterator::SKIP_DOTS ) );
 		foreach ( $iterator as $file ) {
@@ -237,14 +238,14 @@ PHP,
 		return $copy;
 	}
 
-	private function copyDirectory( string $source, string $destination ): void {
+	private function copy_directory( string $source, string $destination ): void {
 		mkdir( $destination, 0700, true );
 		foreach ( scandir( $source ) ?: array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
 				continue;
 			}
 			$from = $source . '/' . $name;
-			is_dir( $from ) ? $this->copyDirectory( $from, $destination . '/' . $name ) : copy( $from, $destination . '/' . $name );
+			is_dir( $from ) ? $this->copy_directory( $from, $destination . '/' . $name ) : copy( $from, $destination . '/' . $name );
 		}
 	}
 }

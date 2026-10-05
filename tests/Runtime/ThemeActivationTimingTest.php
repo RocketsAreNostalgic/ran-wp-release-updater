@@ -10,6 +10,7 @@ final class ThemeActivationTimingTest extends TestCase {
 
 	private string $root;
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/theme-activation-timing-' . bin2hex( random_bytes( 6 ) );
 		mkdir( $this->root . '/active-theme', 0700, true );
@@ -18,7 +19,7 @@ final class ThemeActivationTimingTest extends TestCase {
 		file_put_contents( $this->root . '/inactive-theme/style.css', "/*\nTheme Name: Inactive Theme\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/inactive-theme\n*/\n" );
 	}
 
-	public function testThemeSelfRegistrationBeforeTheBoundaryActivatesAndItsNativeCallbackStartsTheThemeCutoff(): void {
+	public function test_theme_self_registration_before_the_boundary_activates_and_its_native_callback_starts_the_theme_cutoff(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $active = null;
@@ -44,7 +45,7 @@ PHP
 		self::assertSame( 11, $result['hooks'] );
 	}
 
-	public function testDirectInactiveThemeDeclarationAfterThemeCutoffIsDeferredWithoutNativeWorkOrHooks(): void {
+	public function test_direct_inactive_theme_declaration_after_theme_cutoff_is_deferred_without_native_work_or_hooks(): void {
 		$result = $this->probe(
 			<<<'PHP'
 $active = null;
@@ -88,7 +89,7 @@ PHP
 		$file   = $this->root . '/probe.php';
 		$data   = array(
 			'active'    => $this->root . '/active-theme/style.css',
-			'bootstrap' => $this->packageCopy() . '/bootstrap.php',
+			'bootstrap' => $this->package_copy() . '/bootstrap.php',
 			'hooks'     => dirname( __DIR__ ) . '/Support/WordPressHookFixture.php',
 			'inactive'  => $this->root . '/inactive-theme/style.css',
 		);
@@ -99,12 +100,12 @@ PHP
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
 	}
 
-	private function packageCopy(): string {
+	private function package_copy(): string {
 		$copy = $this->root . '/runtime';
 		mkdir( $copy, 0700, true );
 		copy( dirname( __DIR__, 2 ) . '/bootstrap.php', $copy . '/bootstrap.php' );
 		copy( dirname( __DIR__, 2 ) . '/runtime.php', $copy . '/runtime.php' );
-		$this->copyDirectory( dirname( __DIR__, 2 ) . '/src', $copy . '/src' );
+		$this->copy_directory( dirname( __DIR__, 2 ) . '/src', $copy . '/src' );
 		$files    = array( 'bootstrap.php', 'runtime.php' );
 		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $copy . '/src', \FilesystemIterator::SKIP_DOTS ) );
 		foreach ( $iterator as $candidate ) {
@@ -114,8 +115,8 @@ PHP
 		}
 		sort( $files, SORT_STRING );
 		$payload = '';
-		foreach ( $files as $runtimeFile ) {
-			$payload .= $runtimeFile . "\0" . hash_file( 'sha256', $copy . '/' . $runtimeFile ) . "\n";
+		foreach ( $files as $runtime_file ) {
+			$payload .= $runtime_file . "\0" . hash_file( 'sha256', $copy . '/' . $runtime_file ) . "\n";
 		}
 		file_put_contents(
 			$copy . '/runtime-copy.json',
@@ -134,7 +135,7 @@ PHP
 		return $copy;
 	}
 
-	private function copyDirectory( string $source, string $destination ): void {
+	private function copy_directory( string $source, string $destination ): void {
 		mkdir( $destination, 0700, true );
 		foreach ( scandir( $source ) ?: array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
@@ -142,7 +143,7 @@ PHP
 			}
 			$from = $source . '/' . $name;
 			$to   = $destination . '/' . $name;
-			is_dir( $from ) ? $this->copyDirectory( $from, $to ) : copy( $from, $to );
+			is_dir( $from ) ? $this->copy_directory( $from, $to ) : copy( $from, $to );
 		}
 	}
 }

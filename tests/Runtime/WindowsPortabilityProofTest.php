@@ -10,6 +10,7 @@ final class WindowsPortabilityProofTest extends TestCase {
 
 	private string $workspace;
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->workspace = dirname( __DIR__, 2 ) . '/.workspaces/windows-portability-proof-' . bin2hex( random_bytes( 8 ) );
 		mkdir( $this->workspace . '/plugins/example', 0700, true );
@@ -17,13 +18,14 @@ final class WindowsPortabilityProofTest extends TestCase {
 		mkdir( $this->workspace . '/php-tmp', 0700, true );
 	}
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function tearDown(): void {
 		if ( isset( $this->workspace ) ) {
 			$this->remove( $this->workspace );
 		}
 	}
 
-	public function testCheckedInRuntimeIdentityActivatesAndResolvesPluginAndThemeOnDrivePaths(): void {
+	public function test_checked_in_runtime_identity_activates_and_resolves_plugin_and_theme_on_drive_paths(): void {
 		$plugin = $this->workspace . '/plugins/example/main.php';
 		$theme  = $this->workspace . '/themes/example/style.css';
 		file_put_contents( $plugin, "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example-plugin\n*/\n" );
@@ -54,8 +56,8 @@ final class WindowsPortabilityProofTest extends TestCase {
 		self::assertSame( 19, $result['hooks'] );
 	}
 
-	public function testCopiedPackageBootstrapVerifiesProvenanceOnNativePaths(): void {
-		$copy   = $this->packageCopy();
+	public function test_copied_package_bootstrap_verifies_provenance_on_native_paths(): void {
+		$copy   = $this->package_copy();
 		$plugin = $this->workspace . '/plugins/example/main.php';
 		$theme  = $this->workspace . '/themes/example/style.css';
 		file_put_contents( $plugin, "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example-plugin\n*/\n" );
@@ -76,21 +78,21 @@ final class WindowsPortabilityProofTest extends TestCase {
 		self::assertSame( 'target_active', $result['theme']['code'] );
 	}
 
-	private function packageCopy(): string {
+	private function package_copy(): string {
 		$root = $this->workspace . '/package';
 		mkdir( $root, 0700, true );
 		$source = dirname( __DIR__, 2 );
 		foreach ( array( 'bootstrap.php', 'runtime.php' ) as $file ) {
 			copy( $source . DIRECTORY_SEPARATOR . $file, $root . DIRECTORY_SEPARATOR . $file );
 		}
-		$this->copyDirectory( $source . DIRECTORY_SEPARATOR . 'src', $root . DIRECTORY_SEPARATOR . 'src' );
-		$checkedIn = json_decode( (string) file_get_contents( $source . DIRECTORY_SEPARATOR . 'runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		$this->copy_directory( $source . DIRECTORY_SEPARATOR . 'src', $root . DIRECTORY_SEPARATOR . 'src' );
+		$checked_in = json_decode( (string) file_get_contents( $source . DIRECTORY_SEPARATOR . 'runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 		file_put_contents(
 			$root . DIRECTORY_SEPARATOR . 'runtime-copy.json',
 			json_encode(
 				array(
 					'package_revision' => $this->identity( $root ),
-					'package_version'  => $checkedIn['package_version'],
+					'package_version'  => $checked_in['package_version'],
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
 					'runtime_protocol' => 5,
@@ -120,7 +122,7 @@ final class WindowsPortabilityProofTest extends TestCase {
 		return hash( 'sha256', $payload );
 	}
 
-	private function copyDirectory( string $source, string $destination ): void {
+	private function copy_directory( string $source, string $destination ): void {
 		mkdir( $destination, 0700, true );
 		foreach ( scandir( $source ) ?: array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
@@ -128,7 +130,7 @@ final class WindowsPortabilityProofTest extends TestCase {
 			}
 			$from = $source . DIRECTORY_SEPARATOR . $name;
 			$to   = $destination . DIRECTORY_SEPARATOR . $name;
-			is_dir( $from ) ? $this->copyDirectory( $from, $to ) : copy( $from, $to );
+			is_dir( $from ) ? $this->copy_directory( $from, $to ) : copy( $from, $to );
 		}
 	}
 

@@ -13,12 +13,13 @@ final class P04CompatibilityNetworkScaleTest extends TestCase {
 
 	private string $root;
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.4/php-tmp/' . bin2hex( random_bytes( 8 ) );
 		mkdir( $this->root, 0700, true );
 	}
 
-	public function testCompatibleCopiesSelectOneRuntimeAndOneTargetHookSet(): void {
+	public function test_compatible_copies_select_one_runtime_and_one_target_hook_set(): void {
 		$first  = $this->package( 'a-copy' );
 		$second = $this->package( 'z-copy' );
 		$plugin = $this->plugin( 'compatible', 'https://github.com/acme/compatible' );
@@ -57,7 +58,7 @@ PHP,
 		self::assertSame( 10, $result['hooks'] );
 	}
 
-	public function testMainAndSubsiteDeclarationsShareOneNetworkTargetAndFenceKey(): void {
+	public function test_main_and_subsite_declarations_share_one_network_target_and_fence_key(): void {
 		$plugin = $this->plugin( 'network', 'https://github.com/acme/network' );
 		$result = $this->probe(
 			<<<'PHP'
@@ -96,8 +97,8 @@ PHP,
 		self::assertArrayNotHasKey( 'blog_id', $result['subsite'] );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'targetCounts' )]
-	public function testMixedTargetRegistrationStaysWithinTheP0ScaleEnvelope( int $count ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'target_counts' )]
+	public function test_mixed_target_registration_stays_within_the_p0_scale_envelope( int $count ): void {
 		$targets = array();
 		for ( $index = 0; $index < $count; ++$index ) {
 			$targets[] = array(
@@ -158,7 +159,7 @@ PHP,
 	}
 
 	/** @return array<string,array{int}> */
-	public static function targetCounts(): array {
+	public static function target_counts(): array {
 		return array(
 			'one'    => array( 1 ),
 			'five'   => array( 5 ),
@@ -168,7 +169,7 @@ PHP,
 	}
 
 	private function plugin( string $name, string $uri ): string {
-		return $this->writeTarget(
+		return $this->write_target(
 			$this->root . '/plugins/' . $name . '/main.php',
 			"<?php\n/*\nPlugin Name: {$name}\nVersion: 1.0.0\nUpdate URI: {$uri}\n*/\n"
 		);
@@ -177,18 +178,18 @@ PHP,
 	private function target( int $index, string $type ): string {
 		$name = sprintf( '%02d', $index );
 		if ( 'plugin' === $type ) {
-			return $this->writeTarget(
+			return $this->write_target(
 				$this->root . '/plugins/scale-' . $name . '/main.php',
 				"<?php\n/*\nPlugin Name: Scale {$name}\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/scale-{$index}\n*/\n"
 			);
 		}
-		return $this->writeTarget(
+		return $this->write_target(
 			$this->root . '/themes/scale-' . $name . '/style.css',
 			"/*\nTheme Name: Scale {$name}\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/scale-{$index}\n*/\n"
 		);
 	}
 
-	private function writeTarget( string $file, string $contents ): string {
+	private function write_target( string $file, string $contents ): string {
 		if ( ! is_dir( dirname( $file ) ) ) {
 			mkdir( dirname( $file ), 0700, true );
 		}

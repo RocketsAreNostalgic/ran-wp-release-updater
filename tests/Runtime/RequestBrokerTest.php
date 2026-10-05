@@ -10,11 +10,13 @@ final class RequestBrokerTest extends TestCase {
 
 	private string $parent;
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->parent = dirname( __DIR__, 2 ) . '/.workspaces/p0.1/request-broker-' . bin2hex( random_bytes( 8 ) );
 		mkdir( $this->parent, 0700, true );
 	}
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function tearDown(): void {
 		$this->remove( $this->parent );
 	}
@@ -64,7 +66,7 @@ final class RequestBrokerTest extends TestCase {
 		}
 	}
 
-	public function testDeclarationPathsAcceptPosixDriveQualifiedAndUncAbsoluteForms(): void {
+	public function test_declaration_paths_accept_posix_drive_qualified_and_unc_absolute_forms(): void {
 		$broker      = new \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker( activation_boundary_missed: false, selected_runtime_state: null );
 		$method      = new \ReflectionMethod( $broker, 'declaration_code' );
 		$declaration = array(
@@ -90,7 +92,7 @@ final class RequestBrokerTest extends TestCase {
 		}
 	}
 
-	public function testDifferentPhysicalCopiesUseOneBrokerAndLoadOnlyTheHighestCompatibleRuntime(): void {
+	public function test_different_physical_copies_use_one_broker_and_load_only_the_highest_compatible_runtime(): void {
 		$old = $this->copy( 'old', '0.1.0-beta.1', 'a' );
 		$new = $this->copy( 'new', '0.1.0-beta.2', 'b' );
 		foreach ( array( array( $old, $new ), array( $new, $old ) ) as $order ) {
@@ -110,7 +112,7 @@ final class RequestBrokerTest extends TestCase {
 		}
 	}
 
-	public function testThreeOrMoreCompatibleCopiesSelectOneHighestRuntimeInEveryLoadOrder(): void {
+	public function test_three_or_more_compatible_copies_select_one_highest_runtime_in_every_load_order(): void {
 		$copies = array(
 			$this->copy( 'beta-one', '0.1.0-beta.1', 'a' ),
 			$this->copy( 'beta-two', '0.1.0-beta.2', 'b' ),
@@ -139,7 +141,7 @@ final class RequestBrokerTest extends TestCase {
 		}
 	}
 
-	public function testMoreThanEightUniqueCopiesAreAdmittedAndOnlyTheHighestRuntimeLoads(): void {
+	public function test_more_than_eight_unique_copies_are_admitted_and_only_the_highest_runtime_loads(): void {
 		$copies = array();
 		for ( $index = 1; $index <= 9; ++$index ) {
 			$copies[] = $this->copy( 'copy-' . $index, '0.1.0-beta.' . $index, 'a' );
@@ -157,7 +159,7 @@ final class RequestBrokerTest extends TestCase {
 		self::assertSame( 'copy-9', $result['marker'] );
 	}
 
-	public function testTwoPartWordPressRuntimeVersionSelectsACompatibleCopy(): void {
+	public function test_two_part_word_press_runtime_version_selects_a_compatible_copy(): void {
 		$copy   = $this->copy( 'copy', '0.1.0-beta.2', 'a' );
 		$result = $this->probe(
 			'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"7.0")); echo json_encode(array("result"=>$result,"marker"=>file_exists($data["marker"])));',
@@ -172,7 +174,7 @@ final class RequestBrokerTest extends TestCase {
 		self::assertTrue( $result['marker'] );
 	}
 
-	public function testEqualVersionDifferentRevisionFailsClosedWithoutLoadingEitherRuntime(): void {
+	public function test_equal_version_different_revision_fails_closed_without_loading_either_runtime(): void {
 		$left  = $this->copy( 'left', '0.1.0-beta.2', 'a' );
 		$right = $this->copy( 'right', '0.1.0-beta.2', 'b' );
 		foreach ( array( array( $left, $right ), array( $right, $left ) ) as $order ) {
@@ -190,7 +192,7 @@ final class RequestBrokerTest extends TestCase {
 		}
 	}
 
-	public function testInvalidAndLateCopiesRemainPassiveAndOneShot(): void {
+	public function test_invalid_and_late_copies_remain_passive_and_one_shot(): void {
 		$copy    = $this->copy( 'copy', '0.1.0-beta.2', 'a' );
 		$invalid = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $duplicate=$broker->register_candidate($data["copy"] . "/runtime-copy.json"); $bad=$broker->register_candidate($data["copy"] . "/wrong.json"); $first=$broker->activate(array("php_version"=>"8.0.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $late=$broker->register_candidate($data["copy"] . "/runtime-copy.json"); $second=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); echo json_encode(array("duplicate"=>$duplicate,"bad"=>$bad,"late"=>$late,"first"=>$first,"second"=>$second));', array( 'copy' => $copy ) );
 		self::assertTrue( $invalid['duplicate'] );
@@ -201,7 +203,7 @@ final class RequestBrokerTest extends TestCase {
 		self::assertContains( 'runtime_selection_inactive', array_column( $invalid['second']['diagnostics'], 'code' ) );
 	}
 
-	public function testDiagnosticsAreBoundedForRepeatedInvalidAndLateRegistrations(): void {
+	public function test_diagnostics_are_bounded_for_repeated_invalid_and_late_registrations(): void {
 		$copy   = $this->copy( 'copy', '0.1.0-beta.2', 'a' );
 		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; for ($index=0; $index<17; ++$index) $broker->register_candidate($data["copy"] . "/wrong.json"); $invalid=$broker->diagnostics(); $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); for ($index=0; $index<17; ++$index) $broker->register_candidate($data["copy"] . "/runtime-copy.json"); echo json_encode(array("invalid"=>$invalid,"late"=>$broker->diagnostics()));', array( 'copy' => $copy ) );
 		self::assertCount( 16, $result['invalid']['diagnostics'] );
@@ -209,7 +211,7 @@ final class RequestBrokerTest extends TestCase {
 		self::assertSame( $result['invalid']['diagnostics'], $result['late']['diagnostics'] );
 	}
 
-	public function testForeignBrokerWithAnIncompleteShapeIsUntouchedAndReturnsAConflictRegistrar(): void {
+	public function test_foreign_broker_with_an_incomplete_shape_is_untouched_and_returns_a_conflict_registrar(): void {
 		$copy    = $this->copy( 'copy', '0.1.0-beta.2', 'a' );
 		$foreign = $this->parent . '/foreign';
 		mkdir( $foreign, 0700, true );
@@ -236,45 +238,45 @@ PHP
 		self::assertSame( 'protocol_conflict_inactive', $result['code'] );
 	}
 
-	public function testThrownRuntimeLoadAndInvalidRuntimeHandoffsFailClosedWithDistinctCodes(): void {
+	public function test_thrown_runtime_load_and_invalid_runtime_handoffs_fail_closed_with_distinct_codes(): void {
 		$throwing = $this->copy( 'throwing', '0.1.0-beta.2', 'a' );
-		$this->replaceRuntime( $throwing, "<?php\nthrow new RuntimeException('load failure');\n" );
+		$this->replace_runtime( $throwing, "<?php\nthrow new RuntimeException('load failure');\n" );
 		$thrown = $this->activate( $throwing );
 		self::assertFalse( $thrown['loaded'] );
 		self::assertSame( 'runtime_load_failed', $thrown['code'] );
 
 		$malformed = $this->copy( 'malformed', '0.1.0-beta.2', 'b' );
-		$this->replaceRuntime( $malformed, "<?php\nreturn new class { public function boot(array \$environment, array \$submissions): array { return array(); } };\n" );
+		$this->replace_runtime( $malformed, "<?php\nreturn new class { public function boot(array \$environment, array \$submissions): array { return array(); } };\n" );
 		$invalid = $this->activate( $malformed );
 		self::assertFalse( $invalid['loaded'] );
 		self::assertSame( 'runtime_handoff_invalid', $invalid['code'] );
 
-		$foreignFile = $this->parent . '/foreign-handoff.php';
-		file_put_contents( $foreignFile, "<?php class P0ForeignHandoff { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array(); } }\n" );
+		$foreign_file = $this->parent . '/foreign-handoff.php';
+		file_put_contents( $foreign_file, "<?php class P0ForeignHandoff { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array(); } }\n" );
 		$foreign = $this->copy( 'foreign-handoff', '0.1.0-beta.2', 'c' );
-		$this->replaceRuntime( $foreign, "<?php\nrequire_once " . var_export( $foreignFile, true ) . ";\nreturn new P0ForeignHandoff();\n" );
-		$wrongOrigin = $this->activate( $foreign );
-		self::assertFalse( $wrongOrigin['loaded'] );
-		self::assertSame( 'runtime_handoff_invalid', $wrongOrigin['code'] );
+		$this->replace_runtime( $foreign, "<?php\nrequire_once " . var_export( $foreign_file, true ) . ";\nreturn new P0ForeignHandoff();\n" );
+		$wrong_origin = $this->activate( $foreign );
+		self::assertFalse( $wrong_origin['loaded'] );
+		self::assertSame( 'runtime_handoff_invalid', $wrong_origin['code'] );
 	}
 
-	public function testWrongOriginTargetHandleDuringBootInvalidatesTheHandoff(): void {
-		$foreignFile = $this->parent . '/foreign-target.php';
-		file_put_contents( $foreignFile, "<?php class P0ForeignTarget { public function status(): array { return array(); } public function diagnostics(): array { return array(); } public function refresh(): bool { return true; } }\n" );
+	public function test_wrong_origin_target_handle_during_boot_invalidates_the_handoff(): void {
+		$foreign_file = $this->parent . '/foreign-target.php';
+		file_put_contents( $foreign_file, "<?php class P0ForeignTarget { public function status(): array { return array(); } public function diagnostics(): array { return array(); } public function refresh(): bool { return true; } }\n" );
 		$copy = $this->copy( 'foreign-target', '0.1.0-beta.2', 'a' );
-		$this->replaceRuntime( $copy, "<?php\nrequire_once " . var_export( $foreignFile, true ) . ";\nreturn new class { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(static fn(array \$submission): array => array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()), \$submissions)); } public function register_target(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()); } };\n" );
+		$this->replace_runtime( $copy, "<?php\nrequire_once " . var_export( $foreign_file, true ) . ";\nreturn new class { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(static fn(array \$submission): array => array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()), \$submissions)); } public function register_target(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()); } };\n" );
 		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode($broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")));', array( 'copy' => $copy ) );
 		self::assertFalse( $result['loaded'] );
 		self::assertSame( 'runtime_handoff_invalid', $result['code'] );
 	}
 
-	public function testInheritedExtraMethodsAndMagicCallsAreRejected(): void {
+	public function test_inherited_extra_methods_and_magic_calls_are_rejected(): void {
 		foreach ( array(
 			'inherited' => 'class P0BaseTarget { public function extra(): void {} } class P0Target extends P0BaseTarget { public function status(): array { $GLOBALS["ran_test_target_called"] = true; return array(); } public function diagnostics(): array { return array(); } public function refresh(): bool { return true; } }',
 			'magic'     => 'class P0Target { public function status(): array { $GLOBALS["ran_test_target_called"] = true; return array(); } public function diagnostics(): array { return array(); } public function refresh(): bool { return true; } public function __call(string $name, array $arguments): mixed { return null; } }',
 		) as $mode => $target ) {
 			$copy = $this->copy( 'reject-' . $mode, '0.1.0-beta.2', substr( $mode, 0, 1 ) );
-			$this->replaceRuntime( $copy, "<?php\n" . $target . "\nreturn new class { public function boot(array \$environment, array \$submissions): array { \$GLOBALS['ran_test_target_checked'] = true; return array('accepted' => true, 'code' => 'runtime_active', 'results' => array_map(static fn(array \$submission): array => array('submission_id' => \$submission['submission_id'], 'accepted' => true, 'code' => 'target_active', 'target_key' => str_repeat('a', 64), 'target_handle' => new P0Target()), \$submissions)); } public function register_target(array \$submission): array { return array('submission_id' => \$submission['submission_id'], 'accepted' => true, 'code' => 'target_active', 'target_key' => str_repeat('a', 64), 'target_handle' => new P0Target()); } public function release_source(array \$declaration): array { return array(); } };\n" );
+			$this->replace_runtime( $copy, "<?php\n" . $target . "\nreturn new class { public function boot(array \$environment, array \$submissions): array { \$GLOBALS['ran_test_target_checked'] = true; return array('accepted' => true, 'code' => 'runtime_active', 'results' => array_map(static fn(array \$submission): array => array('submission_id' => \$submission['submission_id'], 'accepted' => true, 'code' => 'target_active', 'target_key' => str_repeat('a', 64), 'target_handle' => new P0Target()), \$submissions)); } public function register_target(array \$submission): array { return array('submission_id' => \$submission['submission_id'], 'accepted' => true, 'code' => 'target_active', 'target_key' => str_repeat('a', 64), 'target_handle' => new P0Target()); } public function release_source(array \$declaration): array { return array(); } };\n" );
 			$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); $result=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $result["booted"]=$GLOBALS["ran_test_target_checked"]??false; $result["target_called"]=$GLOBALS["ran_test_target_called"]??false; echo json_encode($result);', array( 'copy' => $copy ) );
 			self::assertTrue( $result['booted'], $mode );
 			self::assertFalse( $result['target_called'], $mode );
@@ -283,9 +285,9 @@ PHP
 		}
 	}
 
-	public function testImmediateAcceptedResultIncludesDuplicateAndDeferredCompositions(): void {
+	public function test_immediate_accepted_result_includes_duplicate_and_deferred_compositions(): void {
 		$copy = $this->copy( 'accepted-deferred', '0.1.0-beta.2', 'd' );
-		$this->replaceRuntime(
+		$this->replace_runtime(
 			$copy,
 			<<<'PHP'
 <?php
@@ -309,7 +311,7 @@ PHP
 		self::assertSame( 'declaration_deferred_operation_started', $result['code'] );
 	}
 
-	public function testSelectedRuntimeHandoffRejectsBrokerLivenessChanges(): void {
+	public function test_selected_runtime_handoff_rejects_broker_liveness_changes(): void {
 		foreach ( array( 'replacement', 'protocol' ) as $mode ) {
 			$result = $this->probe(
 				'$broker=new class { public int $protocol=5; public function protocol_version(): int { return $this->protocol; } }; $GLOBALS["ran_wp_release_updater_v1_broker"]=$broker; $handoff=require $data["runtime"]; if ("replacement"===$data["mode"]) $GLOBALS["ran_wp_release_updater_v1_broker"]=new stdClass(); if ("protocol"===$data["mode"]) $broker->protocol=1; try { $handoff->boot(array(),array()); echo json_encode(array("failed"=>false)); } catch (Throwable) { echo json_encode(array("failed"=>true)); }',
@@ -322,9 +324,9 @@ PHP
 		}
 	}
 
-	public function testInvalidActiveCompositionResultFailsClosedAndTerminatesTheHandle(): void {
+	public function test_invalid_active_composition_result_fails_closed_and_terminates_the_handle(): void {
 		$copy = $this->copy( 'invalid-active-result', '0.1.0-beta.2', 'a' );
-		$this->replaceRuntime( $copy, "<?php\nreturn new class { public function boot(array \$environment,array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array(); } public function release_source(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); } };\n" );
+		$this->replace_runtime( $copy, "<?php\nreturn new class { public function boot(array \$environment,array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array(); } public function release_source(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); } };\n" );
 		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $active=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $registered=$broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); $status=$broker->target_status($registered["submission_id"]); $again=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); echo json_encode(array("active"=>$active,"registered"=>$registered,"status"=>$status,"again"=>$again));', array( 'copy' => $copy ) );
 
 		self::assertTrue( $result['active']['loaded'] );
@@ -335,9 +337,9 @@ PHP
 		self::assertSame( 'runtime_handoff_invalid', $result['again']['code'] );
 	}
 
-	public function testProjectsRuntimeLivenessLossStatusAndDiagnosticsFromAnActiveTarget(): void {
+	public function test_projects_runtime_liveness_loss_status_and_diagnostics_from_an_active_target(): void {
 		$copy = $this->copy( 'runtime-liveness-lost', '0.1.0-beta.2', 'a' );
-		$this->replaceRuntime(
+		$this->replace_runtime(
 			$copy,
 			<<<'PHP'
 <?php
@@ -363,9 +365,9 @@ PHP
 		self::assertSame( array( 'runtime_liveness_lost' ), array_column( $result['diagnostics']['diagnostics'], 'code' ) );
 	}
 
-	public function testPostBootstrapCompositionCannotSubmitTheWrongSubmissionId(): void {
+	public function test_post_bootstrap_composition_cannot_submit_the_wrong_submission_id(): void {
 		$copy = $this->copy( 'wrong-submission', '0.1.0-beta.2', 'a' );
-		$this->replaceRuntime(
+		$this->replace_runtime(
 			$copy,
 			<<<'PHP'
 <?php
@@ -381,9 +383,9 @@ PHP
 		self::assertSame( 'runtime_handoff_invalid', $result['registered']['code'] );
 	}
 
-	public function testReleaseSourceRejectsUnknownOperationalOutcomeFromTheCurrentHandoff(): void {
+	public function test_release_source_rejects_unknown_operational_outcome_from_the_current_handoff(): void {
 		$copy = $this->copy( 'unknown-release-outcome', '0.1.0-beta.2', 'a' );
-		$this->replaceRuntime( $copy, "<?php\nreturn new class { public function boot(array \$environment,array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null); } public function release_source(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'future_release_outcome','source_handle'=>null); } };\n" );
+		$this->replace_runtime( $copy, "<?php\nreturn new class { public function boot(array \$environment,array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null); } public function release_source(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'future_release_outcome','source_handle'=>null); } };\n" );
 		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")); $source=$broker->release_source(array("provider_code"=>"github","target_type"=>"plugin","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode(array("source"=>$source,"diagnostics"=>$broker->diagnostics()));', array( 'copy' => $copy ) );
 
 		self::assertSame(
@@ -399,9 +401,9 @@ PHP
 	}
 
 	#[\PHPUnit\Framework\Attributes\Test]
-	public function testSameProtocolAdditiveDiagnosticReachesTheValidatorThenFailsClosed(): void {
+	public function test_same_protocol_additive_diagnostic_reaches_the_validator_then_fails_closed(): void {
 		$copy = $this->copy( 'unknown-current-diagnostic', '0.1.0-beta.2', 'a' );
-		$this->replaceRuntime(
+		$this->replace_runtime(
 			$copy,
 			<<<'PHP'
 <?php
@@ -466,7 +468,7 @@ PHP
 	}
 
 	/** Replace a copied runtime and bind its manifest to its new production bytes. */
-	private function replaceRuntime( string $root, string $source ): void {
+	private function replace_runtime( string $root, string $source ): void {
 		file_put_contents( $root . '/runtime.php', $source );
 		$copy                     = json_decode( (string) file_get_contents( $root . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 		$copy['package_revision'] = $this->identity( $root );
