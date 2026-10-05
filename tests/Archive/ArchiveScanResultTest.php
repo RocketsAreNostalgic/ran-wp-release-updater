@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Archive\ArchiveScanResult;
 
 final class ArchiveScanResultTest extends TestCase {
-	public function test_named_ready_factory_preserves_scan_facts(): void {
+	public function testNamedReadyFactoryPreservesScanFacts(): void {
 		$entries = array(
 			array(
 				'name'            => 'plugin/main.php',
@@ -26,7 +26,7 @@ final class ArchiveScanResultTest extends TestCase {
 		self::assertSame( 15, $result->expanded_bytes() );
 	}
 
-	public function test_named_blocked_factory_retains_only_failure_code(): void {
+	public function testNamedBlockedFactoryRetainsOnlyFailureCode(): void {
 		$result = ArchiveScanResult::blocked( failure_code: 'archive_size_limit' );
 		self::assertFalse( $result->is_valid() );
 		self::assertSame( 'archive_size_limit', $result->failure_code() );

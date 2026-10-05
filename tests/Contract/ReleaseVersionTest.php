@@ -9,20 +9,20 @@ use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 
 final class ReleaseVersionTest extends TestCase {
 
-	public function test_accepted_version_order_is_antisymmetric_and_transitive(): void {
+	public function testAcceptedVersionOrderIsAntisymmetricAndTransitive(): void {
 		$ordered = array( '0.0.1', '1.0.0-999999999999999999999999999999', '1.0.0-1000000000000000000000000000000', '1.0.0-alpha', '1.0.0-alpha.1', '1.0.0-alpha.beta', '1.0.0-beta', '1.0.0-beta.2', '1.0.0-beta.11', '1.0.0-rc.1', '1.0.0', '1.0.1-x.1', '1.0.1-y.1', '1.0.1', '1.1.0', '2.0.0' );
-		foreach ( $ordered as $left_index => $left ) {
+		foreach ( $ordered as $leftIndex => $left ) {
 			self::assertSame( 0, ReleaseVersion::compare( $left, $left ) );
-			foreach ( $ordered as $right_index => $right ) {
-				if ( $left_index >= $right_index ) {
+			foreach ( $ordered as $rightIndex => $right ) {
+				if ( $leftIndex >= $rightIndex ) {
 					continue;
 				}
 				self::assertSame( -1, ReleaseVersion::compare( $left, $right ) );
 				self::assertSame( 1, ReleaseVersion::compare( $right, $left ) );
 				self::assertSame( ReleaseVersion::RELATIONSHIP_OLDER, ReleaseVersion::relationship( $left, $right ) );
 				self::assertSame( ReleaseVersion::RELATIONSHIP_NEWER, ReleaseVersion::relationship( $right, $left ) );
-				foreach ( $ordered as $third_index => $third ) {
-					if ( $right_index < $third_index ) {
+				foreach ( $ordered as $thirdIndex => $third ) {
+					if ( $rightIndex < $thirdIndex ) {
 						self::assertSame( -1, ReleaseVersion::compare( $left, $third ) );
 					}
 				}
@@ -30,19 +30,19 @@ final class ReleaseVersionTest extends TestCase {
 		}
 	}
 
-	public function test_stable_header_shorthand_has_canonical_equality(): void {
+	public function testStableHeaderShorthandHasCanonicalEquality(): void {
 		self::assertSame( 0, ReleaseVersion::compare( '2.1', '2.1.0' ) );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'invalid_comparison_provider' )]
-	public function test_invalid_versions_have_one_fixed_relationship( string $version ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'invalidComparisonProvider' )]
+	public function testInvalidVersionsHaveOneFixedRelationship( string $version ): void {
 		self::assertNull( ReleaseVersion::compare( $version, '1.0.0' ) );
 		self::assertNull( ReleaseVersion::compare( '1.0.0', $version ) );
 		self::assertSame( ReleaseVersion::RELATIONSHIP_INVALID, ReleaseVersion::relationship( $version, '1.0.0' ) );
 	}
 
 	/** @return array<string, array{string}> */
-	public static function invalid_comparison_provider(): array {
+	public static function invalidComparisonProvider(): array {
 		return array(
 			'build metadata'   => array( '1.0.0+build.1' ),
 			'tag marker'       => array( 'v1.0.0' ),

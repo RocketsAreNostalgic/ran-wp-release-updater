@@ -28,7 +28,6 @@ final class AcquisitionReceiptTest extends TestCase {
 
 	/** @var list<string> */
 	private array $archives = array();
-	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function tearDown(): void {
 		foreach ( $this->archives as $archive ) {
 			if ( is_file( $archive ) ) {
@@ -36,12 +35,12 @@ final class AcquisitionReceiptTest extends TestCase {
 			}
 		} parent::tearDown(); }
 
-	public function test_only_validator_issued_packages_mint_identical_one_use_receipts(): void {
-		list( $validator, $descriptor, $state, $first_package ) = $this->ready();
-		$second_package = $validator->validate( $descriptor, $this->policy(), $this->archives[0] );
-		$first          = AcquisitionReceipt::issue( $state, $descriptor, $validator, $first_package, 10 );
-		$second         = AcquisitionReceipt::issue( $state, $descriptor, $validator, $second_package, 10 );
-		$manifest       = $first_package->to_array();
+	public function testOnlyValidatorIssuedPackagesMintIdenticalOneUseReceipts(): void {
+		list( $validator, $descriptor, $state, $firstPackage ) = $this->ready();
+		$secondPackage = $validator->validate( $descriptor, $this->policy(), $this->archives[0] );
+		$first         = AcquisitionReceipt::issue( $state, $descriptor, $validator, $firstPackage, 10 );
+		$second        = AcquisitionReceipt::issue( $state, $descriptor, $validator, $secondPackage, 10 );
+		$manifest      = $firstPackage->to_array();
 		self::assertSame(
 			$first,
 			AcquisitionReceipt::assert_archive_manifest(
@@ -68,7 +67,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		self::assertSame( $second, AcquisitionReceipt::accept_fresh( $second, $state, $descriptor, 10 ) );
 	}
 
-	public function test_public_ready_blocked_and_clone_packages_cannot_mint_and_flags_are_not_inputs(): void {
+	public function testPublicReadyBlockedAndClonePackagesCannotMintAndFlagsAreNotInputs(): void {
 		list( $validator, $descriptor, $state, $package ) = $this->ready();
 		foreach ( array( ValidatedPackage::ready( $package->to_array() ), ValidatedPackage::blocked( 'blocked' ), clone $package ) as $forged ) {
 			try {
@@ -90,7 +89,7 @@ final class AcquisitionReceiptTest extends TestCase {
 			self::addToAssertionCount( 1 ); }
 	}
 
-	public function test_receipt_is_bound_to_claim_incarnation_and_expiry(): void {
+	public function testReceiptIsBoundToClaimIncarnationAndExpiry(): void {
 		list( $validator, $descriptor, $state, $package ) = $this->ready();
 		$receipt   = AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, 10 );
 		$successor = BindingState::create( $state->binding(), str_repeat( 'b', 64 ), 30, $state->binding_generation() + 1, $state->fence_epoch() + 1 );
@@ -109,7 +108,7 @@ final class AcquisitionReceiptTest extends TestCase {
 			self::addToAssertionCount( 1 ); }
 	}
 
-	public function test_completion_rechecks_a_concurrent_competing_owner_after_consuming_the_receipt(): void {
+	public function testCompletionRechecksAConcurrentCompetingOwnerAfterConsumingTheReceipt(): void {
 		list( $validator, $descriptor, $prototype, $package ) = $this->ready();
 		$database = new FakeOptionDatabase( 10 );
 		$claimed  = BindingFenceCoordinator::claim_persistent_binding_state( $database, $prototype->binding(), str_repeat( 'a', 64 ), 10 );
@@ -117,7 +116,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$state     = $claimed['current'];
 		$claim     = $this->claim( $state );
 		$receipt   = AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, 10 );
-		$next      = BindingRecord::create( array_merge( $this->binding_facts(), array( 'update_policy' => 'automatic' ) ) );
+		$next      = BindingRecord::create( array_merge( $this->bindingFacts(), array( 'update_policy' => 'automatic' ) ) );
 		$name      = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
 			array(
 				'network_id'                 => 1,
@@ -150,7 +149,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$validator  = new PackageIdentityValidator();
 		$package    = $validator->validate( $descriptor, $this->policy(), $path );
 		self::assertTrue( $package->is_valid() );
-		return array( $validator, $descriptor, BindingState::create( BindingRecord::create( $this->binding_facts() ), str_repeat( 'a', 64 ), 20 ), $package ); }
+		return array( $validator, $descriptor, BindingState::create( BindingRecord::create( $this->bindingFacts() ), str_repeat( 'a', 64 ), 20 ), $package ); }
 	private function archive(): string {
 		$path = tempnam( sys_get_temp_dir(), 'ran-receipt-' );
 		self::assertIsString( $path );
@@ -161,7 +160,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$zip->close();
 		return $path; }
 	private function descriptor( string $path ): IdentityDescriptor {
-		$facts                    = $this->descriptor_facts();
+		$facts                    = $this->descriptorFacts();
 		$facts['artifact_sha256'] = hash_file( 'sha256', $path );
 		$facts['artifact_size']   = filesize( $path );
 		return IdentityDescriptor::create( $facts ); }
@@ -193,7 +192,7 @@ final class AcquisitionReceiptTest extends TestCase {
 			'owner_token'        => $state->owner_token(),
 		); }
 	/** @return array<string,mixed> */
-	private function binding_facts(): array {
+	private function bindingFacts(): array {
 		return array(
 			'canonical_repository_locator' => 'owner/repo',
 			'canonical_update_uri'         => 'https://example.com/owner/repo',
@@ -210,7 +209,7 @@ final class AcquisitionReceiptTest extends TestCase {
 			'wordpress_runtime_version'    => '6.8',
 		); }
 	/** @return array<string,mixed> */
-	private function descriptor_facts(): array {
+	private function descriptorFacts(): array {
 		return array(
 			'artifact_filename'          => 'x.zip',
 			'artifact_identity'          => 'asset:1',

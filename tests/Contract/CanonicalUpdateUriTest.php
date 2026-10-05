@@ -9,8 +9,8 @@ use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 
 final class CanonicalUpdateUriTest extends TestCase {
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'canonical_uris' )]
-	public function test_canonicalizes_only_scheme_and_host_and_removes_one_terminal_slash(
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'canonicalUris' )]
+	public function testCanonicalizesOnlySchemeAndHostAndRemovesOneTerminalSlash(
 		string $uri,
 		string $expected
 	): void {
@@ -20,7 +20,7 @@ final class CanonicalUpdateUriTest extends TestCase {
 	/**
 	 * @return array<string, array{string, string}>
 	 */
-	public static function canonical_uris(): array {
+	public static function canonicalUris(): array {
 		return array(
 			'scheme and host case' => array(
 				'HTTPS://Updates.Example.test/Release/Plugin',
@@ -33,15 +33,15 @@ final class CanonicalUpdateUriTest extends TestCase {
 		);
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'invalid_uris' )]
-	public function test_rejects_non_canonical_v1_inputs( string $uri ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'invalidUris' )]
+	public function testRejectsNonCanonicalV1Inputs( string $uri ): void {
 		self::assertNull( CanonicalUpdateUri::canonicalize( $uri ) );
 	}
 
 	/**
 	 * @return array<string, array{string}>
 	 */
-	public static function invalid_uris(): array {
+	public static function invalidUris(): array {
 		return array(
 			'leading whitespace'     => array( ' https://updates.example.test/release' ),
 			'trailing whitespace'    => array( "https://updates.example.test/release\n" ),
@@ -71,14 +71,14 @@ final class CanonicalUpdateUriTest extends TestCase {
 		);
 	}
 
-	public function test_canonicalize_equality_matches_equivalent_case_and_terminal_slash(): void {
+	public function testCanonicalizeEqualityMatchesEquivalentCaseAndTerminalSlash(): void {
 		self::assertSame(
 			CanonicalUpdateUri::canonicalize( 'HTTPS://Updates.Example.test/Release/Plugin/' ),
 			CanonicalUpdateUri::canonicalize( 'https://updates.example.test/Release/Plugin' )
 		);
 	}
 
-	public function test_canonicalize_comparison_rejects_different_uris(): void {
+	public function testCanonicalizeComparisonRejectsDifferentUris(): void {
 		self::assertNotSame(
 			CanonicalUpdateUri::canonicalize( 'https://updates.example.test/Release/Plugin' ),
 			CanonicalUpdateUri::canonicalize( 'https://updates.example.test/release/Plugin' )
@@ -89,7 +89,7 @@ final class CanonicalUpdateUriTest extends TestCase {
 		);
 	}
 
-	public function test_canonicalizes_only_the_closed_four_boundary_tuple(): void {
+	public function testCanonicalizesOnlyTheClosedFourBoundaryTuple(): void {
 		$boundaries = array(
 			'configuration'     => 'HTTPS://Updates.Example.test/Release/Plugin/',
 			'offer'             => 'https://updates.example.test/Release/Plugin',
@@ -112,7 +112,7 @@ final class CanonicalUpdateUriTest extends TestCase {
 		self::assertNull( CanonicalUpdateUri::canonicalize_boundaries( $boundaries ) );
 	}
 
-	public function test_four_boundary_tuple_rejects_a_changed_path_or_invalid_value_type(): void {
+	public function testFourBoundaryTupleRejectsAChangedPathOrInvalidValueType(): void {
 		$boundaries = array(
 			'configuration'     => 'https://updates.example.test/Release/Plugin',
 			'offer'             => 'https://updates.example.test/Release/Plugin',
