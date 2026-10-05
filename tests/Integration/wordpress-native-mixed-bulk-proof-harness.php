@@ -9,7 +9,7 @@ $source_root          = getenv( 'RAN_WP_RELEASE_UPDATER_SOURCE_ROOT' );
 $marker_file          = getenv( 'RAN_WP_RELEASE_UPDATER_MARKER_FILE' );
 $marker_root          = is_string( $marker_file ) ? realpath( dirname( $marker_file ) ) : false;
 $expected_source_root = is_string( $marker_root ) ? $marker_root . '/site/wp-content/plugins/ran-wp-release-updater' : '';
-if ( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK' !== getenv( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK' ) || ! is_string( $source_root ) || $expected_source_root !== realpath( $source_root ) || ! is_file( (string) $marker_file ) || is_link( (string) $marker_file ) || "RAN_WP_RELEASE_UPDATER_MIXED_BULK\n" !== file_get_contents( (string) $marker_file ) ) {
+if ( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK' !== getenv( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK' ) || ! is_string( $source_root ) || realpath( $source_root ) !== $expected_source_root || ! is_file( (string) $marker_file ) || is_link( (string) $marker_file ) || "RAN_WP_RELEASE_UPDATER_MIXED_BULK\n" !== file_get_contents( (string) $marker_file ) ) {
 	throw new RuntimeException( 'The mixed-bulk harness is not inside its owned disposable site.' );
 }
 $type = (string) getenv( 'RAN_WP_RELEASE_UPDATER_BULK_TYPE' );
@@ -150,7 +150,7 @@ if ( 'failure' === $mode ) {
 		'upgrader_post_install',
 		static function ( mixed $response, array $extra, array $install ) use ( $type, $ids, &$injected ): mixed {
 			$key = 'plugin' === $type ? 'plugin' : 'theme';
-			if ( $ids[0] !== ( $extra[ $key ] ?? null ) || ! is_array( $install ) ) {
+			if ( ( $extra[ $key ] ?? null ) !== $ids[0] || ! is_array( $install ) ) {
 				return $response;
 			}
 
@@ -210,9 +210,9 @@ add_action(
 		}
 		$tokens               = array( $managed_a['offer']['package'], $managed_b['offer']['package'] );
 		$observation_evidence = array(
-			'managed_a_exact_token'   => 1 === count( $observations[ $ids[0] ] ) && $tokens[0] === ( $observations[ $ids[0] ][0] ?? null ),
-			'ordinary_direct_archive' => 1 === count( $observations[ $ids[1] ] ) && $archives['ordinary'] === ( $observations[ $ids[1] ][0] ?? null ),
-			'managed_b_exact_token'   => 1 === count( $observations[ $ids[2] ] ) && $tokens[1] === ( $observations[ $ids[2] ][0] ?? null ),
+			'managed_a_exact_token'   => 1 === count( $observations[ $ids[0] ] ) && ( $observations[ $ids[0] ][0] ?? null ) === $tokens[0],
+			'ordinary_direct_archive' => 1 === count( $observations[ $ids[1] ] ) && ( $observations[ $ids[1] ][0] ?? null ) === $archives['ordinary'],
+			'managed_b_exact_token'   => 1 === count( $observations[ $ids[2] ] ) && ( $observations[ $ids[2] ][0] ?? null ) === $tokens[1],
 			'managed_tokens_distinct' => $tokens[0] !== $tokens[1],
 		);
 		$values               = $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'ran\\_wp\\_release\\_updater\\_target\\_v1\\_%' ORDER BY option_name" );
@@ -231,8 +231,8 @@ add_action(
 		$expected_results             = $success ? array( true, true, true ) : array( false, true, true );
 		$failure_exact                = ! $success && 'ran_wp_release_updater_unverified_install_result' === $result_codes[ $ids[0] ] && null === $result_codes[ $ids[1] ] && null === $result_codes[ $ids[2] ];
 		$manifest_exact               = $success ? ( $manifest_evidence['managed-a']['exact_match'] && $manifest_evidence['managed-b']['exact_match'] ) : $manifest_evidence['managed-b']['exact_match'];
-		$pass                         = $ids === array_keys( $results )
-			&& $expected_results === array_values( $results )
+		$pass                         = array_keys( $results ) === $ids
+			&& array_values( $results ) === $expected_results
 			&& ! in_array( false, $observation_evidence, true )
 			&& $manifest_exact
 			&& ! str_starts_with( $archives['ordinary'], 'ran-wp-release-updater:v1:' )
@@ -520,7 +520,7 @@ function target_version( string $type, string $identity ): ?string {
 function active_states( string $type, array $ids ): array {
 	$active = array();
 	foreach ( $ids as $identity ) {
-		$active [ $identity ] = 'plugin' === $type ? is_plugin_active( $identity ) : $identity === get_stylesheet();
+		$active [ $identity ] = 'plugin' === $type ? is_plugin_active( $identity ) : get_stylesheet() === $identity;
 	}
 	return $active;
 }

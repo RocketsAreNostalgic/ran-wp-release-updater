@@ -14,8 +14,7 @@ Core dependency update. The native-operation refinement below was delivered sepa
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
 | Generated `src/Dependency/ArchiveSafety.php` | PHPCS excluded; namespace-only byte parity against the locked `ran/updater-support` source and direct level-8 analysis remain required. Never hand-edit this file. |
-| `tests/Archive`, `tests/Contract`, `tests/Dependency`, `tests/Provider`, `tests/Runtime`, `tests/WordPress`, `tests/Support`, `tests/Integration` | Owned method and variable naming now cover these eight roots, including future files. Twenty-nine PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
-| Other `tests/` roots | The separate purpose-built fixture/harness naming boundary remains. Production callers, named arguments, callbacks and Reflection seams follow the production API. This cohort does not certify every fixture-local identifier as snake_case. |
+| All `tests/` PHP, including root files and future/nested roots | Owned methods, variables, Yoda conditions, unused parameters and reserved parameter names have no file/root exclusions. Thirty-one PHPUnit lifecycle overrides, twelve unused foreign-stub parameter reports, the existing skin override parameter and native ZipArchive property uses retain exact local exceptions. Other fixture-specific rule boundaries remain listed below. |
 
 `composer check` retains strict validation, generated-copy parity, live advisory
 audit, syntax, shared standards/compatibility, level-8 analysis, unit tests and
@@ -39,7 +38,7 @@ local product requirements, not shared-standard exemptions.
 | Prepared SQL identifier/CAS boundary | BindingFenceCoordinator validates the table identifier and prepares data values. Only two SQL parser false-positive rules are excepted for that file. MySQL CAS and setup-failure proofs remain required. |
 | Bounded base64 operation tokens | NativePackageUpdater uses URL-safe base64 for opaque operation tokens, not executable code. Only its encode/decode rules and test fixtures are excepted. |
 | Native `ZipArchive::$numFiles` | Two line-local property-name ignores cover three reads of the external extension property. Owned members remain enforced. |
-| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. The existing explicit condition/reserved-parameter and other fixture scopes remain; they do not exempt production. |
+| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Free-function/global naming, native primitives and the other fixture-specific rules remain explicitly scoped; condition/unused/reserved-parameter file exclusions are removed. These retained boundaries do not exempt production. |
 
 Seven declaration-local PHPStan exceptions remain: RequestBroker's
 Reflection-invoked private validation seam; ReleaseSource's direct-filesystem
@@ -262,3 +261,51 @@ legacy runtime qualification. No harness guard or prerequisite is relaxed.
 Production, scripts, dependencies, public APIs, runtime identity, JavaScript and
 workflows are unchanged. Remaining test roots and retained exceptions continue
 under organisation #65/#128. No release is authorized.
+
+
+## Complete test naming and condition/parameter scope
+
+Integration naming landed in PR #101 at
+`8ade8e1c62025179b505b900532a8bc41b15b618`. This proposal finishes the remaining
+Performance, Architecture, Documentation and root-file naming migration and
+removes every test file/root exclusion for the six owned-method/WPCS-method,
+variable, Yoda, unused-parameter and reserved-parameter rules. New roots are
+covered automatically; the checker and fixer retain the same ruleset.
+
+The remaining baseline has 221 reports: 38 method and 136 variable naming
+reports, 28 Yoda reports, fourteen unused parameters and five reserved names.
+Thirty-six owned methods and all variables are renamed; two additional PHPUnit
+lifecycle methods retain exact exceptions. Twenty-six safe equality operand
+swaps preserve strict comparison and short-circuit order. Two already-Yoda
+command-line flag comparisons gain parentheses to stop the checker scanning
+into preceding function arguments. Four owned reserved parameters are renamed;
+the existing skin override parameter keeps its named-call compatibility.
+Two unused owned helper arguments and their sole pure call expressions are
+removed. Six foreign stub declarations retain local exact unused-parameter
+exceptions covering twelve reports. No fabricated variable use, broad new
+exclusion, gate relaxation, new API, dependency or persistent state is added.
+
+The existing checker regression now covers 27 current/future/root/nested naming
+paths plus condition/parameter controls (372 assertions). Restoring each old
+rule-family scope fails its corresponding control. All 477 test/dataset identities
+remain under the explicit owned-method mapping; the complete PHPUnit suite
+passes 477 tests / 25,340 assertions and the no-dev consumer passes. The native-discovery matrix
+passes all 96 rows plus two plugin callback controls and five theme controls;
+all budgets, counters, revocation checks and output keys are preserved.
+Twelve public-consumer combinations pass when supplied with their required
+fence source inputs. MySQL setup-failure cleanup and the existing source-security
+contracts remain checked. Production, scripts, runtime identity, dependencies,
+JavaScript and workflows are byte-identical to the base.
+
+Local Composer advisory requests suffered intermittent service/proxy timeouts;
+a standalone live audit retry passed. Qualification records distinguish that
+result, the individually executed remaining gates, and exact-head native CI
+rather than claiming a failed aggregate invocation succeeded. Legacy Local-only
+phase-2.4/mixed-bulk end-to-end suites remain unexecuted locally because their
+external prerequisites are unavailable. Reviewed transformations and existing
+security contracts are bounded evidence; prerequisites and deletion guards remain.
+
+This completes these six test rule families, not acceptance of every retained
+fixture/global/native-primitive exception or the whole ecosystem. Remaining
+exceptions, Admin Shell inventory, UI/manual/operational acceptance and releases
+remain separate under organisation #65/#128. No release is authorized.

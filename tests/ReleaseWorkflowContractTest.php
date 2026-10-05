@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 
 final class ReleaseWorkflowContractTest extends TestCase {
 
-	public function testSharedProfileAAndJsonVersionUpdaterAreExact(): void {
+	public function test_shared_profile_a_and_json_version_updater_are_exact(): void {
 		$workflow = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/release-please.yml' );
 		$ci       = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/ci.yml' );
 		$config   = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/release-please-config.json' ), true, 512, JSON_THROW_ON_ERROR );
@@ -33,7 +33,7 @@ final class ReleaseWorkflowContractTest extends TestCase {
 		self::assertSame( '$.package_version', $config['packages']['.']['extra-files'][0]['jsonpath'] );
 	}
 
-	public function testQualityFanInRequiresEveryVerificationLane(): void {
+	public function test_quality_fan_in_requires_every_verification_lane(): void {
 		$ci = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/ci.yml' );
 
 		$required_needs = <<<'YAML'
@@ -63,7 +63,7 @@ YAML;
 		}
 	}
 
-	public function testBootstrapAndArchiveContractsRemainReleaseSafe(): void {
+	public function test_bootstrap_and_archive_contracts_remain_release_safe(): void {
 		$config     = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/release-please-config.json' ), true, 512, JSON_THROW_ON_ERROR );
 		$manifest   = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/.release-please-manifest.json' ), true, 512, JSON_THROW_ON_ERROR );
 		$copy       = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );

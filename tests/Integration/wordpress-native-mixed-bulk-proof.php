@@ -30,7 +30,7 @@ if (
 ) {
 	throw new RuntimeException( 'Refusing an unsafe disposable mixed-bulk proof root.' );
 }
-if ( ! mkdir( $base, 0700 ) || $base !== realpath( $base ) || ! file_put_contents( $marker_file, $marker . "\n" ) ) {
+if ( ! mkdir( $base, 0700 ) || realpath( $base ) !== $base || ! file_put_contents( $marker_file, $marker . "\n" ) ) {
 	throw new RuntimeException( 'Could not establish the owned disposable proof root.' );
 }
 try {
@@ -117,7 +117,7 @@ try {
 		proc_close( $server );
 	}
 	if ( file_exists( $base ) ) {
-		if ( is_link( $base ) || $base !== realpath( $base ) || ! is_file( $marker_file ) || $marker . "\n" !== file_get_contents( $marker_file ) ) {
+		if ( is_link( $base ) || realpath( $base ) !== $base || ! is_file( $marker_file ) || file_get_contents( $marker_file ) !== $marker . "\n" ) {
 			throw new RuntimeException( 'Refusing unvalidated disposable proof cleanup.' );
 		}
 		removeTree( $base );

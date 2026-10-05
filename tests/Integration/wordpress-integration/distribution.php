@@ -9,6 +9,7 @@ require_once ABSPATH . 'wp-admin/includes/class-theme-upgrader.php';
 
 final class RAN_Updater_Integration_Skin extends WP_Upgrader_Skin {
 
+	// phpcs:ignore Universal.NamingConventions.NoReservedKeywordParameterNames.stringFound -- Preserve this existing WP_Upgrader_Skin override parameter for named-call compatibility.
 	public function feedback( $string, ...$args ): void {}
 	public function header(): void {}
 	public function footer(): void {}

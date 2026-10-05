@@ -50,6 +50,7 @@ namespace {
 	function wp_http_validate_url( string $url ): string {
 		return $url;
 	}
+	// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- WordPress requires the filename parameter; this fixture allocates its own temporary filename.
 	function wp_tempnam( string $name ): string|false {
 		$path = tempnam( $GLOBALS ['native_measure'] ['temp'], 'asset-' );
 		if ( is_string( $path ) ) {
@@ -139,15 +140,15 @@ namespace Tests\Performance {
 			throw new \RuntimeException( 'Runtime manifest is unreadable: ' . $file, 0, $error );
 		}
 		$keys = array( 'package_revision', 'package_version', 'php_floor', 'runtime_file', 'runtime_protocol', 'wordpress_floor' );
-		native_measure_assert( is_array( $manifest ) && ! array_is_list( $manifest ) && $keys === array_keys( $manifest ), 'Runtime manifest has an unexpected shape: ' . $file );
+		native_measure_assert( is_array( $manifest ) && ! array_is_list( $manifest ) && array_keys( $manifest ) === $keys, 'Runtime manifest has an unexpected shape: ' . $file );
 		native_measure_assert( is_string( $manifest ['package_revision'] ) && is_string( $manifest ['package_version'] ) && is_string( $manifest ['php_floor'] ) && 'runtime.php' === $manifest ['runtime_file'] && is_int( $manifest ['runtime_protocol'] ) && 0 < $manifest ['runtime_protocol'] && is_string( $manifest ['wordpress_floor'] ), 'Runtime manifest contains invalid values: ' . $file );
 		return $manifest;
 	}
-	function native_measure_current_runtime_protocol( string $trustedRoot, array $roots ): int {
-		native_measure_assert( '' !== $trustedRoot && is_dir( $trustedRoot ), 'Trusted current runtime root is unavailable.' );
-		$trusted = native_measure_runtime_manifest( $trustedRoot );
+	function native_measure_current_runtime_protocol( string $trusted_root, array $roots ): int {
+		native_measure_assert( '' !== $trusted_root && is_dir( $trusted_root ), 'Trusted current runtime root is unavailable.' );
+		$trusted = native_measure_runtime_manifest( $trusted_root );
 		foreach ( $roots as $root ) {
-			native_measure_assert( $trusted === native_measure_runtime_manifest( $root ), 'Runtime specimen manifest differs from the trusted current manifest: ' . $root );
+			native_measure_assert( native_measure_runtime_manifest( $root ) === $trusted, 'Runtime specimen manifest differs from the trusted current manifest: ' . $root );
 		}
 		return $trusted ['runtime_protocol'];
 	}
@@ -186,9 +187,9 @@ namespace Tests\Performance {
 		);
 	}
 	/** One PHP request: N copied bootstraps, M queued registrar targets, then one activation. */
-	function native_measure_shared_request( array $roots, int $targets, string $scenario, bool $callbackControl = false, string $targetType = 'plugin', bool $callbackRevoked = false ): array {
-		native_measure_assert( $roots !== array() && count( $roots ) === count( array_unique( $roots ) ), 'Physical runtime roots are not distinct.' );
-		$runtimeProtocol            = native_measure_current_runtime_protocol( (string) getenv( 'RAN_NATIVE_MEASURE_TRUSTED_ROOT' ), $roots );
+	function native_measure_shared_request( array $roots, int $targets, string $scenario, bool $callback_control = false, string $target_type = 'plugin', bool $callback_revoked = false ): array {
+		native_measure_assert( array() !== $roots && count( $roots ) === count( array_unique( $roots ) ), 'Physical runtime roots are not distinct.' );
+		$runtime_protocol           = native_measure_current_runtime_protocol( (string) getenv( 'RAN_NATIVE_MEASURE_TRUSTED_ROOT' ), $roots );
 		$temp                       = getenv( 'RAN_NATIVE_MEASURE_TEMP' ) ?: sys_get_temp_dir();
 		$GLOBALS ['native_measure'] = array(
 			'temp'             => $temp,
@@ -202,33 +203,33 @@ namespace Tests\Performance {
 			'validation_opens' => 0,
 			'temporary'        => array(),
 		);
-		$installedRoot              = $temp . '/shared-installed-' . bin2hex( random_bytes( 4 ) );
-		mkdir( $installedRoot, 0700, true );
+		$installed_root             = $temp . '/shared-installed-' . bin2hex( random_bytes( 4 ) );
+		mkdir( $installed_root, 0700, true );
 		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
-			define( 'WP_PLUGIN_DIR', $installedRoot );
+			define( 'WP_PLUGIN_DIR', $installed_root );
 		}
 		$GLOBALS ['wp_version']           = '6.8.0';
 		$GLOBALS ['wpdb']                 = new FakeOptionDatabase( 100 );
-		$GLOBALS ['wp_theme_directories'] = array( $installedRoot );
+		$GLOBALS ['wp_theme_directories'] = array( $installed_root );
 		$GLOBALS ['wp_filter']            = array();
 		$GLOBALS ['wp_actions']           = array();
 		$GLOBALS ['wp_current_filter']    = array();
 		$api                              = null;
-		$targetFixtures                   = array();
+		$target_fixtures                  = array();
 		for ( $index = 0; $index < $targets; ++$index ) {
 			$slug = 'repository-' . $index;
 			$uri  = 'https://github.com/owner/' . $slug;
 			$name = 'Fixture ' . $index;
-			mkdir( $installedRoot . '/' . $slug, 0700, true );
-			$file   = $installedRoot . '/' . $slug . '/' . ( 'plugin' === $targetType ? $slug . '.php' : 'style.css' );
-			$header = 'plugin' === $targetType
+			mkdir( $installed_root . '/' . $slug, 0700, true );
+			$file   = $installed_root . '/' . $slug . '/' . ( 'plugin' === $target_type ? $slug . '.php' : 'style.css' );
+			$header = 'plugin' === $target_type
 				? "<?php\n/*\nPlugin Name: " . $name . "\nVersion: 1.0.0\nPlugin URI: " . $uri . "\nUpdate URI: " . $uri . "\nRequires PHP: 8.2\nRequires at least: 6.8\n*/"
 				: "/*\nTheme Name: " . $name . "\nVersion: 1.0.0\nTheme URI: " . $uri . "\nUpdate URI: " . $uri . "\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
 			file_put_contents( $file, $header );
-			$targetFixtures [] = array(
+			$target_fixtures [] = array(
 				'repository' => $slug,
 				'uri'        => $uri,
-				'zip'        => native_measure_zip( $targetType, $slug, $uri, $name ),
+				'zip'        => native_measure_zip( $target_type, $slug, $uri, $name ),
 			);
 		}
 		memory_reset_peak_usage();
@@ -242,45 +243,45 @@ namespace Tests\Performance {
 				$api = $loaded;
 			}
 		}
-		$afterBootstrap  = array(
+		$after_bootstrap  = array(
 			'time_ns' => hrtime( true ),
 			'memory'  => memory_get_usage( true ),
 		);
-		$credentialCalls = 0;
-		foreach ( $targetFixtures as $index => $fixture ) {
-			$file     = $installedRoot . '/' . $fixture ['repository'] . '/' . ( 'plugin' === $targetType ? $fixture ['repository'] . '.php' : 'style.css' );
-			$resolver = $callbackControl ? static function () use ( &$credentialCalls, $callbackRevoked ): ?string {
-				++$credentialCalls;
-				if ( $callbackRevoked && $credentialCalls > 3 ) {
+		$credential_calls = 0;
+		foreach ( $target_fixtures as $index => $fixture ) {
+			$file     = $installed_root . '/' . $fixture ['repository'] . '/' . ( 'plugin' === $target_type ? $fixture ['repository'] . '.php' : 'style.css' );
+			$resolver = $callback_control ? static function () use ( &$credential_calls, $callback_revoked ): ?string {
+				++$credential_calls;
+				if ( $callback_revoked && $credential_calls > 3 ) {
 					throw new \RuntimeException( 'Credential revoked.' );
 				}
 				return null;
 			}
 			: null;
-			$handle   = 'plugin' === $targetType ? $api->plugin( 'github', $file, 'owner/' . $fixture ['repository'], (string) ( 99 + $index ), 'stable', 'manual', $resolver ) : $api->theme( 'github', $file, 'owner/' . $fixture ['repository'], (string) ( 99 + $index ), 'stable', 'manual', $resolver );
+			$handle   = 'plugin' === $target_type ? $api->plugin( 'github', $file, 'owner/' . $fixture ['repository'], (string) ( 99 + $index ), 'stable', 'manual', $resolver ) : $api->theme( 'github', $file, 'owner/' . $fixture ['repository'], (string) ( 99 + $index ), 'stable', 'manual', $resolver );
 			native_measure_assert( $handle->register(), 'Queued registrar target was rejected.' );
 		}
-		$afterDeclaration = array(
+		$after_declaration = array(
 			'time_ns' => hrtime( true ),
 			'memory'  => memory_get_usage( true ),
 		);
-		$broker           = $GLOBALS ['ran_wp_release_updater_v1_broker'];
-		$activation       = $broker->activate(
+		$broker            = $GLOBALS ['ran_wp_release_updater_v1_broker'];
+		$activation        = $broker->activate(
 			array(
 				'php_version'       => '8.2.0',
-				'runtime_protocol'  => $runtimeProtocol,
+				'runtime_protocol'  => $runtime_protocol,
 				'wordpress_version' => '6.8.0',
 			)
 		);
 		native_measure_assert( 'active' === $activation ['state'], 'Shared-request activation failed.' );
-		$afterActivation = array(
+		$after_activation = array(
 			'time_ns' => hrtime( true ),
 			'memory'  => memory_get_usage( true ),
 		);
-		$submissions     = new \ReflectionProperty( $broker, 'submissions' );
-		$all             = $submissions->getValue( $broker );
-		$opens           = 0;
-		$natives         = array();
+		$submissions      = new \ReflectionProperty( $broker, 'submissions' );
+		$all              = $submissions->getValue( $broker );
+		$opens            = 0;
+		$natives          = array();
 		foreach ( array_values( $all ) as $index => $submission ) {
 			$native    = ( new \ReflectionProperty( $submission ['handle'], 'native' ) )->getValue( $submission ['handle'] );
 			$validator = ( new \ReflectionProperty( $native, 'validator' ) )->getValue( $native );
@@ -295,7 +296,7 @@ namespace Tests\Performance {
 			$natives [] = array(
 				'native'   => $native,
 				'identity' => ( new \ReflectionProperty( $native, 'installed_identity' ) )->getValue( $native ),
-				'fixture'  => $targetFixtures [ $index ],
+				'fixture'  => $target_fixtures [ $index ],
 			);
 		}
 		$steps  = array();
@@ -304,7 +305,7 @@ namespace Tests\Performance {
 			foreach ( $natives as $index => $item ) {
 				$GLOBALS ['native_measure'] ['repository'] = $item ['fixture'] ['repository'];
 				$GLOBALS ['native_measure'] ['zip']        = $item ['fixture'] ['zip'];
-				$beforeStep                                = native_measure_counters();
+				$before_step                               = native_measure_counters();
 				$offer                                     = $item ['native']->filter_update(
 					false,
 					array(
@@ -320,7 +321,7 @@ namespace Tests\Performance {
 					native_measure_assert( is_array( $offer ), 'Discovery did not offer an update for ' . $item ['identity'] . '.' );
 				}
 							$offers [ $index ]               = $offer;
-							$steps [ 'discovery_' . $index ] = native_measure_delta( $beforeStep );
+							$steps [ 'discovery_' . $index ] = native_measure_delta( $before_step );
 				if ( 'incompatible' === $scenario ) {
 					native_measure_assert( 8 === $steps [ 'discovery_' . $index ] ['archive_acquisitions'], 'Incompatible search did not inspect eight candidates.' );
 					native_measure_assert( 8 === $steps [ 'discovery_' . $index ] ['validation_archive_opens'], 'Incompatible search did not open eight candidate archives.' );
@@ -334,7 +335,7 @@ namespace Tests\Performance {
 			foreach ( $natives as $index => $item ) {
 				$GLOBALS ['native_measure'] ['repository'] = $item ['fixture'] ['repository'];
 				$GLOBALS ['native_measure'] ['zip']        = $item ['fixture'] ['zip'];
-				$beforeStep                                = native_measure_counters();
+				$before_step                               = native_measure_counters();
 				$again                                     = $item ['native']->filter_update(
 					false,
 					array(
@@ -344,16 +345,16 @@ namespace Tests\Performance {
 					$item ['identity'],
 					array()
 				);
-				if ( $callbackRevoked ) {
+				if ( $callback_revoked ) {
 					native_measure_assert( false === $again, 'Revoked callback discovery did not fail closed.' );
 				} else {
 					native_measure_assert( is_array( $again ), 'Repeated discovery did not offer an update.' );
 				}
-							$steps [ 'repeated_discovery_' . $index ] = native_measure_delta( $beforeStep );
-				if ( 'plugin' === $targetType && ! $callbackRevoked ) {
-					$beforeStep                        = native_measure_counters();
+							$steps [ 'repeated_discovery_' . $index ] = native_measure_delta( $before_step );
+				if ( 'plugin' === $target_type && ! $callback_revoked ) {
+					$before_step                       = native_measure_counters();
 					$information                       = $item ['native']->filter_plugin_information( false, 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', 'plugin' . "\0" . $item ['identity'] ), 0, 24 ) ) );
-					$steps [ 'information_' . $index ] = native_measure_delta( $beforeStep );
+					$steps [ 'information_' . $index ] = native_measure_delta( $before_step );
 					native_measure_assert( is_object( $information ) && '2.0.0' === ( $information->version ?? null ), 'Plugin information did not return the expected version.' );
 				}
 			}
@@ -363,7 +364,7 @@ namespace Tests\Performance {
 				native_measure_assert( true === $item ['native']->refresh(), 'Native refresh failed.' );
 				$GLOBALS ['native_measure'] ['repository'] = $item ['fixture'] ['repository'];
 				$GLOBALS ['native_measure'] ['zip']        = $item ['fixture'] ['zip'];
-				$beforeStep                                = native_measure_counters();
+				$before_step                               = native_measure_counters();
 				native_measure_assert(
 					is_array(
 						$item ['native']->filter_update(
@@ -378,7 +379,7 @@ namespace Tests\Performance {
 					),
 					'Refresh discovery did not offer an update.'
 				);
-							$steps [ 'refresh_discovery_' . $index ] = native_measure_delta( $beforeStep );
+							$steps [ 'refresh_discovery_' . $index ] = native_measure_delta( $before_step );
 							native_measure_assert( 1 === $steps [ 'refresh_discovery_' . $index ] ['archive_acquisitions'], 'Refresh discovery did not acquire a fresh archive.' );
 			}
 		}
@@ -390,56 +391,56 @@ namespace Tests\Performance {
 				if ( 'changed' === $scenario ) {
 					$GLOBALS ['native_measure'] ['changed'] = true;
 				}
-				$beforeStep = native_measure_counters();
-				$extra      = array(
+				$before_step = native_measure_counters();
+				$extra       = array(
 					'action' => 'update',
-					'type'   => $targetType,
-					'plugin' === $targetType ? 'plugin' : 'theme' => $item ['identity'],
+					'type'   => $target_type,
+					'plugin' === $target_type ? 'plugin' : 'theme' => $item ['identity'],
 				);
-				$reply      = $item ['native']->filter_pre_download( false, $offers [ $index ] ['package'], null, $extra );
+				$reply       = $item ['native']->filter_pre_download( false, $offers [ $index ] ['package'], null, $extra );
 				if ( 'install' === $scenario ) {
 					native_measure_assert( is_string( $reply ) && is_file( $reply ), 'Fresh installation preparation failed.' );
 				} else {
 					native_measure_assert( $reply instanceof \WP_Error || false === $reply, 'Changed remote evidence was admitted.' );
 					native_measure_assert( 'remote_release_changed' === $item ['native']->status() ['failure_code'], 'Changed remote evidence had the wrong rejection.' );
 				}
-				$stepName            = ( 'install' === $scenario ? 'install_' : 'changed_' ) . $index;
-				$steps [ $stepName ] = native_measure_delta( $beforeStep );
+				$step_name            = ( 'install' === $scenario ? 'install_' : 'changed_' ) . $index;
+				$steps [ $step_name ] = native_measure_delta( $before_step );
 				if ( 'install' === $scenario ) {
-					native_measure_assert( 1 === $steps [ $stepName ] ['archive_acquisitions'], 'Installation preparation did not acquire exactly one fresh archive.' );
-					native_measure_assert( 2 === $steps [ $stepName ] ['validation_archive_opens'], 'Installation preparation did not open source and owned archive.' );
+					native_measure_assert( 1 === $steps [ $step_name ] ['archive_acquisitions'], 'Installation preparation did not acquire exactly one fresh archive.' );
+					native_measure_assert( 2 === $steps [ $step_name ] ['validation_archive_opens'], 'Installation preparation did not open source and owned archive.' );
 				}
 			}
 		}
-		$afterOperations = array(
+		$after_operations = array(
 			'time_ns'     => hrtime( true ),
 			'memory'      => memory_get_usage( true ),
 			'memory_peak' => memory_get_peak_usage( true ),
 		);
-		$ownedPaths      = array();
+		$owned_paths      = array();
 		foreach ( $natives as $item ) {
 			$pending = ( new \ReflectionProperty( $item ['native'], 'pending_install' ) )->getValue( $item ['native'] );
 			$path    = $pending instanceof \RAN\WPReleaseUpdater\V1\WordPress\PendingInstallState ? $pending->archive() : null;
 			if ( is_string( $path ) && is_file( $path ) ) {
-				$ownedPaths [] = $path;
+				$owned_paths [] = $path;
 			}
 		}
-		$temporaryPaths = array_filter( $GLOBALS ['native_measure'] ['temporary'], 'is_file' );
-		$beforeCleanup  = count( array_unique( array_merge( $ownedPaths, $temporaryPaths ) ) );
+		$temporary_paths = array_filter( $GLOBALS ['native_measure'] ['temporary'], 'is_file' );
+		$before_cleanup  = count( array_unique( array_merge( $owned_paths, $temporary_paths ) ) );
 		foreach ( $natives as $item ) {
 			native_measure_assert( true === $item ['native']->refresh(), 'Native cleanup refresh failed.' );
 		}
-		$afterCleanup = count( array_filter( array_unique( array_merge( $ownedPaths, $temporaryPaths ) ), 'is_file' ) );
-		$brokerState  = $broker->diagnostics();
-		native_measure_assert( count( $roots ) === $brokerState ['candidate_count'], 'Broker candidate count differs from physical copies: ' . json_encode( $brokerState ) );
-		native_measure_assert( count( $all ) === $targets && $targets === $brokerState ['logical_target_count'], 'Shared-request active native count differs from declarations.' );
+		$after_cleanup = count( array_filter( array_unique( array_merge( $owned_paths, $temporary_paths ) ), 'is_file' ) );
+		$broker_state  = $broker->diagnostics();
+		native_measure_assert( count( $roots ) === $broker_state ['candidate_count'], 'Broker candidate count differs from physical copies: ' . json_encode( $broker_state ) );
+		native_measure_assert( count( $all ) === $targets && $targets === $broker_state ['logical_target_count'], 'Shared-request active native count differs from declarations.' );
 		native_measure_assert( $opens >= $GLOBALS ['native_measure'] ['acquisitions'], 'Validator opened fewer archives than acquisitions.' );
-		native_measure_assert( 0 === $afterCleanup, 'Native refresh left owned or temporary archives behind.' );
+		native_measure_assert( 0 === $after_cleanup, 'Native refresh left owned or temporary archives behind.' );
 		if ( 'registration' === $scenario ) {
-			native_measure_assert( 0 === $GLOBALS ['native_measure'] ['http_calls'] && 0 === $credentialCalls, 'Registration performed work outside declaration.' );
+			native_measure_assert( 0 === $GLOBALS ['native_measure'] ['http_calls'] && 0 === $credential_calls, 'Registration performed work outside declaration.' );
 		}
 		if ( 'install' === $scenario ) {
-			native_measure_assert( $targets === $beforeCleanup, 'Installation did not retain exactly one owned file per target.' );
+			native_measure_assert( $targets === $before_cleanup, 'Installation did not retain exactly one owned file per target.' );
 		}
 		if ( 'changed' === $scenario ) {
 			foreach ( $steps as $name => $delta ) {
@@ -456,30 +457,30 @@ namespace Tests\Performance {
 		return array(
 			'physical_copies'           => count( $roots ),
 			'distinct_targets'          => $targets,
-			'target_type'               => $targetType,
+			'target_type'               => $target_type,
 			'scenario'                  => $scenario,
-			'credential_mode'           => $callbackControl ? 'callback_returning_null' : 'literal_null',
-			'bootstrap_ns'              => $afterBootstrap ['time_ns'] - $before ['time_ns'],
-			'declaration_ns'            => $afterDeclaration ['time_ns'] - $afterBootstrap ['time_ns'],
-			'activation_ns'             => $afterActivation ['time_ns'] - $afterDeclaration ['time_ns'],
-			'operations_ns'             => $afterOperations ['time_ns'] - $afterActivation ['time_ns'],
+			'credential_mode'           => $callback_control ? 'callback_returning_null' : 'literal_null',
+			'bootstrap_ns'              => $after_bootstrap ['time_ns'] - $before ['time_ns'],
+			'declaration_ns'            => $after_declaration ['time_ns'] - $after_bootstrap ['time_ns'],
+			'activation_ns'             => $after_activation ['time_ns'] - $after_declaration ['time_ns'],
+			'operations_ns'             => $after_operations ['time_ns'] - $after_activation ['time_ns'],
 			'memory_initial'            => $before ['memory'],
-			'memory_after_operations'   => $afterOperations ['memory'],
-			'memory_peak'               => $afterOperations ['memory_peak'],
+			'memory_after_operations'   => $after_operations ['memory'],
+			'memory_peak'               => $after_operations ['memory_peak'],
 			'http_calls'                => $GLOBALS ['native_measure'] ['http_calls'],
 			'body_bytes'                => $GLOBALS ['native_measure'] ['body_bytes'],
 			'streamed_bytes'            => $GLOBALS ['native_measure'] ['streamed_bytes'],
 			'archive_acquisitions'      => $GLOBALS ['native_measure'] ['acquisitions'],
 			'validation_archive_opens'  => $opens,
-			'files_before_cleanup'      => $beforeCleanup,
-			'files_after_cleanup'       => $afterCleanup,
-			'credential_callback_calls' => $credentialCalls,
+			'files_before_cleanup'      => $before_cleanup,
+			'files_after_cleanup'       => $after_cleanup,
+			'credential_callback_calls' => $credential_calls,
 			'operation_steps'           => $steps,
 		);
 	}
 	function native_measure_shared_worker( array $args ): void {
 		$roots = explode( '|', (string) getenv( 'RAN_NATIVE_MEASURE_ROOTS' ) );
-		echo json_encode( native_measure_shared_request( $roots, (int) ( $args [2] ?? 1 ), $args [3] ?? 'cold', '--callback-control' === ( $args [4] ?? null ), $args [5] ?? 'plugin', '--callback-revoked' === ( $args [6] ?? null ) ), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
+		echo json_encode( native_measure_shared_request( $roots, (int) ( $args [2] ?? 1 ), $args [3] ?? 'cold', ( '--callback-control' === ( $args [4] ?? null ) ), $args [5] ?? 'plugin', ( '--callback-revoked' === ( $args [6] ?? null ) ) ), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
 	}
 	function native_measure_copy( string $from, string $to ): void {
 		mkdir( $to, 0700, true );
@@ -497,8 +498,8 @@ namespace Tests\Performance {
 			}
 		}
 	}
-	function native_measure_child( array $roots, string $scratch, int $targets, string $scenario, bool $callbackControl = false, string $targetType = 'plugin', bool $callbackRevoked = false ): array {
-		$command     = array( PHP_BINARY, '-d', 'sys_temp_dir=' . $scratch, __FILE__, '--shared-worker', (string) $targets, $scenario, $callbackControl ? '--callback-control' : '--literal-null', $targetType, $callbackRevoked ? '--callback-revoked' : '--callback-stable' );
+	function native_measure_child( array $roots, string $scratch, int $targets, string $scenario, bool $callback_control = false, string $target_type = 'plugin', bool $callback_revoked = false ): array {
+		$command     = array( PHP_BINARY, '-d', 'sys_temp_dir=' . $scratch, __FILE__, '--shared-worker', (string) $targets, $scenario, $callback_control ? '--callback-control' : '--literal-null', $target_type, $callback_revoked ? '--callback-revoked' : '--callback-stable' );
 		$environment = array(
 			'RAN_NATIVE_MEASURE_ROOTS'        => implode( '|', $roots ),
 			'RAN_NATIVE_MEASURE_TEMP'         => $scratch,
@@ -574,7 +575,7 @@ namespace Tests\Performance {
 				$bytes += $file->getSize();
 			}
 		}
-		$out         = array(
+		$out          = array(
 			'fixture'          => 'native-discovery-measure',
 			'environment'      => array(
 				'php'              => PHP_VERSION,
@@ -590,17 +591,17 @@ namespace Tests\Performance {
 			'measurements'     => $rows,
 			'limitations'      => array( 'Timing is local contextual evidence, not host or network latency.', 'Fake transport and fake option database count deterministic runtime work only.' ),
 		);
-		$controlCopy = $scratch . '/callback-control';
-		native_measure_copy( $root, $controlCopy );
-		$out ['controls']                                      = array( 'callback_returning_null_repeated_plugin' => native_measure_child( array( $controlCopy ), $scratch, 1, 'repeated', true ) );
-		$out ['controls'] ['callback_revoked_repeated_plugin'] = native_measure_child( array( $controlCopy ), $scratch, 1, 'repeated', true, 'plugin', true );
-		$themeControls = array();
+		$control_copy = $scratch . '/callback-control';
+		native_measure_copy( $root, $control_copy );
+		$out ['controls']                                      = array( 'callback_returning_null_repeated_plugin' => native_measure_child( array( $control_copy ), $scratch, 1, 'repeated', true ) );
+		$out ['controls'] ['callback_revoked_repeated_plugin'] = native_measure_child( array( $control_copy ), $scratch, 1, 'repeated', true, 'plugin', true );
+		$theme_controls                                        = array();
 		foreach ( array( 'cold', 'repeated', 'refresh', 'install', 'changed' ) as $scenario ) {
-			$themeCopy = $scratch . '/theme-control-' . $scenario;
-			native_measure_copy( $root, $themeCopy );
-			$themeControls [ $scenario ] = native_measure_child( array( $themeCopy ), $scratch, 1, $scenario, false, 'theme' );
+			$theme_copy = $scratch . '/theme-control-' . $scenario;
+			native_measure_copy( $root, $theme_copy );
+			$theme_controls [ $scenario ] = native_measure_child( array( $theme_copy ), $scratch, 1, $scenario, false, 'theme' );
 		}
-		$out ['controls'] ['theme_1copy_1target'] = $themeControls;
+		$out ['controls'] ['theme_1copy_1target'] = $theme_controls;
 		native_measure_assert( $out ['controls'] ['callback_returning_null_repeated_plugin'] ['credential_callback_calls'] > 0, 'Callback-returning-null control did not invoke its resolver.' );
 		native_measure_assert( 4 === $out ['controls'] ['callback_revoked_repeated_plugin'] ['credential_callback_calls'], 'Revoked callback control did not re-resolve before the second discovery.' );
 		file_put_contents( $root . '/.workspaces/evidence/native-discovery-measure.json', json_encode( $out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );

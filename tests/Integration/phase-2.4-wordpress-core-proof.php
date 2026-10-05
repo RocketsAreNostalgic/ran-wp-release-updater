@@ -62,7 +62,7 @@ putenv( 'RAN_WP_RELEASE_UPDATER_PHASE24=' . $marker );
 if ( ! mkdir( $base, 0700, false ) ) {
 	throw new RuntimeException( 'Could not prepare isolated proof root.' );
 }
-if ( is_link( $base ) || $base !== realpath( $base ) || dirname( $base ) !== $workspace || false === file_put_contents( $marker_file, $marker . "\n" ) ) {
+if ( is_link( $base ) || realpath( $base ) !== $base || dirname( $base ) !== $workspace || false === file_put_contents( $marker_file, $marker . "\n" ) ) {
 	throw new RuntimeException( 'Could not establish a real disposable proof root and marker.' );
 }
 
@@ -118,7 +118,7 @@ try {
 	create_fixture_plugin( $site_path, 'phase24-plugin', $plugin_uri );
 	create_fixture_theme( $site_path, 'phase24-theme', $theme_uri );
 	create_fixture_theme( $site_path, 'phase24-manager-theme', $manager_theme_uri );
-	create_manager_plugin( $site_path, 'phase24-manager-theme', $manager_theme_uri );
+	create_manager_plugin( $site_path, 'phase24-manager-theme' );
 
 	file_put_contents(
 		$site_path . '/wp-config.php',
@@ -215,7 +215,7 @@ try {
 				$preoffer_failure       = in_array( $phase_mode, array( 'download', 'validation' ), true );
 				$http                   = is_array( $one ) ? ( $one['post_shutdown']['http'] ?? null ) : null;
 				$common_proof           = is_array( $one )
-				&& $site_path . '/wp-content/plugins/ran-wp-release-updater' === ( $one['sourceRoot'] ?? null )
+				&& ( $one['sourceRoot'] ?? null ) === $site_path . '/wp-content/plugins/ran-wp-release-updater'
 				&& true === ( $one['activation_readback']['plugin_active'] ?? null )
 				&& true === ( $one['activation_readback']['theme_active'] ?? null )
 				&& false === ( $one['activation_readback']['manager_theme_active'] ?? null )
@@ -261,7 +261,7 @@ try {
 				$preoffer_failure_proof = $preoffer_failure
 				&& false === ( $one['sanity']['offer_hook_fired'] ?? null )
 				&& 0 === ( $one['automatic_vcs_checkout_override']['calls'] ?? null )
-				&& $phase_mode === ( $one['core_upgrade']['failure_stage'] ?? null )
+				&& ( $one['core_upgrade']['failure_stage'] ?? null ) === $phase_mode
 				&& '2.0.0' === ( $one['core_upgrade']['version_before'] ?? null )
 				&& '2.0.0' === ( $one['core_upgrade']['version_after'] ?? null )
 				&& false === ( $one['core_upgrade']['offer_token_used'] ?? null )
@@ -275,7 +275,7 @@ try {
 				&& true === ( $one['sanity']['offer_hook_fired'] ?? null )
 				&& ( 'automatic' !== $policy || 0 < ( $one['automatic_vcs_checkout_override']['calls'] ?? 0 ) )
 				&& true === ( $one['core_upgrade']['failed'] ?? null )
-				&& $phase_mode === ( $one['core_upgrade']['failure_stage'] ?? null )
+				&& ( $one['core_upgrade']['failure_stage'] ?? null ) === $phase_mode
 				&& '2.0.0' === ( $one['core_upgrade']['version_before'] ?? null )
 				&& '3.0.0' === ( $one['core_upgrade']['version_after'] ?? null )
 				&& ( 'install' !== $phase_mode || 'phase24_injected_post_copy_failure' === ( $one['core_upgrade']['result_code'] ?? null ) )
@@ -385,7 +385,7 @@ try {
 	if ( is_file( $hook_file ) ) {
 		unlink( $hook_file );
 	}
-	if ( is_link( $base ) || $base !== realpath( $base ) || dirname( $base ) !== $workspace || ! is_file( $marker_file ) || is_link( $marker_file ) || $marker . "\n" !== file_get_contents( $marker_file ) ) {
+	if ( is_link( $base ) || realpath( $base ) !== $base || dirname( $base ) !== $workspace || ! is_file( $marker_file ) || is_link( $marker_file ) || file_get_contents( $marker_file ) !== $marker . "\n" ) {
 		throw new RuntimeException( 'Refusing cleanup because disposable-root ownership cannot be revalidated.' );
 	}
 	removeTree( $base );
@@ -558,7 +558,7 @@ function create_fixture_theme( string $site, string $identity, string $uri ): vo
 	}
 }
 
-function create_manager_plugin( string $site, string $theme, string $uri ): void {
+function create_manager_plugin( string $site, string $theme ): void {
 	$root = $site . '/wp-content/plugins/phase24-manager';
 	if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 		throw new RuntimeException( 'Could not create manager plugin directory.' );

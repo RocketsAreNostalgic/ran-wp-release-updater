@@ -8,20 +8,20 @@ use PHPUnit\Framework\TestCase;
 
 final class IntegrationProofSecurityContractTest extends TestCase {
 
-	public function testDisposableProofsRequireAndValidateAnExplicitWordPressRoot(): void {
+	public function test_disposable_proofs_require_and_validate_an_explicit_word_press_root(): void {
 		foreach ( array( 'wordpress-native-mixed-bulk-proof.php', 'phase-2.4-wordpress-core-proof.php' ) as $script ) {
 			$proof = $this->proof( $script );
 
 			self::assertStringContainsString( "getenv( 'RAN_WP_RELEASE_UPDATER_LOCAL_WP_ROOT' )", $proof );
 			self::assertStringContainsString( 'realpath( $wp_root_input )', $proof );
 			self::assertStringNotContainsString( '?: $wp_root', $proof );
-			foreach ( array( '/wp-load.php', '/wp-settings.php', '/wp-includes/version.php' ) as $requiredFile ) {
-				self::assertStringContainsString( $requiredFile, $proof );
+			foreach ( array( '/wp-load.php', '/wp-settings.php', '/wp-includes/version.php' ) as $required_file ) {
+				self::assertStringContainsString( $required_file, $proof );
 			}
 		}
 	}
 
-	public function testDisposableProofsKeepAdminPasswordsOutOfSourceAndProcessArguments(): void {
+	public function test_disposable_proofs_keep_admin_passwords_out_of_source_and_process_arguments(): void {
 		foreach ( array( 'wordpress-native-mixed-bulk-proof.php', 'phase-2.4-wordpress-core-proof.php' ) as $script ) {
 			$proof = $this->proof( $script );
 

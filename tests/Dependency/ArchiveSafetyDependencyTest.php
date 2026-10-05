@@ -29,19 +29,25 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 		$method_code   = 'RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase';
 		$variable_code = 'WordPress.NamingConventions.ValidVariableName.VariableNotSnakeCase';
 		$source        = "<?php\nnamespace Tests;\nclass NamingProbe extends \\PHPUnit\\Framework\\TestCase {\npublic function owned_method(): int { \$owned_value = 1; return \$owned_value; }\n}\n";
-		foreach ( array( 'Archive/ArchiveScanResultTest.php', 'Contract/ReleaseVersionTest.php', 'Dependency/ArchiveSafetyDependencyTest.php', 'Provider/GitHubReleaseAdapterTest.php', 'Runtime/RequestBrokerTest.php', 'WordPress/NativePackageUpdaterTest.php', 'Support/FakeOptionDatabase.php', 'Integration/wordpress-integration.php', 'Integration/wordpress-integration/distribution.php', 'Archive/FutureTest.php', 'Contract/FutureTest.php', 'Dependency/FutureTest.php', 'Provider/FutureTest.php', 'Runtime/FutureTest.php', 'WordPress/FutureTest.php', 'Support/FutureTest.php', 'Integration/FutureTest.php', 'Integration/wordpress-integration/FutureTest.php', 'Performance/FutureTest.php' ) as $path ) {
-			$in_scope = ! str_starts_with( $path, 'Performance/' );
-			self::assertSame( array(), $this->naming_diagnostics( $path, $source ) );
-			self::assertSame( $in_scope, in_array( $method_code, $this->naming_diagnostics( $path, str_replace( 'owned_method', 'ownedMethod', $source ) ), true ), $path );
-			self::assertSame( $in_scope, in_array( $variable_code, $this->naming_diagnostics( $path, str_replace( 'owned_value', 'ownedValue', $source ) ), true ), $path );
+		foreach ( array( 'Archive/ArchiveScanResultTest.php', 'Contract/ReleaseVersionTest.php', 'Dependency/ArchiveSafetyDependencyTest.php', 'Provider/GitHubReleaseAdapterTest.php', 'Runtime/RequestBrokerTest.php', 'WordPress/NativePackageUpdaterTest.php', 'Support/FakeOptionDatabase.php', 'Integration/wordpress-integration.php', 'Integration/wordpress-integration/distribution.php', 'Archive/FutureTest.php', 'Contract/FutureTest.php', 'Dependency/FutureTest.php', 'Provider/FutureTest.php', 'Runtime/FutureTest.php', 'WordPress/FutureTest.php', 'Support/FutureTest.php', 'Integration/FutureTest.php', 'Integration/wordpress-integration/FutureTest.php', 'Performance/FutureTest.php', 'Performance/KernelPerformanceTest.php', 'Architecture/NeutralKernelBoundaryTest.php', 'Architecture/FutureTest.php', 'Documentation/ReadmeExamplesTest.php', 'Documentation/FutureTest.php', 'bootstrap.php', 'FutureTest.php', 'FutureRoot/NestedTest.php' ) as $path ) {
+			self::assertSame( array(), $this->profile_diagnostics( $path, $source ) );
+			self::assertSame( true, in_array( $method_code, $this->profile_diagnostics( $path, str_replace( 'owned_method', 'ownedMethod', $source ) ), true ), $path );
+			self::assertSame( true, in_array( $variable_code, $this->profile_diagnostics( $path, str_replace( 'owned_value', 'ownedValue', $source ) ), true ), $path );
 		}
 		foreach ( array( 'Support/MysqliOptionDatabase.php', 'Support/FutureTest.php' ) as $path ) {
-			self::assertContains( 'WordPress.PHP.YodaConditions.NotYoda', $this->naming_diagnostics( $path, str_replace( 'return $owned_value;', 'return $owned_value === 1;', $source ) ), $path );
+			self::assertContains( 'WordPress.PHP.YodaConditions.NotYoda', $this->profile_diagnostics( $path, str_replace( 'return $owned_value;', 'return $owned_value === 1;', $source ) ), $path );
+		}
+		foreach ( array( 'Integration/release-source-consumer-proof.php', 'Performance/native-discovery-measure.php', 'FutureRoot/NestedTest.php' ) as $path ) {
+			self::assertContains( 'WordPress.PHP.YodaConditions.NotYoda', $this->profile_diagnostics( $path, str_replace( 'return $owned_value;', 'return $owned_value === 1;', $source ) ), $path );
+			self::assertContains( 'Generic.CodeAnalysis.UnusedFunctionParameter.Found', $this->profile_diagnostics( $path, '<?php function profile_probe( $unused ) { return 1; }' ), $path );
+		}
+		foreach ( array( 'bootstrap.php', 'Documentation/ReadmeExamplesTest.php', 'Integration/wordpress-integration/distribution.php', 'FutureRoot/NestedTest.php' ) as $path ) {
+			self::assertContains( 'Universal.NamingConventions.NoReservedKeywordParameterNames.classFound', $this->profile_diagnostics( $path, '<?php function profile_probe( $class ) { return $class; }' ), $path );
 		}
 	}
 
 	/** @return list<string> */
-	private function naming_diagnostics( string $path, string $source ): array {
+	private function profile_diagnostics( string $path, string $source ): array {
 		$root    = dirname( __DIR__, 2 );
 		$process = proc_open(
 			array( PHP_BINARY, $root . '/vendor/bin/phpcs', '--standard=' . $root . '/.phpcs.xml', '--report=json', '-q', '--no-colors', '--stdin-path=' . $root . '/tests/' . $path, '-' ),
@@ -65,6 +71,6 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 		$report = json_decode( $output, true, 512, JSON_THROW_ON_ERROR );
 		self::assertArrayHasKey( 'files', $report );
 		$messages = array_merge( ...array_column( array_values( $report['files'] ), 'messages' ) );
-		return array_values( array_filter( array_column( $messages, 'source' ), static fn( string $code ): bool => str_starts_with( $code, 'RANOwnedMethods.' ) || str_starts_with( $code, 'WordPress.NamingConventions.ValidVariableName.' ) || 'WordPress.PHP.YodaConditions.NotYoda' === $code ) );
+		return array_values( array_filter( array_column( $messages, 'source' ), static fn( string $code ): bool => str_starts_with( $code, 'RANOwnedMethods.' ) || str_starts_with( $code, 'WordPress.NamingConventions.ValidVariableName.' ) || 'WordPress.PHP.YodaConditions.NotYoda' === $code || str_starts_with( $code, 'Generic.CodeAnalysis.UnusedFunctionParameter.' ) || str_starts_with( $code, 'Universal.NamingConventions.NoReservedKeywordParameterNames.' ) ) );
 	}
 }

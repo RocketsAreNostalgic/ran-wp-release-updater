@@ -9,28 +9,28 @@ use ReflectionMethod;
 
 final class ReleaseSourceContractDocumentationTest extends TestCase {
 
-	public function testIssue44PublicContractClarificationsRemainDocumented(): void {
-		$root           = dirname( __DIR__, 2 );
-		$readme         = file_get_contents( $root . '/README.md' );
-		$integration    = file_get_contents( $root . '/docs/integration.md' );
-		$releaseSources = file_get_contents( $root . '/docs/release-sources.md' );
+	public function test_issue44_public_contract_clarifications_remain_documented(): void {
+		$root            = dirname( __DIR__, 2 );
+		$readme          = file_get_contents( $root . '/README.md' );
+		$integration     = file_get_contents( $root . '/docs/integration.md' );
+		$release_sources = file_get_contents( $root . '/docs/release-sources.md' );
 
 		self::assertIsString( $readme );
 		self::assertIsString( $integration );
-		self::assertIsString( $releaseSources );
+		self::assertIsString( $release_sources );
 
-		foreach ( array( $readme, $integration ) as $releaseGuide ) {
+		foreach ( array( $readme, $integration ) as $release_guide ) {
 			self::assertStringContainsString(
 				'`MAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH` form',
-				$releaseGuide
+				$release_guide
 			);
 			self::assertStringContainsString(
 				'prerelease suffix subset such as `1.2.3-beta.1` or `v1.2.3-beta.1`',
-				$releaseGuide
+				$release_guide
 			);
 			self::assertStringContainsString(
 				'build metadata (`+...`) is not supported',
-				$releaseGuide
+				$release_guide
 			);
 		}
 		self::assertStringContainsString(
@@ -44,39 +44,39 @@ final class ReleaseSourceContractDocumentationTest extends TestCase {
 
 		self::assertStringContainsString(
 			'`channel` accepts `stable` or `prerelease` and defaults to `stable`',
-			$releaseSources
+			$release_sources
 		);
 		self::assertStringContainsString(
 			'`credentials` is an optional request-local callable returning a token string or `null` and defaults to anonymous access',
-			$releaseSources
+			$release_sources
 		);
 		self::assertStringContainsString(
 			'`maximum_artifact_bytes` is a positive compressed-ZIP byte ceiling and defaults to 52,428,800 bytes',
-			$releaseSources
+			$release_sources
 		);
 		self::assertStringContainsString(
 			'`release_identity` and `tag`',
-			$releaseSources
+			$release_sources
 		);
 		self::assertStringContainsString(
 			'A successful inspection returns the opaque `fingerprint`',
-			$releaseSources
+			$release_sources
 		);
 		self::assertStringContainsString(
 			'downloads and validates the full ZIP',
-			$releaseSources
+			$release_sources
 		);
 		self::assertStringContainsString(
 			'discards those inspection bytes synchronously',
-			$releaseSources
+			$release_sources
 		);
 		self::assertStringContainsString(
 			'A later `acquire()` performs a fresh download',
-			$releaseSources
+			$release_sources
 		);
 	}
 
-	public function testReleaseSourceOptionalArgumentDefaultsMatchThePublicBootstrap(): void {
+	public function test_release_source_optional_argument_defaults_match_the_public_bootstrap(): void {
 		$registrar  = require dirname( __DIR__, 2 ) . '/bootstrap.php';
 		$parameters = ( new ReflectionMethod( $registrar, 'releases' ) )->getParameters();
 

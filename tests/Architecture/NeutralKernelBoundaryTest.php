@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 
 final class NeutralKernelBoundaryTest extends TestCase {
 
-	public function testEveryProductionFileExcludesProviderProtocolAndIdentityAssumptions(): void {
+	public function test_every_production_file_excludes_provider_protocol_and_identity_assumptions(): void {
 		$root  = dirname( __DIR__, 2 );
 		$files = glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE ) ?: array();
 		self::assertNotEmpty( $files );
@@ -24,7 +24,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		}
 	}
 
-	public function testNeutralKernelContainsNoProviderProtocolOrWordPressTransport(): void {
+	public function test_neutral_kernel_contains_no_provider_protocol_or_word_press_transport(): void {
 		$root  = dirname( __DIR__, 2 );
 		$files = array_merge(
 			glob( $root . '/src/Contract/*.php' ) ?: array(),
@@ -49,7 +49,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		}
 	}
 
-	public function testRuntimeHasNoProviderCatalogueOrCompositionActivation(): void {
+	public function test_runtime_has_no_provider_catalogue_or_composition_activation(): void {
 		$root = dirname( __DIR__, 2 );
 		self::assertFileDoesNotExist( $root . '/runtime-catalogue.json' );
 		self::assertFileDoesNotExist( $root . '/src/Runtime/Composition/Github.php' );
@@ -61,7 +61,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		self::assertStringNotContainsString( 'gitlab', $runtime );
 	}
 
-	public function testRuntimeCatalogOnlyDispatchesToTheSealedGitHubAdapter(): void {
+	public function test_runtime_catalog_only_dispatches_to_the_sealed_git_hub_adapter(): void {
 		$root    = dirname( __DIR__, 2 );
 		$runtime = (string) file_get_contents( $root . '/runtime.php' );
 		$catalog = strstr( $runtime, '/* The sealed catalog is deliberately local to this selected runtime. */' );
@@ -80,7 +80,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		self::assertStringNotContainsString( "'configuration_update_uri'", $catalog );
 	}
 
-	public function testSelectedRuntimeEntrypointOwnsEveryLifecycleClass(): void {
+	public function test_selected_runtime_entrypoint_owns_every_lifecycle_class(): void {
 		$root = dirname( __DIR__, 2 );
 		require $root . '/runtime.php';
 		foreach ( array(
@@ -106,7 +106,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		}
 	}
 
-	public function testGitHubProtocolIsConfinedToTheSelectedProviderDirectory(): void {
+	public function test_git_hub_protocol_is_confined_to_the_selected_provider_directory(): void {
 		$root     = dirname( __DIR__, 2 );
 		$provider = $root . '/src/Provider/GitHub';
 		self::assertFileExists( $provider . '/GitHubCredentialResolver.php' );
@@ -121,25 +121,25 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		}
 	}
 
-	public function testNativeOperationExceptionsDoNotHideUnrelatedCalls(): void {
-		foreach ( $this->nativeExceptionPaths() as $path ) {
+	public function test_native_operation_exceptions_do_not_hide_unrelated_calls(): void {
+		foreach ( $this->native_exception_paths() as $path ) {
 			$root   = dirname( __DIR__, 2 );
 			$source = is_file( $root . '/' . $path ) ? (string) file_get_contents( $root . '/' . $path ) : "<?php\n";
-			self::assertSame( array(), $this->nativeDiagnostics( $path, $source ), $path );
-			self::assertContains( 'WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents', $this->nativeDiagnostics( $path, $source . "\nfile_get_contents( '/native-operation-probe' );\n" ), $path );
+			self::assertSame( array(), $this->native_diagnostics( $path, $source ), $path );
+			self::assertContains( 'WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents', $this->native_diagnostics( $path, $source . "\nfile_get_contents( '/native-operation-probe' );\n" ), $path );
 		}
 	}
 
-	public function testNativeOperationExceptionsDoNotHideUnrelatedSilencing(): void {
-		foreach ( $this->nativeExceptionPaths() as $path ) {
+	public function test_native_operation_exceptions_do_not_hide_unrelated_silencing(): void {
+		foreach ( $this->native_exception_paths() as $path ) {
 			$root   = dirname( __DIR__, 2 );
 			$source = is_file( $root . '/' . $path ) ? (string) file_get_contents( $root . '/' . $path ) : "<?php\n";
-			self::assertContains( 'WordPress.PHP.NoSilencedErrors.Discouraged', $this->nativeDiagnostics( $path, $source . "\n@is_file( '/native-operation-probe' );\n" ), $path );
+			self::assertContains( 'WordPress.PHP.NoSilencedErrors.Discouraged', $this->native_diagnostics( $path, $source . "\n@is_file( '/native-operation-probe' );\n" ), $path );
 		}
 	}
 
 	/** @return list<string> */
-	private function nativeExceptionPaths(): array {
+	private function native_exception_paths(): array {
 		return array(
 			'src/Archive/PackageIdentityValidator.php',
 			'src/Archive/TemporaryArtifact.php',
@@ -156,7 +156,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 	}
 
 	/** @return list<string> */
-	private function nativeDiagnostics( string $path, string $source ): array {
+	private function native_diagnostics( string $path, string $source ): array {
 		$root    = dirname( __DIR__, 2 );
 		$process = proc_open(
 			array( PHP_BINARY, $root . '/vendor/bin/phpcs', '--standard=' . $root . '/.phpcs.xml', '--report=json', '-q', '--no-colors', '--stdin-path=' . $root . '/' . $path, '-' ),
