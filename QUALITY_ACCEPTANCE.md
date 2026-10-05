@@ -14,7 +14,7 @@ dependency update. Release PR #70 remains held by the owner.
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
 | Generated `src/Dependency/ArchiveSafety.php` | PHPCS excluded; namespace-only byte parity against the locked `ran/updater-support` source and direct level-8 analysis remain required. Never hand-edit this file. |
-| `tests/Archive`, `tests/Contract`, `tests/Dependency` | Owned method and variable naming now cover these three roots, including future files. Five PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
+| `tests/Archive`, `tests/Contract`, `tests/Dependency` | Owned method and variable naming now cover these three roots, including future files. Six PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
 | Other `tests/` roots | The separate purpose-built fixture/harness naming boundary remains. Production callers, named arguments, callbacks and Reflection seams follow the production API. This cohort does not certify every fixture-local identifier as snake_case. |
 
 `composer check` retains strict validation, generated-copy parity, live advisory
@@ -102,9 +102,9 @@ never manual tags.
 This bounded proposal starts from main `0649dbb106fdbe8428b66a4f1efa0c52a03ddd99`,
 independently of the open native-operation refinement in PR #95. It covers four
 Archive tests, five Contract tests and one Dependency test. The locked checker
-exposed 115 naming diagnostics: 72 owned method declarations, 38 variable or
-interpolation occurrences, and five PHPUnit lifecycle overrides. Owned names and
-their calls/DataProvider references are normalized; the five required foreign
+exposed 115 naming diagnostics: 71 owned method declarations, 38 variable or
+interpolation occurrences, and six PHPUnit lifecycle overrides. Owned names and
+their calls/DataProvider references are normalized; the six required foreign
 overrides use exact declaration-local exceptions. Yoda, unused-parameter and
 reserved-parameter rules were already active and clear in this cohort.
 
