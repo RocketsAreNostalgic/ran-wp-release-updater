@@ -13,19 +13,33 @@ final class ConciseRegistrarTest extends TestCase {
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/concise-registrar-' . bin2hex( random_bytes( 6 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root . '/plugin', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root . '/theme', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root . '/manager-theme', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root . '/forced-plugin', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root . '/late-plugin', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/plugin/plugin.php', "<?php\n/*\nPlugin Name: Example\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n*/\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/theme/style.css', "/*\nTheme Name: Example Theme\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example-theme\n*/\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/manager-theme/style.css', "/*\nTheme Name: Managed Theme\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/managed-theme\n*/\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/forced-plugin/main.php', "<?php\n/*\nPlugin Name: Forced Plugin\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/forced-plugin\n*/\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/late-plugin/main.php', "<?php\n/*\nPlugin Name: Late Plugin\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/late-plugin\n*/\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root . '/canonical', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/canonical/plugin.php', "<?php\n/*\nPlugin Name: Canonical\nVersion: 1.0.0\nUpdate URI: HTTPS://GitHub.com/acme/example/\n*/\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root . '/mismatch', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/mismatch/plugin.php', "<?php\n/*\nPlugin Name: Mismatch\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/other\n*/\n" );
 	}
 
@@ -444,7 +458,9 @@ PHP
 			$extra
 		);
 		$prefix = '<?php define("WP_PLUGIN_DIR", ' . var_export( $this->root, true ) . '); function add_filter(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["p0_1_hooks"][]=array("hook"=>$hook,"callback"=>$callback);} function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["p0_1_hooks"][]=array("hook"=>$hook,"callback"=>$callback);} $GLOBALS["p0_1_hooks"]=array();$GLOBALS["wpdb"]=new stdClass();$GLOBALS["wp_version"]="6.8.0";$GLOBALS["wp_theme_directories"]=array(' . var_export( $this->root, true ) . ');$data=' . var_export( $data, true ) . ';';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $prefix . $body );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root ) . ' ' . escapeshellarg( $file ), $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );

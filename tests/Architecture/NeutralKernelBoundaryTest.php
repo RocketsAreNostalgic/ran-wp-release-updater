@@ -13,6 +13,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		$files = glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE ) ?: array();
 		self::assertNotEmpty( $files );
 		foreach ( $files as $file ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository architecture assertions without requiring WordPress filesystem initialization.
 			$source = file_get_contents( $file );
 			self::assertIsString( $source, $file );
 			self::assertDoesNotMatchRegularExpression(
@@ -33,6 +34,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 
 		self::assertNotEmpty( $files );
 		foreach ( $files as $file ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository architecture assertions without requiring WordPress filesystem initialization.
 			$source = file_get_contents( $file );
 			self::assertIsString( $source, $file );
 			self::assertDoesNotMatchRegularExpression(
@@ -53,7 +55,9 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		$root = dirname( __DIR__, 2 );
 		self::assertFileDoesNotExist( $root . '/runtime-catalogue.json' );
 		self::assertFileDoesNotExist( $root . '/src/Runtime/Composition/Github.php' );
-		$broker  = (string) file_get_contents( $root . '/src/Runtime/RequestBroker.php' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository architecture assertions without requiring WordPress filesystem initialization.
+		$broker = (string) file_get_contents( $root . '/src/Runtime/RequestBroker.php' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository architecture assertions without requiring WordPress filesystem initialization.
 		$runtime = (string) file_get_contents( $root . '/runtime.php' );
 		self::assertStringContainsString( 'register_target', $broker );
 		self::assertStringContainsString( 'public function boot', $runtime );
@@ -62,7 +66,8 @@ final class NeutralKernelBoundaryTest extends TestCase {
 	}
 
 	public function test_runtime_catalog_only_dispatches_to_the_sealed_git_hub_adapter(): void {
-		$root    = dirname( __DIR__, 2 );
+		$root = dirname( __DIR__, 2 );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository architecture assertions without requiring WordPress filesystem initialization.
 		$runtime = (string) file_get_contents( $root . '/runtime.php' );
 		$catalog = strstr( $runtime, '/* The sealed catalog is deliberately local to this selected runtime. */' );
 
@@ -117,22 +122,32 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		self::assertFileDoesNotExist( $provider . '/GitHubTemporaryArtifact.php' );
 		self::assertFileExists( $root . '/src/Archive/TemporaryArtifact.php' );
 		foreach ( glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE ) ?: array() as $file ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository architecture assertions without requiring WordPress filesystem initialization.
 			self::assertStringNotContainsString( 'GitHub', (string) file_get_contents( $file ), $file );
 		}
 	}
 
 	public function test_native_operation_exceptions_do_not_hide_unrelated_calls(): void {
 		foreach ( $this->native_exception_paths() as $path ) {
-			$root   = dirname( __DIR__, 2 );
+			$root = dirname( __DIR__, 2 );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository architecture assertions without requiring WordPress filesystem initialization.
 			$source = is_file( $root . '/' . $path ) ? (string) file_get_contents( $root . '/' . $path ) : "<?php\n";
 			self::assertSame( array(), $this->native_diagnostics( $path, $source ), $path );
-			self::assertContains( 'WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents', $this->native_diagnostics( $path, $source . "\nfile_get_contents( '/native-operation-probe' );\n" ), $path );
+			$probe       = $source . "\nfile_get_contents( '/native-operation-probe' );\nexec( 'fixture-probe' );\nproc_open( array( 'fixture-probe' ), array(), \$pipes );\nshell_exec( 'fixture-probe' );\nputenv( 'FIXTURE_PROBE=1' );\n";
+			$diagnostics = $this->native_diagnostics( $path, $probe );
+			self::assertContains( 'WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents', $diagnostics, $path );
+			if ( str_starts_with( $path, 'tests/' ) ) {
+				foreach ( array( 'system_calls_exec', 'system_calls_proc_open', 'system_calls_shell_exec', 'runtime_configuration_putenv' ) as $code ) {
+					self::assertContains( 'WordPress.PHP.DiscouragedPHPFunctions.' . $code, $diagnostics, $path );
+				}
+			}
 		}
 	}
 
 	public function test_native_operation_exceptions_do_not_hide_unrelated_silencing(): void {
 		foreach ( $this->native_exception_paths() as $path ) {
-			$root   = dirname( __DIR__, 2 );
+			$root = dirname( __DIR__, 2 );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository architecture assertions without requiring WordPress filesystem initialization.
 			$source = is_file( $root . '/' . $path ) ? (string) file_get_contents( $root . '/' . $path ) : "<?php\n";
 			self::assertContains( 'WordPress.PHP.NoSilencedErrors.Discouraged', $this->native_diagnostics( $path, $source . "\n@is_file( '/native-operation-probe' );\n" ), $path );
 		}
@@ -140,7 +155,7 @@ final class NeutralKernelBoundaryTest extends TestCase {
 
 	/** @return list<string> */
 	private function native_exception_paths(): array {
-		return array(
+		$paths = array(
 			'src/Archive/PackageIdentityValidator.php',
 			'src/Archive/TemporaryArtifact.php',
 			'src/Provider/GitHub/GitHubArtifactStore.php',
@@ -152,12 +167,24 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			'scripts/sync-updater-support.php',
 			'src/Archive/FutureNativeProbe.php',
 			'scripts/future-native-probe.php',
+			'tests/FutureNativeProbe.php',
+			'tests/Integration/FutureNativeProbe.php',
+			'tests/FutureRoot/Nested/FutureNativeProbe.php',
+			'tests/FutureRoot/bootstrap.php',
 		);
+		$root  = dirname( __DIR__, 2 );
+		foreach ( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/tests', \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
+			if ( $file->isFile() && 'php' === $file->getExtension() ) {
+				$paths[] = str_replace( '\\', '/', substr( $file->getPathname(), strlen( $root ) + 1 ) );
+			}
+		}
+		return $paths;
 	}
 
 	/** @return list<string> */
 	private function native_diagnostics( string $path, string $source ): array {
-		$root    = dirname( __DIR__, 2 );
+		$root = dirname( __DIR__, 2 );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the locked checker with an argument vector and stdin source; capture its diagnostics without executing the probe.
 		$process = proc_open(
 			array( PHP_BINARY, $root . '/vendor/bin/phpcs', '--standard=' . $root . '/.phpcs.xml', '--report=json', '-q', '--no-colors', '--stdin-path=' . $root . '/' . $path, '-' ),
 			array(
@@ -169,17 +196,21 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			$root
 		);
 		self::assertIsResource( $process );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write fixture bytes to the native stream while preserving its existing partial-write or subprocess protocol.
 		fwrite( $pipes[0], $source );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes[0] );
 		$output = stream_get_contents( $pipes[1] );
 		$error  = stream_get_contents( $pipes[2] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes[1] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes[2] );
 		$status = proc_close( $process );
 		self::assertContains( $status, array( 0, 1, 2, 3 ), $error );
 		$report = json_decode( $output, true, 512, JSON_THROW_ON_ERROR );
 		self::assertArrayHasKey( 'files', $report );
 		$messages = array_merge( ...array_column( array_values( $report['files'] ), 'messages' ) );
-		return array_values( array_filter( array_column( $messages, 'source' ), static fn( string $code ): bool => str_starts_with( $code, 'WordPress.WP.AlternativeFunctions.' ) || 'WordPress.PHP.NoSilencedErrors.Discouraged' === $code ) );
+		return array_values( array_filter( array_column( $messages, 'source' ), static fn( string $code ): bool => str_starts_with( $code, 'WordPress.WP.AlternativeFunctions.' ) || 'WordPress.PHP.NoSilencedErrors.Discouraged' === $code || str_starts_with( $code, 'WordPress.PHP.DiscouragedPHPFunctions.system_calls_' ) || 'WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv' === $code ) );
 	}
 }

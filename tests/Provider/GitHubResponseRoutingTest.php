@@ -25,6 +25,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 	protected function tearDown(): void {
 		foreach ( $GLOBALS['ran_github_temp_paths'] as $path ) {
 			if ( is_string( $path ) && ( is_file( $path ) || is_link( $path ) ) ) {
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				@unlink( $path );
 			}
 		}

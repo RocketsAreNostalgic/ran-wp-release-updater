@@ -65,6 +65,7 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 			return $outcome;
 		}
 		$artifact_path = tempnam( $this->temporary_directory, 'ran-native-adapter-' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- The fake provider copies the real archive and requires private permissions before admitting custody.
 		if ( ! is_string( $artifact_path ) || ! copy( $this->archive, $artifact_path ) || ! chmod( $artifact_path, 0600 ) ) {
 			throw new \RuntimeException( 'Could not create fake artifact.' );
 		}

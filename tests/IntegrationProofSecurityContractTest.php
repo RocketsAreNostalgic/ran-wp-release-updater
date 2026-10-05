@@ -38,6 +38,7 @@ final class IntegrationProofSecurityContractTest extends TestCase {
 	}
 
 	private function proof( string $name ): string {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository contract assertions without requiring WordPress filesystem initialization.
 		return (string) file_get_contents( __DIR__ . '/Integration/' . $name );
 	}
 }

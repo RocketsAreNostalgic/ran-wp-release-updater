@@ -20,6 +20,7 @@ if ( 'fence-inspect' === $scenario ) {
 	$fixture_release_id    = 42;
 }
 $root = sys_get_temp_dir() . '/release-source-consumer-' . $type . '-' . bin2hex( random_bytes( 8 ) );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 	throw new RuntimeException( 'Could not create fixture root.' ); }
 $GLOBALS['rs_root']      = $root;
@@ -32,7 +33,9 @@ $GLOBALS['wpdb']         = new stdClass();
 register_shutdown_function(
 	static function () use ( $root ): void {
 		foreach ( glob( $root . '/*' ) ?: array() as $path ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@unlink( $path );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		} @rmdir( $root );
 	}
 );
@@ -63,6 +66,7 @@ function did_action( string $hook ): int {
 function wp_tempnam( string $name ): string|false {
 	$path = tempnam( $GLOBALS['rs_root'], 'rs-' );
 	if ( is_string( $path ) ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 		chmod( $path, 0600 );
 		$GLOBALS['rs_paths'][] = $path;
 	} return $path; }
@@ -75,7 +79,9 @@ function wp_safe_remote_get( string $url, array $args ): array|WP_Error {
 	if ( ! is_array( $response ) ) {
 		throw new RuntimeException( 'Unexpected mock request.' );
 	} if ( isset( $args['filename'], $response['file'] ) ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 		file_put_contents( $args['filename'], $response['file'] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 		chmod( $args['filename'], 0600 );
 	} return $response; }
 function wp_remote_retrieve_response_code( array $response ): int|string {
@@ -113,27 +119,34 @@ function rs_copy_verified( string $source, string $destination, array $facts ): 
 	$size  = $facts['artifact_size'] ?? null;
 	$limit = $facts['maximum_artifact_bytes'] ?? null;
 	rs_assert( is_int( $size ) && $size > 0 && is_int( $limit ) && $size <= $limit, 'Artifact facts are not bounded.' );
-	$input  = fopen( $source, 'rb' );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- The fixture needs the native stream mode and handle, including exclusive creation or archive truncation semantics.
+	$input = fopen( $source, 'rb' );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- The fixture needs the native stream mode and handle, including exclusive creation or archive truncation semantics.
 	$output = fopen( $destination, 'xb' );
 	if ( false === $input || false === $output ) {
 		throw new RuntimeException( 'Could not open prepared-copy stream.' ); }
 	try {
 		$remaining = $size;
 		while ( 0 < $remaining ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read the native stream directly to preserve bounded reads and injected failure behavior.
 			$chunk = fread( $input, min( 8192, $remaining ) );
 			if ( false === $chunk || '' === $chunk ) {
 				throw new RuntimeException( 'Prepared-copy read was incomplete.' ); }
 			for ( $offset = 0, $length = strlen( $chunk ); $offset < $length; ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write fixture bytes to the native stream while preserving its existing partial-write or subprocess protocol.
 				$written = fwrite( $output, substr( $chunk, $offset ) );
 				if ( false === $written || 0 === $written ) {
 					throw new RuntimeException( 'Prepared-copy write was incomplete.' );
 				} $offset += $written; }
 			$remaining -= $length;
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read the native stream directly to preserve bounded reads and injected failure behavior.
 		if ( false === feof( $input ) && '' !== fread( $input, 1 ) ) {
 			throw new RuntimeException( 'Artifact exceeded its inspected size.' ); }
 	} finally {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $input );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $output ); }
 	rs_assert( filesize( $destination ) === $size, 'Prepared copy size changed.' );
 	rs_assert( hash_equals( $facts['artifact_sha256'], (string) hash_file( 'sha256', $destination ) ), 'Prepared copy digest changed.' );
@@ -145,7 +158,9 @@ rs_assert( true === $zip->open( $zip_path, ZipArchive::CREATE | ZipArchive::OVER
 $entry = 'plugin' === $type ? 'consumer/consumer.php' : 'consumer/style.css';
 $zip->addFromString( $entry, 'plugin' === $type ? "<?php\n/*\nPlugin Name: Consumer\nVersion: 1.2.3\nUpdate URI: https://github.com/{$fixture_repository}\nRequires at least: 6.5\nRequires PHP: 8.2\n*/" : "/*\nTheme Name: Consumer\nVersion: 1.2.3\nUpdate URI: https://github.com/{$fixture_repository}\nRequires at least: 6.5\nRequires PHP: 8.2\n*/" );
 $zip->close();
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 chmod( $zip_path, 0600 );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 $bytes = file_get_contents( $zip_path );
 rs_assert( is_string( $bytes ), 'ZIP read failed.' );
 $release     = array(
@@ -255,6 +270,7 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 			rs_assert( ! file_exists( $GLOBALS['rs_paths'][ count( $GLOBALS['rs_paths'] ) - 1 ] ), 'Acquisition fence retained its owned artifact.' );
 		}
 		rs_assert( array() === $GLOBALS['rs_responses'], 'Fence mock queue was not drained.' );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- The following absence assertion observes cleanup; an already absent fixture must not emit a warning. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		@unlink( $root . '/fence-prepared.zip' );
 		rs_assert( ! file_exists( $root . '/fence-prepared.zip' ), 'Fixture owner could not remove its scenario file.' );
 		echo json_encode(
@@ -320,6 +336,7 @@ try {
 			throw new RuntimeException( 'Expected liveness loss.' );
 		} catch ( RuntimeException $failure ) {
 			rs_assert( 1002 === $failure->getCode(), 'Liveness loss did not use code 1002.' );
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- The following absence assertion observes cleanup; an already absent fixture must not emit a warning. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@unlink( $provisional );
 		} rs_assert( ! file_exists( $provisional ), 'Liveness failure retained provisional copy.' );
 		rs_assert( $artifact->discard(), 'Cleanup after liveness loss failed.' ); } else {
@@ -327,19 +344,23 @@ try {
 				$artifact->inspect(
 					static function ( string $path ) use ( $provisional, $acquisition ): void {
 						rs_copy_verified( $path, $provisional, $acquisition['value']['inspection'] );
+							// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 							file_put_contents( $path, 'changed' );
 					}
 				);
 				throw new RuntimeException( 'Expected changed artifact.' );
 			} catch ( RuntimeException $failure ) {
 				rs_assert( 1001 === $failure->getCode(), 'Changed artifact did not use code 1001.' );
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- The following absence assertion observes cleanup; an already absent fixture must not emit a warning. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				@unlink( $provisional );
 			} rs_assert( ! file_exists( $provisional ), 'Changed-artifact failure retained provisional copy.' );
 			rs_assert( ! $artifact->discard(), 'Changed artifact cleanup must fail safely.' ); }
 } catch ( Throwable $failure ) {
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort provisional-file cleanup preserves the original exception. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 	@unlink( $provisional );
 	throw $failure; }
 if ( 'happy' !== $scenario ) {
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- The following absence assertion observes cleanup; an already absent fixture must not emit a warning. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 	@unlink( $provisional ); }
 rs_assert( 'happy' === $scenario ? is_file( $provisional ) : ! file_exists( $provisional ), 'Consumer provisional-copy retention changed.' );
 rs_assert( 3 === $credentials, 'Resolver was not called once per operation.' );

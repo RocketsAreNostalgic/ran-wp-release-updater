@@ -108,6 +108,7 @@ $proof             = array(
 		&& null === ( $plugin->status()['native']['offered_release_identity'] ?? null )
 		&& null === ( $theme->status()['native']['offered_release_identity'] ?? null ),
 );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write the installed-distribution proof result for the parent harness to validate.
 file_put_contents( $output, json_encode( $proof, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . "\n" );
 
 function requiredInput( string $name ): string {

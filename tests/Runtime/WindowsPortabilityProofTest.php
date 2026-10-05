@@ -13,8 +13,11 @@ final class WindowsPortabilityProofTest extends TestCase {
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->workspace = dirname( __DIR__, 2 ) . '/.workspaces/windows-portability-proof-' . bin2hex( random_bytes( 8 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->workspace . '/plugins/example', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->workspace . '/themes/example', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->workspace . '/php-tmp', 0700, true );
 	}
 
@@ -28,7 +31,9 @@ final class WindowsPortabilityProofTest extends TestCase {
 	public function test_checked_in_runtime_identity_activates_and_resolves_plugin_and_theme_on_drive_paths(): void {
 		$plugin = $this->workspace . '/plugins/example/main.php';
 		$theme  = $this->workspace . '/themes/example/style.css';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $plugin, "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example-plugin\n*/\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $theme, "/*\nTheme Name: Example Theme\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example-theme\n*/\n" );
 
 		$result = $this->probe(
@@ -60,7 +65,9 @@ final class WindowsPortabilityProofTest extends TestCase {
 		$copy   = $this->package_copy();
 		$plugin = $this->workspace . '/plugins/example/main.php';
 		$theme  = $this->workspace . '/themes/example/style.css';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $plugin, "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example-plugin\n*/\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $theme, "/*\nTheme Name: Example Theme\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example-theme\n*/\n" );
 
 		$result = $this->probe(
@@ -80,13 +87,16 @@ final class WindowsPortabilityProofTest extends TestCase {
 
 	private function package_copy(): string {
 		$root = $this->workspace . '/package';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $root, 0700, true );
 		$source = dirname( __DIR__, 2 );
 		foreach ( array( 'bootstrap.php', 'runtime.php' ) as $file ) {
 			copy( $source . DIRECTORY_SEPARATOR . $file, $root . DIRECTORY_SEPARATOR . $file );
 		}
 		$this->copy_directory( $source . DIRECTORY_SEPARATOR . 'src', $root . DIRECTORY_SEPARATOR . 'src' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for isolated runtime and installed-package fixtures without requiring WordPress filesystem initialization.
 		$checked_in = json_decode( (string) file_get_contents( $source . DIRECTORY_SEPARATOR . 'runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$root . DIRECTORY_SEPARATOR . 'runtime-copy.json',
 			json_encode(
@@ -123,6 +133,7 @@ final class WindowsPortabilityProofTest extends TestCase {
 	}
 
 	private function copy_directory( string $source, string $destination ): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $destination, 0700, true );
 		foreach ( scandir( $source ) ?: array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
@@ -137,6 +148,7 @@ final class WindowsPortabilityProofTest extends TestCase {
 	/** @param array<string,string> $data @return array{activation:array<string,mixed>,hooks:int,package:string,plugin:array<string,mixed>,theme:array<string,mixed>} */
 	private function probe( array $data ): array {
 		$probe = $this->workspace . '/proof.php';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$probe,
 			'<?php $data = ' . var_export( $data, true ) . <<<'PHP'
@@ -159,6 +171,7 @@ echo json_encode(array('activation' => $activation, 'hooks' => count($GLOBALS['w
 PHP
 		);
 		$command = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->workspace . '/php-tmp' ) . ' ' . escapeshellarg( $probe );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( $command, $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 
@@ -168,6 +181,7 @@ PHP
 	private function remove( string $path ): void {
 		if ( ! is_dir( $path ) ) {
 			if ( file_exists( $path ) || is_link( $path ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				unlink( $path );
 			}
 			return;
@@ -175,9 +189,11 @@ PHP
 		foreach ( scandir( $path ) ?: array() as $name ) {
 			if ( '.' !== $name && '..' !== $name ) {
 				$child = $path . '/' . $name;
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				is_dir( $child ) && ! is_link( $child ) ? $this->remove( $child ) : unlink( $child );
 			}
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		rmdir( $path );
 	}
 }

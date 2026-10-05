@@ -52,6 +52,7 @@ $proof               = array(
 	),
 	'status'                          => $handle->status(),
 );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write the multisite proof result for the parent harness to validate.
 file_put_contents( $output, json_encode( $proof, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . "\n" );
 
 $release = getenv( 'RAN_UPDATER_NETWORK_RELEASE' );

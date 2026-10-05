@@ -14,6 +14,10 @@ under the `^1.0` development constraint.
 current and future test root. Yoda conditions, unused parameters and reserved
 parameter names likewise have no test file/root exclusions. Required foreign
 signatures use exact declaration-local exceptions recorded in acceptance.
+Test native filesystem, warning-suppression, subprocess and environment
+operations also use exact occurrence-local exceptions. Preserve their real
+identity/permission/stream semantics, process isolation and observed failure
+or best-effort teardown behavior; unrelated new calls remain checked.
 The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded and is
 namespace-only parity checked against the locked upstream package. All 36
 shipped PHP files, including that generated copy, remain directly analysed at

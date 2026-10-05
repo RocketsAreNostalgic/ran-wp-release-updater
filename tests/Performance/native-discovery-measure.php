@@ -28,7 +28,9 @@ namespace {
 		++$GLOBALS ['native_measure'] ['http_calls'];
 		$GLOBALS ['native_measure'] ['body_bytes'] += strlen( $body );
 		if ( isset( $args ['filename'] ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for native discovery measurement fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $args ['filename'], $body );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 			chmod( $args ['filename'], 0600 );
 			$GLOBALS ['native_measure'] ['streamed_bytes'] += strlen( $body );
 		}
@@ -54,6 +56,7 @@ namespace {
 	function wp_tempnam( string $name ): string|false {
 		$path = tempnam( $GLOBALS ['native_measure'] ['temp'], 'asset-' );
 		if ( is_string( $path ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 			chmod( $path, 0600 );
 			$GLOBALS ['native_measure'] ['temporary'] [] = $path;
 		}
@@ -135,6 +138,7 @@ namespace Tests\Performance {
 		$file = $root . '/runtime-copy.json';
 		native_measure_assert( is_file( $file ) && ! is_link( $file ), 'Runtime manifest is not a regular file: ' . $file );
 		try {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for native discovery measurement fixtures without requiring WordPress filesystem initialization.
 			$manifest = json_decode( (string) file_get_contents( $file ), true, 512, JSON_THROW_ON_ERROR );
 		} catch ( \Throwable $error ) {
 			throw new \RuntimeException( 'Runtime manifest is unreadable: ' . $file, 0, $error );
@@ -162,7 +166,9 @@ namespace Tests\Performance {
 		$zip->addFromString( $root . '/' . ( 'plugin' === $type ? $root . '.php' : 'style.css' ), $header );
 		$zip->addFromString( $root . '/readme.txt', 'fixture' );
 		$zip->close();
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for native discovery measurement fixtures without requiring WordPress filesystem initialization.
 		$bytes = file_get_contents( $path );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		unlink( $path );
 		return is_string( $bytes ) ? $bytes : throw new \RuntimeException( 'ZIP read failed.' );
 	}
@@ -204,6 +210,7 @@ namespace Tests\Performance {
 			'temporary'        => array(),
 		);
 		$installed_root             = $temp . '/shared-installed-' . bin2hex( random_bytes( 4 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for native discovery measurement fixtures with the specified permissions.
 		mkdir( $installed_root, 0700, true );
 		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
 			define( 'WP_PLUGIN_DIR', $installed_root );
@@ -220,11 +227,13 @@ namespace Tests\Performance {
 			$slug = 'repository-' . $index;
 			$uri  = 'https://github.com/owner/' . $slug;
 			$name = 'Fixture ' . $index;
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for native discovery measurement fixtures with the specified permissions.
 			mkdir( $installed_root . '/' . $slug, 0700, true );
 			$file   = $installed_root . '/' . $slug . '/' . ( 'plugin' === $target_type ? $slug . '.php' : 'style.css' );
 			$header = 'plugin' === $target_type
 				? "<?php\n/*\nPlugin Name: " . $name . "\nVersion: 1.0.0\nPlugin URI: " . $uri . "\nUpdate URI: " . $uri . "\nRequires PHP: 8.2\nRequires at least: 6.8\n*/"
 				: "/*\nTheme Name: " . $name . "\nVersion: 1.0.0\nTheme URI: " . $uri . "\nUpdate URI: " . $uri . "\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for native discovery measurement fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $file, $header );
 			$target_fixtures [] = array(
 				'repository' => $slug,
@@ -451,6 +460,7 @@ namespace Tests\Performance {
 		}
 		foreach ( $GLOBALS ['native_measure'] ['temporary'] as $path ) {
 			if ( is_file( $path ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				unlink( $path );
 			}
 		}
@@ -483,6 +493,7 @@ namespace Tests\Performance {
 		echo json_encode( native_measure_shared_request( $roots, (int) ( $args [2] ?? 1 ), $args [3] ?? 'cold', ( '--callback-control' === ( $args [4] ?? null ) ), $args [5] ?? 'plugin', ( '--callback-revoked' === ( $args [6] ?? null ) ) ), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
 	}
 	function native_measure_copy( string $from, string $to ): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for native discovery measurement fixtures with the specified permissions.
 		mkdir( $to, 0700, true );
 		foreach ( array( 'bootstrap.php', 'runtime.php', 'runtime-copy.json' ) as $file ) {
 			copy( $from . '/' . $file, $to . '/' . $file );
@@ -492,6 +503,7 @@ namespace Tests\Performance {
 			$relative    = substr( $file->getPathname(), strlen( $from . '/src' ) + 1 );
 			$destination = $to . '/src/' . $relative;
 			if ( $file->isDir() ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for native discovery measurement fixtures with the specified permissions.
 				mkdir( $destination, 0700, true );
 			} else {
 				copy( $file->getPathname(), $destination );
@@ -511,7 +523,8 @@ namespace Tests\Performance {
 				$environment[ $name ] = $value;
 			}
 		}
-		$pipes   = array();
+		$pipes = array();
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
 		$process = proc_open(
 			$command,
 			array(
@@ -524,10 +537,13 @@ namespace Tests\Performance {
 			$environment
 		);
 		native_measure_assert( is_resource( $process ), 'Could not start measurement subprocess.' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes [0] );
 		$stdout = stream_get_contents( $pipes [1] );
 		$stderr = stream_get_contents( $pipes [2] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes [1] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes [2] );
 		$exit = proc_close( $process );
 		if ( 0 !== $exit ) {
@@ -544,6 +560,7 @@ namespace Tests\Performance {
 	function native_measure_main(): void {
 		$root    = dirname( __DIR__, 2 );
 		$scratch = $root . '/.workspaces/evidence/u2-native-measure-' . bin2hex( random_bytes( 4 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for native discovery measurement fixtures with the specified permissions.
 		mkdir( $scratch, 0700, true );
 		$scenarios = array( 'registration', 'cold', 'repeated', 'incompatible', 'no-newer', 'refresh', 'install', 'changed' );
 		$rows      = array();
@@ -604,6 +621,7 @@ namespace Tests\Performance {
 		$out ['controls'] ['theme_1copy_1target'] = $theme_controls;
 		native_measure_assert( $out ['controls'] ['callback_returning_null_repeated_plugin'] ['credential_callback_calls'] > 0, 'Callback-returning-null control did not invoke its resolver.' );
 		native_measure_assert( 4 === $out ['controls'] ['callback_revoked_repeated_plugin'] ['credential_callback_calls'], 'Revoked callback control did not re-resolve before the second discovery.' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write the measurement result as exact local JSON bytes after all scenarios have passed.
 		file_put_contents( $root . '/.workspaces/evidence/native-discovery-measure.json', json_encode( $out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
 		echo json_encode( $out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . PHP_EOL;
 	}

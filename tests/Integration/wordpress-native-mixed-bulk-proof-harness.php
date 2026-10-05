@@ -9,6 +9,7 @@ $source_root          = getenv( 'RAN_WP_RELEASE_UPDATER_SOURCE_ROOT' );
 $marker_file          = getenv( 'RAN_WP_RELEASE_UPDATER_MARKER_FILE' );
 $marker_root          = is_string( $marker_file ) ? realpath( dirname( $marker_file ) ) : false;
 $expected_source_root = is_string( $marker_root ) ? $marker_root . '/site/wp-content/plugins/ran-wp-release-updater' : '';
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 if ( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK' !== getenv( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK' ) || ! is_string( $source_root ) || realpath( $source_root ) !== $expected_source_root || ! is_file( (string) $marker_file ) || is_link( (string) $marker_file ) || "RAN_WP_RELEASE_UPDATER_MIXED_BULK\n" !== file_get_contents( (string) $marker_file ) ) {
 	throw new RuntimeException( 'The mixed-bulk harness is not inside its owned disposable site.' );
 }
@@ -67,6 +68,7 @@ final class MixedBulkFixtureAdapter implements ReleaseAdapter {
 			throw new RuntimeException( 'The fixture descriptor crossed target custody.' );
 		}
 		$path = tempnam( sys_get_temp_dir(), 'ran-mixed-bulk-artifact-' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 		if ( ! is_string( $path ) || ! copy( $this->archive, $path ) || ! chmod( $path, 0600 ) ) {
 			throw new RuntimeException( 'The fixture artifact could not be acquired.' );
 		}
@@ -281,6 +283,7 @@ add_action(
 			'bytesAfter'          => $bytes_after,
 		);
 		$evidence['manifestEvidence'] = $manifest_evidence;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 		file_put_contents( $output_path, json_encode( $evidence, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
 	},
 	PHP_INT_MAX
@@ -512,6 +515,7 @@ function target_file_manifest( string $type, string $identity ): array {
 	return $manifest;
 }
 function target_bytes( string $type, string $identity ): string {
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 	return (string) file_get_contents( target_path( $type, $identity ) );
 }
 function target_version( string $type, string $identity ): ?string {

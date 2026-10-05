@@ -33,12 +33,12 @@ local product requirements, not shared-standard exemptions.
 | Internal exception text | It is closed failure data, not HTML output. EscapeOutput's exception diagnostic is disabled; public failure projection and message-sanitization tests remain. |
 | Native JSON | Protocol hashes and canonical bytes require native `json_encode` flags and `JSON_THROW_ON_ERROR`, including before WordPress helpers exist. JSON/hash regression tests remain. |
 | Native URL parsing | Provider-neutral canonicalization/bootstrap cannot require WordPress URL helpers. Canonical URI and redirect rejection tests remain. |
-| Native filesystem and local warning suppression | Archive/custody, installed identity, atomic persistence and cleanup require native identity/permission/rename checks. The seven affected production files and two tools use occurrence-local diagnostic annotations; broad category exclusions remain only for the separate test-fixture boundary. Checked failure, observed deletion/retry and best-effort cleanup retain their distinct behavior. Archive, symlink, cleanup, Windows and no-dev proofs remain. |
+| Native filesystem and local warning suppression | Archive/custody, installed identity, atomic persistence and cleanup require native identity/permission/rename checks. The seven affected production files and two tools use occurrence-local diagnostic annotations; test-fixture native and process operations likewise use exact occurrence-local annotations after the refinement below. Checked failure, observed deletion/retry and best-effort cleanup retain their distinct behavior. Archive, symlink, cleanup, Windows and no-dev proofs remain. |
 | Trusted local metadata reads | Bootstrap and RuntimeCopySelector read verified local metadata. Only their native file-read diagnostic is excepted; runtime content identity/provenance and selection/refusal tests remain. |
 | Prepared SQL identifier/CAS boundary | BindingFenceCoordinator validates the table identifier and prepares data values. Only two SQL parser false-positive rules are excepted for that file. MySQL CAS and setup-failure proofs remain required. |
 | Bounded base64 operation tokens | NativePackageUpdater uses URL-safe base64 for opaque operation tokens, not executable code. Only its encode/decode rules and test fixtures are excepted. |
 | Native `ZipArchive::$numFiles` | Two line-local property-name ignores cover three reads of the external extension property. Owned members remain enforced. |
-| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Free-function/global naming, native primitives and the other fixture-specific rules remain explicitly scoped; condition/unused/reserved-parameter file exclusions are removed. These retained boundaries do not exempt production. |
+| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Free-function/global naming and the other fixture-specific rules remain explicitly scoped; native/process exceptions are occurrence-local; condition/unused/reserved-parameter file exclusions are removed. These retained boundaries do not exempt production. |
 
 Seven declaration-local PHPStan exceptions remain: RequestBroker's
 Reflection-invoked private validation seam; ReleaseSource's direct-filesystem
@@ -309,3 +309,54 @@ This completes these six test rule families, not acceptance of every retained
 fixture/global/native-primitive exception or the whole ecosystem. Remaining
 exceptions, Admin Shell inventory, UI/manual/operational acceptance and releases
 remain separate under organisation #65/#128. No release is authorized.
+
+## Native test-fixture and subprocess exception refinement
+
+This tranche follows #102 at `35476cefdf45cd2c32b6698629b74181180126d9`
+(tree `72bd32d9e2a75294b9c05fe59be77e7630b76195`). Removing the six
+test-path exclusions exposes 501 warnings in 41 files: 426 native filesystem
+operations, 32 warning-suppression reports, 18 `exec`, 14 `proc_open`, one
+`shell_exec` and ten `putenv` calls. The 501 reports are not 501 defects.
+They are narrowed to 461 exact-code line-local annotations, with repeated
+rationales grouped by the actual invariant below. No whole-test-file exception
+remains for these six families. Existing global JSON/URL policy and separate
+production metadata-read, SQL, base64 and fixture-syntax boundaries remain.
+
+| Boundary | Retained reason and evidence |
+| --- | --- |
+| Real filesystem fixtures | Setup writes exact package, manifest, header, malformed-input and replacement bytes. Native directories, modes, streams and renames preserve inode/custody/permission boundaries that a WordPress filesystem abstraction would change. Archive, provider, runtime, installed identity and Windows tests exercise them. |
+| Native teardown and deliberate deletion | Direct removal preserves existing ownership, link and marker checks. Core-consumption simulations and injected deletion/permission seams stay distinct from ordinary teardown. No new fallback, deletion scope or success assumption is introduced. |
+| Warning suppression | Thirty-two reports remain local. Checked copy failure becomes a harness exception; consumer cleanup is observed by absence assertions; unavailable isolated MySQL teardown and ordinary fixture teardown remain best-effort. The original exception survives failure cleanup. No `@` is added or removed. |
+| Child processes and pipes | Separate PHP processes isolate bootstrap/global state; isolated mysqld workers prove CAS concurrency. Existing argv arrays or escaped shell arguments, cwd/env, pipe handling and exit/output assertions are preserved. The sole shell lookup is the fixed `command -v mysqld` fallback followed by executable validation. |
+| Environment changes | The setup-failure proof restores both prior values in `finally`. The standalone phase-2.4 process configures its own temporary directories and proof marker for descendants. These are test-process environment changes, not persisted product settings. |
+| Local inspection and result files | Architecture/docs/workflow assertions read exact repository bytes without WordPress initialization. Installed/measurement harnesses write local proof results for their parent or later inspection. |
+
+The existing architecture checker tests now enumerate all maintained test PHP
+and representative future/root/nested paths. Each existing source must remain
+clean for these families; appended native reads, silencing, all three process
+functions and `putenv` must report their exact codes. Probe text is supplied to
+PHPCS stdin and never executed. This exposed the production `/bootstrap.php`
+read exclusion also matching test bootstrap files; its pattern now explicitly
+rejects every `/tests/` path, with current and nested bootstrap controls.
+Production's metadata-read exception remains; no production bytes change.
+
+All 40 changed fixture PHP files outside the expanded architecture guard retain
+identical executable tokens and string bytes. Only annotations and required
+alignment whitespace change there. No production, scripts, dependency,
+runtime identity, API, package version or workflow changes are included.
+PHPStan remains level 8. The other 965 reports from the wider test-exclusion
+probe remain a separate review inventory, not automatically accepted debt.
+
+Local canonical `composer check` passed, including live advisory audit, syntax,
+standards, level-8 analysis, 477 tests / 26,316 assertions and the no-dev consumer
+proof. All 477 test/dataset identities are unchanged. The expanded checker tests
+pass 2 / 1,108; six old-scope negatives and two bootstrap-collision negatives
+prove the scope change, while the production metadata-read exception remains.
+The second fixer pass reports no changes. Native discovery measurement passed
+96 rows plus two plugin and five theme controls; setup-failure cleanup passed.
+Exact-head independent review and native CI remain separate PR qualification.
+
+Legacy Local-only phase-2.4/mixed-bulk end-to-end suites require their original
+external prerequisites and are not claimed as locally executed. Native CI
+continues to own the installed WordPress, MySQL and Windows qualification.
+This refinement does not authorize a merge, release or connected adoption.

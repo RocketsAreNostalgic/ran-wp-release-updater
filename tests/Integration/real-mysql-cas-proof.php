@@ -28,6 +28,7 @@ try {
 	$data   = $root . '/data';
 	$pid    = $root . '/mysqld.pid';
 	$mysqld = resolveMysqld();
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	if ( ! mkdir( $data, 0700, true ) ) {
 		throw new RuntimeException( 'Could not create isolated MySQL directory.' );
 	}
@@ -35,6 +36,7 @@ try {
 		throw new RuntimeException( 'Could not enter isolated MySQL data directory.' );
 	}
 	run( array( $mysqld, '--no-defaults', '--initialize-insecure', '--datadir=' . $data, '--socket=mysql.sock', '--tmpdir=' . $root, '--skip-mysqlx' ), $data );
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Start the dedicated mysqld child with explicit argv and fixture paths; the harness owns its shutdown.
 	$server = proc_open(
 		array(
 			$mysqld,
@@ -145,6 +147,7 @@ function workers( string $scenario, string $data ): array {
 		? array( str_repeat( 'c', 64 ), str_repeat( 'd', 64 ) )
 		: array( str_repeat( 'a', 64 ), str_repeat( 'b', 64 ) );
 	foreach ( $owners as $owner ) {
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Independent PHP workers must race against the same isolated MySQL server to prove CAS ownership.
 		$processes[]                               = proc_open(
 			array( PHP_BINARY, __FILE__, '--worker', $owner, $scenario, (string) $start_at ),
 			array(
@@ -162,10 +165,13 @@ function workers( string $scenario, string $data ): array {
 	}
 	$results = array();
 	foreach ( $processes as $entry ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $entry['pipes'][0] );
 		$out = stream_get_contents( $entry['pipes'][1] );
 		$err = stream_get_contents( $entry['pipes'][2] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $entry['pipes'][1] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $entry['pipes'][2] );
 		$exit = proc_close( $entry['process'] );
 		if ( 0 !== $exit ) {
@@ -179,6 +185,7 @@ function createIsolatedRoot(): string {
 	if ( ! is_string( $configured ) || '' === $configured ) {
 		throw new RuntimeException( 'Real MySQL CAS proof requires RAN_UPDATER_MYSQL_ROOT to name a durable directory.' );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Check real permissions before admitting the configured disposable filesystem root.
 	if ( is_link( $configured ) || ! is_dir( $configured ) || ! is_writable( $configured ) ) {
 		throw new RuntimeException( 'RAN_UPDATER_MYSQL_ROOT must be an existing, writable, non-symlink directory.' );
 	}
@@ -187,6 +194,7 @@ function createIsolatedRoot(): string {
 		throw new RuntimeException( 'Could not resolve RAN_UPDATER_MYSQL_ROOT.' );
 	}
 	$root = rtrim( $parent, '/\\' ) . '/ran-wp-release-updater-mysql-' . bin2hex( random_bytes( 8 ) );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	if ( ! mkdir( $root, 0700 ) ) {
 		throw new RuntimeException( 'Could not create isolated MySQL root.' );
 	}
@@ -243,7 +251,8 @@ function connectProof(): mysqli {
 }
 function resolveMysqld(): string {
 	$configured = getenv( 'RAN_UPDATER_MYSQLD_BIN' );
-	$candidate  = is_string( $configured ) && '' !== $configured ? $configured : trim( (string) shell_exec( 'command -v mysqld 2>/dev/null' ) );
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec -- Fixed command discovers mysqld on PATH; the result must name an executable file before the isolated server starts.
+	$candidate = is_string( $configured ) && '' !== $configured ? $configured : trim( (string) shell_exec( 'command -v mysqld 2>/dev/null' ) );
 	if ( ! is_file( $candidate ) || ! is_executable( $candidate ) ) {
 		throw new RuntimeException( 'Real MySQL CAS proof requires RAN_UPDATER_MYSQLD_BIN to name an executable mysqld binary, or mysqld on PATH; it will not use a running server.' );
 	} return $candidate; }
@@ -371,6 +380,7 @@ function mintReceipt( string $path, \RAN\WPReleaseUpdater\V1\WordPress\BindingSt
 	} return array( $descriptor, AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, time() ) ); }
 /** @param list<string> $command */
 function run( array $command, string $cwd ): void {
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
 	$process = proc_open(
 		$command,
 		array(
@@ -383,10 +393,13 @@ function run( array $command, string $cwd ): void {
 	);
 	if ( ! is_resource( $process ) ) {
 		throw new RuntimeException( 'Could not initialize isolated MySQL.' );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	} fclose( $pipes[0] );
 	$stdout = stream_get_contents( $pipes[1] );
 	$stderr = stream_get_contents( $pipes[2] );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $pipes[1] );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $pipes[2] );
 	if ( 0 !== proc_close( $process ) ) {
 		throw new RuntimeException( 'MySQL initialization failed: ' . $stdout . $stderr );
@@ -405,5 +418,7 @@ function removeTree( string $path ): void {
 		return;
 	} $iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $path, FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST );
 	foreach ( $iterator as $entry ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir, WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		$entry->isDir() ? rmdir( $entry->getPathname() ) : unlink( $entry->getPathname() );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 	} rmdir( $path ); }
