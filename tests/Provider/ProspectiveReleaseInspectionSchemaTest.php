@@ -9,7 +9,7 @@ use RAN\WPReleaseUpdater\V1\Provider\GitHub\ProspectiveReleaseInspection;
 
 final class ProspectiveReleaseInspectionSchemaTest extends TestCase {
 
-	public function testWireSchemaHasFingerprintLastAndItsDigestBindsEveryFact(): void {
+	public function test_wire_schema_has_fingerprint_last_and_its_digest_binds_every_fact(): void {
 		$inspection = ProspectiveReleaseInspection::create( $this->facts() );
 		$wire       = $inspection->to_array();
 		self::assertSame( 'fingerprint', array_key_last( $wire ) );

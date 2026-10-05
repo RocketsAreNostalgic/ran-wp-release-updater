@@ -21,12 +21,12 @@ namespace Tests\Provider {
 	use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 
 	final class GitHubRateLimitTest extends TestCase {
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'classificationProvider' )]
-		public function testRateLimitClassificationUsesOnlyGitHubSignals( int $status, array $headers, int $now, array $expected ): void {
-			self::assertSame( $expected, $this->rateLimit( $status, $headers, $now ) );
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'classification_provider' )]
+		public function test_rate_limit_classification_uses_only_git_hub_signals( int $status, array $headers, int $now, array $expected ): void {
+			self::assertSame( $expected, $this->rate_limit( $status, $headers, $now ) );
 		}
 		/** @return array<string,array{int,array<string,string>,int,array{limited:bool,remaining:?int,reset_at:?int,retry_after:int}}> */
-		public static function classificationProvider(): array {
+		public static function classification_provider(): array {
 			return array(
 				'429 without headers uses the bounded fallback' => array(
 					429,
@@ -218,10 +218,10 @@ namespace Tests\Provider {
 				),
 			);
 		}
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'outOfRangeTimingProvider' )]
-		public function testOutOfRangeTimingMapsToOperationFailed( array $headers ): void {
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'out_of_range_timing_provider' )]
+		public function test_out_of_range_timing_maps_to_operation_failed( array $headers ): void {
 			try {
-				$this->rateLimit( 429, $headers, 1000 );
+				$this->rate_limit( 429, $headers, 1000 );
 				self::fail( 'Expected bounded rate-limit timing to be rejected.' );
 			} catch ( \RuntimeException $exception ) {
 				$method  = new \ReflectionMethod( GitHubReleaseService::class, 'operation_failure' );
@@ -232,7 +232,7 @@ namespace Tests\Provider {
 			}
 		}
 		/** @return array<string,array{array<string,string>}> */
-		public static function outOfRangeTimingProvider(): array {
+		public static function out_of_range_timing_provider(): array {
 			return array(
 				'integer above the maximum' => array( array( 'retry-after' => '86401' ) ),
 				'overflowing decimal'       => array( array( 'retry-after' => '999999999999999999999999999999' ) ),
@@ -245,7 +245,7 @@ namespace Tests\Provider {
 			);
 		}
 		/** @param array<string,string> $headers @return array{limited:bool,remaining:?int,reset_at:?int,retry_after:int} */
-		private function rateLimit( int $status, array $headers, int $now ): array {
+		private function rate_limit( int $status, array $headers, int $now ): array {
 			$method = new \ReflectionMethod( GitHubReleaseService::class, 'rate_limit' );
 			return $method->invoke(
 				null,
