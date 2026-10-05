@@ -42,10 +42,12 @@ namespace Tests\WordPress {
 		/** @var list<string> */
 		private array $paths = array();
 
+		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function setUp(): void {
 			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
 		}
 
+		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function tearDown(): void {
 			foreach ( array_reverse( $this->paths ) as $path ) {
 				$this->remove( $path );
@@ -54,7 +56,7 @@ namespace Tests\WordPress {
 		}
 
 		/** @return array<string,array{string,string,string,string,bool}> */
-		public static function lifecycleCases(): array {
+		public static function lifecycle_cases(): array {
 			return array(
 				'stable plugin'     => array( 'plugin', 'stable', '2.0.0', 'v2.0.0', false ),
 				'prerelease plugin' => array( 'plugin', 'prerelease', '2.0.0-beta.1', 'v2.0.0-beta.1', true ),
@@ -63,52 +65,52 @@ namespace Tests\WordPress {
 			);
 		}
 
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'lifecycleCases' )]
-		public function testDiscoveryReachesVerifiedLifecycleCompletionAcrossTheFourBoundaries( string $targetType, string $channel, string $version, string $tag, bool $prerelease ): void {
-			$this->assertCompletedLifecycle( $targetType, $channel, $version, $tag, $prerelease );
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'lifecycle_cases' )]
+		public function test_discovery_reaches_verified_lifecycle_completion_across_the_four_boundaries( string $target_type, string $channel, string $version, string $tag, bool $prerelease ): void {
+			$this->assert_completed_lifecycle( $target_type, $channel, $version, $tag, $prerelease );
 		}
 
-		public function testStagedHeadersShareCanonicalNormalizationForPluginAndTheme(): void {
-			foreach ( array( "\r\n", "\r" ) as $lineEnding ) {
-				foreach ( array( 'plugin', 'theme' ) as $targetType ) {
-					$this->assertCompletedLifecycle(
-						$targetType,
+		public function test_staged_headers_share_canonical_normalization_for_plugin_and_theme(): void {
+			foreach ( array( "\r\n", "\r" ) as $line_ending ) {
+				foreach ( array( 'plugin', 'theme' ) as $target_type ) {
+					$this->assert_completed_lifecycle(
+						$target_type,
 						'stable',
 						'2.0.0',
 						'v2.0.0',
 						false,
-						$lineEnding,
+						$line_ending,
 						true
 					);
 				}
 			}
 		}
 
-		public function testStagedHeadersPermitAbsentRequirementsAndRejectPostClosingDuplicates(): void {
-			foreach ( array( 'plugin', 'theme' ) as $targetType ) {
+		public function test_staged_headers_permit_absent_requirements_and_reject_post_closing_duplicates(): void {
+			foreach ( array( 'plugin', 'theme' ) as $target_type ) {
 				$uri        = 'https://updates.example.test/owner/fake-release';
-				$archive    = $this->archive( $targetType, $uri, '2.0.0' );
-				$descriptor = $this->descriptor( $targetType, $archive, $uri, 'stable', '2.0.0', 'v2.0.0', false );
+				$archive    = $this->archive( $target_type, $uri, '2.0.0' );
+				$descriptor = $this->descriptor( $target_type, $archive, $uri, 'stable', '2.0.0', 'v2.0.0', false );
 				$updater    = $this->updater(
-					$this->configuration( $targetType, $uri ),
-					$this->binding( $targetType, $uri, 'stable' ),
+					$this->configuration( $target_type, $uri ),
+					$this->binding( $target_type, $uri, 'stable' ),
 					new FakeOptionDatabase( 100 ),
 					$descriptor,
 					$archive,
-					$this->policy( $targetType, $uri )
+					$this->policy( $target_type, $uri )
 				);
 				self::assertInstanceOf( NativePackageUpdater::class, $updater );
 				$matches = new \ReflectionMethod( NativePackageUpdater::class, 'matches_staged_metadata' );
-				$staged  = $this->tree( $targetType, $uri, 'optional', '2.0.0' );
+				$staged  = $this->tree( $target_type, $uri, 'optional', '2.0.0' );
 				self::assertTrue( $matches->invoke( $updater, $staged, '2.0.0' ) );
 
-				$file = $staged . '/' . ( 'plugin' === $targetType ? 'fake-release.php' : 'style.css' );
+				$file = $staged . '/' . ( 'plugin' === $target_type ? 'fake-release.php' : 'style.css' );
 				file_put_contents( $file, "\nVersion: 2.0.0", FILE_APPEND );
 				self::assertFalse( $matches->invoke( $updater, $staged, '2.0.0' ) );
 			}
 		}
 
-		public function testThemeStagingRejectsAChildTemplateAddedAfterArchiveValidation(): void {
+		public function test_theme_staging_rejects_a_child_template_added_after_archive_validation(): void {
 			$uri        = 'https://updates.example.test/owner/fake-release';
 			$archive    = $this->archive( 'theme', $uri, '2.0.0' );
 			$descriptor = $this->descriptor( 'theme', $archive, $uri, 'stable', '2.0.0', 'v2.0.0', false );
@@ -120,59 +122,59 @@ namespace Tests\WordPress {
 			self::assertFalse( $matches->invoke( $updater, $staged, '2.0.0' ) );
 		}
 
-		private function assertCompletedLifecycle(
-			string $targetType,
+		private function assert_completed_lifecycle(
+			string $target_type,
 			string $channel,
 			string $version,
 			string $tag,
 			bool $prerelease,
-			string $lineEnding = "\n",
-			bool $closingCommentMarkers = false
+			string $line_ending = "\n",
+			bool $closing_comment_markers = false
 		): void {
 			$uri        = 'https://updates.example.test/owner/fake-release';
 			$archive    = $this->archive(
-				$targetType,
+				$target_type,
 				$uri,
 				$version,
-				$lineEnding,
-				$closingCommentMarkers
+				$line_ending,
+				$closing_comment_markers
 			);
-			$descriptor = $this->descriptor( $targetType, $archive, $uri, $channel, $version, $tag, $prerelease );
+			$descriptor = $this->descriptor( $target_type, $archive, $uri, $channel, $version, $tag, $prerelease );
 			$validator  = new PackageIdentityValidator();
-			$policy     = $this->policy( $targetType, $uri );
+			$policy     = $this->policy( $target_type, $uri );
 
-			$redirectCandidate                     = $policy;
-			$redirectCandidate['offer_update_uri'] = 'https://updates.example.test/owner/fake-release-redirect';
-			self::assertSame( 'archive_target_policy_invalid', $validator->validate( $descriptor, $redirectCandidate, $archive )->code() );
+			$redirect_candidate                     = $policy;
+			$redirect_candidate['offer_update_uri'] = 'https://updates.example.test/owner/fake-release-redirect';
+			self::assertSame( 'archive_target_policy_invalid', $validator->validate( $descriptor, $redirect_candidate, $archive )->code() );
 
 			$package = $validator->validate( $descriptor, $policy, $archive );
 			self::assertTrue( $package->is_valid() );
 
-			$binding     = $this->binding( $targetType, $uri, $channel );
-			$database    = new FakeOptionDatabase( 100 );
-			$claimResult = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
-			self::assertSame( 'claimed', $claimResult['result'] );
-			$state             = $claimResult['current'];
-			$claim             = $this->claim( $state );
-			$destinationParent = sys_get_temp_dir() . '/ran-fake-adapter-destination-' . bin2hex( random_bytes( 8 ) );
+			$binding      = $this->binding( $target_type, $uri, $channel );
+			$database     = new FakeOptionDatabase( 100 );
+			$claim_result = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+			self::assertSame( 'claimed', $claim_result['result'] );
+			$state              = $claim_result['current'];
+			$claim              = $this->claim( $state );
+			$destination_parent = sys_get_temp_dir() . '/ran-fake-adapter-destination-' . bin2hex( random_bytes( 8 ) );
 
-			$configurationMismatch               = $this->configuration( $targetType, $uri );
-			$configurationMismatch['update_uri'] = 'https://updates.example.test/owner/other-path';
-			$configurationPackage                = $validator->validate( $descriptor, $policy, $archive );
-			self::assertNull( $this->updater( $configurationMismatch, $binding, $database, $descriptor, $archive, $policy ) );
-			self::assertDirectoryDoesNotExist( $destinationParent );
+			$configuration_mismatch               = $this->configuration( $target_type, $uri );
+			$configuration_mismatch['update_uri'] = 'https://updates.example.test/owner/other-path';
+			$configuration_package                = $validator->validate( $descriptor, $policy, $archive );
+			self::assertNull( $this->updater( $configuration_mismatch, $binding, $database, $descriptor, $archive, $policy ) );
+			self::assertDirectoryDoesNotExist( $destination_parent );
 
-			$this->assertStagedHeaderMismatchDoesNotCreateDestination( $targetType, $uri, $version, $descriptor, $binding, $database, $state, $claim, $validator, $policy, $archive, $destinationParent );
+			$this->assert_staged_header_mismatch_does_not_create_destination( $target_type, $uri, $version, $descriptor, $binding, $database, $state, $claim, $validator, $policy, $archive, $destination_parent );
 			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
 
-			$database->setTime( 121 );
-			$updater = $this->updater( $this->configuration( $targetType, $uri ), $binding, $database, $descriptor, $archive, $policy );
+			$database->set_time( 121 );
+			$updater = $this->updater( $this->configuration( $target_type, $uri ), $binding, $database, $descriptor, $archive, $policy );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
 			$updater->register();
-			self::assertSame( $this->expectedTargetHooks( $targetType ), array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ) );
+			self::assertSame( $this->expected_target_hooks( $target_type ), array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ) );
 
-			$identity = 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release';
+			$identity = 'plugin' === $target_type ? 'fake-release/fake-release.php' : 'fake-release';
 			$offer    = $updater->filter_update(
 				false,
 				array(
@@ -198,7 +200,7 @@ namespace Tests\WordPress {
 				)
 			);
 
-			$extra = array( 'plugin' === $targetType ? 'plugin' : 'theme' => $identity );
+			$extra = array( 'plugin' === $target_type ? 'plugin' : 'theme' => $identity );
 			$owned = $updater->filter_pre_download( false, $offer['package'], null, $extra );
 			self::assertIsString( $owned );
 			$shutdown = array_values( array_filter( $GLOBALS['ran_wp_release_updater_test_hooks'], static fn ( array $hook ): bool => 'shutdown' === $hook[1] ) );
@@ -209,29 +211,29 @@ namespace Tests\WordPress {
 			self::assertTrue( $updater->filter_pre_install( true, $extra ) );
 
 			$staged = $this->tree(
-				$targetType,
+				$target_type,
 				$uri,
 				'staged',
 				$version,
-				$lineEnding,
-				$closingCommentMarkers
+				$line_ending,
+				$closing_comment_markers
 			);
 			self::assertSame( $staged, $updater->filter_source_selection( $staged, sys_get_temp_dir(), null, $extra ) );
 			$destination = $this->tree(
-				$targetType,
+				$target_type,
 				$uri,
 				'destination',
 				$version,
-				$lineEnding,
-				$closingCommentMarkers
+				$line_ending,
+				$closing_comment_markers
 			);
 			self::assertSame( array( 'destination' => $destination ), $updater->capture_install_package_result( array( 'destination' => $destination ), $extra ) );
 			$updater->observe_completion(
 				null,
 				array(
 					'action' => 'update',
-					'type'   => $targetType,
-					'plugin' === $targetType ? 'plugins' : 'themes' => array( $identity ),
+					'type'   => $target_type,
+					'plugin' === $target_type ? 'plugins' : 'themes' => array( $identity ),
 				)
 			);
 			$updater->finalize_pending_install();
@@ -240,12 +242,12 @@ namespace Tests\WordPress {
 			self::assertSame( 'update_completed', end( $diagnostics ) );
 		}
 
-		private function assertStagedHeaderMismatchDoesNotCreateDestination( string $targetType, string $uri, string $version, IdentityDescriptor $descriptor, BindingRecord $binding, FakeOptionDatabase $database, BindingState $state, array $claim, PackageIdentityValidator $validator, array $policy, string $archive, string $destinationParent ): void {
-			$database->setTime( 121 );
-			$updater = $this->updater( $this->configuration( $targetType, $uri ), $binding, $database, $descriptor, $archive, $policy );
+		private function assert_staged_header_mismatch_does_not_create_destination( string $target_type, string $uri, string $version, IdentityDescriptor $descriptor, BindingRecord $binding, FakeOptionDatabase $database, BindingState $state, array $claim, PackageIdentityValidator $validator, array $policy, string $archive, string $destination_parent ): void {
+			$database->set_time( 121 );
+			$updater = $this->updater( $this->configuration( $target_type, $uri ), $binding, $database, $descriptor, $archive, $policy );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
-			$identity = 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release';
-			$extra    = array( 'plugin' === $targetType ? 'plugin' : 'theme' => $identity );
+			$identity = 'plugin' === $target_type ? 'fake-release/fake-release.php' : 'fake-release';
+			$extra    = array( 'plugin' === $target_type ? 'plugin' : 'theme' => $identity );
 			$offer    = $updater->filter_update(
 				false,
 				array(
@@ -260,9 +262,9 @@ namespace Tests\WordPress {
 			self::assertNull( $updater->filter_pre_unzip_file( null, $owned, sys_get_temp_dir(), array(), 0.0 ) );
 			unlink( $owned );
 			self::assertTrue( $updater->filter_pre_install( true, $extra ) );
-			$staged = $this->tree( $targetType, 'https://updates.example.test/owner/other-path', 'staged-header-mismatch', $version );
+			$staged = $this->tree( $target_type, 'https://updates.example.test/owner/other-path', 'staged-header-mismatch', $version );
 			self::assertInstanceOf( \WP_Error::class, $updater->filter_source_selection( $staged, sys_get_temp_dir(), null, $extra ) );
-			self::assertDirectoryDoesNotExist( $destinationParent );
+			self::assertDirectoryDoesNotExist( $destination_parent );
 		}
 
 		private function updater( array $configuration, BindingRecord $binding, FakeOptionDatabase $database, IdentityDescriptor $descriptor, string $archive, array $policy ): ?NativePackageUpdater {
@@ -303,20 +305,20 @@ namespace Tests\WordPress {
 			return NativePackageUpdater::from_configuration( $configuration, $binding, $adapter, $database, $policy ); }
 
 		/** @return list<string> */
-		private function expectedTargetHooks( string $targetType ): array {
-			$hooks = array( 'plugin' === $targetType ? 'update_plugins_updates.example.test' : 'update_themes_updates.example.test' );
-			if ( 'plugin' === $targetType ) {
+		private function expected_target_hooks( string $target_type ): array {
+			$hooks = array( 'plugin' === $target_type ? 'update_plugins_updates.example.test' : 'update_themes_updates.example.test' );
+			if ( 'plugin' === $target_type ) {
 				$hooks[] = 'plugins_api';
 			}
-			return array_merge( $hooks, array( 'plugin' === $targetType ? 'auto_update_plugin' : 'auto_update_theme', 'upgrader_package_options', 'upgrader_pre_download', 'upgrader_pre_install', 'pre_unzip_file', 'upgrader_source_selection', 'upgrader_install_package_result', 'upgrader_process_complete' ) );
+			return array_merge( $hooks, array( 'plugin' === $target_type ? 'auto_update_plugin' : 'auto_update_theme', 'upgrader_package_options', 'upgrader_pre_download', 'upgrader_pre_install', 'pre_unzip_file', 'upgrader_source_selection', 'upgrader_install_package_result', 'upgrader_process_complete' ) );
 		}
 
 		private function archive(
-			string $targetType,
+			string $target_type,
 			string $uri,
 			string $version,
-			string $lineEnding = "\n",
-			bool $closingCommentMarkers = false
+			string $line_ending = "\n",
+			bool $closing_comment_markers = false
 		): string {
 			$path = tempnam( sys_get_temp_dir(), 'ran-phase24-' );
 			self::assertIsString( $path );
@@ -325,13 +327,13 @@ namespace Tests\WordPress {
 			self::assertTrue( $zip->open( $path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) );
 			self::assertTrue(
 				$zip->addFromString(
-					'fake-release/' . ( 'plugin' === $targetType ? 'fake-release.php' : 'style.css' ),
+					'fake-release/' . ( 'plugin' === $target_type ? 'fake-release.php' : 'style.css' ),
 					$this->header(
-						$targetType,
+						$target_type,
 						$uri,
 						$version,
-						$lineEnding,
-						$closingCommentMarkers
+						$line_ending,
+						$closing_comment_markers
 					)
 				)
 			);
@@ -341,24 +343,24 @@ namespace Tests\WordPress {
 		}
 
 		private function tree(
-			string $targetType,
+			string $target_type,
 			string $uri,
 			string $suffix,
 			string $version,
-			string $lineEnding = "\n",
-			bool $closingCommentMarkers = false
+			string $line_ending = "\n",
+			bool $closing_comment_markers = false
 		): string {
 			$parent = sys_get_temp_dir() . '/ran-phase24-' . $suffix . '-' . bin2hex( random_bytes( 8 ) );
 			$root   = $parent . '/fake-release';
 			self::assertTrue( mkdir( $root, 0700, true ) );
 			file_put_contents(
-				$root . '/' . ( 'plugin' === $targetType ? 'fake-release.php' : 'style.css' ),
+				$root . '/' . ( 'plugin' === $target_type ? 'fake-release.php' : 'style.css' ),
 				$this->header(
-					$targetType,
+					$target_type,
 					$uri,
 					$version,
-					$lineEnding,
-					$closingCommentMarkers
+					$line_ending,
+					$closing_comment_markers
 				)
 			);
 			file_put_contents( $root . '/payload.php', '<?php return true;' );
@@ -367,25 +369,25 @@ namespace Tests\WordPress {
 		}
 
 		private function header(
-			string $targetType,
+			string $target_type,
 			string $uri,
 			string $version,
-			string $lineEnding = "\n",
-			bool $closingCommentMarkers = false
+			string $line_ending = "\n",
+			bool $closing_comment_markers = false
 		): string {
-			$name   = 'plugin' === $targetType ? 'Plugin Name: Fake Release' : 'Theme Name: Fake Release';
-			$suffix = $closingCommentMarkers ? ' */' : '';
-			return str_replace( "\n", $lineEnding, "<?php\n/*\n{$name}{$suffix}\nVersion: {$version}{$suffix}\nUpdate URI: {$uri}{$suffix}\n*/" );
+			$name   = 'plugin' === $target_type ? 'Plugin Name: Fake Release' : 'Theme Name: Fake Release';
+			$suffix = $closing_comment_markers ? ' */' : '';
+			return str_replace( "\n", $line_ending, "<?php\n/*\n{$name}{$suffix}\nVersion: {$version}{$suffix}\nUpdate URI: {$uri}{$suffix}\n*/" );
 		}
 
 		/** @return array<string,string> */
-		private function policy( string $targetType, string $uri ): array {
-			$header = 'plugin' === $targetType ? 'fake-release.php' : 'style.css';
+		private function policy( string $target_type, string $uri ): array {
+			$header = 'plugin' === $target_type ? 'fake-release.php' : 'style.css';
 			return array(
 				'archive_root'               => 'fake-release',
 				'configuration_update_uri'   => $uri,
 				'header_file'                => $header,
-				'installed_package_identity' => 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release',
+				'installed_package_identity' => 'plugin' === $target_type ? 'fake-release/fake-release.php' : 'fake-release',
 				'maximum_artifact_bytes'     => 52428800,
 				'metadata_name'              => 'Fake Release',
 				'offer_update_uri'           => $uri,
@@ -394,14 +396,14 @@ namespace Tests\WordPress {
 				'repository_identity'        => 'fake:repository',
 				'repository_locator'         => 'owner/fake-release',
 				'staged_package_update_uri'  => $uri,
-				'target_type'                => $targetType,
+				'target_type'                => $target_type,
 				'theme_template'             => '',
 				'wordpress_runtime_version'  => '6.8',
 			);
 		}
 
 		/** @return array<string,mixed> */
-		private function configuration( string $targetType, string $uri ): array {
+		private function configuration( string $target_type, string $uri ): array {
 			return array(
 				'headers'                    => array(
 					'Author'      => 'Test',
@@ -413,26 +415,26 @@ namespace Tests\WordPress {
 					'UpdateURI'   => $uri,
 					'Version'     => '1.0.0',
 				),
-				'installed_package_identity' => 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release',
+				'installed_package_identity' => 'plugin' === $target_type ? 'fake-release/fake-release.php' : 'fake-release',
 				'policy'                     => 'manual',
-				'target_type'                => $targetType,
+				'target_type'                => $target_type,
 				'update_uri'                 => $uri,
 			);
 		}
 
-		private function binding( string $targetType, string $uri, string $channel ): BindingRecord {
+		private function binding( string $target_type, string $uri, string $channel ): BindingRecord {
 			return BindingRecord::create(
 				array(
 					'canonical_repository_locator' => 'owner/fake-release',
 					'canonical_update_uri'         => $uri,
-					'installed_package_identity'   => 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release',
+					'installed_package_identity'   => 'plugin' === $target_type ? 'fake-release/fake-release.php' : 'fake-release',
 					'maximum_artifact_bytes'       => 52428800,
 					'network_id'                   => 1,
 					'php_runtime_version'          => '8.2',
 					'provider_code'                => 'fake',
 					'release_channel'              => $channel,
 					'stable_repository_identity'   => 'fake:repository',
-					'target_type'                  => $targetType,
+					'target_type'                  => $target_type,
 					'theme_template'               => '',
 					'update_policy'                => 'manual',
 					'wordpress_runtime_version'    => '6.8',
@@ -440,7 +442,7 @@ namespace Tests\WordPress {
 			);
 		}
 
-		private function descriptor( string $targetType, string $archive, string $uri, string $channel, string $version, string $tag, bool $prerelease ): IdentityDescriptor {
+		private function descriptor( string $target_type, string $archive, string $uri, string $channel, string $version, string $tag, bool $prerelease ): IdentityDescriptor {
 			return IdentityDescriptor::create(
 				array(
 					'artifact_filename'          => 'fake-release.zip',
@@ -460,14 +462,14 @@ namespace Tests\WordPress {
 					'canonical_update_uri'       => $uri,
 					'channel'                    => $channel,
 					'commit_identity'            => 'fake-commit:2',
-					'installed_package_identity' => 'plugin' === $targetType ? 'fake-release/fake-release.php' : 'fake-release',
+					'installed_package_identity' => 'plugin' === $target_type ? 'fake-release/fake-release.php' : 'fake-release',
 					'prerelease'                 => $prerelease,
 					'provider_code'              => 'fake',
 					'release_identity'           => 'fake-release:2',
 					'repository_identity'        => 'fake:repository',
 					'repository_locator'         => 'owner/fake-release',
 					'tag'                        => $tag,
-					'target_type'                => $targetType,
+					'target_type'                => $target_type,
 					'version'                    => $version,
 				)
 			);
