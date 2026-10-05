@@ -29,11 +29,14 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 		$method_code   = 'RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase';
 		$variable_code = 'WordPress.NamingConventions.ValidVariableName.VariableNotSnakeCase';
 		$source        = "<?php\nnamespace Tests;\nclass NamingProbe extends \\PHPUnit\\Framework\\TestCase {\npublic function owned_method(): int { \$owned_value = 1; return \$owned_value; }\n}\n";
-		foreach ( array( 'Archive/ArchiveScanResultTest.php', 'Contract/ReleaseVersionTest.php', 'Dependency/ArchiveSafetyDependencyTest.php', 'Provider/GitHubReleaseAdapterTest.php', 'Runtime/RequestBrokerTest.php', 'Archive/FutureTest.php', 'Contract/FutureTest.php', 'Dependency/FutureTest.php', 'Provider/FutureTest.php', 'Runtime/FutureTest.php', 'WordPress/FutureTest.php' ) as $path ) {
-			$in_scope = ! str_starts_with( $path, 'WordPress/' );
+		foreach ( array( 'Archive/ArchiveScanResultTest.php', 'Contract/ReleaseVersionTest.php', 'Dependency/ArchiveSafetyDependencyTest.php', 'Provider/GitHubReleaseAdapterTest.php', 'Runtime/RequestBrokerTest.php', 'WordPress/NativePackageUpdaterTest.php', 'Support/FakeOptionDatabase.php', 'Archive/FutureTest.php', 'Contract/FutureTest.php', 'Dependency/FutureTest.php', 'Provider/FutureTest.php', 'Runtime/FutureTest.php', 'WordPress/FutureTest.php', 'Support/FutureTest.php', 'Integration/FutureTest.php' ) as $path ) {
+			$in_scope = ! str_starts_with( $path, 'Integration/' );
 			self::assertSame( array(), $this->naming_diagnostics( $path, $source ) );
 			self::assertSame( $in_scope, in_array( $method_code, $this->naming_diagnostics( $path, str_replace( 'owned_method', 'ownedMethod', $source ) ), true ), $path );
 			self::assertSame( $in_scope, in_array( $variable_code, $this->naming_diagnostics( $path, str_replace( 'owned_value', 'ownedValue', $source ) ), true ), $path );
+		}
+		foreach ( array( 'Support/MysqliOptionDatabase.php', 'Support/FutureTest.php' ) as $path ) {
+			self::assertContains( 'WordPress.PHP.YodaConditions.NotYoda', $this->naming_diagnostics( $path, str_replace( 'return $owned_value;', 'return $owned_value === 1;', $source ) ), $path );
 		}
 	}
 
@@ -62,6 +65,6 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 		$report = json_decode( $output, true, 512, JSON_THROW_ON_ERROR );
 		self::assertArrayHasKey( 'files', $report );
 		$messages = array_merge( ...array_column( array_values( $report['files'] ), 'messages' ) );
-		return array_values( array_filter( array_column( $messages, 'source' ), static fn( string $code ): bool => str_starts_with( $code, 'RANOwnedMethods.' ) || str_starts_with( $code, 'WordPress.NamingConventions.ValidVariableName.' ) ) );
+		return array_values( array_filter( array_column( $messages, 'source' ), static fn( string $code ): bool => str_starts_with( $code, 'RANOwnedMethods.' ) || str_starts_with( $code, 'WordPress.NamingConventions.ValidVariableName.' ) || 'WordPress.PHP.YodaConditions.NotYoda' === $code ) );
 	}
 }

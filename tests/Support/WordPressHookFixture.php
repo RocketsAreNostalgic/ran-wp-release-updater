@@ -15,11 +15,11 @@ final class WP_Hook {
 	public array $callbacks = array();
 	private ?int $priority  = null;
 
-	public function add_filter( string $hook, callable $callback, int $priority, int $acceptedArgs ): void {
+	public function add_filter( string $hook, callable $callback, int $priority, int $accepted_args ): void {
 		unset( $hook );
 		$this->callbacks[ $priority ][] = array(
 			'function'      => $callback,
-			'accepted_args' => $acceptedArgs,
+			'accepted_args' => $accepted_args,
 		);
 	}
 
@@ -71,14 +71,14 @@ final class WP_Hook {
 	}
 }
 
-function add_filter( string $hook, callable $callback, int $priority = 10, int $acceptedArgs = 1 ): bool {
+function add_filter( string $hook, callable $callback, int $priority = 10, int $accepted_args = 1 ): bool {
 	$GLOBALS['wp_filter'][ $hook ] ??= new WP_Hook();
-	$GLOBALS['wp_filter'][ $hook ]->add_filter( $hook, $callback, $priority, $acceptedArgs );
+	$GLOBALS['wp_filter'][ $hook ]->add_filter( $hook, $callback, $priority, $accepted_args );
 	return true;
 }
 
-function add_action( string $hook, callable $callback, int $priority = 10, int $acceptedArgs = 1 ): bool {
-	return add_filter( $hook, $callback, $priority, $acceptedArgs );
+function add_action( string $hook, callable $callback, int $priority = 10, int $accepted_args = 1 ): bool {
+	return add_filter( $hook, $callback, $priority, $accepted_args );
 }
 
 function do_action( string $hook, mixed ...$arguments ): void {

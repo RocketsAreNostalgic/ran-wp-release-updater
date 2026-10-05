@@ -13,7 +13,7 @@ under the `^1.0` development constraint.
 `RANOwnedMethods` and variable naming cover all maintained PHP under `src/`,
 root `bootstrap.php`/`runtime.php`, `scripts/`, and the bounded test cohort
 `tests/Archive`, `tests/Contract`, `tests/Dependency`, `tests/Provider`,
-`tests/Runtime`, including future files in
+`tests/Runtime`, `tests/WordPress`, `tests/Support`, including future files in
 those roots.
 The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded and is
 namespace-only parity checked against the locked upstream package. All 36

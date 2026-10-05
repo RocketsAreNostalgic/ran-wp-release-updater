@@ -14,7 +14,7 @@ Core dependency update. The native-operation refinement below was delivered sepa
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
 | Generated `src/Dependency/ArchiveSafety.php` | PHPCS excluded; namespace-only byte parity against the locked `ran/updater-support` source and direct level-8 analysis remain required. Never hand-edit this file. |
-| `tests/Archive`, `tests/Contract`, `tests/Dependency`, `tests/Provider`, `tests/Runtime` | Owned method and variable naming now cover these five roots, including future files. Twenty-three PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
+| `tests/Archive`, `tests/Contract`, `tests/Dependency`, `tests/Provider`, `tests/Runtime`, `tests/WordPress`, `tests/Support` | Owned method and variable naming now cover these seven roots, including future files. Twenty-nine PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
 | Other `tests/` roots | The separate purpose-built fixture/harness naming boundary remains. Production callers, named arguments, callbacks and Reflection seams follow the production API. This cohort does not certify every fixture-local identifier as snake_case. |
 
 `composer check` retains strict validation, generated-copy parity, live advisory
@@ -184,3 +184,39 @@ This proposal changes tests, checker scope and guidance only. Production,
 scripts, runtime identity, dependencies, public APIs, JavaScript and workflows
 remain unchanged. Other test roots and retained-exception acceptance remain
 separate work under organisation #65/#128; no release is authorized.
+
+
+## WordPress and shared-support test cohort
+
+Runtime naming landed in PR #99 at
+`fd2a7daa19f9a17f6b429d0863ea2726e46d6238`. This proposal adds all four
+WordPress tests and six Support PHP files, including future and nested files,
+to owned method/variable enforcement. Nine files need normalization; the
+failing-runtime fixture already complies. The locked checker exposes 600 naming
+reports: 99 owned-method checker reports (93 owned declarations and six required
+PHPUnit lifecycle overrides), ten overlapping WPCS method reports, and 491
+variable/property declaration or use reports. This is checker exposure, not a
+count of distinct defects. The six lifecycle methods retain exact local exceptions.
+
+Seven DataProvider reference strings follow their owned declarations. The shared
+fake database's two callers in AcquisitionReceiptTest are updated in the same
+change. Other fixture APIs, named production arguments, Reflection targets,
+embedded payloads, wire keys, GLOBALS, by-reference captures, callback order,
+rollback observations and deletion/identity fences are preserved. Hook-fixture
+accepted_args spelling is normalized consistently with its positional callers.
+
+One additional Yoda finding in MysqliOptionDatabase is corrected by swapping the
+pure strlen comparison operands; its file exclusion is removed. The existing
+Dependency regression covers 15 naming paths (current/future selected roots and
+an outside Integration path), plus current/future Support Yoda controls. It passes
+188 assertions. Restoring either the old naming scope or the old MySQL Yoda
+exclusion makes the corresponding control fail.
+
+All 477 test/dataset identities remain under the explicit owned-name map.
+WordPress before and after remains 86 tests / 904 assertions. The canonical
+Composer aggregate passes 477 tests / 25,156 assertions, level 8, live advisory
+audit and the installed no-dev consumer. Token comparison permits only owned
+renames, seven provider strings and the single pure comparison swap.
+Production, scripts, public APIs, runtime identity, dependencies, JavaScript and
+workflows are unchanged. Other test roots and exception acceptance remain under
+organisation #65/#128. This is not release authorization.

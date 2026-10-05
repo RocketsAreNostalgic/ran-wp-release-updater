@@ -19,7 +19,7 @@ final class MysqliOptionDatabase {
 	public function prepare( string $sql, mixed ...$args ): string {
 		foreach ( $args as $arg ) {
 			$position = strcspn( $sql, '%', 0 );
-			if ( $position === strlen( $sql ) || ! isset( $sql[ $position + 1 ] ) || ! in_array( $sql[ $position + 1 ], array( 'd', 's' ), true ) ) {
+			if ( strlen( $sql ) === $position || ! isset( $sql[ $position + 1 ] ) || ! in_array( $sql[ $position + 1 ], array( 'd', 's' ), true ) ) {
 				throw new \InvalidArgumentException( 'Unsupported query placeholder.' );
 			}
 			$replacement = 'd' === $sql[ $position + 1 ] ? (string) (int) $arg : "'" . $this->mysqli->real_escape_string( (string) $arg ) . "'";

@@ -33,12 +33,14 @@
 		<include-pattern>/tests/Dependency/</include-pattern>
 		<include-pattern>/tests/Provider/</include-pattern>
 		<include-pattern>/tests/Runtime/</include-pattern>
-		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/)</exclude-pattern>
+		<include-pattern>/tests/WordPress/</include-pattern>
+		<include-pattern>/tests/Support/</include-pattern>
+		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/|WordPress/|Support/)</exclude-pattern>
 	</rule>
 
-	<!-- Archive, Contract, Dependency, Provider and Runtime tests share owned naming; other fixture cohorts remain separate. -->
+	<!-- Archive, Contract, Dependency, Provider, Runtime, WordPress and Support tests share owned naming; other fixture cohorts remain separate. -->
 	<rule ref="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid">
-		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/)</exclude-pattern>
+		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/|WordPress/|Support/)</exclude-pattern>
 	</rule>
 	<!-- Match owned-method scope; no production variable-naming suppression remains. -->
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
@@ -51,7 +53,9 @@
 		<include-pattern>/tests/Dependency/</include-pattern>
 		<include-pattern>/tests/Provider/</include-pattern>
 		<include-pattern>/tests/Runtime/</include-pattern>
-		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/)</exclude-pattern>
+		<include-pattern>/tests/WordPress/</include-pattern>
+		<include-pattern>/tests/Support/</include-pattern>
+		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/|WordPress/|Support/)</exclude-pattern>
 	</rule>
 	<!-- Synthetic WordPress/SQL and performance fixtures retain their purpose-built conditions. -->
 	<rule ref="WordPress.PHP.YodaConditions">
@@ -62,7 +66,6 @@
 		<exclude-pattern>/tests/Integration/release-source-consumer-proof.php</exclude-pattern>
 		<exclude-pattern>/tests/Integration/wordpress-native-mixed-bulk-proof.php</exclude-pattern>
 		<exclude-pattern>/tests/Performance/native-discovery-measure.php</exclude-pattern>
-		<exclude-pattern>/tests/Support/MysqliOptionDatabase.php</exclude-pattern>
 	</rule>
 
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">

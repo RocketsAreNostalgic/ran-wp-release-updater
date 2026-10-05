@@ -126,10 +126,10 @@ final class AcquisitionReceiptTest extends TestCase {
 			)
 		);
 		$successor = BindingState::create( $next, str_repeat( 'b', 64 ), $state->lease_deadline(), $state->binding_generation() + 1, $state->fence_epoch() + 1 );
-		$database->mutateOnTimeRead(
+		$database->mutate_on_time_read(
 			1,
 			static function ( FakeOptionDatabase $database ) use ( $name, $successor ): void {
-				$database->forceOptionValue( $name, json_encode( $successor->to_array(), JSON_THROW_ON_ERROR ) );
+				$database->force_option_value( $name, json_encode( $successor->to_array(), JSON_THROW_ON_ERROR ) );
 			}
 		);
 

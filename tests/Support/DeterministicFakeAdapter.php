@@ -14,11 +14,11 @@ final readonly class DeterministicFakeAdapter {
 	public function __construct( private array $candidates ) {}
 
 	/** @return list<IdentityDescriptor> */
-	public function discover( string $targetType ): array {
-		if ( ! in_array( $targetType, array( 'plugin', 'theme' ), true ) ) {
+	public function discover( string $target_type ): array {
+		if ( ! in_array( $target_type, array( 'plugin', 'theme' ), true ) ) {
 			throw new InvalidArgumentException( 'The fake adapter target is invalid.' );
 		}
 
-		return $this->candidates[ $targetType ];
+		return $this->candidates[ $target_type ];
 	}
 }
