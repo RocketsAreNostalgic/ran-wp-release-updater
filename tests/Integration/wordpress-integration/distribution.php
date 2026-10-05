@@ -14,17 +14,17 @@ final class RAN_Updater_Integration_Skin extends WP_Upgrader_Skin {
 	public function footer(): void {}
 }
 
-$pluginZip = requiredInput( 'RAN_UPDATER_PLUGIN_ZIP' );
-$themeZip  = requiredInput( 'RAN_UPDATER_THEME_ZIP' );
-$output    = requiredInput( 'RAN_UPDATER_OUTPUT' );
-$mode      = requiredInput( 'RAN_UPDATER_DISTRIBUTION_MODE' );
+$plugin_zip = requiredInput( 'RAN_UPDATER_PLUGIN_ZIP' );
+$theme_zip  = requiredInput( 'RAN_UPDATER_THEME_ZIP' );
+$output     = requiredInput( 'RAN_UPDATER_OUTPUT' );
+$mode       = requiredInput( 'RAN_UPDATER_DISTRIBUTION_MODE' );
 
 if ( 'install' === $mode ) {
 	$skin = new RAN_Updater_Integration_Skin();
-	if ( ! ( new Plugin_Upgrader( $skin ) )->install( $pluginZip ) ) {
+	if ( ! ( new Plugin_Upgrader( $skin ) )->install( $plugin_zip ) ) {
 		throw new RuntimeException( 'Plugin_Upgrader could not install the exact consumer ZIP.' );
 	}
-	if ( ! ( new Theme_Upgrader( $skin ) )->install( $themeZip ) ) {
+	if ( ! ( new Theme_Upgrader( $skin ) )->install( $theme_zip ) ) {
 		throw new RuntimeException( 'Theme_Upgrader could not install the exact consumer ZIP.' );
 	}
 	return;
@@ -40,65 +40,65 @@ if ( ! is_object( $plugin ) || ! is_object( $theme ) || ! is_object( $broker ) )
 	throw new RuntimeException( 'Installed consumer boot did not expose public handles.' );
 }
 
-$credentialsAtBoot = $GLOBALS['ran_updater_credential_calls'] ?? null;
-$httpAtBoot        = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
-$pluginCallbacks   = nativeCallbacks( 'update_plugins_github.com' );
-$themeCallbacks    = nativeCallbacks( 'update_themes_github.com' );
-$runtimeRoot       = WP_PLUGIN_DIR . '/ran-neutral-plugin/vendor/ran/wp-release-updater';
+$credentials_at_boot = $GLOBALS['ran_updater_credential_calls'] ?? null;
+$http_at_boot        = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
+$plugin_callbacks    = nativeCallbacks( 'update_plugins_github.com' );
+$theme_callbacks     = nativeCallbacks( 'update_themes_github.com' );
+$runtime_root        = WP_PLUGIN_DIR . '/ran-neutral-plugin/vendor/ran/wp-release-updater';
 
-$pluginData  = get_plugin_data( WP_PLUGIN_DIR . '/ran-neutral-plugin/ran-neutral-plugin.php', false, false );
-$themeObject = wp_get_theme( 'ran-neutral-theme' );
-apply_filters( 'update_plugins_github.com', false, $pluginData, 'ran-neutral-plugin/ran-neutral-plugin.php', array() );
+$plugin_data  = get_plugin_data( WP_PLUGIN_DIR . '/ran-neutral-plugin/ran-neutral-plugin.php', false, false );
+$theme_object = wp_get_theme( 'ran-neutral-theme' );
+apply_filters( 'update_plugins_github.com', false, $plugin_data, 'ran-neutral-plugin/ran-neutral-plugin.php', array() );
 apply_filters(
 	'update_themes_github.com',
 	false,
 	array(
-		'Name'        => $themeObject->get( 'Name' ),
-		'Version'     => $themeObject->get( 'Version' ),
-		'UpdateURI'   => $themeObject->get( 'UpdateURI' ),
-		'RequiresWP'  => $themeObject->get( 'RequiresWP' ),
-		'RequiresPHP' => $themeObject->get( 'RequiresPHP' ),
+		'Name'        => $theme_object->get( 'Name' ),
+		'Version'     => $theme_object->get( 'Version' ),
+		'UpdateURI'   => $theme_object->get( 'UpdateURI' ),
+		'RequiresWP'  => $theme_object->get( 'RequiresWP' ),
+		'RequiresPHP' => $theme_object->get( 'RequiresPHP' ),
 	),
 	'ran-neutral-theme',
 	array()
 );
 
-$credentialsAfter = $GLOBALS['ran_updater_credential_calls'] ?? null;
-$httpAfter        = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
-$diagnostics      = $broker->diagnostics();
-$proof            = array(
+$credentials_after = $GLOBALS['ran_updater_credential_calls'] ?? null;
+$http_after        = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
+$diagnostics       = $broker->diagnostics();
+$proof             = array(
 	'boot'                 => array(
 		'candidate_count'      => $diagnostics['candidate_count'] ?? null,
 		'logical_target_count' => $diagnostics['logical_target_count'] ?? null,
-		'credential_callbacks' => $credentialsAtBoot,
-		'http_callbacks'       => $httpAtBoot,
+		'credential_callbacks' => $credentials_at_boot,
+		'http_callbacks'       => $http_at_boot,
 	),
 	'callbacks'            => array(
-		'plugin_native_callbacks' => count( $pluginCallbacks ),
-		'theme_native_callbacks'  => count( $themeCallbacks ),
-		'origins'                 => callbackOrigins( array_merge( $pluginCallbacks, $themeCallbacks ) ),
-		'credential_callbacks'    => $credentialsAfter,
-		'http_callback_delta'     => $httpAfter - $httpAtBoot,
+		'plugin_native_callbacks' => count( $plugin_callbacks ),
+		'theme_native_callbacks'  => count( $theme_callbacks ),
+		'origins'                 => callbackOrigins( array_merge( $plugin_callbacks, $theme_callbacks ) ),
+		'credential_callbacks'    => $credentials_after,
+		'http_callback_delta'     => $http_after - $http_at_boot,
 	),
-	'plugin_manifest_hash' => hash( 'sha256', json_encode( archiveManifest( $pluginZip, 'ran-neutral-plugin' ), JSON_THROW_ON_ERROR ) ),
-	'theme_manifest_hash'  => hash( 'sha256', json_encode( archiveManifest( $themeZip, 'ran-neutral-theme' ), JSON_THROW_ON_ERROR ) ),
+	'plugin_manifest_hash' => hash( 'sha256', json_encode( archiveManifest( $plugin_zip, 'ran-neutral-plugin' ), JSON_THROW_ON_ERROR ) ),
+	'theme_manifest_hash'  => hash( 'sha256', json_encode( archiveManifest( $theme_zip, 'ran-neutral-theme' ), JSON_THROW_ON_ERROR ) ),
 	'plugin_status'        => $plugin->status(),
 	'theme_status'         => $theme->status(),
-	'pass'                 => archiveManifest( $pluginZip, 'ran-neutral-plugin' ) === directoryManifest( WP_PLUGIN_DIR . '/ran-neutral-plugin' )
-		&& archiveManifest( $themeZip, 'ran-neutral-theme' ) === directoryManifest( get_theme_root() . '/ran-neutral-theme' )
+	'pass'                 => archiveManifest( $plugin_zip, 'ran-neutral-plugin' ) === directoryManifest( WP_PLUGIN_DIR . '/ran-neutral-plugin' )
+		&& archiveManifest( $theme_zip, 'ran-neutral-theme' ) === directoryManifest( get_theme_root() . '/ran-neutral-theme' )
 		&& is_plugin_active( 'ran-neutral-plugin/ran-neutral-plugin.php' ) && 'ran-neutral-theme' === get_stylesheet()
 		&& 2 === ( $diagnostics['candidate_count'] ?? null ) && 2 === ( $diagnostics['logical_target_count'] ?? null )
 		&& 5 === ( $diagnostics['protocol_version'] ?? null )
 		&& array(
 			'plugin' => 0,
 			'theme'  => 0,
-		) === $credentialsAtBoot && 0 === $httpAtBoot
-		&& 1 === count( $pluginCallbacks ) && 1 === count( $themeCallbacks )
-		&& originsAreInstalled( array_merge( $pluginCallbacks, $themeCallbacks ), $runtimeRoot )
+		) === $credentials_at_boot && 0 === $http_at_boot
+		&& 1 === count( $plugin_callbacks ) && 1 === count( $theme_callbacks )
+		&& originsAreInstalled( array_merge( $plugin_callbacks, $theme_callbacks ), $runtime_root )
 		&& array(
 			'plugin' => 1,
 			'theme'  => 1,
-		) === $credentialsAfter && 2 === ( $httpAfter - $httpAtBoot )
+		) === $credentials_after && 2 === ( $http_after - $http_at_boot )
 		&& 'target_active' === ( $plugin->status()['code'] ?? null ) && 'target_active' === ( $theme->status()['code'] ?? null )
 		&& true === ( $plugin->status()['hooks_registered'] ?? null ) && true === ( $theme->status()['hooks_registered'] ?? null )
 		&& is_array( $plugin->status()['native'] ?? null ) && is_array( $theme->status()['native'] ?? null )
@@ -138,9 +138,9 @@ function callbackOrigins( array $callbacks ): array {
 	return array_map( static fn( object $callback ): string => (string) ( new ReflectionClass( $callback ) )->getFileName(), $callbacks );
 }
 /** @param list<object> $callbacks */
-function originsAreInstalled( array $callbacks, string $runtimeRoot ): bool {
+function originsAreInstalled( array $callbacks, string $runtime_root ): bool {
 	foreach ( callbackOrigins( $callbacks ) as $origin ) {
-		if ( ! str_starts_with( $origin, $runtimeRoot . '/' ) ) {
+		if ( ! str_starts_with( $origin, $runtime_root . '/' ) ) {
 			return false;
 		}
 	}
@@ -152,6 +152,7 @@ function archiveManifest( string $zip, string $root ): array {
 		throw new RuntimeException( 'Could not read exact ZIP.' );
 	}
 	$manifest = array();
+	// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- ZipArchive exposes this native property name.
 	for ( $index = 0; $index < $archive->numFiles; ++$index ) {
 		$name = $archive->getNameIndex( $index );
 		$stat = $archive->statIndex( $index );

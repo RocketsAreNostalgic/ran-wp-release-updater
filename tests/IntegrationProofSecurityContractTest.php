@@ -13,8 +13,8 @@ final class IntegrationProofSecurityContractTest extends TestCase {
 			$proof = $this->proof( $script );
 
 			self::assertStringContainsString( "getenv( 'RAN_WP_RELEASE_UPDATER_LOCAL_WP_ROOT' )", $proof );
-			self::assertStringContainsString( 'realpath( $wpRootInput )', $proof );
-			self::assertStringNotContainsString( '?: $wpRoot', $proof );
+			self::assertStringContainsString( 'realpath( $wp_root_input )', $proof );
+			self::assertStringNotContainsString( '?: $wp_root', $proof );
 			foreach ( array( '/wp-load.php', '/wp-settings.php', '/wp-includes/version.php' ) as $requiredFile ) {
 				self::assertStringContainsString( $requiredFile, $proof );
 			}

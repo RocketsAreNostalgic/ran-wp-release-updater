@@ -5,7 +5,7 @@ declare(strict_types=1);
 // Run against pristine WordPress source and a new, socket-only MySQL instance.
 const INTEGRATION_MARKER = 'ran-wp-release-updater-integration-v1';
 $processes               = array();
-$ownedDirectories        = array();
+$owned_directories       = array();
 $redactions              = array();
 $environment             = array();
 $report                  = null;
@@ -30,25 +30,25 @@ try {
 	$runtime                           = verifyRuntime( $source );
 	$result['candidate_revision']      = $runtime['package_revision'];
 	$result['candidate_manifest_hash'] = hash_file( 'sha256', $source . '/runtime-copy.json' );
-	$suiteBytes                        = '';
+	$suite_bytes                       = '';
 	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php' ) as $file ) {
-		$suiteBytes .= basename( $file ) . "\0" . hash_file( 'sha256', $file ) . "\n";
+		$suite_bytes .= basename( $file ) . "\0" . hash_file( 'sha256', $file ) . "\n";
 	}
-	$result['suite_revision'] = hash( 'sha256', $suiteBytes );
+	$result['suite_revision'] = hash( 'sha256', $suite_bytes );
 	$wordpress                = inputDirectory( 'RAN_UPDATER_WP_ROOT', false );
 	if ( ! is_file( $wordpress . '/wp-load.php' ) ) {
 		throw new RuntimeException( 'RAN_UPDATER_WP_ROOT must contain pristine WordPress source.' );
 	}
-	$workspace       = inputDirectory( 'RAN_UPDATER_INTEGRATION_ROOT' );
-	$socketParent    = getenv( 'RAN_UPDATER_SOCKET_ROOT' ) ? inputDirectory( 'RAN_UPDATER_SOCKET_ROOT' ) : $workspace;
-	$wpCli           = inputExecutable( 'RAN_UPDATER_WP_CLI' );
-	$mysqld          = inputExecutable( 'RAN_UPDATER_MYSQLD_BIN' );
-	$report          = $workspace . '/ran-wp-release-updater-result-' . bin2hex( random_bytes( 6 ) ) . '.json';
-	$run             = ownDirectory( $workspace, 'ran-wp-release-updater-run-' );
-	$socketDirectory = ownDirectory( $socketParent, 's-' );
-	$socket          = $socketDirectory . '/mysql.sock';
-	$socketLimit     = 'Darwin' === PHP_OS_FAMILY ? 103 : 107;
-	if ( strlen( $socket ) > $socketLimit || ! str_starts_with( $socket, '/' ) ) {
+	$workspace        = inputDirectory( 'RAN_UPDATER_INTEGRATION_ROOT' );
+	$socket_parent    = getenv( 'RAN_UPDATER_SOCKET_ROOT' ) ? inputDirectory( 'RAN_UPDATER_SOCKET_ROOT' ) : $workspace;
+	$wp_cli           = inputExecutable( 'RAN_UPDATER_WP_CLI' );
+	$mysqld           = inputExecutable( 'RAN_UPDATER_MYSQLD_BIN' );
+	$report           = $workspace . '/ran-wp-release-updater-result-' . bin2hex( random_bytes( 6 ) ) . '.json';
+	$run              = ownDirectory( $workspace, 'ran-wp-release-updater-run-' );
+	$socket_directory = ownDirectory( $socket_parent, 's-' );
+	$socket           = $socket_directory . '/mysql.sock';
+	$socket_limit     = 'Darwin' === PHP_OS_FAMILY ? 103 : 107;
+	if ( strlen( $socket ) > $socket_limit || ! str_starts_with( $socket, '/' ) ) {
 		throw new RuntimeException( 'Set RAN_UPDATER_SOCKET_ROOT to a shorter durable absolute directory.' );
 	}
 	$scratch = makeDirectory( $run . '/scratch' );
@@ -66,7 +66,7 @@ try {
 	);
 	$mysql       = makeDirectory( $run . '/mysql' );
 	$data        = makeDirectory( $mysql . '/data' );
-	$pidFile     = $mysql . '/mysqld.pid';
+	$pid_file    = $mysql . '/mysqld.pid';
 	command(
 		array(
 			$mysqld,
@@ -88,7 +88,7 @@ try {
 			'--datadir=' . $data,
 			'--socket=' . $socket,
 			'--skip-networking',
-			'--pid-file=' . $pidFile,
+			'--pid-file=' . $pid_file,
 			'--tmpdir=' . $scratch,
 			'--skip-mysqlx',
 			'--log-error=' . $mysql . '/error.log',
@@ -96,14 +96,14 @@ try {
 		$mysql,
 		'mysql-server'
 	);
-	$database                    = attestDatabase( $server, $socket, $data, $pidFile );
-	$wpCommand                   = array(
+	$database                    = attestDatabase( $server, $socket, $data, $pid_file );
+	$wp_command                  = array(
 		PHP_BINARY,
 		'-d',
 		'sys_temp_dir=' . $scratch,
 		'-d',
 		'zend.exception_ignore_args=1',
-		$wpCli,
+		$wp_cli,
 		'--allow-root',
 		'--skip-packages',
 	);
@@ -115,9 +115,9 @@ try {
 	if ( 'all' === $scenario || 'distribution' === $scenario ) {
 		$started = hrtime( true );
 		$site    = createSite( $wordpress, $run . '/single', $database, $socket );
-		installWordpress( $wpCommand, $site, $password, false );
+		installWordpress( $wp_command, $site, $password, false );
 		$archives  = consumerArchives( $source, $run );
-		$arguments = array_merge( $wpCommand, array( '--path=' . $site ) );
+		$arguments = array_merge( $wp_command, array( '--path=' . $site ) );
 		$inputs    = array(
 			'RAN_UPDATER_PLUGIN_ZIP' => $archives['plugin'],
 			'RAN_UPDATER_THEME_ZIP'  => $archives['theme'],
@@ -146,8 +146,8 @@ try {
 	if ( 'all' === $scenario || 'multisite' === $scenario ) {
 		$started = hrtime( true );
 		$site    = createSite( $wordpress, $run . '/network', $database, $socket );
-		installWordpress( $wpCommand, $site, $password, true );
-		$arguments = array_merge( $wpCommand, array( '--path=' . $site ) );
+		installWordpress( $wp_command, $site, $password, true );
+		$arguments = array_merge( $wp_command, array( '--path=' . $site ) );
 		$subsite   = command(
 			array_merge(
 				$arguments,
@@ -165,28 +165,28 @@ try {
 		requireFact( ctype_digit( $subsite ), 'WordPress did not return a subsite ID.' );
 		networkConsumer( $source, $site );
 		command( array_merge( $arguments, array( 'plugin', 'activate', 'ran-network-target', '--network' ) ), $site, 'activate-network-plugin' );
-		$observer    = __DIR__ . '/wordpress-integration/multisite.php';
-		$mainOutput  = $run . '/main.json';
-		$childOutput = $run . '/subsite.json';
-		$release     = $run . '/release-main';
-		$winner      = startProcess(
+		$observer     = __DIR__ . '/wordpress-integration/multisite.php';
+		$main_output  = $run . '/main.json';
+		$child_output = $run . '/subsite.json';
+		$release      = $run . '/release-main';
+		$winner       = startProcess(
 			array_merge( $arguments, array( '--url=http://example.test', 'eval-file', $observer ) ),
 			$site,
 			'main-site-discovery',
 			array(
-				'RAN_UPDATER_NETWORK_OUTPUT'  => $mainOutput,
+				'RAN_UPDATER_NETWORK_OUTPUT'  => $main_output,
 				'RAN_UPDATER_NETWORK_RELEASE' => $release,
 			)
 		);
-		waitForOutput( $winner, $mainOutput );
+		waitForOutput( $winner, $main_output );
 		command(
 			array_merge( $arguments, array( '--url=http://example.test/subsite/', 'eval-file', $observer ) ),
 			$site,
 			'subsite-discovery',
-			array( 'RAN_UPDATER_NETWORK_OUTPUT' => $childOutput )
+			array( 'RAN_UPDATER_NETWORK_OUTPUT' => $child_output )
 		);
-		$main                             = readJson( $mainOutput );
-		$child                            = readJson( $childOutput );
+		$main                             = readJson( $main_output );
+		$child                            = readJson( $child_output );
 		$result['scenarios']['multisite'] = array(
 			'main'    => $main,
 			'subsite' => $child,
@@ -195,14 +195,14 @@ try {
 		writeFile( $release, "release\n" );
 		finishProcess( $winner );
 		// Positive control: the subsite must discover once the competing owner exits.
-		$afterOutput = $run . '/subsite-after-release.json';
+		$after_output = $run . '/subsite-after-release.json';
 		command(
 			array_merge( $arguments, array( '--url=http://example.test/subsite/', 'eval-file', $observer ) ),
 			$site,
 			'subsite-after-release',
-			array( 'RAN_UPDATER_NETWORK_OUTPUT' => $afterOutput )
+			array( 'RAN_UPDATER_NETWORK_OUTPUT' => $after_output )
 		);
-		$after = readJson( $afterOutput );
+		$after = readJson( $after_output );
 		$result['scenarios']['multisite']['after_release'] = $after;
 		requireFact(
 			1 === ( $after['provider_callback_delta'] ?? null ) && false === ( $after['suppressed_provider'] ?? null )
@@ -220,26 +220,26 @@ try {
 } catch ( Throwable $error ) {
 	$result['error'] = redact( $error->getMessage() );
 } finally {
-	$cleanupErrors = array();
+	$cleanup_errors = array();
 	foreach ( array_reverse( array_keys( $processes ) ) as $id ) {
 		try {
 			stopProcess( $id );
 		} catch ( Throwable $error ) {
-			$cleanupErrors[] = redact( $error->getMessage() ); }
+			$cleanup_errors[] = redact( $error->getMessage() ); }
 	}
 	// Never remove a server's files unless all owned processes have stopped.
 	if ( array() === $processes ) {
-		foreach ( array_reverse( $ownedDirectories ) as $directory ) {
+		foreach ( array_reverse( $owned_directories ) as $directory ) {
 			try {
 				removeOwnedDirectory( $directory );
 			} catch ( Throwable $error ) {
-				$cleanupErrors[] = redact( $error->getMessage() ); }
+				$cleanup_errors[] = redact( $error->getMessage() ); }
 		}
 	}
-	$result['cleanup'] = array() === $cleanupErrors && array() === $processes ? 'complete' : 'failed';
+	$result['cleanup'] = array() === $cleanup_errors && array() === $processes ? 'complete' : 'failed';
 	if ( 'complete' !== $result['cleanup'] ) {
 		$result['status']         = 'failed';
-		$result['cleanup_errors'] = $cleanupErrors;
+		$result['cleanup_errors'] = $cleanup_errors;
 	}
 	$json = json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . "\n";
 	if ( is_string( $report ) ) {
@@ -284,13 +284,13 @@ function writeFile( string $path, string $bytes ): void {
 }
 
 function ownDirectory( string $parent, string $prefix ): string {
-	global $ownedDirectories;
+	global $owned_directories;
 	$path = makeDirectory( $parent . '/' . $prefix . bin2hex( random_bytes( 6 ) ) );
 	try {
 		writeFile( $path . '/.integration-owner', INTEGRATION_MARKER ); } catch ( Throwable $error ) {
 		rmdir( $path );
 		throw $error; }
-		$ownedDirectories[] = $path;
+		$owned_directories[] = $path;
 		return $path;
 }
 
@@ -418,13 +418,13 @@ function stopProcess( int $id ): void {
 	unset( $processes[ $id ] );
 }
 
-function attestDatabase( int $server, string $socket, string $data, string $pidFile ): mysqli {
+function attestDatabase( int $server, string $socket, string $data, string $pid_file ): mysqli {
 	mysqli_report( MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT );
 	$deadline = microtime( true ) + 30;
 	do {
 		$status = pollProcess( $server );
 		requireFact( $status['running'], 'Owned MySQL exited before socket attestation.' );
-		if ( is_file( $pidFile ) && trim( (string) file_get_contents( $pidFile ) ) === (string) $status['pid'] ) {
+		if ( is_file( $pid_file ) && trim( (string) file_get_contents( $pid_file ) ) === (string) $status['pid'] ) {
 			try {
 				$db = mysqli_init();
 				$db->real_connect( 'localhost', 'root', '', null, 0, $socket );
@@ -438,7 +438,7 @@ function attestDatabase( int $server, string $socket, string $data, string $pidF
 			$row = $db->query( 'SELECT @@datadir AS d, @@pid_file AS p, @@skip_networking AS n' )->fetch_assoc();
 			requireFact(
 				realpath( (string) $row['d'] ) === realpath( $data )
-				&& realpath( (string) $row['p'] ) === realpath( $pidFile ) && 1 === (int) $row['n'],
+				&& realpath( (string) $row['p'] ) === realpath( $pid_file ) && 1 === (int) $row['n'],
 				'Owned MySQL attestation failed.'
 			);
 			return $db;

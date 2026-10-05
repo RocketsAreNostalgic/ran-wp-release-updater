@@ -14,7 +14,7 @@ Core dependency update. The native-operation refinement below was delivered sepa
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
 | Generated `src/Dependency/ArchiveSafety.php` | PHPCS excluded; namespace-only byte parity against the locked `ran/updater-support` source and direct level-8 analysis remain required. Never hand-edit this file. |
-| `tests/Archive`, `tests/Contract`, `tests/Dependency`, `tests/Provider`, `tests/Runtime`, `tests/WordPress`, `tests/Support` | Owned method and variable naming now cover these seven roots, including future files. Twenty-nine PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
+| `tests/Archive`, `tests/Contract`, `tests/Dependency`, `tests/Provider`, `tests/Runtime`, `tests/WordPress`, `tests/Support`, `tests/Integration` | Owned method and variable naming now cover these eight roots, including future files. Twenty-nine PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
 | Other `tests/` roots | The separate purpose-built fixture/harness naming boundary remains. Production callers, named arguments, callbacks and Reflection seams follow the production API. This cohort does not certify every fixture-local identifier as snake_case. |
 
 `composer check` retains strict validation, generated-copy parity, live advisory
@@ -220,3 +220,45 @@ renames, seven provider strings and the single pure comparison swap.
 Production, scripts, public APIs, runtime identity, dependencies, JavaScript and
 workflows are unchanged. Other test roots and exception acceptance remain under
 organisation #65/#128. This is not release authorization.
+
+
+## Integration harness naming cohort
+
+WordPress/Support naming landed in PR #100 at
+`9ca4d7b91ae5815955d37a1bfd19a20889da89d3`. This proposal adds all eleven
+Integration PHP files and future/nested files to owned method and variable
+checks. Ten files need normalization; the no-dev consumer already complies.
+The locked checker exposes 772 naming reports: one owned method declaration
+and 771 variable/property/interpolation reports. Two property uses are the native
+ZipArchive::numFiles API and retain exact occurrence-local exceptions. The other
+39 condition/signature reports (23 Yoda, 13 unused parameters, three reserved
+parameter names) retain their existing, separately reviewed scope; this cohort
+adds no exclusions for them and does not claim their acceptance.
+
+Owned identifiers are normalized while free-function API names, environment
+keys, embedded fixture payloads, foreign signatures, Reflection targets, globals,
+reference captures, control flow and cleanup fences remain intact. One compact()
+evidence assembly becomes an explicit array so all sixteen existing output keys,
+order and values remain unchanged. A differential evaluation verifies that
+mapping. Two source-string expectations in the existing security contract test
+follow the variable renames without weakening either positive or negative checks.
+
+The existing checker regression now exercises nineteen naming paths, including
+current/future nested Integration paths and an outside Performance control;
+its two previous Support Yoda controls remain. It passes 236 assertions.
+Restoring the previous naming scope fails the Integration control. All 477
+PHPUnit test/dataset identities are unchanged. Canonical Composer passes
+477 tests / 25,204 assertions, level 8, live advisory audit and installed no-dev.
+All twelve plugin/theme public-consumer scenarios and the MySQL setup-failure
+cleanup proof pass locally. The full Integration token comparison permits only
+owned renames and the explicit compact-key mapping (plus formatting/comments).
+
+Native CI qualifies the maintained installed WordPress and MySQL suites. The
+legacy Local-only phase-2.4 and mixed-bulk suites require external Local/MySQL/
+WordPress prerequisites unavailable in the coordinator environment; they were
+not executed locally for this proposal. Token equivalence and their existing
+security-contract tests provide bounded evidence, not a claim of a new full
+legacy runtime qualification. No harness guard or prerequisite is relaxed.
+Production, scripts, dependencies, public APIs, runtime identity, JavaScript and
+workflows are unchanged. Remaining test roots and retained exceptions continue
+under organisation #65/#128. No release is authorized.
