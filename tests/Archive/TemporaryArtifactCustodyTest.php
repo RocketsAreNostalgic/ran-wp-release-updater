@@ -11,11 +11,13 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 
 	private string $directory;
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->directory = sys_get_temp_dir() . '/ran-artifact-custody-' . bin2hex( random_bytes( 8 ) );
 		self::assertTrue( mkdir( $this->directory, 0700 ) );
 	}
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function tearDown(): void {
 		@chmod( $this->directory, 0700 );
 		foreach ( glob( $this->directory . '/*' ) ?: array() as $path ) {
@@ -24,7 +26,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		@rmdir( $this->directory );
 	}
 
-	public function testInspectChecksContinuityBeforeAndAfterReader(): void {
+	public function test_inspect_checks_continuity_before_and_after_reader(): void {
 		$artifact = $this->artifact( 'original' );
 
 		$this->expectException( \RuntimeException::class );
@@ -37,7 +39,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		);
 	}
 
-	public function testInspectPreservesCallerExceptionAndClearsBusyState(): void {
+	public function test_inspect_preserves_caller_exception_and_clears_busy_state(): void {
 		$artifact = $this->artifact( 'original' );
 		$expected = new \DomainException( 'reader failure' );
 
@@ -55,7 +57,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		self::assertSame( 'ok', $artifact->inspect( static fn(): string => 'ok' ) );
 	}
 
-	public function testInspectAndDiscardRejectReentryWhileReaderIsBusy(): void {
+	public function test_inspect_and_discard_reject_reentry_while_reader_is_busy(): void {
 		$artifact = $this->artifact( 'original' );
 		$codes    = $artifact->inspect(
 			function () use ( $artifact ): array {
@@ -78,7 +80,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		self::assertTrue( $artifact->discard() );
 	}
 
-	public function testLivenessIsCheckedBeforeAndAfterSuccessfulReader(): void {
+	public function test_liveness_is_checked_before_and_after_successful_reader(): void {
 		$live     = true;
 		$artifact = $this->artifact(
 			'original',
@@ -97,7 +99,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		);
 	}
 
-	public function testDiscardRemainsAvailableAfterRuntimeLoss(): void {
+	public function test_discard_remains_available_after_runtime_loss(): void {
 		$artifact = $this->artifact( 'original', static fn(): string => 'runtime_revoked' );
 
 		$this->expectExceptionCode( 1002 );
@@ -108,7 +110,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		}
 	}
 
-	public function testDiscardAttemptDeniesFurtherUseAndCanRetryUnchangedFile(): void {
+	public function test_discard_attempt_denies_further_use_and_can_retry_unchanged_file(): void {
 		$artifact = $this->artifact( 'original' );
 		chmod( $this->directory, 0500 );
 		try {
@@ -127,7 +129,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		self::assertTrue( $artifact->discard() );
 	}
 
-	public function testDiscardWillNotDeleteForeignReplacement(): void {
+	public function test_discard_will_not_delete_foreign_replacement(): void {
 		$artifact = $this->artifact( 'original' );
 		$path     = $this->path();
 		self::assertTrue( rename( $path, $path . '.owned' ) );
@@ -138,7 +140,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		self::assertSame( 'foreign', file_get_contents( $path ) );
 	}
 
-	public function testFailedCloneLeavesOriginalArtifactUsable(): void {
+	public function test_failed_clone_leaves_original_artifact_usable(): void {
 		$artifact = $this->artifact( 'original' );
 		try {
 			clone $artifact;
@@ -150,12 +152,12 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		self::assertTrue( $artifact->discard() );
 	}
 
-	public function testSerializationIsDenied(): void {
+	public function test_serialization_is_denied(): void {
 		$this->expectException( \LogicException::class );
 		serialize( $this->artifact( 'original' ) );
 	}
 
-	public function testCraftedUnserializeFailsWithoutDamagingOriginalArtifact(): void {
+	public function test_crafted_unserialize_fails_without_damaging_original_artifact(): void {
 		$artifact = $this->artifact( 'original' );
 		$class    = TemporaryArtifact::class;
 		$payload  = sprintf( 'O:%d:"%s":0:{}', strlen( $class ), $class );
@@ -170,7 +172,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		self::assertTrue( $artifact->discard() );
 	}
 
-	private function artifact( string $contents, ?callable $livenessGuard = null ): TemporaryArtifact {
+	private function artifact( string $contents, ?callable $liveness_guard = null ): TemporaryArtifact {
 		$path = $this->path();
 		file_put_contents( $path, $contents );
 		chmod( $path, 0600 );
@@ -191,7 +193,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 				'mtime' => (int) $stat['mtime'],
 				'ctime' => (int) $stat['ctime'],
 			),
-			liveness_guard: $livenessGuard
+			liveness_guard: $liveness_guard
 		);
 	}
 

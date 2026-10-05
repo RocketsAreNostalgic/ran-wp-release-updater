@@ -9,13 +9,15 @@ use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 final class TemporaryArtifactTest extends TestCase {
 
 	private string $path;
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->path = tempnam( sys_get_temp_dir(), 'ran-core-artifact-' );
 		chmod( $this->path, 0600 );
 		file_put_contents( $this->path, 'artifact' ); }
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function tearDown(): void {
 		@unlink( $this->path ); }
-	public function testInspectRejectsMutation(): void {
+	public function test_inspect_rejects_mutation(): void {
 		$artifact = new TemporaryArtifact( $this->path, hash_file( 'sha256', $this->path ), $this->identity() );
 		file_put_contents( $this->path, 'changed' );
 		$this->expectException( \RuntimeException::class );
