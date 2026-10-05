@@ -146,6 +146,7 @@ namespace Tests\Provider {
 
 	final class GitHubReleaseAdapterTest extends TestCase {
 
+		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function setUp(): void {
 			$GLOBALS['ran_github_requests']         = array();
 			$GLOBALS['ran_github_responses']        = array();
@@ -157,6 +158,7 @@ namespace Tests\Provider {
 			$GLOBALS['ran_github_unlink_failures']  = 0;
 		}
 
+		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function tearDown(): void {
 			foreach ( $GLOBALS['ran_github_temp_paths'] as $path ) {
 				if ( is_string( $path ) && ( is_file( $path ) || is_link( $path ) ) ) {
@@ -166,7 +168,7 @@ namespace Tests\Provider {
 			parent::tearDown();
 		}
 
-		public function testDormantLoadAndConstructionPerformNoWork(): void {
+		public function test_dormant_load_and_construction_perform_no_work(): void {
 			$calls    = 0;
 			$resolver = new GitHubCredentialResolver(
 				static function () use ( &$calls ): string {
@@ -184,7 +186,7 @@ namespace Tests\Provider {
 			self::assertSame( array(), $GLOBALS['ran_github_temp_paths'] );
 		}
 
-		public function testProductionCompositionActivatesSelectedRootAndRemainsDormantUntilOffer(): void {
+		public function test_production_composition_activates_selected_root_and_remains_dormant_until_offer(): void {
 			$root = dirname( __DIR__, 2 );
 			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
 			require $root . '/bootstrap.php';
@@ -264,7 +266,7 @@ namespace Tests\Provider {
 
 		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
 		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
-		public function testPublicReleaseSourceListsEmptyAndMapsCredentialFailureWithoutHttp(): void {
+		public function test_public_release_source_lists_empty_and_maps_credential_failure_without_http(): void {
 			$GLOBALS['wp_version'] = '6.8.0';
 			$registrar             = require dirname( __DIR__, 2 ) . '/bootstrap.php';
 			$broker                = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
@@ -279,9 +281,9 @@ namespace Tests\Provider {
 					)
 				)['code']
 			);
-			$source             = $registrar->releases( 'github', 'plugin', 'owner/repository', '99' );
-			$invalidConditional = $source->list( array( 'etag' => 'invalid' ) );
-			self::assertSame( 'invalid_configuration', $invalidConditional['code'] );
+			$source              = $registrar->releases( 'github', 'plugin', 'owner/repository', '99' );
+			$invalid_conditional = $source->list( array( 'etag' => 'invalid' ) );
+			self::assertSame( 'invalid_configuration', $invalid_conditional['code'] );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
 			$result                          = $source->list();
@@ -297,9 +299,9 @@ namespace Tests\Provider {
 			);
 			self::assertSame( array(), $result['value']['candidates'] );
 			$GLOBALS['ran_github_responses'] = array( $this->response( 304, null, array( 'etag' => '"same"' ) ) );
-			$notModified                     = $source->list( array( 'etag' => '"old"' ) );
-			self::assertSame( 'releases_not_modified', $notModified['code'] );
-			self::assertTrue( $notModified['value']['not_modified'] );
+			$not_modified                    = $source->list( array( 'etag' => '"old"' ) );
+			self::assertSame( 'releases_not_modified', $not_modified['code'] );
+			self::assertTrue( $not_modified['value']['not_modified'] );
 			$GLOBALS['ran_github_responses'] = array( $this->response( 429, null, array( 'retry-after' => '12' ) ) );
 			$limited                         = $source->list();
 			self::assertSame(
@@ -350,7 +352,7 @@ namespace Tests\Provider {
 
 		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
 		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
-		public function testPublicReleaseSourceMapsAssetAndProspectiveArchiveFailures(): void {
+		public function test_public_release_source_maps_asset_and_prospective_archive_failures(): void {
 			$GLOBALS['wp_version'] = '6.8.0';
 			$registrar             = require dirname( __DIR__, 2 ) . '/bootstrap.php';
 			$broker                = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
@@ -366,9 +368,9 @@ namespace Tests\Provider {
 				)['code']
 			);
 			$header                          = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
-			$archive                         = $this->prospectiveArchive( $header );
+			$archive                         = $this->prospective_archive( $header );
 			$source                          = $registrar->releases( 'github', 'plugin', 'owner/repository', '99' );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $source->inspect( '7', 'v1.2.3' );
 			self::assertSame( 'release_inspected', $inspection['code'] );
 			$GLOBALS['ran_github_responses'] = array(
@@ -379,13 +381,13 @@ namespace Tests\Provider {
 				$this->response( 404, null ),
 			);
 			self::assertSame( 'release_unavailable', $source->acquire( '7', 'v1.2.3', $inspection['value']['fingerprint'] )['code'] );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $source->inspect( '7', 'v1.2.3' );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$changed                         = $source->acquire( '7', 'v1.2.3', 'v2:' . str_repeat( '0', 64 ) );
 			self::assertSame( 'release_changed', $changed['code'] );
 			self::assertSame( 'complete', $changed['cleanup_status'] );
-			self::assertAllTemporaryPathsAbsent();
+			self::assert_all_temporary_paths_absent();
 			$theme                           = $registrar->releases( 'github', 'theme', 'owner/repository', '99' );
 			$invalid                         = 'not-a-zip';
 			$release                         = $this->release( 7, 'v1.2.3' );
@@ -402,11 +404,11 @@ namespace Tests\Provider {
 			$broken                          = $theme->inspect( '7', 'v1.2.3' );
 			self::assertSame( 'package_incompatible', $broken['code'] );
 			self::assertSame( 'complete', $broken['cleanup_status'] );
-			self::assertAllTemporaryPathsAbsent();
+			self::assert_all_temporary_paths_absent();
 		}
 
-		public function testPublicServiceKeepsRepositoryAndExactReleaseFailuresDistinct(): void {
-			$service                         = $this->publicService();
+		public function test_public_service_keeps_repository_and_exact_release_failures_distinct(): void {
+			$service                         = $this->public_service();
 			$GLOBALS['ran_github_responses'] = array( $this->response( 404, null ) );
 			try {
 				$service->inspect( '7', 'v1.2.3' );
@@ -429,9 +431,9 @@ namespace Tests\Provider {
 			}
 		}
 
-		public function testPublicServiceRejectsMalformedConditionalBeforeHttp(): void {
+		public function test_public_service_rejects_malformed_conditional_before_http(): void {
 			try {
-				$this->publicService()->list( array( 'etag' => 'invalid' ) );
+				$this->public_service()->list( array( 'etag' => 'invalid' ) );
 				self::fail( 'Malformed conditional state must fail before provider work.' );
 			} catch ( ReleaseFailure $failure ) {
 				self::assertSame( 'invalid_configuration', $failure->release_code );
@@ -439,10 +441,10 @@ namespace Tests\Provider {
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 		}
 
-		public function testPublicServiceCleansRateLimitedAndInvalidStreamFailures(): void {
-			$archive                         = $this->prospectiveArchive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
-			$service                         = $this->publicService();
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+		public function test_public_service_cleans_rate_limited_and_invalid_stream_failures(): void {
+			$archive                         = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+			$service                         = $this->public_service();
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspect( '7', 'v1.2.3' );
 
 			$GLOBALS['ran_github_responses'] = array(
@@ -460,7 +462,7 @@ namespace Tests\Provider {
 				self::assertSame( 30, $failure->retry_after );
 				self::assertSame( 'complete', $failure->cleanup_status );
 			}
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
@@ -476,13 +478,13 @@ namespace Tests\Provider {
 				self::assertSame( 'package_incompatible', $failure->release_code );
 				self::assertSame( 'complete', $failure->cleanup_status );
 			}
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function testPublicServiceStopsAfterLivenessChangesDuringCredentialResolution(): void {
+		public function test_public_service_stops_after_liveness_changes_during_credential_resolution(): void {
 			$calls   = 0;
 			$service = new GitHubReleaseService(
-				$this->serviceConfiguration( $this->binding() ),
+				$this->service_configuration( $this->binding() ),
 				new GitHubCredentialResolver(
 					static function (): string {
 						return 'private-token'; }
@@ -499,10 +501,10 @@ namespace Tests\Provider {
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 		}
 
-		public function testPublicServiceStopsAfterLivenessChangesDuringHttpCallback(): void {
+		public function test_public_service_stops_after_liveness_changes_during_http_callback(): void {
 			$revoked                                = false;
 			$service                                = new GitHubReleaseService(
-				$this->serviceConfiguration( $this->binding() ),
+				$this->service_configuration( $this->binding() ),
 				null,
 				static function () use ( &$revoked ): ?string {
 					return $revoked ? 'runtime_unavailable' : null; }
@@ -520,14 +522,14 @@ namespace Tests\Provider {
 			self::assertCount( 1, $GLOBALS['ran_github_requests'] );
 		}
 
-		public function testPublicServiceRetriesCleanupOnceAndReportsBothOutcomes(): void {
-			$archive                         = $this->prospectiveArchive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
-			$service                         = $this->publicService();
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+		public function test_public_service_retries_cleanup_once_and_reports_both_outcomes(): void {
+			$archive                         = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+			$service                         = $this->public_service();
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspect( '7', 'v1.2.3' );
 
 			$GLOBALS['ran_github_unlink_failures'] = 1;
-			$GLOBALS['ran_github_responses']       = $this->invalidStreamResponses();
+			$GLOBALS['ran_github_responses']       = $this->invalid_stream_responses();
 			try {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'Invalid bytes must fail after cleanup retry.' );
@@ -536,10 +538,10 @@ namespace Tests\Provider {
 				self::assertSame( 'complete', $failure->cleanup_status );
 			}
 			self::assertSame( 0, $GLOBALS['ran_github_unlink_failures'] );
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 
 			$GLOBALS['ran_github_unlink_failures'] = 2;
-			$GLOBALS['ran_github_responses']       = $this->invalidStreamResponses();
+			$GLOBALS['ran_github_responses']       = $this->invalid_stream_responses();
 			try {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'Invalid bytes must expose an unreleased owned file.' );
@@ -551,12 +553,12 @@ namespace Tests\Provider {
 			self::assertFileExists( $GLOBALS['ran_github_temp_paths'][ count( $GLOBALS['ran_github_temp_paths'] ) - 1 ] );
 		}
 
-		public function testPublicServiceReportsTemporaryAllocationCleanupForInspectAndAcquire(): void {
-			$archive = $this->prospectiveArchive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+		public function test_public_service_reports_temporary_allocation_cleanup_for_inspect_and_acquire(): void {
+			$archive = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
 
-			$service                              = $this->publicService();
+			$service                              = $this->public_service();
 			$GLOBALS['ran_github_chmod_failures'] = 1;
-			$GLOBALS['ran_github_responses']      = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses']      = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			try {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'A chmod allocation failure must be structured.' );
@@ -564,12 +566,12 @@ namespace Tests\Provider {
 				self::assertSame( 'operation_failed', $failure->release_code );
 				self::assertSame( 'complete', $failure->cleanup_status );
 			}
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 
-			$service                               = $this->publicService();
+			$service                               = $this->public_service();
 			$GLOBALS['ran_github_chmod_failures']  = 1;
 			$GLOBALS['ran_github_unlink_failures'] = 2;
-			$GLOBALS['ran_github_responses']       = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses']       = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			try {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'An unreleased chmod allocation failure must be structured.' );
@@ -577,16 +579,16 @@ namespace Tests\Provider {
 				self::assertSame( 'operation_failed', $failure->release_code );
 				self::assertSame( 'failed', $failure->cleanup_status );
 			}
-			$unreleasedPath = $GLOBALS['ran_github_temp_paths'][ count( $GLOBALS['ran_github_temp_paths'] ) - 1 ];
-			self::assertFileExists( $unreleasedPath );
-			self::assertTrue( \unlink( $unreleasedPath ) );
+			$unreleased_path = $GLOBALS['ran_github_temp_paths'][ count( $GLOBALS['ran_github_temp_paths'] ) - 1 ];
+			self::assertFileExists( $unreleased_path );
+			self::assertTrue( \unlink( $unreleased_path ) );
 
-			$service                                = $this->publicService();
+			$service                                = $this->public_service();
 			$GLOBALS['ran_github_unlink_failures']  = 0;
-			$GLOBALS['ran_github_responses']        = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses']        = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                             = $service->inspect( '7', 'v1.2.3' );
 			$GLOBALS['ran_github_lstat_failure_at'] = 2;
-			$GLOBALS['ran_github_responses']        = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses']        = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			try {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'An identity allocation failure must be structured.' );
@@ -594,11 +596,11 @@ namespace Tests\Provider {
 				self::assertSame( 'operation_failed', $failure->release_code );
 				self::assertSame( 'complete', $failure->cleanup_status );
 			}
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 
-			$service                                = $this->publicService();
+			$service                                = $this->public_service();
 			$GLOBALS['ran_github_lstat_failure_at'] = 1;
-			$GLOBALS['ran_github_responses']        = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses']        = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			try {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'An unproven temporary file must be structured.' );
@@ -609,23 +611,23 @@ namespace Tests\Provider {
 			self::assertFileExists( $GLOBALS['ran_github_temp_paths'][ count( $GLOBALS['ran_github_temp_paths'] ) - 1 ] );
 		}
 
-		public function testPublicServicesResolveIndependentCredentialsPerOperation(): void {
-			$firstCalls                      = 0;
-			$secondCalls                     = 0;
+		public function test_public_services_resolve_independent_credentials_per_operation(): void {
+			$first_calls                     = 0;
+			$second_calls                    = 0;
 			$first                           = new GitHubReleaseService(
-				$this->serviceConfiguration( $this->binding() ),
+				$this->service_configuration( $this->binding() ),
 				new GitHubCredentialResolver(
-					static function () use ( &$firstCalls ): string {
-						++$firstCalls;
+					static function () use ( &$first_calls ): string {
+						++$first_calls;
 						return 'first-token'; }
 				),
 				static fn (): ?string => null
 			);
 			$second                          = new GitHubReleaseService(
-				$this->serviceConfiguration( $this->binding() ),
+				$this->service_configuration( $this->binding() ),
 				new GitHubCredentialResolver(
-					static function () use ( &$secondCalls ): string {
-						++$secondCalls;
+					static function () use ( &$second_calls ): string {
+						++$second_calls;
 						return 'second-token'; }
 				),
 				static fn (): ?string => null
@@ -633,22 +635,22 @@ namespace Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ), $this->response( 200, array() ) );
 			$first->list();
 			$second->list();
-			self::assertSame( 1, $firstCalls );
-			self::assertSame( 1, $secondCalls );
+			self::assertSame( 1, $first_calls );
+			self::assertSame( 1, $second_calls );
 			self::assertSame( 'Bearer first-token', $GLOBALS['ran_github_requests'][0][1]['headers']['Authorization'] );
 			self::assertSame( 'Bearer second-token', $GLOBALS['ran_github_requests'][1][1]['headers']['Authorization'] );
 		}
 
-		public function testPublicServiceMapsRuntimeLossDuringPackageInspection(): void {
+		public function test_public_service_maps_runtime_loss_during_package_inspection(): void {
 			$checks                          = 0;
 			$service                         = new GitHubReleaseService(
-				$this->serviceConfiguration( $this->binding() ),
+				$this->service_configuration( $this->binding() ),
 				null,
 				static function () use ( &$checks ): ?string {
 					return ++$checks >= 17 ? 'runtime_unavailable' : null; }
 			);
-			$archive                         = $this->prospectiveArchive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$archive                         = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			try {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'Runtime loss after package inspection must suppress the inspection.' );
@@ -656,10 +658,10 @@ namespace Tests\Provider {
 				self::assertSame( 'runtime_unavailable', $failure->release_code );
 				self::assertSame( 'complete', $failure->cleanup_status );
 			}
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function testCredentialsResolveOncePerTopLevelChainAndFailBeforeHttp(): void {
+		public function test_credentials_resolve_once_per_top_level_chain_and_fail_before_http(): void {
 			$calls                           = 0;
 			$resolver                        = new GitHubCredentialResolver(
 				static function () use ( &$calls ): string {
@@ -692,7 +694,7 @@ namespace Tests\Provider {
 			}
 		}
 
-		public function testNullCredentialResultUsesAnonymousRequest(): void {
+		public function test_null_credential_result_uses_anonymous_request(): void {
 			$calls                           = 0;
 			$adapter                         = new GitHubReleaseAdapter(
 				$this->binding(),
@@ -713,14 +715,14 @@ namespace Tests\Provider {
 			self::assertArrayNotHasKey( 'Authorization', $GLOBALS['ran_github_requests'][0][1]['headers'] );
 		}
 
-		public function testInvalidCallerInputDoesNotResolveCredentialsOrCallGitHub(): void {
+		public function test_invalid_caller_input_does_not_resolve_credentials_or_call_git_hub(): void {
 			$valid                           = new GitHubReleaseAdapter( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $valid->inspect( '7' );
 			$facts                           = $descriptor->to_array();
 			unset( $facts['fingerprint'] );
 			$facts['artifact_identity'] = 'invalid-asset';
-			$invalidDescriptor          = IdentityDescriptor::create( $facts );
+			$invalid_descriptor         = IdentityDescriptor::create( $facts );
 
 			$calls                          = 0;
 			$service                        = $this->service(
@@ -746,7 +748,7 @@ namespace Tests\Provider {
 			foreach (
 			array(
 				static fn (): IdentityDescriptor => $adapter->inspect( 'not-a-release' ),
-				static fn (): TemporaryArtifact => $adapter->acquire( $invalidDescriptor ),
+				static fn (): TemporaryArtifact => $adapter->acquire( $invalid_descriptor ),
 				static fn (): ProspectiveReleaseInspection => $service->inspect_prospective( 'not-a-release' ),
 			) as $operation
 			) {
@@ -762,7 +764,7 @@ namespace Tests\Provider {
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 		}
 
-		public function testProspectiveConfigurationAndZeroIdentityFailBeforeCredentialsOrHttp(): void {
+		public function test_prospective_configuration_and_zero_identity_fail_before_credentials_or_http(): void {
 			$calls         = 0;
 			$resolver      = new GitHubCredentialResolver(
 				static function () use ( &$calls ): string {
@@ -770,7 +772,7 @@ namespace Tests\Provider {
 					return 'private-token';
 				}
 			);
-			$configuration = $this->serviceConfiguration( $this->binding() );
+			$configuration = $this->service_configuration( $this->binding() );
 			$invalid       = array(
 				array_replace( $configuration, array( 'stable_repository_identity' => '0' ) ),
 				array_replace( $configuration, array( 'canonical_repository_locator' => 'owner' ) ),
@@ -801,7 +803,7 @@ namespace Tests\Provider {
 			self::assertSame( array(), $GLOBALS['ran_github_temp_paths'] );
 		}
 
-		public function testListingSortsStableNumericIdentitiesAndReturnsReleaseDetails(): void {
+		public function test_listing_sorts_stable_numeric_identities_and_returns_release_details(): void {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response(
 					200,
@@ -840,7 +842,7 @@ namespace Tests\Provider {
 			self::assertFalse( $result['search_exhausted'] );
 		}
 
-		public function testListingFiltersInvalidVersionsAndBreaksVersionTiesByIdentity(): void {
+		public function test_listing_filters_invalid_versions_and_breaks_version_ties_by_identity(): void {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response(
 					200,
@@ -861,7 +863,7 @@ namespace Tests\Provider {
 			self::assertSame( array( '6', '10', '2' ), array_column( $result['candidates'], 'release_identity' ) );
 		}
 
-		public function testPrereleaseListingKeepsSemverOrderingWithinItsChannel(): void {
+		public function test_prerelease_listing_keeps_semver_ordering_within_its_channel(): void {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response(
 					200,
@@ -882,7 +884,7 @@ namespace Tests\Provider {
 			self::assertSame( array( false, true, true ), array_column( $result['candidates'], 'prerelease' ) );
 		}
 
-		public function testListingRejectsMalformedMembersAndOversizedBodies(): void {
+		public function test_listing_rejects_malformed_members_and_oversized_bodies(): void {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( $this->release( 1, 'v1.0.0' ), 'invalid-member' ) ),
 			);
@@ -905,7 +907,7 @@ namespace Tests\Provider {
 			}
 		}
 
-		public function testResponseContainersDistinguishOperationAndCandidateFailures(): void {
+		public function test_response_containers_distinguish_operation_and_candidate_failures(): void {
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, (object) array() ) );
 			try {
 				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
@@ -926,37 +928,37 @@ namespace Tests\Provider {
 			}
 		}
 
-		public function testListingUsesTwoBoundedPagesAndReturnsAtMostEightCandidates(): void {
-			$credentialCalls = 0;
-			$service         = $this->service(
+		public function test_listing_uses_two_bounded_pages_and_returns_at_most_eight_candidates(): void {
+			$credential_calls = 0;
+			$service          = $this->service(
 				$this->binding(),
 				new GitHubCredentialResolver(
-					static function () use ( &$credentialCalls ): string {
-						++$credentialCalls;
+					static function () use ( &$credential_calls ): string {
+						++$credential_calls;
 						return 'private-token';
 					}
 				)
 			);
-			$drafts          = array();
+			$drafts           = array();
 			for ( $index = 1; $index <= 20; ++$index ) {
 				$release          = $this->release( $index, 'v1.0.' . $index );
 				$release['draft'] = true;
 				$drafts[]         = $release;
 			}
-			$pageTwo = array();
+			$page_two = array();
 			for ( $index = 21; $index <= 30; ++$index ) {
-				$pageTwo[] = $this->release( $index, 'v2.0.' . ( $index - 21 ) );
+				$page_two[] = $this->release( $index, 'v2.0.' . ( $index - 21 ) );
 			}
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, $drafts ),
-				$this->response( 200, $pageTwo ),
+				$this->response( 200, $page_two ),
 			);
 
 			$result = $service->list_releases(
 				array( 'etag' => '"prior"' )
 			);
 
-			self::assertSame( 1, $credentialCalls );
+			self::assertSame( 1, $credential_calls );
 			self::assertCount( 2, $GLOBALS['ran_github_requests'] );
 			self::assertStringContainsString( 'page=2', $GLOBALS['ran_github_requests'][1][0] );
 			self::assertArrayNotHasKey(
@@ -967,7 +969,7 @@ namespace Tests\Provider {
 			self::assertTrue( $result['search_exhausted'] );
 		}
 
-		public function testConditionalNotModifiedAndRateLimitRemainClosedProviderState(): void {
+		public function test_conditional_not_modified_and_rate_limit_remain_closed_provider_state(): void {
 			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response(
@@ -1009,21 +1011,21 @@ namespace Tests\Provider {
 			}
 		}
 
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'readUnavailableStatusProvider' )]
-		public function testAuthenticatedAuthorizationFailuresAreNotRateLimits( int $status ): void {
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'read_unavailable_status_provider' )]
+		public function test_authenticated_authorization_failures_are_not_rate_limits( int $status ): void {
 			$GLOBALS['ran_github_responses'] = array( $this->response( $status, null ) );
 			$this->expectException( ReleaseFailure::class );
 			( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 		}
 
 		/** @return iterable<string,array{0:int}> */
-		public static function readUnavailableStatusProvider(): iterable {
+		public static function read_unavailable_status_provider(): iterable {
 			yield 'unauthorized' => array( 401 );
 			yield 'forbidden' => array( 403 );
 			yield 'not found' => array( 404 );
 		}
 
-		public function testTransportAndCredentialFailuresSignalUnavailableRead(): void {
+		public function test_transport_and_credential_failures_signal_unavailable_read(): void {
 			$GLOBALS['ran_github_responses'] = array( new \WP_Error( 'transport', 'not connected' ) );
 			$this->expectException( ReleaseFailure::class );
 			try {
@@ -1034,7 +1036,7 @@ namespace Tests\Provider {
 			}
 		}
 
-		public function testInvalidCredentialSignalsUnavailableReadBeforeHttp(): void {
+		public function test_invalid_credential_signals_unavailable_read_before_http(): void {
 			$adapter = new GitHubReleaseAdapter(
 				$this->binding(),
 				new GitHubCredentialResolver( static fn (): string => 'bad token' )
@@ -1048,7 +1050,7 @@ namespace Tests\Provider {
 			}
 		}
 
-		public function testNonStringCredentialResultSignalsUnavailableReadBeforeHttp(): void {
+		public function test_non_string_credential_result_signals_unavailable_read_before_http(): void {
 			$adapter = new GitHubReleaseAdapter(
 				$this->binding(),
 				new GitHubCredentialResolver( static fn (): int => 42 )
@@ -1062,7 +1064,7 @@ namespace Tests\Provider {
 			}
 		}
 
-		public function testUnavailableCredentialSignalsUnavailableReadBeforeHttp(): void {
+		public function test_unavailable_credential_signals_unavailable_read_before_http(): void {
 			$adapter = new GitHubReleaseAdapter(
 				$this->binding(),
 				new GitHubCredentialResolver(
@@ -1079,7 +1081,7 @@ namespace Tests\Provider {
 			}
 		}
 
-		public function testServerErrorsRemainGenericRuntimeFailures(): void {
+		public function test_server_errors_remain_generic_runtime_failures(): void {
 			$GLOBALS['ran_github_responses'] = array( $this->response( 500, null ) );
 			$this->expectException( ReleaseFailure::class );
 			try {
@@ -1089,9 +1091,9 @@ namespace Tests\Provider {
 				throw $exception; }
 		}
 
-		public function testInspectionBindsExactNumericRepositoryReleaseCommitAndAsset(): void {
+		public function test_inspection_binds_exact_numeric_repository_release_commit_and_asset(): void {
 			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses(
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses(
 				7,
 				'v1.2.3',
 				false,
@@ -1114,11 +1116,11 @@ namespace Tests\Provider {
 			);
 		}
 
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'installedInspectionFailureProvider' )]
-		public function testInstalledInspectionMapsEndpointFailuresToNeutralFailures(
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'installed_inspection_failure_provider' )]
+		public function test_installed_inspection_maps_endpoint_failures_to_neutral_failures(
 			string $scenario,
-			string $expectedCode,
-			int $expectedRequests
+			string $expected_code,
+			int $expected_requests
 		): void {
 			$GLOBALS['ran_github_responses'] = match ( $scenario ) {
 				'repository_access_denied' => array( $this->response( 401, null ) ),
@@ -1137,15 +1139,15 @@ namespace Tests\Provider {
 				( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7', 'v1.2.3' );
 				self::fail( 'Installed inspection failures must be neutral typed failures.' );
 			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( $expectedCode, $failure->release_code );
+				self::assertSame( $expected_code, $failure->release_code );
 				self::assertSame( 'not_applicable', $failure->cleanup_status );
 			}
 
-			self::assertCount( $expectedRequests, $GLOBALS['ran_github_requests'] );
+			self::assertCount( $expected_requests, $GLOBALS['ran_github_requests'] );
 		}
 
 		/** @return iterable<string,array{0:string,1:string,2:int}> */
-		public static function installedInspectionFailureProvider(): iterable {
+		public static function installed_inspection_failure_provider(): iterable {
 			yield 'repository access denied' => array(
 				'repository_access_denied',
 				'repository_access_unavailable',
@@ -1163,8 +1165,8 @@ namespace Tests\Provider {
 			);
 		}
 
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'invalidZipMetadataProvider' )]
-		public function testInstalledInspectionRejectsInvalidZipMetadataBeforeCommitLookup( string $scenario ): void {
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'invalid_zip_metadata_provider' )]
+		public function test_installed_inspection_rejects_invalid_zip_metadata_before_commit_lookup( string $scenario ): void {
 			$release = $this->release( 7, 'v1.2.3' );
 			switch ( $scenario ) {
 				case 'missing_zip':
@@ -1212,13 +1214,13 @@ namespace Tests\Provider {
 		}
 
 		/** @return iterable<string,array{0:string}> */
-		public static function invalidZipMetadataProvider(): iterable {
+		public static function invalid_zip_metadata_provider(): iterable {
 			foreach ( array( 'missing_zip', 'multiple_zip', 'invalid_id', 'invalid_size', 'missing_digest', 'over_limit', 'not_uploaded' ) as $scenario ) {
 				yield $scenario => array( $scenario );
 			}
 		}
 
-		public function testInspectionTreatsMissingConcreteReleaseAsGenericCandidateFailure(): void {
+		public function test_inspection_treats_missing_concrete_release_as_generic_candidate_failure(): void {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 404, null ),
@@ -1240,7 +1242,7 @@ namespace Tests\Provider {
 			);
 		}
 
-		public function testInspectionTreatsMissingConcreteCommitAsGenericCandidateFailure(): void {
+		public function test_inspection_treats_missing_concrete_commit_as_generic_candidate_failure(): void {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
@@ -1264,7 +1266,7 @@ namespace Tests\Provider {
 			);
 		}
 
-		public function testInspectionRejectsLocatorThatDoesNotMatchStableRepositoryIdentity(): void {
+		public function test_inspection_rejects_locator_that_does_not_match_stable_repository_identity(): void {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 100 ) ),
 			);
@@ -1281,9 +1283,9 @@ namespace Tests\Provider {
 			}
 		}
 
-		public function testMutableReleaseRemainsManualOnlyAndPrereleaseThemeIsBound(): void {
+		public function test_mutable_release_remains_manual_only_and_prerelease_theme_is_bound(): void {
 			$adapter                         = new GitHubReleaseAdapter( $this->binding( 'prerelease', 'theme' ) );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses(
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses(
 				7,
 				'v2.0.0-beta.1',
 				true,
@@ -1299,7 +1301,7 @@ namespace Tests\Provider {
 			self::assertTrue( $facts['assurance_facts']['trusted_digest_source'] );
 		}
 
-		public function testInspectionPreservesUppercaseZipSuffixIdentity(): void {
+		public function test_inspection_preserves_uppercase_zip_suffix_identity(): void {
 			$release                         = $this->release( 7, 'v1.2.3', false, true );
 			$release['assets'][0]['name']    = 'Repository.ZIP';
 			$GLOBALS['ran_github_responses'] = array(
@@ -1313,7 +1315,7 @@ namespace Tests\Provider {
 			self::assertSame( 'Repository.ZIP', $facts['artifact_filename'] );
 		}
 
-		public function testInspectionAcceptsNativeIntegerIdentityAndSizeBoundaries(): void {
+		public function test_inspection_accepts_native_integer_identity_and_size_boundaries(): void {
 			$identity                        = PHP_INT_MAX;
 			$release                         = $this->release( $identity, 'v1.2.3', false, true );
 			$release['assets'][0]['id']      = $identity;
@@ -1334,7 +1336,7 @@ namespace Tests\Provider {
 			self::assertSame( 52_428_800, $facts['artifact_size'] );
 		}
 
-		public function testCustomBindingAcceptsItsExactLargerAssetMetadata(): void {
+		public function test_custom_binding_accepts_its_exact_larger_asset_metadata(): void {
 			$limit                           = 52_428_800 + 1;
 			$release                         = $this->release( 7, 'v1.2.3' );
 			$release['assets'][0]['size']    = $limit;
@@ -1343,11 +1345,11 @@ namespace Tests\Provider {
 				$this->response( 200, $release ),
 				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
 			);
-			self::assertSame( $limit, ( new GitHubReleaseAdapter( $this->binding( maximumArtifactBytes: $limit ) ) )->inspect( '7' )->to_array()['artifact_size'] );
+			self::assertSame( $limit, ( new GitHubReleaseAdapter( $this->binding( maximum_artifact_bytes: $limit ) ) )->inspect( '7' )->to_array()['artifact_size'] );
 		}
 
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'invalidInspectionProvider' )]
-		public function testInspectionRejectsChangedOrAmbiguousIdentity(
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'invalid_inspection_provider' )]
+		public function test_inspection_rejects_changed_or_ambiguous_identity(
 			string $failure,
 			callable $mutate
 		): void {
@@ -1373,7 +1375,7 @@ namespace Tests\Provider {
 		}
 
 		/** @return iterable<string,array{0:string,1:callable}> */
-		public static function invalidInspectionProvider(): iterable {
+		public static function invalid_inspection_provider(): iterable {
 			yield 'repository transfer' => array(
 				'repository identity changed',
 				static function ( array &$repository ): void {
@@ -1521,7 +1523,7 @@ namespace Tests\Provider {
 			);
 		}
 
-		public function testPrivateCredentialIsStrippedOnAssetRedirectAndCustodyTransfersOnce(): void {
+		public function test_private_credential_is_stripped_on_asset_redirect_and_custody_transfers_once(): void {
 			$calls                           = 0;
 			$adapter                         = new GitHubReleaseAdapter(
 				$this->binding(),
@@ -1532,7 +1534,7 @@ namespace Tests\Provider {
 					}
 				)
 			);
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			self::assertSame( 1, $calls );
 			self::assertCount( 3, $GLOBALS['ran_github_requests'] );
@@ -1572,9 +1574,9 @@ namespace Tests\Provider {
 			self::assertFileDoesNotExist( $path );
 		}
 
-		public function testProspectiveInspectionKeepsReleaseAndDescriptorFactsThenDiscards(): void {
+		public function test_prospective_inspection_keeps_release_and_descriptor_facts_then_discards(): void {
 			$calls                           = 0;
-			$archive                         = $this->prospectiveArchive(
+			$archive                         = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
@@ -1588,7 +1590,7 @@ namespace Tests\Provider {
 					}
 				)
 			);
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses(
 				7,
 				'v1.2.3',
 				$archive
@@ -1604,10 +1606,10 @@ namespace Tests\Provider {
 			self::assertArrayHasKey( 'fingerprint', $facts );
 			self::assertSame( 1, $calls );
 			self::assertCount( 6, $GLOBALS['ran_github_requests'] );
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function testPrivateThemeProspectiveFlowResolvesOncePerChainAndDiscards(): void {
+		public function test_private_theme_prospective_flow_resolves_once_per_chain_and_discards(): void {
 			$calls                           = 0;
 			$service                         = $this->service(
 				$this->binding( 'stable', 'theme' ),
@@ -1625,12 +1627,12 @@ namespace Tests\Provider {
 			self::assertSame( 1, $calls );
 			self::assertSame( '7', $candidate['release_identity'] );
 
-			$archive                         = $this->prospectiveThemeArchive(
+			$archive                         = $this->prospective_theme_archive(
 				"/*\nTheme Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses(
 				7,
 				'v1.2.3',
 				$archive
@@ -1648,16 +1650,16 @@ namespace Tests\Provider {
 			foreach ( $GLOBALS['ran_github_requests'] as $request ) {
 				self::assertSame( 'Bearer private-token', $request[1]['headers']['Authorization'] );
 			}
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function testPublicPluginProspectiveFlowSendsNoAuthorization(): void {
-			$archive                         = $this->prospectiveArchive(
+		public function test_public_plugin_prospective_flow_sends_no_authorization(): void {
+			$archive                         = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 
 			$inspection = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
 
@@ -1665,11 +1667,11 @@ namespace Tests\Provider {
 			foreach ( $GLOBALS['ran_github_requests'] as $request ) {
 				self::assertArrayNotHasKey( 'Authorization', $request[1]['headers'] );
 			}
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function testProspectiveInspectionRejectsArchiveAndStillDiscards(): void {
-			$archive                         = $this->prospectiveArchive(
+		public function test_prospective_inspection_rejects_archive_and_still_discards(): void {
+			$archive                         = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n*/",
 				array(
@@ -1678,7 +1680,7 @@ namespace Tests\Provider {
 				)
 			);
 			$service                         = $this->service( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses(
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses(
 				7,
 				'v1.2.3',
 				$archive
@@ -1688,13 +1690,13 @@ namespace Tests\Provider {
 			try {
 				$service->inspect_prospective( '7', 'v1.2.3' );
 			} finally {
-				$this->assertAllTemporaryPathsAbsent();
+				$this->assert_all_temporary_paths_absent();
 			}
 		}
 
-		public function testProspectiveAcquisitionRepeatsProofAndTransfersExactCustody(): void {
+		public function test_prospective_acquisition_repeats_proof_and_transfers_exact_custody(): void {
 			$calls                           = 0;
-			$archive                         = $this->prospectiveArchive(
+			$archive                         = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
@@ -1708,10 +1710,10 @@ namespace Tests\Provider {
 					}
 				)
 			);
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
 			$persisted                       = ProspectiveReleaseInspection::rehydrate( $inspection->to_array() );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 
 			$owned = $service->acquire_prospective( $persisted, expected_fingerprint: $persisted->fingerprint_value() );
 
@@ -1734,14 +1736,14 @@ namespace Tests\Provider {
 			self::assertFileDoesNotExist( $path );
 		}
 
-		public function testProspectiveAcquisitionRejectsWrongFingerprintBeforeCredentialOrHttp(): void {
-			$archive                         = $this->prospectiveArchive(
+		public function test_prospective_acquisition_rejects_wrong_fingerprint_before_credential_or_http(): void {
+			$archive                         = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
 			$service                         = $this->service( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
 			$requests                        = count( $GLOBALS['ran_github_requests'] );
 			$calls                           = 0;
@@ -1762,16 +1764,16 @@ namespace Tests\Provider {
 			}
 			self::assertSame( 0, $calls );
 			self::assertCount( $requests, $GLOBALS['ran_github_requests'] );
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function testProspectiveAcquisitionDiscardsAChangedArchiveProof(): void {
+		public function test_prospective_acquisition_discards_a_changed_archive_proof(): void {
 			$calls                           = 0;
 			$header                          = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 			. "Update URI: https://github.com/owner/repository\n"
 			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/";
-			$initial                         = $this->prospectiveArchive( $header );
-			$changed                         = $this->prospectiveArchive( $header, array( 'repository/payload.php' => '<?php return true;' ) );
+			$initial                         = $this->prospective_archive( $header );
+			$changed                         = $this->prospective_archive( $header, array( 'repository/payload.php' => '<?php return true;' ) );
 			$service                         = $this->service(
 				$this->binding(),
 				new GitHubCredentialResolver(
@@ -1780,9 +1782,9 @@ namespace Tests\Provider {
 						return 'private-token'; }
 				)
 			);
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $initial );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $initial );
 			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $changed );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $changed );
 
 			try {
 				$service->acquire_prospective( $inspection, $inspection->fingerprint_value() );
@@ -1791,19 +1793,19 @@ namespace Tests\Provider {
 				self::assertStringContainsString( 'changed before acquisition', $exception->getMessage() );
 			}
 			self::assertSame( 2, $calls );
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function testProspectiveAcquisitionDiscardsChangedReleaseFacts(): void {
-			$archive                         = $this->prospectiveArchive(
+		public function test_prospective_acquisition_discards_changed_release_facts(): void {
+			$archive                         = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
 			$service                         = $this->service( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
-			$responses                       = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$responses                       = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$responses[2]                    = $this->response( 200, array( 'sha' => str_repeat( 'b', 40 ) ) );
 			$GLOBALS['ran_github_responses'] = $responses;
 
@@ -1813,22 +1815,22 @@ namespace Tests\Provider {
 			} catch ( RuntimeException $exception ) {
 				self::assertStringContainsString( 'changed before acquisition', $exception->getMessage() );
 			}
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function testProspectiveAcquisitionDiscardsAChangedHostileArchive(): void {
+		public function test_prospective_acquisition_discards_a_changed_hostile_archive(): void {
 			$header                          = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 			. "Update URI: https://github.com/owner/repository\n"
 			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/";
-			$initial                         = $this->prospectiveArchive( $header );
-			$hostile                         = $this->prospectiveArchive(
+			$initial                         = $this->prospective_archive( $header );
+			$hostile                         = $this->prospective_archive(
 				$header,
 				array( 'repository/other.php' => str_replace( 'Repository', 'Other', $header ) )
 			);
 			$service                         = $this->service( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $initial );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $initial );
 			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $hostile );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $hostile );
 
 			try {
 				$service->acquire_prospective( $inspection, $inspection->fingerprint_value() );
@@ -1836,37 +1838,37 @@ namespace Tests\Provider {
 			} catch ( ReleaseFailure $exception ) {
 				self::assertSame( 'package_incompatible', $exception->release_code );
 			}
-			$this->assertAllTemporaryPathsAbsent();
+			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function testProspectiveInspectionFingerprintRejectsChangedRuntimeAndPackageFacts(): void {
-			$archive                         = $this->prospectiveArchive(
+		public function test_prospective_inspection_fingerprint_rejects_changed_runtime_and_package_facts(): void {
+			$archive                         = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
 			$facts                           = $inspection->to_array();
 			unset( $facts['fingerprint'] );
-			$changedRuntime = ProspectiveReleaseInspection::create( array_replace( $facts, array( 'php_runtime_version' => '8.3' ) ) );
-			$changedRoot    = ProspectiveReleaseInspection::create( array_replace( $facts, array( 'package_root' => 'renamed' ) ) );
+			$changed_runtime = ProspectiveReleaseInspection::create( array_replace( $facts, array( 'php_runtime_version' => '8.3' ) ) );
+			$changed_root    = ProspectiveReleaseInspection::create( array_replace( $facts, array( 'package_root' => 'renamed' ) ) );
 
-			self::assertNotSame( $inspection->fingerprint_value(), $changedRuntime->fingerprint_value() );
-			self::assertNotSame( $inspection->fingerprint_value(), $changedRoot->fingerprint_value() );
+			self::assertNotSame( $inspection->fingerprint_value(), $changed_runtime->fingerprint_value() );
+			self::assertNotSame( $inspection->fingerprint_value(), $changed_root->fingerprint_value() );
 			$tampered              = $inspection->to_array();
 			$tampered['main_file'] = 'other.php';
 			$this->expectException( \InvalidArgumentException::class );
 			ProspectiveReleaseInspection::rehydrate( $tampered );
 		}
 
-		public function testProspectiveInspectionUsesExactKeysAndDefensiveAccessors(): void {
-			$archive                         = $this->prospectiveArchive(
+		public function test_prospective_inspection_uses_exact_keys_and_defensive_accessors(): void {
+			$archive                         = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
-			$GLOBALS['ran_github_responses'] = $this->prospectiveInspectionResponses( 7, 'v1.2.3', $archive );
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
 			self::assertSame( '7', $inspection->release_identity() );
 			self::assertSame( 'v1.2.3', $inspection->tag() );
@@ -1903,10 +1905,10 @@ namespace Tests\Provider {
 			self::assertSame( 0, $calls );
 		}
 
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafeRedirectProvider' )]
-		public function testUnsafeExpiredAndExcessRedirectsFailClosed( string $location ): void {
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafe_redirect_provider' )]
+		public function test_unsafe_expired_and_excess_redirects_fail_closed( string $location ): void {
 			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
@@ -1917,12 +1919,12 @@ namespace Tests\Provider {
 			try {
 				$adapter->acquire( $descriptor );
 			} finally {
-				$this->assertAllTemporaryPathsAbsent();
+				$this->assert_all_temporary_paths_absent();
 			}
 		}
 
 		/** @return iterable<string,array{0:string}> */
-		public static function unsafeRedirectProvider(): iterable {
+		public static function unsafe_redirect_provider(): iterable {
 			yield 'external host' => array( 'https://example.invalid/file' );
 			yield 'userinfo' => array( 'https://user@release-assets.githubusercontent.com/file' );
 			yield 'ip host' => array( 'https://127.0.0.1/file' );
@@ -1944,9 +1946,9 @@ namespace Tests\Provider {
 			);
 		}
 
-		public function testSecondRedirectAndDownloadedDigestMismatchCleanOwnedFile(): void {
+		public function test_second_redirect_and_downloaded_digest_mismatch_clean_owned_file(): void {
 			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
@@ -1966,7 +1968,7 @@ namespace Tests\Provider {
 				$adapter->acquire( $descriptor );
 				self::fail( 'A second redirect must fail.' );
 			} catch ( RuntimeException ) {
-				$this->assertAllTemporaryPathsAbsent();
+				$this->assert_all_temporary_paths_absent();
 			}
 
 			$GLOBALS['ran_github_responses'] = array(
@@ -1977,13 +1979,13 @@ namespace Tests\Provider {
 				$adapter->acquire( $descriptor );
 				self::fail( 'Changed downloaded bytes must fail.' );
 			} catch ( RuntimeException ) {
-				$this->assertAllTemporaryPathsAbsent();
+				$this->assert_all_temporary_paths_absent();
 			}
 		}
 
-		public function testAcquisitionRateLimitIsDistinctAndCleansOwnedFile(): void {
+		public function test_acquisition_rate_limit_is_distinct_and_cleans_owned_file(): void {
 			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
@@ -1994,13 +1996,13 @@ namespace Tests\Provider {
 			try {
 				$adapter->acquire( $descriptor );
 			} finally {
-				$this->assertAllTemporaryPathsAbsent();
+				$this->assert_all_temporary_paths_absent();
 			}
 		}
 
-		public function testAcquisitionAssetNotFoundIsGenericAndCleansOwnedFile(): void {
+		public function test_acquisition_asset_not_found_is_generic_and_cleans_owned_file(): void {
 			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
@@ -2012,7 +2014,7 @@ namespace Tests\Provider {
 				self::fail( 'A missing release asset must fail.' );
 			} catch ( ReleaseFailure $exception ) {
 				self::assertSame( 'release_unavailable', $exception->release_code );
-				$this->assertAllTemporaryPathsAbsent();
+				$this->assert_all_temporary_paths_absent();
 			}
 
 			self::assertSame(
@@ -2024,9 +2026,9 @@ namespace Tests\Provider {
 			);
 		}
 
-		public function testOversizedStreamIsRejectedAndCleanedBeforeDigesting(): void {
+		public function test_oversized_stream_is_rejected_and_cleaned_before_digesting(): void {
 			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			$oversized                       = $this->response( 200, null );
 			$oversized['file_size']          = 52_428_800 + 1;
@@ -2039,14 +2041,14 @@ namespace Tests\Provider {
 			try {
 				$adapter->acquire( $descriptor );
 			} finally {
-				$this->assertAllTemporaryPathsAbsent();
+				$this->assert_all_temporary_paths_absent();
 			}
 		}
 
-		public function testCustomLimitBoundsTheDownloadAndRejectsAnOverCustomActualSize(): void {
+		public function test_custom_limit_bounds_the_download_and_rejects_an_over_custom_actual_size(): void {
 			$limit                           = 83886080;
-			$adapter                         = new GitHubReleaseAdapter( $this->binding( maximumArtifactBytes: $limit ) );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+			$adapter                         = new GitHubReleaseAdapter( $this->binding( maximum_artifact_bytes: $limit ) );
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			$oversized                       = $this->response( 200, null );
 			$oversized['file_size']          = $limit + 1;
@@ -2058,17 +2060,17 @@ namespace Tests\Provider {
 				self::assertSame( 'package_incompatible', $exception->release_code );
 				self::assertSame( $limit + 1, $GLOBALS['ran_github_requests'][4][1]['limit_response_size'] );
 			} finally {
-				$this->assertAllTemporaryPathsAbsent(); }
+				$this->assert_all_temporary_paths_absent(); }
 		}
 
-		public function testMaximumIntegerLimitDoesNotOverflowTheDownloadResponseLimit(): void {
-			$service                         = $this->service( $this->binding( maximumArtifactBytes: PHP_INT_MAX ) );
+		public function test_maximum_integer_limit_does_not_overflow_the_download_response_limit(): void {
+			$service                         = $this->service( $this->binding( maximum_artifact_bytes: PHP_INT_MAX ) );
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
 			$service->list_releases();
 			self::assertSame( 262145, $GLOBALS['ran_github_requests'][0][1]['limit_response_size'] );
 			// The artifact request is the only request sized from the target limit; invoke its private boundary through acquisition setup below.
-			$adapter                         = new GitHubReleaseAdapter( $this->binding( maximumArtifactBytes: PHP_INT_MAX ) );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+			$adapter                         = new GitHubReleaseAdapter( $this->binding( maximum_artifact_bytes: PHP_INT_MAX ) );
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 500, null ) );
 			try {
@@ -2077,9 +2079,9 @@ namespace Tests\Provider {
 				self::assertSame( PHP_INT_MAX, $GLOBALS['ran_github_requests'][5][1]['limit_response_size'] );
 		}
 
-		public function testTemporaryArtifactRejectsReplacementAndNeverDeletesUnownedBytes(): void {
+		public function test_temporary_artifact_rejects_replacement_and_never_deletes_unowned_bytes(): void {
 			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
-			$GLOBALS['ran_github_responses'] = $this->inspectionResponses( 7, 'v1.2.3' );
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
@@ -2100,24 +2102,24 @@ namespace Tests\Provider {
 
 		private function binding(
 			string $channel = 'stable',
-			string $targetType = 'plugin',
-			string $repositoryIdentity = '99',
-			int $maximumArtifactBytes = 52428800
+			string $target_type = 'plugin',
+			string $repository_identity = '99',
+			int $maximum_artifact_bytes = 52428800
 		): BindingRecord {
 			return BindingRecord::create(
 				array(
 					'canonical_repository_locator' => 'owner/repository',
 					'canonical_update_uri'         => 'https://github.com/owner/repository',
-					'installed_package_identity'   => 'plugin' === $targetType
+					'installed_package_identity'   => 'plugin' === $target_type
 						? 'repository/repository.php'
 						: 'repository',
-					'maximum_artifact_bytes'       => $maximumArtifactBytes,
+					'maximum_artifact_bytes'       => $maximum_artifact_bytes,
 					'network_id'                   => 1,
 					'php_runtime_version'          => '8.2.0',
 					'provider_code'                => 'github',
 					'release_channel'              => $channel,
-					'stable_repository_identity'   => $repositoryIdentity,
-					'target_type'                  => $targetType,
+					'stable_repository_identity'   => $repository_identity,
+					'target_type'                  => $target_type,
 					'theme_template'               => '',
 					'update_policy'                => 'automatic',
 					'wordpress_runtime_version'    => '6.8.0',
@@ -2129,19 +2131,19 @@ namespace Tests\Provider {
 			BindingRecord $binding,
 			?GitHubCredentialResolver $credentials = null
 		): GitHubReleaseService {
-			return new GitHubReleaseService( $this->serviceConfiguration( $binding ), $credentials, liveness_guard: null );
+			return new GitHubReleaseService( $this->service_configuration( $binding ), $credentials, liveness_guard: null );
 		}
 
-		private function publicService(): GitHubReleaseService {
+		private function public_service(): GitHubReleaseService {
 			return new GitHubReleaseService(
-				$this->serviceConfiguration( $this->binding() ),
+				$this->service_configuration( $this->binding() ),
 				null,
 				static fn (): ?string => null
 			);
 		}
 
 		/** @return list<array<string,mixed>> */
-		private function invalidStreamResponses(): array {
+		private function invalid_stream_responses(): array {
 			return array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
@@ -2152,7 +2154,7 @@ namespace Tests\Provider {
 		}
 
 		/** @return array<string,mixed> */
-		private function serviceConfiguration( BindingRecord $binding ): array {
+		private function service_configuration( BindingRecord $binding ): array {
 			$facts = $binding->to_array();
 			return array(
 				'canonical_repository_locator' => $facts['canonical_repository_locator'],
@@ -2167,8 +2169,8 @@ namespace Tests\Provider {
 		}
 
 		/** @return list<array<string,mixed>> */
-		private function inspectionResponses(
-			int $releaseIdentity,
+		private function inspection_responses(
+			int $release_identity,
 			string $tag,
 			bool $prerelease = false,
 			bool $immutable = true
@@ -2178,7 +2180,7 @@ namespace Tests\Provider {
 				$this->response(
 					200,
 					$this->release(
-						$releaseIdentity,
+						$release_identity,
 						$tag,
 						$prerelease,
 						true,
@@ -2190,12 +2192,12 @@ namespace Tests\Provider {
 		}
 
 		/** @return list<array<string,mixed>> */
-		private function prospectiveInspectionResponses(
-			int $releaseIdentity,
+		private function prospective_inspection_responses(
+			int $release_identity,
 			string $tag,
 			string $archive
 		): array {
-			$release                        = $this->release( $releaseIdentity, $tag );
+			$release                        = $this->release( $release_identity, $tag );
 			$release['assets'][0]['digest'] = 'sha256:' . hash( 'sha256', $archive );
 			$release['assets'][0]['size']   = strlen( $archive );
 			return array(
@@ -2208,14 +2210,14 @@ namespace Tests\Provider {
 			);
 		}
 
-		/** @param array<string,string> $additionalEntries */
-		private function prospectiveArchive( string $header, array $additionalEntries = array() ): string {
+		/** @param array<string,string> $additional_entries */
+		private function prospective_archive( string $header, array $additional_entries = array() ): string {
 			$path = tempnam( sys_get_temp_dir(), 'ran-github-prospective-' );
 			self::assertIsString( $path );
 			$zip = new \ZipArchive();
 			self::assertTrue( $zip->open( $path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) );
 			self::assertTrue( $zip->addFromString( 'repository/repository.php', $header ) );
-			foreach ( $additionalEntries as $name => $contents ) {
+			foreach ( $additional_entries as $name => $contents ) {
 				self::assertTrue( $zip->addFromString( $name, $contents ) );
 			}
 			$zip->close();
@@ -2225,7 +2227,7 @@ namespace Tests\Provider {
 			return $archive;
 		}
 
-		private function prospectiveThemeArchive( string $header ): string {
+		private function prospective_theme_archive( string $header ): string {
 			$path = tempnam( sys_get_temp_dir(), 'ran-github-prospective-' );
 			self::assertIsString( $path );
 			$zip = new \ZipArchive();
@@ -2291,7 +2293,7 @@ namespace Tests\Provider {
 			return $response;
 		}
 
-		private function assertAllTemporaryPathsAbsent(): void {
+		private function assert_all_temporary_paths_absent(): void {
 			self::assertNotEmpty( $GLOBALS['ran_github_temp_paths'] );
 			foreach ( $GLOBALS['ran_github_temp_paths'] as $path ) {
 				self::assertFileDoesNotExist( $path );

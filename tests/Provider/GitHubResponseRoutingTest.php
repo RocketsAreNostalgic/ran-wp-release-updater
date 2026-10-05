@@ -10,6 +10,7 @@ use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService;
 use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 
 final class GitHubResponseRoutingTest extends TestCase {
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$GLOBALS['ran_github_requests']         = array();
 		$GLOBALS['ran_github_responses']        = array();
@@ -20,6 +21,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 		$GLOBALS['ran_github_lstat_failure_at'] = 0;
 		$GLOBALS['ran_github_unlink_failures']  = 0;
 	}
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function tearDown(): void {
 		foreach ( $GLOBALS['ran_github_temp_paths'] as $path ) {
 			if ( is_string( $path ) && ( is_file( $path ) || is_link( $path ) ) ) {
@@ -27,7 +29,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 			}
 		}
 	}
-	public function testListingRateFactsStopOnTheFirstAndSecondPage(): void {
+	public function test_listing_rate_facts_stop_on_the_first_and_second_page(): void {
 		$GLOBALS['ran_github_responses'] = array( $this->response( 429, null, array( 'retry-after' => '12' ) ) );
 		$first                           = $this->service()->list_releases();
 		self::assertSame( array(), $first['candidates'] );
@@ -57,60 +59,60 @@ final class GitHubResponseRoutingTest extends TestCase {
 		self::assertStringContainsString( 'page=2', $GLOBALS['ran_github_requests'][1][0] );
 		self::assertSame( array(), $GLOBALS['ran_github_responses'] );
 	}
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'inspectionRateProvider' )]
-	public function testInstalledInspectionRateFailuresStopAtTheirEndpoint( string $endpoint, int $requests ): void {
-		$GLOBALS['ran_github_responses'] = $this->inspectionRateResponses( $endpoint );
-		$this->assertFailure( fn() => $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' ), 'rate_limited', $requests, 60 );
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'inspection_rate_provider' )]
+	public function test_installed_inspection_rate_failures_stop_at_their_endpoint( string $endpoint, int $requests ): void {
+		$GLOBALS['ran_github_responses'] = $this->inspection_rate_responses( $endpoint );
+		$this->assert_failure( fn() => $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' ), 'rate_limited', $requests, 60 );
 	}
 	/** @return array<string,array{string,int}> */
-	public static function inspectionRateProvider(): array {
+	public static function inspection_rate_provider(): array {
 		return array(
 			'repository' => array( 'repository', 1 ),
 			'release'    => array( 'release', 2 ),
 			'commit'     => array( 'commit', 3 ),
 		);
 	}
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'acquisitionRateProvider' )]
-	public function testInstalledAcquisitionRateFailuresCleanUpAndStop( string $endpoint, int $requests ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'acquisition_rate_provider' )]
+	public function test_installed_acquisition_rate_failures_clean_up_and_stop( string $endpoint, int $requests ): void {
 		$descriptor                      = $this->descriptor();
 		$GLOBALS['ran_github_requests']  = array();
-		$GLOBALS['ran_github_responses'] = $this->acquisitionRateResponses( $endpoint );
-		$this->assertFailure( fn() => $this->service()->acquire_installed( $descriptor ), 'rate_limited', $requests, 60, 'complete' );
-		$this->assertTemporaryPathsAbsent();
+		$GLOBALS['ran_github_responses'] = $this->acquisition_rate_responses( $endpoint );
+		$this->assert_failure( fn() => $this->service()->acquire_installed( $descriptor ), 'rate_limited', $requests, 60, 'complete' );
+		$this->assert_temporary_paths_absent();
 	}
 	/** @return array<string,array{string,int}> */
-	public static function acquisitionRateProvider(): array {
+	public static function acquisition_rate_provider(): array {
 		return array(
 			'asset API'             => array( 'asset', 2 ),
 			'final repository read' => array( 'final_repository', 3 ),
 			'CDN redirect'          => array( 'cdn', 3 ),
 		);
 	}
-	public function testInstalledResponseAcceptanceAndPartialAssetCleanup(): void {
+	public function test_installed_response_acceptance_and_partial_asset_cleanup(): void {
 		$GLOBALS['ran_github_responses'] = array( $this->response( 201, array( 'id' => 99 ) ), $this->response( 201, $this->release( 7, 'v1.2.3' ) ), $this->response( 201, array( 'sha' => str_repeat( 'a', 40 ) ) ) );
 		self::assertInstanceOf( IdentityDescriptor::class, $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' ) );
 		self::assertCount( 3, $GLOBALS['ran_github_requests'] );
 
 		$GLOBALS['ran_github_requests']  = array();
 		$GLOBALS['ran_github_responses'] = array( $this->response( 204, null ) );
-		$this->assertFailure( fn() => $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' ), 'operation_failed', 1 );
+		$this->assert_failure( fn() => $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' ), 'operation_failed', 1 );
 
 		$descriptor                      = $this->descriptor();
 		$GLOBALS['ran_github_requests']  = array();
 		$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 206, null, array(), 'zip' ) );
-		$this->assertFailure( fn() => $this->service()->acquire_installed( $descriptor ), 'package_incompatible', 2, null, 'complete' );
-		$this->assertTemporaryPathsAbsent();
+		$this->assert_failure( fn() => $this->service()->acquire_installed( $descriptor ), 'package_incompatible', 2, null, 'complete' );
+		$this->assert_temporary_paths_absent();
 	}
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'endpointFailureProvider' )]
-	public function testEndpointFailuresUseNeutralCodesAndMakeNoLaterRequest( string $operation, string $scenario, string $code, int $requests ): void {
-		$GLOBALS['ran_github_responses'] = $this->endpointResponses( $scenario );
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'endpoint_failure_provider' )]
+	public function test_endpoint_failures_use_neutral_codes_and_make_no_later_request( string $operation, string $scenario, string $code, int $requests ): void {
+		$GLOBALS['ran_github_responses'] = $this->endpoint_responses( $scenario );
 		$call                            = 'list' === $operation
 			? fn() => $this->service()->list_releases()
 			: fn() => $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' );
-		$this->assertFailure( $call, $code, $requests );
+		$this->assert_failure( $call, $code, $requests );
 	}
 	/** @return array<string,array{string,string,string,int}> */
-	public static function endpointFailureProvider(): array {
+	public static function endpoint_failure_provider(): array {
 		return array(
 			'list 401'             => array( 'list', 'list401', 'repository_access_unavailable', 1 ),
 			'list 404'             => array( 'list', 'list404', 'repository_access_unavailable', 1 ),
@@ -125,7 +127,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 		);
 	}
 	/** @return list<array<string,mixed>> */
-	private function inspectionRateResponses( string $endpoint ): array {
+	private function inspection_rate_responses( string $endpoint ): array {
 		$limited = $this->response( 429, null, array( 'retry-after' => '60' ) );
 		return match ( $endpoint ) {
 			'repository' => array( $limited ),
@@ -134,7 +136,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 		};
 	}
 	/** @return list<array<string,mixed>> */
-	private function acquisitionRateResponses( string $endpoint ): array {
+	private function acquisition_rate_responses( string $endpoint ): array {
 		$limited = $this->response( 429, null, array( 'retry-after' => '60' ) );
 		return match ( $endpoint ) {
 			'asset' => array( $this->response( 200, array( 'id' => 99 ) ), $limited ),
@@ -143,7 +145,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 		};
 	}
 	/** @return list<mixed> */
-	private function endpointResponses( string $scenario ): array {
+	private function endpoint_responses( string $scenario ): array {
 		return match ( $scenario ) {
 			'list401' => array( $this->response( 401, null ) ),
 			'list404' => array( $this->response( 404, null ) ),
@@ -208,7 +210,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 		}
 		return $response;
 	}
-	private function assertFailure( callable $call, string $code, int $requests, ?int $retry = null, string $cleanup = 'not_applicable' ): void {
+	private function assert_failure( callable $call, string $code, int $requests, ?int $retry = null, string $cleanup = 'not_applicable' ): void {
 		try {
 			$call();
 			self::fail( 'Expected a typed provider failure.' ); } catch ( ReleaseFailure $failure ) {
@@ -218,7 +220,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 			self::assertCount( $requests, $GLOBALS['ran_github_requests'] );
 			self::assertSame( array(), $GLOBALS['ran_github_responses'] );
 	}
-	private function assertTemporaryPathsAbsent(): void {
+	private function assert_temporary_paths_absent(): void {
 		self::assertNotEmpty( $GLOBALS['ran_github_temp_paths'] );
 		foreach ( $GLOBALS['ran_github_temp_paths'] as $path ) {
 			self::assertFileDoesNotExist( $path );
