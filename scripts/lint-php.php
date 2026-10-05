@@ -41,19 +41,25 @@ foreach ( $files as $file ) {
 		$root
 	);
 	if ( ! is_resource( $process ) ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write directly to the CLI descriptor without requiring a WordPress runtime.
 		fwrite( STDERR, "Could not start PHP lint for {$file}.\n" );
 		exit( 1 );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream owned by this operation; no WordPress filesystem abstraction applies.
 	fclose( $pipes[0] );
 	$stdout = stream_get_contents( $pipes[1] );
 	$stderr = stream_get_contents( $pipes[2] );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream owned by this operation; no WordPress filesystem abstraction applies.
 	fclose( $pipes[1] );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream owned by this operation; no WordPress filesystem abstraction applies.
 	fclose( $pipes[2] );
 	$exit = proc_close( $process );
 	if ( 0 !== $exit ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write directly to the CLI descriptor without requiring a WordPress runtime.
 		fwrite( STDERR, $stdout . $stderr );
 		exit( $exit );
 	}
 }
 
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write directly to the CLI descriptor without requiring a WordPress runtime.
 fwrite( STDOUT, sprintf( "PASS PHP syntax lint (%d files)\n", count( $files ) ) );

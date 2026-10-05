@@ -55,6 +55,7 @@ final class InstalledPackageResolver {
 
 		$file = str_replace( '\\', '/', $file );
 		clearstatcache( true, $file );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$initial = @lstat( $file );
 		if ( ! is_array( $initial ) ) {
 			return array( 'code' => 'installed_file_missing' );
@@ -66,6 +67,7 @@ final class InstalledPackageResolver {
 			return array( 'code' => 'installed_file_not_regular' );
 		}
 
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Resolve the actual local path for containment and repeat-observation checks; failure is rejected without emitting warnings.
 		$real = @realpath( $file );
 		if ( ! is_string( $real ) ) {
 			return array( 'code' => 'installed_file_unreadable' );
@@ -93,7 +95,9 @@ final class InstalledPackageResolver {
 		}
 
 		clearstatcache( true, $file );
-		$last      = @lstat( $file );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
+		$last = @lstat( $file );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Resolve the actual local path for containment and repeat-observation checks; failure is rejected without emitting warnings.
 		$last_real = @realpath( $file );
 		$last_root = is_string( $last_real ) ? $this->root_for( $type, $file, $last_real ) : null;
 		if ( ! $this->same_stat( $initial, $last ) || $real !== $last_real || ! is_array( $last_root ) || $root !== $last_root ) {
@@ -201,6 +205,7 @@ final class InstalledPackageResolver {
 		if ( ! $this->valid_path( $logical ) || ! $this->valid_path( $actual ) ) {
 			return;
 		}
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Resolve the actual local path for containment and repeat-observation checks; failure is rejected without emitting warnings.
 		$real = @realpath( $actual );
 		if ( ! is_string( $real ) || ! is_dir( $real ) ) {
 			return;
@@ -274,6 +279,7 @@ final class InstalledPackageResolver {
 	 * @return string|array{0:string,1:array<int|string,int>}
 	 */
 	private function capture( string $file, array $initial ): string|array {
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Keep native stream identity and access mode; failed opens follow the existing rejection and cleanup path.
 		$stream = @fopen( $file, 'rb' );
 		if ( ! is_resource( $stream ) ) {
 			return 'installed_file_unreadable';
@@ -283,15 +289,19 @@ final class InstalledPackageResolver {
 			if ( null !== $this->before_first_stat ) {
 				( $this->before_first_stat )( $file );
 			}
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 			$first = @fstat( $stream );
 			if ( ! $this->same_stat( $initial, $first ) ) {
 				return 'installed_file_changed';
 			}
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Take the nonblocking shared lock on this exact descriptor; failure returns the existing unreadable result.
 			$locked = null === $this->lock ? @flock( $stream, LOCK_SH | LOCK_NB ) : ( $this->lock )( $stream );
 			if ( ! $locked ) {
 				return 'installed_file_unreadable';
 			}
-			$one     = null === $this->read ? fread( $stream, self::MAX_HEADER_BYTES ) : ( $this->read )( $stream, 1 );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read bounded bytes from the already opened native stream; existing type, length and identity checks govern acceptance.
+			$one = null === $this->read ? fread( $stream, self::MAX_HEADER_BYTES ) : ( $this->read )( $stream, 1 );
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Rewind this exact locked descriptor for the second observation; failure rejects the capture.
 			$rewound = null === $this->rewind ? -1 !== @fseek( $stream, 0 ) : ( $this->rewind )( $stream );
 			if ( ! is_string( $one ) || ! $rewound ) {
 				return 'installed_file_unreadable';
@@ -299,7 +309,9 @@ final class InstalledPackageResolver {
 			if ( null !== $this->after_first_read ) {
 				( $this->after_first_read )( $file );
 			}
-			$two  = null === $this->read ? fread( $stream, self::MAX_HEADER_BYTES ) : ( $this->read )( $stream, 2 );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read bounded bytes from the already opened native stream; existing type, length and identity checks govern acceptance.
+			$two = null === $this->read ? fread( $stream, self::MAX_HEADER_BYTES ) : ( $this->read )( $stream, 2 );
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 			$last = @fstat( $stream );
 			if ( ! is_string( $two ) ) {
 				return 'installed_file_unreadable';
@@ -309,6 +321,7 @@ final class InstalledPackageResolver {
 			}
 			return array( $one, $last );
 		} finally {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream owned by this operation; no WordPress filesystem abstraction applies.
 			fclose( $stream );
 		}
 	}

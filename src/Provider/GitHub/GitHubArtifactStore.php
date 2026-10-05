@@ -21,6 +21,7 @@ final class GitHubArtifactStore {
 			throw new RuntimeException( 'A private temporary file could not be created.' );
 		}
 		$created_identity = $this->identity( $path );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Apply the required native file permissions; failure follows the existing rejection and cleanup path.
 		if ( null === $created_identity || ! @chmod( $path, 0600 ) ) {
 			$clean = is_array( $created_identity )
 				? $this->remove( $path, $created_identity )
@@ -38,6 +39,7 @@ final class GitHubArtifactStore {
 	/** @return array{dev:int,ino:int,mode:int,nlink:int,uid:int,gid:int,size:int,mtime:int,ctime:int}|null */
 	public function identity( string $path ): ?array {
 		clearstatcache( true, $path );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$stat = @lstat( $path );
 		if ( ! is_array( $stat ) || is_link( $path ) || 0100000 !== ( (int) $stat['mode'] & 0170000 ) ) {
 			return null;
@@ -62,6 +64,7 @@ final class GitHubArtifactStore {
 			if ( ! is_array( $current ) || $current['dev'] !== $identity['dev'] || $current['ino'] !== $identity['ino'] ) {
 				return ! file_exists( $path ) && ! is_link( $path );
 			}
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Delete only the matching device/inode; refreshed existence checks govern success and bounded retry.
 			@unlink( $path );
 			clearstatcache( true, $path );
 			if ( ! file_exists( $path ) && ! is_link( $path ) ) {

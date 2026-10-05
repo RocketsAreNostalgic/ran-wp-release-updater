@@ -120,4 +120,66 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			self::assertStringNotContainsString( 'GitHub', (string) file_get_contents( $file ), $file );
 		}
 	}
+
+	public function testNativeOperationExceptionsDoNotHideUnrelatedCalls(): void {
+		foreach ( $this->nativeExceptionPaths() as $path ) {
+			$root   = dirname( __DIR__, 2 );
+			$source = is_file( $root . '/' . $path ) ? (string) file_get_contents( $root . '/' . $path ) : "<?php\n";
+			self::assertSame( array(), $this->nativeDiagnostics( $path, $source ), $path );
+			self::assertContains( 'WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents', $this->nativeDiagnostics( $path, $source . "\nfile_get_contents( '/native-operation-probe' );\n" ), $path );
+		}
+	}
+
+	public function testNativeOperationExceptionsDoNotHideUnrelatedSilencing(): void {
+		foreach ( $this->nativeExceptionPaths() as $path ) {
+			$root   = dirname( __DIR__, 2 );
+			$source = is_file( $root . '/' . $path ) ? (string) file_get_contents( $root . '/' . $path ) : "<?php\n";
+			self::assertContains( 'WordPress.PHP.NoSilencedErrors.Discouraged', $this->nativeDiagnostics( $path, $source . "\n@is_file( '/native-operation-probe' );\n" ), $path );
+		}
+	}
+
+	/** @return list<string> */
+	private function nativeExceptionPaths(): array {
+		return array(
+			'src/Archive/PackageIdentityValidator.php',
+			'src/Archive/TemporaryArtifact.php',
+			'src/Provider/GitHub/GitHubArtifactStore.php',
+			'src/WordPress/InstalledPackageResolver.php',
+			'src/WordPress/OwnedArchiveStore.php',
+			'src/WordPress/StagedPackageManifest.php',
+			'src/WordPress/NativePackageUpdater.php',
+			'scripts/lint-php.php',
+			'scripts/sync-updater-support.php',
+			'src/Archive/FutureNativeProbe.php',
+			'scripts/future-native-probe.php',
+		);
+	}
+
+	/** @return list<string> */
+	private function nativeDiagnostics( string $path, string $source ): array {
+		$root    = dirname( __DIR__, 2 );
+		$process = proc_open(
+			array( PHP_BINARY, $root . '/vendor/bin/phpcs', '--standard=' . $root . '/.phpcs.xml', '--report=json', '-q', '--no-colors', '--stdin-path=' . $root . '/' . $path, '-' ),
+			array(
+				0 => array( 'pipe', 'r' ),
+				1 => array( 'pipe', 'w' ),
+				2 => array( 'pipe', 'w' ),
+			),
+			$pipes,
+			$root
+		);
+		self::assertIsResource( $process );
+		fwrite( $pipes[0], $source );
+		fclose( $pipes[0] );
+		$output = stream_get_contents( $pipes[1] );
+		$error  = stream_get_contents( $pipes[2] );
+		fclose( $pipes[1] );
+		fclose( $pipes[2] );
+		$status = proc_close( $process );
+		self::assertContains( $status, array( 0, 1, 2, 3 ), $error );
+		$report = json_decode( $output, true, 512, JSON_THROW_ON_ERROR );
+		self::assertArrayHasKey( 'files', $report );
+		$messages = array_merge( ...array_column( array_values( $report['files'] ), 'messages' ) );
+		return array_values( array_filter( array_column( $messages, 'source' ), static fn( string $code ): bool => str_starts_with( $code, 'WordPress.WP.AlternativeFunctions.' ) || 'WordPress.PHP.NoSilencedErrors.Discouraged' === $code ) );
+	}
 }

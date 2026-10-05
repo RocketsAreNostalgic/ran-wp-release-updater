@@ -2,9 +2,9 @@
 
 This is the repository's residual acceptance record for
 [RocketsAreNostalgic/ran-wp-release-updater#60](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/60).
-The implementation is proposed until its PRs are reviewed and merged. This
-record does not authorize a merge, package version bump, publication or a Core
-dependency update. Release PR #70 remains held by the owner.
+That implementation and historical release PR #70 have since merged. This
+record does not authorize another merge, package version bump, publication or a
+Core dependency update. The native-operation refinement below is a separate proposal.
 
 ## Maintained scope
 
@@ -25,15 +25,16 @@ MySQL CAS, Windows portability and JavaScript checks still feed terminal
 
 ## Retained exceptions
 
-The exact rule/path list lives in `.phpcs.xml`; these are local product
-requirements, not shared-standard exemptions.
+The retained rule/path list lives in `.phpcs.xml`; native production/tool
+operations now carry exact diagnostic codes at their occurrences. These are
+local product requirements, not shared-standard exemptions.
 
 | Boundary | Reason and retained protection |
 | --- | --- |
 | Internal exception text | It is closed failure data, not HTML output. EscapeOutput's exception diagnostic is disabled; public failure projection and message-sanitization tests remain. |
 | Native JSON | Protocol hashes and canonical bytes require native `json_encode` flags and `JSON_THROW_ON_ERROR`, including before WordPress helpers exist. JSON/hash regression tests remain. |
 | Native URL parsing | Provider-neutral canonicalization/bootstrap cannot require WordPress URL helpers. Canonical URI and redirect rejection tests remain. |
-| Native filesystem and local warning suppression | Archive/custody, installed identity, atomic persistence and cleanup require native identity/permission/rename checks. Scope is limited to the listed production files/directories plus tooling/fixtures; archive, symlink, cleanup, Windows and no-dev proofs remain. |
+| Native filesystem and local warning suppression | Archive/custody, installed identity, atomic persistence and cleanup require native identity/permission/rename checks. The seven affected production files and two tools use occurrence-local diagnostic annotations; broad category exclusions remain only for the separate test-fixture boundary. Checked failure, observed deletion/retry and best-effort cleanup retain their distinct behavior. Archive, symlink, cleanup, Windows and no-dev proofs remain. |
 | Trusted local metadata reads | Bootstrap and RuntimeCopySelector read verified local metadata. Only their native file-read diagnostic is excepted; runtime content identity/provenance and selection/refusal tests remain. |
 | Prepared SQL identifier/CAS boundary | BindingFenceCoordinator validates the table identifier and prepares data values. Only two SQL parser false-positive rules are excepted for that file. MySQL CAS and setup-failure proofs remain required. |
 | Bounded base64 operation tokens | NativePackageUpdater uses URL-safe base64 for opaque operation tokens, not executable code. Only its encode/decode rules and test fixtures are excepted. |
@@ -73,14 +74,15 @@ targets together in one request.
 
 ## Connected adoption and closure
 
-Core at `0c1ace618331a23e068cec6e54a896c634bc8f76` still locks updater
-`0.1.0-beta.7` and declares `extra.ran-updater-runtime-protocol: 4`. Its
+The historical adoption snapshot recorded Core at `0c1ace618331a23e068cec6e54a896c634bc8f76` locking updater
+`0.1.0-beta.7` and declaring `extra.ran-updater-runtime-protocol: 4`. Its
 `tests/WordPress/ReleaseUpdaterBootstrapTest.php` and
-`tests/WordPress/github-release-updater-bootstrap-smoke.php` assert protocol 4
-through `protocolVersion()`. Those checks and the metadata must change together
-with an installable released dependency adoption. Do not relax them to accept
-both protocols or record protocol 5 beside the old lock. Core #177's separate
-release-management work is not modified by this cohort.
+`tests/WordPress/github-release-updater-bootstrap-smoke.php` asserted protocol 4
+through `protocolVersion()`. Those checks and the metadata had to change together
+with an installable released dependency adoption, without relaxing them to accept
+both protocols or recording protocol 5 beside the old lock. Core #177's separate
+release-management work was outside that cohort. This is historical evidence,
+not a statement of the current Core dependency tuple.
 
 The bounded tracked-source audit also covered Provider
 `7cd2c0624e2a41ccd8c2b1e879ac743eddb8f800`, Bitbucket
@@ -89,8 +91,9 @@ The bounded tracked-source audit also covered Provider
 archive/provider internals was found there. This is not an inventory of
 untracked third-party consumers or a certification of a new Core tuple.
 
-Before #60 closes, record exact reviewed heads, applicable native CI, merged
-main qualification and the organisation matrix/adoption reconciliation. Retarget
+Issue #60 is closed; its source acceptance is historical evidence, not blanket
+acceptance of future exceptions. Record exact reviewed heads, applicable native
+CI and merged-main qualification for this refinement. Retarget
 and requalify dependent PRs after squash merges. Portable PHP 8.4 lacks
 `GLOB_BRACE`; its two architecture errors are not a green full aggregate.
 Native CI provides separate qualification. Publication and Core adoption remain
@@ -99,8 +102,8 @@ never manual tags.
 
 ## First ordinary-test naming cohort
 
-This bounded proposal starts from main `0649dbb106fdbe8428b66a4f1efa0c52a03ddd99`,
-independently of the open native-operation refinement in PR #95. It covers four
+This cohort landed in PR #96 at `a670e7681eac7119fcfecd07cc35c5abea852343`,
+independently of this native-operation refinement. It covers four
 Archive tests, five Contract tests and one Dependency test. The locked checker
 exposed 115 naming diagnostics: 71 owned method declarations, 38 variable or
 interpolation occurrences, and six PHPUnit lifecycle overrides. Owned names and
@@ -116,3 +119,21 @@ are preserved after the explicit owned-name mapping; only this regression adds
 a test. No production, dependency, runtime identity, API or fixture wire format
 changes are part of this proposal. Other test roots and native/fixture exceptions
 remain separate work; this is not acceptance of the full test surface.
+
+## Native-operation exception refinement
+
+Removing the production/tool category exclusions exposes 95 diagnostics across
+seven production files and two scripts. Exact occurrence annotations preserve
+native identity, locks, bounded streams, permissions, atomic replacement and
+existing cleanup semantics without changing executable PHP tokens. Local warning
+suppression remains where return values or later observations drive failure, and
+where cleanup was already deliberately best-effort; annotations distinguish them.
+
+Two architecture regressions run the actual locked checker on each affected path
+and future archive/tool paths: an unrelated native read and an unrelated silenced
+expression must independently report their exact diagnostics. These probes do not
+execute the supplied paths. The generated helper, dependency lock, public API,
+level-8 analysis and separate fixture exceptions are unchanged. Production comment
+bytes change the canonical runtime identity, so `runtime-copy.json.package_revision`
+is regenerated using the existing sorted-path/content-hash algorithm. Package
+version and runtime protocol remain unchanged.
