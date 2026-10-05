@@ -14,7 +14,7 @@ use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 
 final class BindingRecordTest extends TestCase {
-	public function testHashChangesForEveryLiveBindingSwitch(): void {
+	public function test_hash_changes_for_every_live_binding_switch(): void {
 		$facts = $this->facts();
 		$base  = BindingRecord::create( $facts )->binding_hash();
 		foreach ( array(
@@ -34,7 +34,7 @@ final class BindingRecordTest extends TestCase {
 			)
 		);
 		self::assertNotSame( BindingRecord::create( $theme )->binding_hash(), BindingRecord::create( array_merge( $theme, array( 'theme_template' => 'parent-theme' ) ) )->binding_hash(), 'theme_template' ); }
-	public function testThemeTemplateIsClosedToThemesAndSafeThemeSlugs(): void {
+	public function test_theme_template_is_closed_to_themes_and_safe_theme_slugs(): void {
 		foreach ( array(
 			array(
 				'target_type'    => 'plugin',
@@ -67,8 +67,8 @@ final class BindingRecordTest extends TestCase {
 				)
 			)->to_array()['theme_template']
 		); }
-	public function testDescriptorAndBindingMustRemainExactPair(): void {
-		$descriptor = IdentityDescriptor::create( $this->descriptorFacts() );
+	public function test_descriptor_and_binding_must_remain_exact_pair(): void {
+		$descriptor = IdentityDescriptor::create( $this->descriptor_facts() );
 		$binding    = BindingRecord::create( $this->facts() );
 		self::assertSame( $descriptor, BindingRecord::assert_descriptor_binding( $descriptor, $binding ) );
 		foreach ( array(
@@ -78,14 +78,14 @@ final class BindingRecordTest extends TestCase {
 		) as $key => $value ) {
 			$this->expectException( InvalidArgumentException::class );
 			BindingRecord::assert_descriptor_binding( $descriptor, BindingRecord::create( array_merge( $this->facts(), array( $key => $value ) ) ) ); } }
-	public function testDescriptorMustNotContainThePolicyFactAndCannotExceedItsBindingLimit(): void {
-		$facts                  = $this->descriptorFacts();
+	public function test_descriptor_must_not_contain_the_policy_fact_and_cannot_exceed_its_binding_limit(): void {
+		$facts                  = $this->descriptor_facts();
 		$facts['artifact_size'] = 2;
 		$descriptor             = IdentityDescriptor::create( $facts );
 		$binding                = BindingRecord::create( array_merge( $this->facts(), array( 'maximum_artifact_bytes' => 1 ) ) );
 		$this->expectException( InvalidArgumentException::class );
 		BindingRecord::assert_descriptor_binding( $descriptor, $binding ); }
-	public function testRehydrateRejectsForgedOrOpenSnapshots(): void {
+	public function test_rehydrate_rejects_forged_or_open_snapshots(): void {
 		$snapshot = BindingRecord::create( $this->facts() )->to_array();
 		self::assertSame( $snapshot, BindingRecord::rehydrate( $snapshot )->to_array() );
 		foreach ( array( array_merge( $snapshot, array( 'binding_hash' => str_repeat( 'f', 64 ) ) ), array_merge( $snapshot, array( 'unexpected' => true ) ) ) as $invalid ) {
@@ -95,7 +95,7 @@ final class BindingRecordTest extends TestCase {
 			} catch ( InvalidArgumentException ) {
 				self::addToAssertionCount( 1 ); }
 		} }
-	public function testTargetFenceHasOneCanonicalNetworkTypeAndIdentityOrder(): void {
+	public function test_target_fence_has_one_canonical_network_type_and_identity_order(): void {
 		$first = BindingRecord::target_fence_key(
 			array(
 				'installed_package_identity' => 'x/x.php',
@@ -133,7 +133,7 @@ final class BindingRecordTest extends TestCase {
 				)
 			)
 		); }
-	public function testTargetFenceRejectsOpenOrInvalidExactRecords(): void {
+	public function test_target_fence_rejects_open_or_invalid_exact_records(): void {
 		foreach ( array(
 			array(
 				'network_id'                 => 0,
@@ -179,7 +179,7 @@ final class BindingRecordTest extends TestCase {
 			'update_policy'                => 'manual',
 			'wordpress_runtime_version'    => '6.8',
 		); }
-	/** @return array<string,mixed> */ private function descriptorFacts(): array {
+	/** @return array<string,mixed> */ private function descriptor_facts(): array {
 		return array(
 			'artifact_filename'          => 'x.zip',
 			'artifact_identity'          => 'asset:1',

@@ -12,14 +12,14 @@ use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 
 final class IdentityDescriptorTest extends TestCase {
-	public function testClosedFingerprintBindsEveryReleaseFact(): void {
+	public function test_closed_fingerprint_binds_every_release_fact(): void {
 		$descriptor = IdentityDescriptor::create( $this->facts() );
 		self::assertMatchesRegularExpression( '/\Av1:[a-f0-9]{64}\z/D', $descriptor->fingerprint_value() );
 		$snapshot                     = $descriptor->to_array();
 		$snapshot['release_identity'] = '43';
 		$this->expectException( InvalidArgumentException::class );
 		IdentityDescriptor::rehydrate( $snapshot ); }
-	public function testExactTargetBindingRejectsProviderRepositoryAndUriSwitches(): void {
+	public function test_exact_target_binding_rejects_provider_repository_and_uri_switches(): void {
 		$descriptor = IdentityDescriptor::create( $this->facts() );
 		foreach ( array( array( 'provider_code' => 'gitlab' ), array( 'repository_identity' => 'repo:2' ), array( 'repository_locator' => 'other/repo' ) ) as $replacement ) {
 			try {
@@ -28,17 +28,17 @@ final class IdentityDescriptorTest extends TestCase {
 			} catch ( InvalidArgumentException ) {
 				self::addToAssertionCount( 1 ); }
 		} }
-	public function testAutomaticAssuranceFactsRemainClosed(): void {
+	public function test_automatic_assurance_facts_remain_closed(): void {
 		$snapshot = IdentityDescriptor::create( $this->facts() )->to_array();
 		$snapshot['assurance_facts']['publication_immutable'] = false;
 		$this->expectException( InvalidArgumentException::class );
 		IdentityDescriptor::rehydrate( $snapshot ); }
-	public function testDescriptorFactsRejectTargetPolicyFields(): void {
+	public function test_descriptor_facts_reject_target_policy_fields(): void {
 		$facts                           = $this->facts();
 		$facts['maximum_artifact_bytes'] = 52428800;
 		$this->expectException( InvalidArgumentException::class );
 		IdentityDescriptor::create( $facts ); }
-	public function testArtifactZipSuffixPreservesExactCase(): void {
+	public function test_artifact_zip_suffix_preserves_exact_case(): void {
 		$facts                      = $this->facts();
 		$facts['artifact_filename'] = 'RAN-Booster.ZIP';
 		self::assertSame(
@@ -46,7 +46,7 @@ final class IdentityDescriptorTest extends TestCase {
 			IdentityDescriptor::create( $facts )->to_array()['artifact_filename']
 		);
 	}
-	public function testNamedParametersPreserveExplicitTargetAndLengthChecks(): void {
+	public function test_named_parameters_preserve_explicit_target_and_length_checks(): void {
 		$descriptor = IdentityDescriptor::create( $this->facts() );
 		$snapshot   = $descriptor->to_array();
 		self::assertSame( $snapshot, IdentityDescriptor::rehydrate( value: $snapshot, expected_target: $this->target() )->to_array() );
