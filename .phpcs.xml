@@ -28,12 +28,15 @@
 		<include-pattern>/bootstrap.php</include-pattern>
 		<include-pattern>/runtime.php</include-pattern>
 		<include-pattern>/scripts/</include-pattern>
-		<exclude-pattern>/tests/</exclude-pattern>
+		<include-pattern>/tests/Archive/</include-pattern>
+		<include-pattern>/tests/Contract/</include-pattern>
+		<include-pattern>/tests/Dependency/</include-pattern>
+		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/)</exclude-pattern>
 	</rule>
 
-	<!-- Purpose-built test harness/fixture names stay outside production naming normalization. -->
+	<!-- Archive, Contract and Dependency tests share owned naming; other fixture cohorts remain separate. -->
 	<rule ref="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid">
-		<exclude-pattern>/tests/</exclude-pattern>
+		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/)</exclude-pattern>
 	</rule>
 	<!-- Match owned-method scope; no production variable-naming suppression remains. -->
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
@@ -41,7 +44,10 @@
 		<include-pattern>/bootstrap.php</include-pattern>
 		<include-pattern>/runtime.php</include-pattern>
 		<include-pattern>/scripts/</include-pattern>
-		<exclude-pattern>/tests/</exclude-pattern>
+		<include-pattern>/tests/Archive/</include-pattern>
+		<include-pattern>/tests/Contract/</include-pattern>
+		<include-pattern>/tests/Dependency/</include-pattern>
+		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/)</exclude-pattern>
 	</rule>
 	<!-- Synthetic WordPress/SQL and performance fixtures retain their purpose-built conditions. -->
 	<rule ref="WordPress.PHP.YodaConditions">
