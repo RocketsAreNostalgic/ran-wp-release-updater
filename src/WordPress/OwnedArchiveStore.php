@@ -60,7 +60,7 @@ final class OwnedArchiveStore {
 			}
 			$length = strlen( $chunk );
 			for ( $written = 0; $written < $length; ) {
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write to the exclusively opened archive stream; short or failed writes reject the copy.
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Complete short writes in the bounded loop; failed or zero-progress writes reject the copy.
 				$result = fwrite( $output, substr( $chunk, $written ) );
 				if ( ! is_int( $result ) || 0 === $result ) {
 					$ok = false;
