@@ -341,6 +341,7 @@ final class PackageIdentityValidator {
 	 */
 	private function archive_identity( string $path, array $facts ): ?array {
 		clearstatcache( true, $path );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$stat = @lstat( $path );
 		if ( ! is_array( $stat ) || ! is_readable( $path ) || ( $stat['mode'] & 0170000 ) !== 0100000 || $stat['size'] !== $facts['artifact_size'] ) {
 			return null;
@@ -362,8 +363,10 @@ final class PackageIdentityValidator {
 	 * @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity
 	 */
 	private function matches_archive_identity( string $path, array $facts, array $identity ): bool {
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Hash the local bytes and recheck native identity; unreadable or changed content is rejected quietly.
 		$digest = @hash_file( 'sha256', $path );
 		clearstatcache( true, $path );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$stat = @lstat( $path );
 		if ( ! is_string( $digest ) || ! hash_equals( $facts['artifact_sha256'], $digest ) || ! is_array( $stat ) || $stat['size'] !== $facts['artifact_size'] ) {
 			return false;
@@ -381,6 +384,7 @@ final class PackageIdentityValidator {
 		if ( ! is_resource( $stream ) ) {
 			return null;
 		} $contents = stream_get_contents( $stream, self::MAX_HEADER_BYTES );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream owned by this operation; no WordPress filesystem abstraction applies.
 		fclose( $stream );
 		return is_string( $contents ) ? $contents : null; }
 	/** @return array{sha256:string,size:int}|null */
@@ -392,12 +396,14 @@ final class PackageIdentityValidator {
 		$size      = 0;
 		$valid     = true;
 		while ( ! feof( $stream ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read bounded bytes from the already opened native stream; existing type, length and identity checks govern acceptance.
 			$chunk = fread( $stream, 65536 );
 			if ( ! is_string( $chunk ) || ( '' === $chunk && ! feof( $stream ) ) || strlen( $chunk ) > $expected_size - $size ) {
 				$valid = false;
 				break;
 			} $size += strlen( $chunk );
 			hash_update( $context, $chunk );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream owned by this operation; no WordPress filesystem abstraction applies.
 		} fclose( $stream );
 		return $valid && $size === $expected_size ? array(
 			'sha256' => hash_final( $context ),

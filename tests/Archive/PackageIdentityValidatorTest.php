@@ -13,6 +13,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 	/** @var list<string> */
 	private array $archives = array();
 
+	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function tearDown(): void {
 		foreach ( $this->archives as $archive ) {
 			if ( is_file( $archive ) ) {
@@ -22,7 +23,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		parent::tearDown();
 	}
 
-	public function testAcceptsAnExactPluginAndThemeWithoutExtraction(): void {
+	public function test_accepts_an_exact_plugin_and_theme_without_extraction(): void {
 		$plugin    = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$theme     = $this->archive( array( 'example-theme/style.css' => $this->header( 'Theme Name', 'Example Theme' ) ) );
 		$validator = new PackageIdentityValidator( after_open: null );
@@ -41,7 +42,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertTrue( $validator->validate( $this->descriptor( $theme, 'theme', 'example-theme' ), $this->policy( 'theme', 'example-theme', 'style.css', 'Example Theme' ), $theme )->is_valid() );
 	}
 
-	public function testThemeTemplateMustExactlyPreserveChildOrStandaloneIdentity(): void {
+	public function test_theme_template_must_exactly_preserve_child_or_standalone_identity(): void {
 		$child      = $this->archive( array( 'child/style.css' => $this->header( 'Theme Name', 'Child Theme', "Template: parent\n" ) ) );
 		$validator  = new PackageIdentityValidator();
 		$descriptor = $this->descriptor( $child, 'theme', 'child' );
@@ -51,17 +52,17 @@ final class PackageIdentityValidatorTest extends TestCase {
 			$candidate = $this->archive( array( 'child/style.css' => $this->header( 'Theme Name', 'Child Theme', '' === $template ? '' : "Template: {$template}\n" ) ) );
 			self::assertSame( 'archive_metadata_identity_mismatch', $validator->validate( $this->descriptor( $candidate, 'theme', 'child' ), $policy, $candidate )->code() );
 		}
-		$standalone       = $this->archive( array( 'standalone/style.css' => $this->header( 'Theme Name', 'Standalone' ) ) );
-		$standalonePolicy = $this->policy( 'theme', 'standalone', 'style.css', 'Standalone' );
-		self::assertTrue( $validator->validate( $this->descriptor( $standalone, 'theme', 'standalone' ), $standalonePolicy, $standalone )->is_valid() );
-		self::assertSame( 'archive_metadata_identity_mismatch', $validator->validate( $this->descriptor( $standalone, 'theme', 'standalone' ), array_replace( $standalonePolicy, array( 'theme_template' => 'parent' ) ), $standalone )->code() );
+		$standalone        = $this->archive( array( 'standalone/style.css' => $this->header( 'Theme Name', 'Standalone' ) ) );
+		$standalone_policy = $this->policy( 'theme', 'standalone', 'style.css', 'Standalone' );
+		self::assertTrue( $validator->validate( $this->descriptor( $standalone, 'theme', 'standalone' ), $standalone_policy, $standalone )->is_valid() );
+		self::assertSame( 'archive_metadata_identity_mismatch', $validator->validate( $this->descriptor( $standalone, 'theme', 'standalone' ), array_replace( $standalone_policy, array( 'theme_template' => 'parent' ) ), $standalone )->code() );
 	}
 
-	public function testProspectiveAndInstalledPoliciesRejectAnArtifactOverTheirTargetLimit(): void {
+	public function test_prospective_and_installed_policies_reject_an_artifact_over_their_target_limit(): void {
 		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$size    = filesize( $archive );
 		self::assertIsInt( $size );
-		$prospective                           = $this->prospectivePolicy( $archive, 'plugin' );
+		$prospective                           = $this->prospective_policy( $archive, 'plugin' );
 		$prospective['maximum_artifact_bytes'] = $size - 1;
 		self::assertNull( ( new PackageIdentityValidator() )->inspect_prospective( $prospective, $archive ) );
 		$policy                           = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
@@ -69,25 +70,25 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertSame( 'archive_target_policy_invalid', ( new PackageIdentityValidator() )->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $archive )->code() );
 	}
 
-	public function testArchivePathsShareCanonicalHeaderNormalization(): void {
-		foreach ( array( "\r\n", "\r" ) as $lineEnding ) {
+	public function test_archive_paths_share_canonical_header_normalization(): void {
+		foreach ( array( "\r\n", "\r" ) as $line_ending ) {
 			foreach ( array( 'plugin', 'theme' ) as $type ) {
-				$root      = 'plugin' === $type ? 'example-plugin' : 'example-theme';
-				$file      = 'plugin' === $type ? 'example-plugin.php' : 'style.css';
-				$nameLabel = 'plugin' === $type ? 'Plugin Name' : 'Theme Name';
-				$name      = 'plugin' === $type ? 'Example Plugin' : 'Example Theme';
-				$header    = str_replace(
+				$root       = 'plugin' === $type ? 'example-plugin' : 'example-theme';
+				$file       = 'plugin' === $type ? 'example-plugin.php' : 'style.css';
+				$name_label = 'plugin' === $type ? 'Plugin Name' : 'Theme Name';
+				$name       = 'plugin' === $type ? 'Example Plugin' : 'Example Theme';
+				$header     = str_replace(
 					"\n",
-					$lineEnding,
+					$line_ending,
 					"/*\n"
-					. "{$nameLabel}: {$name} */ trailing\n"
+					. "{$name_label}: {$name} */ trailing\n"
 					. "Version: 1.0.0 */\n"
 					. "Update URI: https://updates.example.test/owner/package */\n"
 					. "Requires PHP: 8.2\n"
 					. "Requires at least: 6.8\n*/\n"
 				);
-				$archive   = $this->archive( array( $root . '/' . $file => $header ) );
-				$policy    = $this->policy( $type, $root, $file, $name );
+				$archive    = $this->archive( array( $root . '/' . $file => $header ) );
+				$policy     = $this->policy( $type, $root, $file, $name );
 
 				self::assertSame(
 					'installed_header_verified',
@@ -99,7 +100,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 						'main_file'    => $file,
 					),
 					( new PackageIdentityValidator() )->inspect_prospective(
-						$this->prospectivePolicy( $archive, $type ),
+						$this->prospective_policy( $archive, $type ),
 						$archive
 					)
 				);
@@ -118,7 +119,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		}
 	}
 
-	public function testArchiveHeaderFailuresKeepArchiveFailureCodes(): void {
+	public function test_archive_header_failures_keep_archive_failure_codes(): void {
 		$cases = array(
 			'duplicate name' => array(
 				"Plugin Name: Example Plugin\nPlugin Name: Example Plugin",
@@ -167,7 +168,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		}
 	}
 
-	public function testProspectiveInspectionDiscoversOneSafePluginOrThemeHeader(): void {
+	public function test_prospective_inspection_discovers_one_safe_plugin_or_theme_header(): void {
 		$plugin    = $this->archive(
 			array(
 				'example-plugin/loader.php'         => '<?php return true;',
@@ -181,38 +182,38 @@ final class PackageIdentityValidatorTest extends TestCase {
 				'package_root' => 'example-plugin',
 				'main_file'    => 'example-plugin.php',
 			),
-			$validator->inspect_prospective( $this->prospectivePolicy( $plugin, 'plugin' ), archive_path: $plugin )
+			$validator->inspect_prospective( $this->prospective_policy( $plugin, 'plugin' ), archive_path: $plugin )
 		);
 		self::assertSame(
 			array(
 				'package_root' => 'example-theme',
 				'main_file'    => 'style.css',
 			),
-			$validator->inspect_prospective( $this->prospectivePolicy( $theme, 'theme' ), $theme )
+			$validator->inspect_prospective( $this->prospective_policy( $theme, 'theme' ), $theme )
 		);
 	}
 
-	public function testProspectiveInspectionRejectsAmbiguousPluginHeaders(): void {
+	public function test_prospective_inspection_rejects_ambiguous_plugin_headers(): void {
 		$archive = $this->archive(
 			array(
 				'example-plugin/a.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
 				'example-plugin/b.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
 			)
 		);
-		self::assertNull( ( new PackageIdentityValidator() )->inspect_prospective( $this->prospectivePolicy( $archive, 'plugin' ), $archive ) );
+		self::assertNull( ( new PackageIdentityValidator() )->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ) );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'prospectiveUnsafeArchives' )]
-	public function testProspectiveInspectionRejectsUnsafeAndAmbiguousShapes(
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'prospective_unsafe_archives' )]
+	public function test_prospective_inspection_rejects_unsafe_and_ambiguous_shapes(
 		array $entries,
 		array $links = array()
 	): void {
 		$archive = $this->archive( $entries, $links );
-		self::assertNull( $this->prospectivePlugin( $archive ) );
+		self::assertNull( $this->prospective_plugin( $archive ) );
 	}
 
 	/** @return array<string,array{0:array<string,string>,1?:list<string>}> */
-	public static function prospectiveUnsafeArchives(): array {
+	public static function prospective_unsafe_archives(): array {
 		$header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/";
 		return array(
 			'multiple roots'      => array(
@@ -243,14 +244,14 @@ final class PackageIdentityValidatorTest extends TestCase {
 		);
 	}
 
-	public function testProspectiveInspectionRejectsEntryLimitAndHeaderMismatches(): void {
+	public function test_prospective_inspection_rejects_entry_limit_and_header_mismatches(): void {
 		$many = array(
 			'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
 		);
 		for ( $index = 1; $index <= 10000; ++$index ) {
 			$many[ 'example-plugin/entry-' . $index ] = '';
 		}
-		self::assertNull( $this->prospectivePlugin( $this->archive( $many ) ) );
+		self::assertNull( $this->prospective_plugin( $this->archive( $many ) ) );
 
 		foreach (
 			array(
@@ -263,11 +264,11 @@ final class PackageIdentityValidatorTest extends TestCase {
 			) as $header
 		) {
 			$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
-			self::assertNull( $this->prospectivePlugin( $archive ) );
+			self::assertNull( $this->prospective_plugin( $archive ) );
 		}
 	}
 
-	public function testProspectiveInspectionKeepsCrossTypeHeadersAndRejectsReplacement(): void {
+	public function test_prospective_inspection_keeps_cross_type_headers_and_rejects_replacement(): void {
 		$archive = $this->archive(
 			array(
 				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
@@ -279,7 +280,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 				'package_root' => 'example-plugin',
 				'main_file'    => 'example-plugin.php',
 			),
-			$this->prospectivePlugin( $archive )
+			$this->prospective_plugin( $archive )
 		);
 
 		$archive     = $this->archive(
@@ -289,8 +290,8 @@ final class PackageIdentityValidatorTest extends TestCase {
 			array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Other Plugin' ) )
 		);
 		$validator   = new PackageIdentityValidator();
-		$afterOpen   = new \ReflectionProperty( $validator, 'after_open' );
-		$afterOpen->setValue(
+		$after_open  = new \ReflectionProperty( $validator, 'after_open' );
+		$after_open->setValue(
 			$validator,
 			static function ( string $path ) use ( $replacement ): void {
 				copy( $replacement, $path );
@@ -298,21 +299,21 @@ final class PackageIdentityValidatorTest extends TestCase {
 		);
 		self::assertNull(
 			$validator->inspect_prospective(
-				$this->prospectivePolicy( $archive, 'plugin' ),
+				$this->prospective_policy( $archive, 'plugin' ),
 				$archive
 			)
 		);
 	}
 
-	public function testFailsClosedForDigestSizeUriTargetAndMetadataMismatches(): void {
+	public function test_fails_closed_for_digest_size_uri_target_and_metadata_mismatches(): void {
 		$archive    = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$validator  = new PackageIdentityValidator();
 		$descriptor = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );
 		$policy     = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
 		$facts      = $descriptor->to_array();
 		unset( $facts['fingerprint'] );
-		$badDigest = IdentityDescriptor::create( array_replace( $facts, array( 'artifact_sha256' => str_repeat( 'b', 64 ) ) ) );
-		self::assertSame( 'archive_file_identity_mismatch', $validator->validate( $badDigest, $policy, $archive )->code() );
+		$bad_digest = IdentityDescriptor::create( array_replace( $facts, array( 'artifact_sha256' => str_repeat( 'b', 64 ) ) ) );
+		self::assertSame( 'archive_file_identity_mismatch', $validator->validate( $bad_digest, $policy, $archive )->code() );
 		self::assertSame( 'archive_target_policy_invalid', $validator->validate( $descriptor, array_replace( $policy, array( 'provider_code' => 'other' ) ), $archive )->code() );
 		self::assertSame( 'archive_target_policy_invalid', $validator->validate( $descriptor, array_replace( $policy, array( 'archive_root' => 'other-root' ) ), $archive )->code() );
 		self::assertSame( 'archive_target_policy_invalid', $validator->validate( $descriptor, array_replace( $policy, array( 'header_file' => 'other.php' ) ), $archive )->code() );
@@ -330,17 +331,17 @@ final class PackageIdentityValidatorTest extends TestCase {
 				$archive
 			)->code()
 		);
-		$wrongUri = $this->archive( array( 'example-plugin/example-plugin.php' => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/other\n*/" ) );
-		self::assertSame( 'archive_update_uri_mismatch', $validator->validate( $this->descriptor( $wrongUri, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $wrongUri )->code() );
+		$wrong_uri = $this->archive( array( 'example-plugin/example-plugin.php' => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/other\n*/" ) );
+		self::assertSame( 'archive_update_uri_mismatch', $validator->validate( $this->descriptor( $wrong_uri, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $wrong_uri )->code() );
 		self::assertSame( 'archive_metadata_identity_mismatch', $validator->validate( $descriptor, array_replace( $policy, array( 'metadata_name' => 'Other Plugin' ) ), $archive )->code() );
 	}
 
-	public function testRejectsReplacementAfterArchiveOpenBeforeInspection(): void {
+	public function test_rejects_replacement_after_archive_open_before_inspection(): void {
 		$archive     = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$replacement = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Other Plugin' ) ) );
 		$validator   = new PackageIdentityValidator();
-		$afterOpen   = new \ReflectionProperty( $validator, 'after_open' );
-		$afterOpen->setValue(
+		$after_open  = new \ReflectionProperty( $validator, 'after_open' );
+		$after_open->setValue(
 			$validator,
 			static function ( string $path ) use ( $replacement ): void {
 				copy( $replacement, $path );
@@ -350,7 +351,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertSame( 'archive_file_identity_mismatch', $result->code() );
 	}
 
-	public function testReceiptProofCannotCrossDescriptorOrValidatorCloneAndOnlyConsumesOnce(): void {
+	public function test_receipt_proof_cannot_cross_descriptor_or_validator_clone_and_only_consumes_once(): void {
 		$archive    = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$validator  = new PackageIdentityValidator();
 		$descriptor = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );
@@ -376,32 +377,32 @@ final class PackageIdentityValidatorTest extends TestCase {
 			self::addToAssertionCount( 1 ); }
 	}
 
-	public function testArchiveManifestIsCanonicalAcrossZipEntryOrder(): void {
-		$header        = $this->header( 'Plugin Name', 'Example Plugin' );
-		$first         = $this->archive(
+	public function test_archive_manifest_is_canonical_across_zip_entry_order(): void {
+		$header         = $this->header( 'Plugin Name', 'Example Plugin' );
+		$first          = $this->archive(
 			array(
 				'example-plugin/example-plugin.php' => $header,
 				'example-plugin/payload.php'        => '<?php return true;',
 			)
 		);
-		$second        = $this->archive(
+		$second         = $this->archive(
 			array(
 				'example-plugin/payload.php'        => '<?php return true;',
 				'example-plugin/example-plugin.php' => $header,
 			)
 		);
-		$validator     = new PackageIdentityValidator();
-		$policy        = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
-		$firstPackage  = $validator->validate( $this->descriptor( $first, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $first );
-		$secondPackage = $validator->validate( $this->descriptor( $second, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $second );
-		self::assertTrue( $firstPackage->is_valid() );
-		self::assertTrue( $secondPackage->is_valid() );
-		self::assertSame( $firstPackage->to_array()['manifest_hash'], $secondPackage->to_array()['manifest_hash'] );
-		self::assertSame( 2, $firstPackage->to_array()['manifest_entry_count'] );
-		self::assertSame( strlen( $header ) + strlen( '<?php return true;' ), $firstPackage->to_array()['manifest_expanded_bytes'] );
+		$validator      = new PackageIdentityValidator();
+		$policy         = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+		$first_package  = $validator->validate( $this->descriptor( $first, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $first );
+		$second_package = $validator->validate( $this->descriptor( $second, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $second );
+		self::assertTrue( $first_package->is_valid() );
+		self::assertTrue( $second_package->is_valid() );
+		self::assertSame( $first_package->to_array()['manifest_hash'], $second_package->to_array()['manifest_hash'] );
+		self::assertSame( 2, $first_package->to_array()['manifest_entry_count'] );
+		self::assertSame( strlen( $header ) + strlen( '<?php return true;' ), $first_package->to_array()['manifest_expanded_bytes'] );
 	}
 
-	public function testRejectsDuplicateSemanticHeaders(): void {
+	public function test_rejects_duplicate_semantic_headers(): void {
 		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => "<?php\n/*\nPlugin Name: Example Plugin\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nUpdate URI: https://updates.example.test/owner/package\n*/" ) );
 		$result  = ( new PackageIdentityValidator() )->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $archive );
 		self::assertSame( 'archive_metadata_identity_mismatch', $result->code() );
@@ -409,15 +410,15 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertSame( 'archive_update_uri_mismatch', ( new PackageIdentityValidator() )->validate( $this->descriptor( $conflict, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $conflict )->code() );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafeArchives' )]
-	public function testRejectsUnsafeOrAmbiguousArchiveShapes( array $entries, string $expected ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafe_archives' )]
+	public function test_rejects_unsafe_or_ambiguous_archive_shapes( array $entries, string $expected ): void {
 		$archive = $this->archive( $entries );
 		$result  = ( new PackageIdentityValidator() )->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $archive );
 		self::assertSame( $expected, $result->code() );
 	}
 
 	/** @return array<string, array{array<string,string>,string}> */
-	public static function unsafeArchives(): array {
+	public static function unsafe_archives(): array {
 		$header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/";
 		return array(
 			'traversal'      => array(
@@ -438,7 +439,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		);
 	}
 
-	public function testRejectsSymlinkAndExcessiveEntryInventory(): void {
+	public function test_rejects_symlink_and_excessive_entry_inventory(): void {
 		$entries = array(
 			'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
 			'example-plugin/link.php'           => '../outside',
@@ -454,7 +455,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertSame( 'archive_entry_limit', ( new PackageIdentityValidator() )->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $archive )->code() );
 	}
 
-	public function testDelegatesAncestorAndMetadataSafetyToTheScopedDependency(): void {
+	public function test_delegates_ancestor_and_metadata_safety_to_the_scoped_dependency(): void {
 		$header    = $this->header( 'Plugin Name', 'Example Plugin' );
 		$validator = new PackageIdentityValidator();
 		$policy    = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
@@ -471,7 +472,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 			),
 		) as $name => $entries ) {
 			$archive = $this->archive( $entries );
-			self::assertNull( $validator->inspect_prospective( $this->prospectivePolicy( $archive, 'plugin' ), $archive ), $name );
+			self::assertNull( $validator->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ), $name );
 			self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $archive )->code(), $name );
 		}
 
@@ -485,7 +486,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 				'package_root' => 'example-plugin',
 				'main_file'    => 'example-plugin.php',
 			),
-			$validator->inspect_prospective( $this->prospectivePolicy( $dos, 'plugin' ), $dos )
+			$validator->inspect_prospective( $this->prospective_policy( $dos, 'plugin' ), $dos )
 		);
 		self::assertTrue( $validator->validate( $this->descriptor( $dos, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $dos )->is_valid() );
 
@@ -494,18 +495,18 @@ final class PackageIdentityValidatorTest extends TestCase {
 			array(),
 			array( 'example-plugin/example-plugin.php' => array( \ZipArchive::OPSYS_UNIX, 0040000 << 16 ) )
 		);
-		self::assertNull( $validator->inspect_prospective( $this->prospectivePolicy( $mismatch, 'plugin' ), $mismatch ) );
+		self::assertNull( $validator->inspect_prospective( $this->prospective_policy( $mismatch, 'plugin' ), $mismatch ) );
 		self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $mismatch, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $mismatch )->code() );
 	}
 
-	#[\PHPUnit\Framework\Attributes\DataProvider( 'archiveCompatibilityCases' )]
-	public function testValidatesArchiveVersionAndOptionalRuntimeRequirements( string $header, string $expected ): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'archive_compatibility_cases' )]
+	public function test_validates_archive_version_and_optional_runtime_requirements( string $header, string $expected ): void {
 		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
 		$result  = ( new PackageIdentityValidator() )->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $archive );
 		self::assertSame( $expected, $result->code() );
 	}
 
-	public function testArchiveValidationPermitsAbsentRequirementsAndRejectsPostClosingDuplicates(): void {
+	public function test_archive_validation_permits_absent_requirements_and_rejects_post_closing_duplicates(): void {
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
 			$root       = 'plugin' === $type ? 'example-plugin' : 'example-theme';
 			$file       = 'plugin' === $type ? 'example-plugin.php' : 'style.css';
@@ -524,7 +525,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 	}
 
 	/** @return array<string, array{string,string}> */
-	public static function archiveCompatibilityCases(): array {
+	public static function archive_compatibility_cases(): array {
 		$base = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: %s\nUpdate URI: https://updates.example.test/owner/package%s\n*/";
 		return array(
 			'ready with compatible floors' => array( sprintf( $base, '1.0', "\nRequires PHP: 8.1\nRequires at least: 6.7" ), 'archive_identity_verified' ),
@@ -595,15 +596,15 @@ final class PackageIdentityValidatorTest extends TestCase {
 	}
 
 	/** @return array{package_root:string,main_file:string}|null */
-	private function prospectivePlugin( string $archive ): ?array {
+	private function prospective_plugin( string $archive ): ?array {
 		return ( new PackageIdentityValidator() )->inspect_prospective(
-			$this->prospectivePolicy( $archive, 'plugin' ),
+			$this->prospective_policy( $archive, 'plugin' ),
 			$archive
 		);
 	}
 
 	/** @return array<string,mixed> */
-	private function prospectivePolicy( string $archive, string $type ): array {
+	private function prospective_policy( string $archive, string $type ): array {
 		return array(
 			'artifact_sha256'           => hash_file( 'sha256', $archive ),
 			'artifact_size'             => filesize( $archive ),

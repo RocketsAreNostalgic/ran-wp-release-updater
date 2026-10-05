@@ -96,6 +96,7 @@ final class TemporaryArtifact {
 			return false;
 		}
 
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Delete only the unchanged owned artifact; refreshed existence checks determine cleanup success.
 		@unlink( $this->path );
 		clearstatcache( true, $this->path );
 		$this->discarded = ! file_exists( $this->path ) && ! is_link( $this->path );
@@ -140,6 +141,7 @@ final class TemporaryArtifact {
 
 	/** @return array<string, int>|null */
 	private static function file_identity( string $path ): ?array {
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$stat = @lstat( $path );
 		if ( ! is_array( $stat ) || is_link( $path ) || 0100000 !== ( (int) $stat['mode'] & 0170000 )
 			|| 1 !== (int) $stat['nlink'] || 0600 !== ( (int) $stat['mode'] & 0777 ) ) {
