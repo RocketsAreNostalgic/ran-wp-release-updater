@@ -21,8 +21,8 @@ Its five private race/read/lock/rewind seams are assigned through Reflection by
 specific declarations. Their callable types and all method bodies remain checked.
 `scanDirectories: src` supplies symbol discovery; it does not itself analyse
 method bodies. All 36 shipped PHP files (`bootstrap.php`, `runtime.php` and
-production PHP under `src/`) now have direct level-8 roots. Issue #60 still owns
-final acceptance; this coverage count does not close the wider quality rollout.
+production PHP under `src/`) now have direct level-8 roots. Issue #60 records the historical
+source acceptance; this coverage count does not certify later exception changes.
 
 `src/Runtime/ReleaseSource.php` is also a level-8 root. Its direct `FS_METHOD`
 inspection deliberately avoids filesystem negotiation; the line-specific
@@ -88,6 +88,11 @@ Focused commands retain the same underlying tools and boundaries:
 | `composer test` | Unit tests, then the installed no-dev consumer proof. |
 
 `test:unit` and `test:no-dev-consumer` remain available individually.
+The architecture suite also invokes the actual locked PHPCS checker to prove
+occurrence-local native-operation exceptions cannot hide an unrelated native read
+or silenced expression in the affected production/tool paths or future archive/tool
+files. Existing custody, installed-identity, deletion and rollback tests retain
+the behavioral evidence; this standards refinement does not change those behaviors.
 The obsolete `lint:php`, `format:php`, and `check:php-style` names have been
 replaced by `standards` and `standards:fix`. Composer audit remains blocking
 inside `check`; it uses live advisory data and requires network access.

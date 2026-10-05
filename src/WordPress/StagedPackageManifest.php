@@ -13,7 +13,8 @@ final class StagedPackageManifest {
 
 	/** @return array<string,array{sha256:string,size:int}>|null */
 	public function build( string $root ): ?array {
-		$root      = rtrim( $root, '/\\' );
+		$root = rtrim( $root, '/\\' );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$root_stat = @lstat( $root );
 		if ( ! is_array( $root_stat ) || 0040000 !== ( $root_stat['mode'] & 0170000 ) ) {
 			return null;
@@ -29,7 +30,8 @@ final class StagedPackageManifest {
 		$total        = 0;
 		$entries_seen = 0;
 		while ( array() !== $queue ) {
-			$next    = array_pop( $queue );
+			$next = array_pop( $queue );
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Enumerate the local staged directory under existing entry bounds; unreadable directories return no manifest.
 			$entries = @scandir( $next['path'] );
 			if ( ! is_array( $entries ) ) {
 				return null;
@@ -46,6 +48,7 @@ final class StagedPackageManifest {
 				if ( strlen( $relative ) > PackageIdentityValidator::MAX_ARCHIVE_PATH_BYTES || 1 === preg_match( '/[^\x20-\x7E]|[\\\\:]/', $relative ) ) {
 					return null;
 				}
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 				$stat = @lstat( $path );
 				if ( ! is_array( $stat ) ) {
 					return null;
@@ -61,8 +64,10 @@ final class StagedPackageManifest {
 				if ( 0100000 !== $type || $stat['size'] < 0 || $stat['size'] > PackageIdentityValidator::MAX_EXPANDED_ARCHIVE_BYTES - $total ) {
 					return null;
 				}
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Hash the local bytes and recheck native identity; unreadable or changed content is rejected quietly.
 				$hash = @hash_file( 'sha256', $path );
 				clearstatcache( true, $path );
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 				$after = @lstat( $path );
 				if (
 					! is_string( $hash )

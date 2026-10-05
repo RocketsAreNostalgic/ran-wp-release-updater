@@ -644,7 +644,8 @@ final class NativePackageUpdater {
 		$targets = $extra[ $key ] ?? array( $extra[ $single ] ?? null );
 		return is_array( $targets ) && in_array( $this->installed_identity, $targets, true ); }
 	private function matches_staged_metadata( string $source, ?string $expected_version = null ): bool {
-		$source    = rtrim( $source, '/\\' );
+		$source = rtrim( $source, '/\\' );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$directory = @lstat( $source );
 		if (
 			! is_array( $directory )
@@ -656,11 +657,13 @@ final class NativePackageUpdater {
 
 		$header = 'plugin' === $this->target_type ? basename( $this->installed_identity ) : 'style.css';
 		$path   = $source . DIRECTORY_SEPARATOR . $header;
-		$file   = @lstat( $path );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
+		$file = @lstat( $path );
 		if ( ! is_array( $file ) || 0100000 !== ( $file['mode'] & 0170000 ) ) {
 			return false;
 		}
 
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the bounded staged header locally; unreadable content returns the existing metadata rejection.
 		$contents = @file_get_contents( $path, false, null, 0, 8192 );
 		if ( ! is_string( $contents ) ) {
 			return false;
