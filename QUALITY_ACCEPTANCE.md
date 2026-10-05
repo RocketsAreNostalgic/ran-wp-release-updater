@@ -4,7 +4,7 @@ This is the repository's residual acceptance record for
 [RocketsAreNostalgic/ran-wp-release-updater#60](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/60).
 That implementation and historical release PR #70 have since merged. This
 record does not authorize another merge, package version bump, publication or a
-Core dependency update. The native-operation refinement below is a separate proposal.
+Core dependency update. The native-operation refinement below was delivered separately in PR #95.
 
 ## Maintained scope
 
@@ -14,7 +14,7 @@ Core dependency update. The native-operation refinement below is a separate prop
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
 | Generated `src/Dependency/ArchiveSafety.php` | PHPCS excluded; namespace-only byte parity against the locked `ran/updater-support` source and direct level-8 analysis remain required. Never hand-edit this file. |
-| `tests/Archive`, `tests/Contract`, `tests/Dependency` | Owned method and variable naming now cover these three roots, including future files. Six PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
+| `tests/Archive`, `tests/Contract`, `tests/Dependency`, `tests/Provider` | Owned method and variable naming now cover these four roots, including future files. Ten PHPUnit lifecycle overrides retain declaration-local method-name exceptions. Other configured standards and executable proofs still run. |
 | Other `tests/` roots | The separate purpose-built fixture/harness naming boundary remains. Production callers, named arguments, callbacks and Reflection seams follow the production API. This cohort does not certify every fixture-local identifier as snake_case. |
 
 `composer check` retains strict validation, generated-copy parity, live advisory
@@ -137,3 +137,23 @@ level-8 analysis and separate fixture exceptions are unchanged. Production comme
 bytes change the canonical runtime identity, so `runtime-copy.json.package_revision`
 is regenerated using the existing sorted-path/content-hash algorithm. Package
 version and runtime protocol remain unchanged.
+
+## Provider test naming cohort
+
+The next bounded cohort adds all five `tests/Provider` files and future files in
+that root to owned method/variable naming. The initial inventory at main
+`a670e7681eac7119fcfecd07cc35c5abea852343` exposed 143
+diagnostics: 93 owned method declarations, 46 variable occurrences and four
+required PHPUnit lifecycle overrides. Four files need normalization; the named
+constructor contract test already complies. The four lifecycle declarations keep
+exact local exceptions; WordPress/native stubs and foreign APIs retain their
+required names. Existing method calls and DataProvider references follow owned
+renames, while dataset identities, named production arguments, Reflection targets,
+wire strings and mutable callback references remain unchanged.
+
+The existing Dependency checker regression adds current and future Provider
+paths, preserving the outside-cohort Runtime control. No new tests or framework
+are introduced. Production, scripts, dependencies, runtime identity and workflow
+inputs are outside this cohort; other test roots remain separate work. The final
+proposal is integrated onto main `cbed2d1a856d3ed8e98d6494a54cbf72495921e6`
+after PR #95, retaining its native-operation protections and acceptance record.

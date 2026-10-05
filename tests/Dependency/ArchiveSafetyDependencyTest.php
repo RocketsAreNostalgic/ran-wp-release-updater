@@ -29,7 +29,7 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 		$method_code   = 'RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase';
 		$variable_code = 'WordPress.NamingConventions.ValidVariableName.VariableNotSnakeCase';
 		$source        = "<?php\nnamespace Tests;\nclass NamingProbe extends \\PHPUnit\\Framework\\TestCase {\npublic function owned_method(): int { \$owned_value = 1; return \$owned_value; }\n}\n";
-		foreach ( array( 'Archive/ArchiveScanResultTest.php', 'Contract/ReleaseVersionTest.php', 'Dependency/ArchiveSafetyDependencyTest.php', 'Archive/FutureTest.php', 'Contract/FutureTest.php', 'Dependency/FutureTest.php', 'Runtime/FutureTest.php' ) as $path ) {
+		foreach ( array( 'Archive/ArchiveScanResultTest.php', 'Contract/ReleaseVersionTest.php', 'Dependency/ArchiveSafetyDependencyTest.php', 'Provider/GitHubReleaseAdapterTest.php', 'Archive/FutureTest.php', 'Contract/FutureTest.php', 'Dependency/FutureTest.php', 'Provider/FutureTest.php', 'Runtime/FutureTest.php' ) as $path ) {
 			$in_scope = ! str_starts_with( $path, 'Runtime/' );
 			self::assertSame( array(), $this->naming_diagnostics( $path, $source ) );
 			self::assertSame( $in_scope, in_array( $method_code, $this->naming_diagnostics( $path, str_replace( 'owned_method', 'ownedMethod', $source ) ), true ), $path );
