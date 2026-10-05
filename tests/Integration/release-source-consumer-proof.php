@@ -7,17 +7,17 @@ $scenario = $argv[2] ?? 'happy';
 if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! in_array( $scenario, array( 'happy', 'liveness', 'discard', 'fence-list', 'fence-inspect', 'fence-acquire' ), true ) ) {
 	throw new RuntimeException( 'Pass a supported package type and consumer scenario.' );
 }
-$fixtureRepository   = 'acme/consumer';
-$fixtureRepositoryId = '99';
-$fixtureReleaseId    = 7;
+$fixture_repository    = 'acme/consumer';
+$fixture_repository_id = '99';
+$fixture_release_id    = 7;
 if ( 'fence-list' === $scenario ) {
-	$fixtureRepository   = 'acme/example-plugin';
-	$fixtureRepositoryId = '123456789';
+	$fixture_repository    = 'acme/example-plugin';
+	$fixture_repository_id = '123456789';
 }
 if ( 'fence-inspect' === $scenario ) {
-	$fixtureRepository   = 'acme/example-theme';
-	$fixtureRepositoryId = '987654321';
-	$fixtureReleaseId    = 42;
+	$fixture_repository    = 'acme/example-theme';
+	$fixture_repository_id = '987654321';
+	$fixture_release_id    = 42;
 }
 $root = sys_get_temp_dir() . '/release-source-consumer-' . $type . '-' . bin2hex( random_bytes( 8 ) );
 if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
@@ -134,22 +134,22 @@ function rs_copy_verified( string $source, string $destination, array $facts ): 
 	rs_assert( hash_equals( $facts['artifact_sha256'], (string) hash_file( 'sha256', $destination ) ), 'Prepared copy digest changed.' );
 }
 
-$zipPath = $root . '/fixture.zip';
-$zip     = new ZipArchive();
-rs_assert( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ), 'ZIP creation failed.' );
+$zip_path = $root . '/fixture.zip';
+$zip      = new ZipArchive();
+rs_assert( true === $zip->open( $zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ), 'ZIP creation failed.' );
 $entry = 'plugin' === $type ? 'consumer/consumer.php' : 'consumer/style.css';
-$zip->addFromString( $entry, 'plugin' === $type ? "<?php\n/*\nPlugin Name: Consumer\nVersion: 1.2.3\nUpdate URI: https://github.com/{$fixtureRepository}\nRequires at least: 6.5\nRequires PHP: 8.2\n*/" : "/*\nTheme Name: Consumer\nVersion: 1.2.3\nUpdate URI: https://github.com/{$fixtureRepository}\nRequires at least: 6.5\nRequires PHP: 8.2\n*/" );
+$zip->addFromString( $entry, 'plugin' === $type ? "<?php\n/*\nPlugin Name: Consumer\nVersion: 1.2.3\nUpdate URI: https://github.com/{$fixture_repository}\nRequires at least: 6.5\nRequires PHP: 8.2\n*/" : "/*\nTheme Name: Consumer\nVersion: 1.2.3\nUpdate URI: https://github.com/{$fixture_repository}\nRequires at least: 6.5\nRequires PHP: 8.2\n*/" );
 $zip->close();
-chmod( $zipPath, 0600 );
-$bytes = file_get_contents( $zipPath );
+chmod( $zip_path, 0600 );
+$bytes = file_get_contents( $zip_path );
 rs_assert( is_string( $bytes ), 'ZIP read failed.' );
 $release     = array(
-	'id'         => $fixtureReleaseId,
+	'id'         => $fixture_release_id,
 	'draft'      => false,
 	'prerelease' => false,
 	'immutable'  => true,
 	'tag_name'   => 'v1.2.3',
-	'html_url'   => 'https://github.com/' . $fixtureRepository . '/releases/tag/v1.2.3',
+	'html_url'   => 'https://github.com/' . $fixture_repository . '/releases/tag/v1.2.3',
 	'assets'     => array(
 		array(
 			'id'     => 8,
@@ -160,8 +160,8 @@ $release     = array(
 		),
 	),
 );
-$queueProof  = static function () use ( $release, $bytes, $fixtureRepositoryId ): void {
-	$GLOBALS['rs_responses'] = array( rs_response( array( 'id' => (int) $fixtureRepositoryId ) ), rs_response( $release ), rs_response( array( 'sha' => str_repeat( 'a', 40 ) ) ), rs_response( array( 'id' => (int) $fixtureRepositoryId ) ), rs_response( null, $bytes ), rs_response( array( 'id' => (int) $fixtureRepositoryId ) ) );
+$queue_proof = static function () use ( $release, $bytes, $fixture_repository_id ): void {
+	$GLOBALS['rs_responses'] = array( rs_response( array( 'id' => (int) $fixture_repository_id ) ), rs_response( $release ), rs_response( array( 'sha' => str_repeat( 'a', 40 ) ) ), rs_response( array( 'id' => (int) $fixture_repository_id ) ), rs_response( null, $bytes ), rs_response( array( 'id' => (int) $fixture_repository_id ) ) );
 };
 $credentials = 0;
 $registrar   = require dirname( __DIR__, 2 ) . '/bootstrap.php';
@@ -186,8 +186,8 @@ rs_assert(
 	) === $GLOBALS['rs_hooks'],
 	'Release source registered native hooks.'
 );
-$brokerFacts = $GLOBALS['ran_wp_release_updater_v1_broker']->diagnostics();
-rs_assert( 0 === $brokerFacts['submission_count'] && 0 === $brokerFacts['logical_target_count'], 'Release source bound a native target.' );
+$broker_facts = $GLOBALS['ran_wp_release_updater_v1_broker']->diagnostics();
+rs_assert( 0 === $broker_facts['submission_count'] && 0 === $broker_facts['logical_target_count'], 'Release source bound a native target.' );
 $before = $source->list();
 rs_assert( 'runtime_not_ready' === $before['code'], 'Source did not fail before readiness.' );
 rs_activate();
@@ -200,31 +200,31 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 	rs_assert( is_string( $fence ) && '' !== $fence && false !== base64_decode( $fence, true ), 'Fence source is required.' );
 	$fence = base64_decode( $fence, true );
 	if ( 'fence-acquire' === $scenario ) {
-		$queueProof();
+		$queue_proof();
 		$inspection = $source->inspect( '7', 'v1.2.3' );
 		rs_assert( $inspection['ok'], 'Fence prerequisite inspection failed.' );
 		$release_id                    = '7';
 		$tag                           = 'v1.2.3';
 		$fingerprint                   = $inspection['value']['fingerprint'];
 		$application_storage_directory = $root;
-		$queueProof();
+		$queue_proof();
 	} elseif ( 'fence-list' === $scenario ) {
 		$GLOBALS['rs_responses'] = array( rs_response( array( $release ) ) ); } else {
-		$queueProof(); }
-		$fenceRequestStart = count( $GLOBALS['rs_requests'] );
+		$queue_proof(); }
+		$fence_request_start = count( $GLOBALS['rs_requests'] );
 		eval( $fence );
 		foreach ( $GLOBALS['rs_hooks'] as $hook ) {
 			if ( 'init' === $hook['hook'] ) {
 				( $hook['callback'] )();
 			}
 		}
-		$fenceDelta = rs_delta( $fenceRequestStart );
+		$fence_delta = rs_delta( $fence_request_start );
 		if ( 'fence-list' === $scenario ) {
 			rs_assert(
 				array(
 					'requests' => 1,
 					'zips'     => 0,
-				) === $fenceDelta,
+				) === $fence_delta,
 				'README listing fence did not complete its public operation.'
 			);
 		} elseif ( 'fence-inspect' === $scenario ) {
@@ -232,7 +232,7 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 				array(
 					'requests' => 6,
 					'zips'     => 1,
-				) === $fenceDelta,
+				) === $fence_delta,
 				'README inspection fence did not complete its public operation.'
 			);
 		} else {
@@ -244,7 +244,7 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 				array(
 					'requests' => 6,
 					'zips'     => 1,
-				) === $fenceDelta,
+				) === $fence_delta,
 				'Acquisition fence did not complete its public operation.'
 			);
 			rs_assert( ! file_exists( $GLOBALS['rs_paths'][ count( $GLOBALS['rs_paths'] ) - 1 ] ), 'Acquisition fence retained its owned artifact.' );
@@ -262,24 +262,24 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 		) . PHP_EOL;
 	exit( 0 );
 }
-$listStart               = count( $GLOBALS['rs_requests'] );
+$list_start              = count( $GLOBALS['rs_requests'] );
 $GLOBALS['rs_responses'] = array( rs_response( array( $release ) ) );
 $list                    = $source->list();
 rs_assert( true === $list['ok'], 'Public list failed.' );
-$listDelta = rs_delta( $listStart );
-rs_assert_delta( 'list', $listDelta, 0 );
-$queueProof();
-$inspectStart = count( $GLOBALS['rs_requests'] );
-$inspection   = $source->inspect( '7', 'v1.2.3' );
+$list_delta = rs_delta( $list_start );
+rs_assert_delta( 'list', $list_delta, 0 );
+$queue_proof();
+$inspect_start = count( $GLOBALS['rs_requests'] );
+$inspection    = $source->inspect( '7', 'v1.2.3' );
 rs_assert( true === $inspection['ok'] && 'complete' === $inspection['cleanup_status'], 'Public inspect failed.' );
-$inspectDelta = rs_delta( $inspectStart );
-rs_assert_delta( 'inspect', $inspectDelta, 1 );
-$queueProof();
-$acquireStart = count( $GLOBALS['rs_requests'] );
-$acquisition  = $source->acquire( '7', 'v1.2.3', $inspection['value']['fingerprint'] );
+$inspect_delta = rs_delta( $inspect_start );
+rs_assert_delta( 'inspect', $inspect_delta, 1 );
+$queue_proof();
+$acquire_start = count( $GLOBALS['rs_requests'] );
+$acquisition   = $source->acquire( '7', 'v1.2.3', $inspection['value']['fingerprint'] );
 rs_assert( true === $acquisition['ok'] && 'retained' === $acquisition['cleanup_status'], 'Public acquire failed.' );
-$acquireDelta = rs_delta( $acquireStart );
-rs_assert_delta( 'acquire', $acquireDelta, 1 );
+$acquire_delta = rs_delta( $acquire_start );
+rs_assert_delta( 'acquire', $acquire_delta, 1 );
 rs_assert( array() === $GLOBALS['rs_responses'], 'Mock queue was not drained.' );
 rs_assert( 2 === count( $GLOBALS['rs_paths'] ), 'Inspection and acquisition must allocate exactly one artifact each.' );
 rs_assert( ! file_exists( $GLOBALS['rs_paths'][0] ), 'Inspection artifact was not removed.' );
@@ -345,9 +345,9 @@ echo json_encode(
 		'before'                => $before['code'],
 		'credential_operations' => $credentials,
 		'http'                  => array(
-			'list'    => $listDelta,
-			'inspect' => $inspectDelta,
-			'acquire' => $acquireDelta,
+			'list'    => $list_delta,
+			'inspect' => $inspect_delta,
+			'acquire' => $acquire_delta,
 		),
 	),
 	JSON_THROW_ON_ERROR

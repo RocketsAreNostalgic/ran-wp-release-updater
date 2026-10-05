@@ -6,41 +6,41 @@ $output = getenv( 'RAN_UPDATER_NETWORK_OUTPUT' );
 if ( ! is_string( $output ) || '' === $output ) {
 	throw new RuntimeException( 'Network output is missing.' );
 }
-$handle          = $GLOBALS['ran_network_handle'] ?? null;
-$duplicateHandle = $GLOBALS['ran_network_duplicate_handle'] ?? null;
-$broker          = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
-if ( ! is_object( $handle ) || ! is_object( $duplicateHandle ) || ! is_object( $broker ) ) {
+$handle           = $GLOBALS['ran_network_handle'] ?? null;
+$duplicate_handle = $GLOBALS['ran_network_duplicate_handle'] ?? null;
+$broker           = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
+if ( ! is_object( $handle ) || ! is_object( $duplicate_handle ) || ! is_object( $broker ) ) {
 	throw new RuntimeException( 'Network target did not boot with its duplicate declaration.' );
 }
 
-$duplicateAccepted = $duplicateHandle->register();
-$providerBefore    = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
-$pluginData        = get_plugin_data( WP_PLUGIN_DIR . '/ran-network-target/main.php', false, false );
-apply_filters( 'update_plugins_github.com', false, $pluginData, 'ran-network-target/main.php', array() );
-$providerAfter = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
+$duplicate_accepted = $duplicate_handle->register();
+$provider_before    = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
+$plugin_data        = get_plugin_data( WP_PLUGIN_DIR . '/ran-network-target/main.php', false, false );
+apply_filters( 'update_plugins_github.com', false, $plugin_data, 'ran-network-target/main.php', array() );
+$provider_after = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
 
-$networkId = get_current_network_id();
-$key       = 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
+$network_id = get_current_network_id();
+$key        = 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
 	array(
-		'network_id'                 => $networkId,
+		'network_id'                 => $network_id,
 		'target_type'                => 'plugin',
 		'installed_package_identity' => 'ran-network-target/main.php',
 	)
 );
 global $wpdb;
-$raw                = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->base_prefix}options WHERE option_name = %s LIMIT 1", $key ) );
-$state              = is_string( $raw ) ? json_decode( $raw, true ) : null;
-$diagnostics        = $broker->diagnostics();
-$providerSuppressed = 0 === ( $providerAfter - $providerBefore );
-$nativeCallbacks    = nativeCallbacks( 'update_plugins_github.com' );
-$proof              = array(
+$raw                 = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->base_prefix}options WHERE option_name = %s LIMIT 1", $key ) );
+$state               = is_string( $raw ) ? json_decode( $raw, true ) : null;
+$diagnostics         = $broker->diagnostics();
+$provider_suppressed = 0 === ( $provider_after - $provider_before );
+$native_callbacks    = nativeCallbacks( 'update_plugins_github.com' );
+$proof               = array(
 	'blog_id'                         => get_current_blog_id(),
-	'network_id'                      => $networkId,
-	'duplicate_registration_accepted' => $duplicateAccepted,
+	'network_id'                      => $network_id,
+	'duplicate_registration_accepted' => $duplicate_accepted,
 	'logical_target_count'            => $diagnostics['logical_target_count'] ?? null,
-	'native_callback_count'           => count( $nativeCallbacks ),
-	'provider_callback_delta'         => $providerAfter - $providerBefore,
-	'suppressed_provider'             => $providerSuppressed,
+	'native_callback_count'           => count( $native_callbacks ),
+	'provider_callback_delta'         => $provider_after - $provider_before,
+	'suppressed_provider'             => $provider_suppressed,
 	'option'                          => array(
 		'name'                => $key,
 		'present'             => is_array( $state ),

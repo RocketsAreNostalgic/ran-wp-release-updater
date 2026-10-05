@@ -20,9 +20,9 @@ if ( '--worker' === ( $argv[1] ?? null ) ) {
 	exit( 0 );
 }
 
-$root        = null;
-$server      = null;
-$originalCwd = getcwd();
+$root         = null;
+$server       = null;
+$original_cwd = getcwd();
 try {
 	$root   = createIsolatedRoot();
 	$data   = $root . '/data';
@@ -66,8 +66,8 @@ try {
 	$cold    = workers( 'cold', $data );
 	assertOneClaim( $cold, 'cold claim' );
 	$winner                       = claimed( $cold );
-	$winnerState                  = BindingState::rehydrate( $winner['state'] );
-	list( $descriptor, $receipt ) = mintReceipt( $root . '/receipt.zip', $winnerState );
+	$winner_state                 = BindingState::rehydrate( $winner['state'] );
+	list( $descriptor, $receipt ) = mintReceipt( $root . '/receipt.zip', $winner_state );
 	$target                       = targetName( $binding );
 	$rows                         = $mysqli->query( 'SELECT option_name, autoload FROM options ORDER BY option_name' )->fetch_all( MYSQLI_ASSOC );
 	if ( 1 !== count( $rows ) || 'no' !== $rows[0]['autoload'] ) {
@@ -81,8 +81,8 @@ try {
 		throw new RuntimeException( 'Takeover did not install a new owner and target fence epoch.' );
 	}
 	$database   = new MysqliOptionDatabase( connectProof(), 'options' );
-	$stale      = BindingFenceCoordinator::verify_persistent_binding_state( $database, $winnerState, claim( $winner['state'] ) );
-	$completion = BindingFenceCoordinator::complete_persistent_install( $database, $winnerState, claim( $winner['state'] ), $receipt, $descriptor );
+	$stale      = BindingFenceCoordinator::verify_persistent_binding_state( $database, $winner_state, claim( $winner['state'] ) );
+	$completion = BindingFenceCoordinator::complete_persistent_install( $database, $winner_state, claim( $winner['state'] ), $receipt, $descriptor );
 	if ( 'binding_fence_lost' !== $stale['result'] || 'binding_fence_lost' !== $completion['result'] ) {
 		throw new RuntimeException( 'Stale writer or completion was not fenced.' );
 	}
@@ -103,8 +103,8 @@ try {
 	if ( is_resource( $server ) ) {
 		stopServer( $server );
 	}
-	if ( is_string( $originalCwd ) ) {
-		chdir( $originalCwd );
+	if ( is_string( $original_cwd ) ) {
+		chdir( $original_cwd );
 	}
 	if ( is_string( $root ) ) {
 		removeTree( $root );
@@ -113,8 +113,8 @@ try {
 
 /** @param list<string> $argv */
 function worker( array $argv ): void {
-	$startAt = (int) $argv[4];
-	while ( hrtime( true ) < $startAt ) {
+	$start_at = (int) $argv[4];
+	while ( hrtime( true ) < $start_at ) {
 		usleep( 1000 );
 	}
 	$database = new MysqliOptionDatabase( connectProof(), 'options' );
@@ -140,13 +140,13 @@ function worker( array $argv ): void {
 /** @return list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> */
 function workers( string $scenario, string $data ): array {
 	$processes = array();
-	$startAt   = hrtime( true ) + 500000000;
+	$start_at  = hrtime( true ) + 500000000;
 	$owners    = 'takeover' === $scenario
 		? array( str_repeat( 'c', 64 ), str_repeat( 'd', 64 ) )
 		: array( str_repeat( 'a', 64 ), str_repeat( 'b', 64 ) );
 	foreach ( $owners as $owner ) {
 		$processes[]                               = proc_open(
-			array( PHP_BINARY, __FILE__, '--worker', $owner, $scenario, (string) $startAt ),
+			array( PHP_BINARY, __FILE__, '--worker', $owner, $scenario, (string) $start_at ),
 			array(
 				0 => array( 'pipe', 'r' ),
 				1 => array( 'pipe', 'w' ),

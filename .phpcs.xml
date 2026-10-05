@@ -35,12 +35,13 @@
 		<include-pattern>/tests/Runtime/</include-pattern>
 		<include-pattern>/tests/WordPress/</include-pattern>
 		<include-pattern>/tests/Support/</include-pattern>
-		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/|WordPress/|Support/)</exclude-pattern>
+		<include-pattern>/tests/Integration/</include-pattern>
+		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/|WordPress/|Support/|Integration/)</exclude-pattern>
 	</rule>
 
-	<!-- Archive, Contract, Dependency, Provider, Runtime, WordPress and Support tests share owned naming; other fixture cohorts remain separate. -->
+	<!-- Archive, Contract, Dependency, Provider, Runtime, WordPress, Support and Integration tests share owned naming; other fixture cohorts remain separate. -->
 	<rule ref="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid">
-		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/|WordPress/|Support/)</exclude-pattern>
+		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/|WordPress/|Support/|Integration/)</exclude-pattern>
 	</rule>
 	<!-- Match owned-method scope; no production variable-naming suppression remains. -->
 	<rule ref="WordPress.NamingConventions.ValidVariableName">
@@ -55,7 +56,8 @@
 		<include-pattern>/tests/Runtime/</include-pattern>
 		<include-pattern>/tests/WordPress/</include-pattern>
 		<include-pattern>/tests/Support/</include-pattern>
-		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/|WordPress/|Support/)</exclude-pattern>
+		<include-pattern>/tests/Integration/</include-pattern>
+		<exclude-pattern>/tests/(?!Archive/|Contract/|Dependency/|Provider/|Runtime/|WordPress/|Support/|Integration/)</exclude-pattern>
 	</rule>
 	<!-- Synthetic WordPress/SQL and performance fixtures retain their purpose-built conditions. -->
 	<rule ref="WordPress.PHP.YodaConditions">

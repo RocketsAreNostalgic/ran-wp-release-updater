@@ -16,8 +16,8 @@ if ( ! mkdir( $root, 0700 ) ) {
 	throw new RuntimeException( 'Could not create setup-failure proof root.' );
 }
 
-$originalRoot   = getenv( 'RAN_UPDATER_MYSQL_ROOT' );
-$originalMysqld = getenv( 'RAN_UPDATER_MYSQLD_BIN' );
+$original_root   = getenv( 'RAN_UPDATER_MYSQL_ROOT' );
+$original_mysqld = getenv( 'RAN_UPDATER_MYSQLD_BIN' );
 try {
 	putenv( 'RAN_UPDATER_MYSQL_ROOT=' . $root );
 	putenv( 'RAN_UPDATER_MYSQLD_BIN=' . $root . '/not-mysqld' );
@@ -54,15 +54,15 @@ try {
 		JSON_THROW_ON_ERROR
 	) . PHP_EOL;
 } finally {
-	if ( false === $originalRoot ) {
+	if ( false === $original_root ) {
 		putenv( 'RAN_UPDATER_MYSQL_ROOT' );
 	} else {
-		putenv( 'RAN_UPDATER_MYSQL_ROOT=' . $originalRoot );
+		putenv( 'RAN_UPDATER_MYSQL_ROOT=' . $original_root );
 	}
-	if ( false === $originalMysqld ) {
+	if ( false === $original_mysqld ) {
 		putenv( 'RAN_UPDATER_MYSQLD_BIN' );
 	} else {
-		putenv( 'RAN_UPDATER_MYSQLD_BIN=' . $originalMysqld );
+		putenv( 'RAN_UPDATER_MYSQLD_BIN=' . $original_mysqld );
 	}
 	if ( is_dir( $root ) && array() === array_values( array_diff( scandir( $root ) ?: array(), array( '.', '..' ) ) ) ) {
 		rmdir( $root );

@@ -1,21 +1,21 @@
 <?php
 
 declare( strict_types = 1 );
-$root          = realpath( __DIR__ . '/../../' ) ?: dirname( __DIR__, 2 );
-$wpRootInput   = getenv( 'RAN_WP_RELEASE_UPDATER_LOCAL_WP_ROOT' );
-$wpRoot        = is_string( $wpRootInput ) && '' !== $wpRootInput ? realpath( $wpRootInput ) : false;
-$marker        = 'RAN_WP_RELEASE_UPDATER_MIXED_BULK';
-$base          = '/private/tmp/' . strtolower( $marker ) . '-' . bin2hex( random_bytes( 16 ) );
-$markerFile    = $base . '/' . $marker . '.marker';
-$site          = $base . '/site';
-$dbName        = 'ran_updater_mixed_bulk_' . random_int( 100000, 999999 );
-$socket        = $base . '/mysql/mysql.sock';
-$mysqld        = getenv( 'RAN_UPDATER_MYSQLD_BIN' ) ?: '/Applications/Local.app/Contents/Resources/extraResources/lightning-services/mysql-8.4.0/bin/darwin-arm64/bin/mysqld';
-$phpCandidates = glob( '/Applications/Local.app/Contents/Resources/extraResources/lightning-services/php-8.2*/bin/darwin-arm64/bin/php' );
-$php           = getenv( 'RAN_WP_RELEASE_UPDATER_PHP82' ) ?: ( $phpCandidates[0] ?? '' );
-$wp            = '/usr/local/bin/wp';
-$server        = null;
-$result        = array(
+$root           = realpath( __DIR__ . '/../../' ) ?: dirname( __DIR__, 2 );
+$wp_root_input  = getenv( 'RAN_WP_RELEASE_UPDATER_LOCAL_WP_ROOT' );
+$wp_root        = is_string( $wp_root_input ) && '' !== $wp_root_input ? realpath( $wp_root_input ) : false;
+$marker         = 'RAN_WP_RELEASE_UPDATER_MIXED_BULK';
+$base           = '/private/tmp/' . strtolower( $marker ) . '-' . bin2hex( random_bytes( 16 ) );
+$marker_file    = $base . '/' . $marker . '.marker';
+$site           = $base . '/site';
+$db_name        = 'ran_updater_mixed_bulk_' . random_int( 100000, 999999 );
+$socket         = $base . '/mysql/mysql.sock';
+$mysqld         = getenv( 'RAN_UPDATER_MYSQLD_BIN' ) ?: '/Applications/Local.app/Contents/Resources/extraResources/lightning-services/mysql-8.4.0/bin/darwin-arm64/bin/mysqld';
+$php_candidates = glob( '/Applications/Local.app/Contents/Resources/extraResources/lightning-services/php-8.2*/bin/darwin-arm64/bin/php' );
+$php            = getenv( 'RAN_WP_RELEASE_UPDATER_PHP82' ) ?: ( $php_candidates[0] ?? '' );
+$wp             = '/usr/local/bin/wp';
+$server         = null;
+$result         = array(
 	'marker' => $marker,
 	'status' => 'errored',
 );
@@ -23,14 +23,14 @@ if (
 	'/private/tmp' !== realpath( dirname( $base ) )
 	|| file_exists( $base )
 	|| is_link( $base )
-	|| false === $wpRoot
-	|| ! is_file( $wpRoot . '/wp-load.php' )
-	|| ! is_file( $wpRoot . '/wp-settings.php' )
-	|| ! is_file( $wpRoot . '/wp-includes/version.php' )
+	|| false === $wp_root
+	|| ! is_file( $wp_root . '/wp-load.php' )
+	|| ! is_file( $wp_root . '/wp-settings.php' )
+	|| ! is_file( $wp_root . '/wp-includes/version.php' )
 ) {
 	throw new RuntimeException( 'Refusing an unsafe disposable mixed-bulk proof root.' );
 }
-if ( ! mkdir( $base, 0700 ) || $base !== realpath( $base ) || ! file_put_contents( $markerFile, $marker . "\n" ) ) {
+if ( ! mkdir( $base, 0700 ) || $base !== realpath( $base ) || ! file_put_contents( $marker_file, $marker . "\n" ) ) {
 	throw new RuntimeException( 'Could not establish the owned disposable proof root.' );
 }
 try {
@@ -54,21 +54,21 @@ try {
 	}
 	fclose( $pipes[0] );
 	$db = connect( $socket );
-	$db->query( 'CREATE DATABASE `' . $db->real_escape_string( $dbName ) . '`' );
+	$db->query( 'CREATE DATABASE `' . $db->real_escape_string( $db_name ) . '`' );
 	$db->close();
-	copyTree( $wpRoot, $site, array( '.git', 'wp-content', 'wp-config.php', '.well-known' ) );
+	copyTree( $wp_root, $site, array( '.git', 'wp-content', 'wp-config.php', '.well-known' ) );
 	foreach ( array( 'plugins', 'themes', 'uploads' ) as $dir ) {
 		mkdir( $site . '/wp-content/' . $dir, 0700, true );
 	}
 	copyTree( $root, $site . '/wp-content/plugins/ran-wp-release-updater', array( 'tests', '.git', '.github', 'vendor', 'node_modules' ) );
-	file_put_contents( $site . '/wp-config.php', config( $dbName, $socket ) );
-	$env           = array(
+	file_put_contents( $site . '/wp-config.php', config( $db_name, $socket ) );
+	$env            = array(
 		'DB_HOST'     => 'localhost:' . $socket,
 		'DB_USER'     => 'root',
 		'DB_PASSWORD' => '',
 	);
-	$adminPassword = bin2hex( random_bytes( 32 ) );
-	run( array( $php, $wp, '--path=' . $site, 'core', 'install', '--skip-email', '--url=http://127.0.0.1', '--title=mixed-bulk', '--admin_user=admin', '--prompt=admin_password', '--admin_email=admin@example.test' ), $site, $env, $adminPassword . "\n" );
+	$admin_password = bin2hex( random_bytes( 32 ) );
+	run( array( $php, $wp, '--path=' . $site, 'core', 'install', '--skip-email', '--url=http://127.0.0.1', '--title=mixed-bulk', '--admin_user=admin', '--prompt=admin_password', '--admin_email=admin@example.test' ), $site, $env, $admin_password . "\n" );
 	$scenarios = array( array( 'plugin', 'success' ), array( 'theme', 'success' ), array( 'plugin', 'failure' ), array( 'theme', 'failure' ) );
 	$proofs    = array();
 	foreach ( $scenarios as $scenario ) {
@@ -86,7 +86,7 @@ try {
 			$site,
 			$env + array(
 				'RAN_WP_RELEASE_UPDATER_MIXED_BULK'        => $marker,
-				'RAN_WP_RELEASE_UPDATER_MARKER_FILE'       => $markerFile,
+				'RAN_WP_RELEASE_UPDATER_MARKER_FILE'       => $marker_file,
 				'RAN_WP_RELEASE_UPDATER_SOURCE_ROOT'       => $site . '/wp-content/plugins/ran-wp-release-updater',
 				'RAN_WP_RELEASE_UPDATER_MIXED_BULK_OUTPUT' => $output,
 				'RAN_WP_RELEASE_UPDATER_BULK_TYPE'         => $type,
@@ -117,7 +117,7 @@ try {
 		proc_close( $server );
 	}
 	if ( file_exists( $base ) ) {
-		if ( is_link( $base ) || $base !== realpath( $base ) || ! is_file( $markerFile ) || $marker . "\n" !== file_get_contents( $markerFile ) ) {
+		if ( is_link( $base ) || $base !== realpath( $base ) || ! is_file( $marker_file ) || $marker . "\n" !== file_get_contents( $marker_file ) ) {
 			throw new RuntimeException( 'Refusing unvalidated disposable proof cleanup.' );
 		}
 		removeTree( $base );
