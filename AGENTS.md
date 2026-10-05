@@ -10,23 +10,22 @@ This repository uses the RAN `php-library` quality profile. PHP coding and
 compatibility ancestry comes from `ran/coding-standards` through
 `RANWordPressLibrary`; the tracked Composer lock binds the published v1.0.0 release
 under the `^1.0` development constraint.
-`RANOwnedMethods` and variable naming cover all maintained PHP under `src/`,
-root `bootstrap.php`/`runtime.php`, `scripts/`, and the bounded test cohort
-`tests/Archive`, `tests/Contract`, `tests/Dependency`, `tests/Provider`,
-`tests/Runtime`, `tests/WordPress`, `tests/Support`, `tests/Integration`, including future files in
-those roots.
+`RANOwnedMethods` and variable naming cover all maintained PHP, including every
+current and future test root. Yoda conditions, unused parameters and reserved
+parameter names likewise have no test file/root exclusions. Required foreign
+signatures use exact declaration-local exceptions recorded in acceptance.
 The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded and is
 namespace-only parity checked against the locked upstream package. All 36
 shipped PHP files, including that generated copy, remain directly analysed at
 PHPStan level 8.
 
-Other purpose-built test harnesses/fixture interfaces retain their naming boundary;
+Purpose-built test harnesses and fixture interfaces follow owned naming;
 actual production calls, named arguments, Reflection seams and callback strings
 must follow the production API. This does not exempt a production class because
 it inherits or implements an interface. New owned methods must be snake_case;
 PHP magic signatures remain recognized. An externally required non-snake name
 needs a declaration-local justification, never a whole-class exemption.
-Within the selected test cohort, owned tests/helpers and provider methods use
+Across all tests, owned tests/helpers and provider methods use
 snake_case; update DataProvider references with their declarations. PHPUnit
 `setUp`/`tearDown` overrides keep exact declaration-local exceptions. Preserve
 foreign APIs, Reflection targets, wire keys and embedded fixture bytes.

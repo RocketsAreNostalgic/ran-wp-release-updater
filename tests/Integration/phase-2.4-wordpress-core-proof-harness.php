@@ -4,7 +4,7 @@ $source_root          = getenv( 'RAN_WP_RELEASE_UPDATER_SOURCE_ROOT' );
 $marker_file          = getenv( 'RAN_WP_RELEASE_UPDATER_MARKER_FILE' );
 $marker_root          = $marker_file ? realpath( dirname( $marker_file ) ) : false;
 $expected_source_root = is_string( $marker_root ) ? $marker_root . '/site/wp-content/plugins/ran-wp-release-updater' : '';
-if ( ! is_string( $source_root ) || $expected_source_root !== realpath( $source_root ) || ! is_file( $expected_source_root . '/bootstrap.php' ) || ! is_file( $expected_source_root . '/runtime.php' ) ) {
+if ( ! is_string( $source_root ) || realpath( $source_root ) !== $expected_source_root || ! is_file( $expected_source_root . '/bootstrap.php' ) || ! is_file( $expected_source_root . '/runtime.php' ) ) {
 	throw new RuntimeException( 'Harness source must be the copied disposable updater source.' );
 }
 
@@ -53,8 +53,8 @@ add_filter(
 $mail_attempts = 0;
 add_filter(
 	'pre_wp_mail',
-	static function ( mixed $return, array $attributes ) use ( &$mail_attempts ): bool {
-		unset( $return, $attributes );
+	static function ( mixed $mail_return, array $attributes ) use ( &$mail_attempts ): bool {
+		unset( $mail_return, $attributes );
 		++$mail_attempts;
 		return true;
 	},
@@ -78,7 +78,7 @@ $target_type      = getenv( 'RAN_WP_RELEASE_UPDATER_TARGET_TYPE' );
 
 $marker_root    = $marker_file ? realpath( dirname( $marker_file ) ) : false;
 $workspace_root = $marker_root ? realpath( dirname( $marker_root ) ) : false;
-if ( 'RAN_WP_RELEASE_UPDATER_PHASE24' !== $marker || ! $marker_file || ! is_file( $marker_file ) || is_link( $marker_file ) || $marker . "\n" !== file_get_contents( $marker_file ) || false === $marker_root || false === $workspace_root || ! str_ends_with( str_replace( '\\', '/', $workspace_root ), '/.workspaces/p0.4' ) || ! in_array( $mode, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $failure_stage, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $target_type, array( 'plugin', 'theme' ), true ) || ! is_string( $archive ) || ! is_file( $archive ) ) {
+if ( 'RAN_WP_RELEASE_UPDATER_PHASE24' !== $marker || ! $marker_file || ! is_file( $marker_file ) || is_link( $marker_file ) || file_get_contents( $marker_file ) !== $marker . "\n" || false === $marker_root || false === $workspace_root || ! str_ends_with( str_replace( '\\', '/', $workspace_root ), '/.workspaces/p0.4' ) || ! in_array( $mode, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $failure_stage, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $target_type, array( 'plugin', 'theme' ), true ) || ! is_string( $archive ) || ! is_file( $archive ) ) {
 	throw new RuntimeException( 'Guarded phase-2.4 harness missing required marker/env settings.' );
 }
 
@@ -130,7 +130,7 @@ if ( ! $network_guard_proved ) {
 
 $identity = 'plugin' === $target_type ? $plugin_id : $theme_id;
 $uri      = 'plugin' === $target_type ? $plugin_uri : $theme_uri;
-$target   = build_target( $target_type, $identity, $uri, $archive, 'success' === $mode ? '1.0.0' : '2.0.0', 'success' === $mode ? '2.0.0' : '3.0.0' );
+$target   = build_target( $target_type, $identity, $uri, $archive, 'success' === $mode ? '1.0.0' : '2.0.0' );
 
 $evidence = array(
 	'marker'                          => $marker,
@@ -175,7 +175,7 @@ add_action(
 );
 
 /** @return array<string,mixed> */
-function build_target( string $type, string $identity, string $uri, string $archive, string $installed_version, string $release_version ): array {
+function build_target( string $type, string $identity, string $uri, string $archive, string $installed_version ): array {
 	$policy        = getenv( 'RAN_WP_RELEASE_UPDATER_POLICY' ) ?: 'manual';
 	$failure_stage = getenv( 'RAN_WP_RELEASE_UPDATER_FAILURE_STAGE' );
 	$handles       = $GLOBALS['phase24_handles'] ?? null;
@@ -199,7 +199,7 @@ function build_target( string $type, string $identity, string $uri, string $arch
 		static function ( mixed $reply, string $package, mixed $upgrader, array $hook_extra ) use ( $type, $identity, $package_observation ): mixed {
 			unset( $upgrader );
 			$key = 'plugin' === $type ? 'plugin' : 'theme';
-			if ( $identity === ( $hook_extra[ $key ] ?? null ) ) {
+			if ( ( $hook_extra[ $key ] ?? null ) === $identity ) {
 				++$package_observation->calls;
 				$package_observation->package = $package;
 			}
@@ -345,7 +345,7 @@ function run_core_upgrade_failure_scenario( array $target, string $failure_stage
 	);
 	$inject_failure = static function ( mixed $response, array $hook_extra, array $install_result ) use ( $type, $identity, &$injected ): mixed {
 		$key = 'plugin' === $type ? 'plugin' : 'theme';
-		if ( $identity !== ( $hook_extra[ $key ] ?? null ) || ! is_array( $install_result ) ) {
+		if ( ( $hook_extra[ $key ] ?? null ) !== $identity || ! is_array( $install_result ) ) {
 			return $response;
 		}
 		$injected['post_copy_seen']      = true;

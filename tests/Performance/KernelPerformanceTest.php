@@ -20,8 +20,8 @@ use Tests\Support\FakeOptionDatabase;
  */
 final class KernelPerformanceTest extends TestCase {
 
-	public function testWarmNeutralKernelTupleHasGenerousLocalResourceBudgets(): void {
-		$binding  = BindingRecord::create( $this->bindingFacts() );
+	public function test_warm_neutral_kernel_tuple_has_generous_local_resource_budgets(): void {
+		$binding  = BindingRecord::create( $this->binding_facts() );
 		$database = new FakeOptionDatabase( 100 );
 		$claimed  = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 600 );
 		self::assertSame( 'claimed', $claimed['result'] );
@@ -31,21 +31,21 @@ final class KernelPerformanceTest extends TestCase {
 			CanonicalUpdateUri::canonicalize_boundaries( $this->boundaries() );
 			BindingFenceCoordinator::verify_persistent_binding_state( $database, $state, $claim );
 		}
-		$memoryBefore = memory_get_usage( true );
-		$cpuBefore    = $this->cpuNanoseconds();
-		$started      = hrtime( true );
+		$memory_before = memory_get_usage( true );
+		$cpu_before    = $this->cpu_nanoseconds();
+		$started       = hrtime( true );
 		for ( $index = 0; $index < 1000; ++$index ) {
-			$uri          = CanonicalUpdateUri::canonicalize_boundaries( $this->boundaries() );
-			$verifyResult = BindingFenceCoordinator::verify_persistent_binding_state( $database, $state, $claim );
+			$uri           = CanonicalUpdateUri::canonicalize_boundaries( $this->boundaries() );
+			$verify_result = BindingFenceCoordinator::verify_persistent_binding_state( $database, $state, $claim );
 		}
-		$elapsedNanoseconds    = hrtime( true ) - $started;
-		$cpuElapsedNanoseconds = $this->cpuNanoseconds() - $cpuBefore;
+		$elapsed_nanoseconds     = hrtime( true ) - $started;
+		$cpu_elapsed_nanoseconds = $this->cpu_nanoseconds() - $cpu_before;
 
 		self::assertSame( 'https://updates.example.test/owner/package', $uri );
-		self::assertSame( 'verified', $verifyResult['result'] );
-		self::assertLessThan( 5_000_000_000, $elapsedNanoseconds, 'One thousand warm local neutral-kernel tuples exceeded the deliberately generous five-second wall budget.' );
-		self::assertLessThan( 4_000_000_000, $cpuElapsedNanoseconds, 'One thousand warm local neutral-kernel tuples exceeded the deliberately generous four-second CPU budget.' );
-		self::assertLessThan( 16 * 1024 * 1024, memory_get_usage( true ) - $memoryBefore, 'The warm neutral-kernel tuple retained more than the deliberately generous sixteen-megabyte memory budget.' );
+		self::assertSame( 'verified', $verify_result['result'] );
+		self::assertLessThan( 5_000_000_000, $elapsed_nanoseconds, 'One thousand warm local neutral-kernel tuples exceeded the deliberately generous five-second wall budget.' );
+		self::assertLessThan( 4_000_000_000, $cpu_elapsed_nanoseconds, 'One thousand warm local neutral-kernel tuples exceeded the deliberately generous four-second CPU budget.' );
+		self::assertLessThan( 16 * 1024 * 1024, memory_get_usage( true ) - $memory_before, 'The warm neutral-kernel tuple retained more than the deliberately generous sixteen-megabyte memory budget.' );
 	}
 
 	/** @return array<string,string> */
@@ -56,7 +56,7 @@ final class KernelPerformanceTest extends TestCase {
 			'offer'             => 'https://updates.example.test/owner/package',
 			'staged_package'    => 'https://updates.example.test/owner/package',
 		); }
-	private function cpuNanoseconds(): int {
+	private function cpu_nanoseconds(): int {
 		$usage = getrusage();
 		return ( (int) $usage['ru_utime.tv_sec'] + (int) $usage['ru_stime.tv_sec'] ) * 1_000_000_000 + ( (int) $usage['ru_utime.tv_usec'] + (int) $usage['ru_stime.tv_usec'] ) * 1000; }
 
@@ -94,7 +94,7 @@ final class KernelPerformanceTest extends TestCase {
 	}
 
 	/** @return array<string,mixed> */
-	private function bindingFacts(): array {
+	private function binding_facts(): array {
 		return array(
 			'canonical_repository_locator' => 'owner/package',
 			'canonical_update_uri'         => 'https://updates.example.test/owner/package',

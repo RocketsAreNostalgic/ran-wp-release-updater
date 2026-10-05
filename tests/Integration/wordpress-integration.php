@@ -283,9 +283,9 @@ function writeFile( string $path, string $bytes ): void {
 	requireFact( strlen( $bytes ) === file_put_contents( $path, $bytes, LOCK_EX ), 'Could not write a fixture file.' );
 }
 
-function ownDirectory( string $parent, string $prefix ): string {
+function ownDirectory( string $parent_directory, string $prefix ): string {
 	global $owned_directories;
-	$path = makeDirectory( $parent . '/' . $prefix . bin2hex( random_bytes( 6 ) ) );
+	$path = makeDirectory( $parent_directory . '/' . $prefix . bin2hex( random_bytes( 6 ) ) );
 	try {
 		writeFile( $path . '/.integration-owner', INTEGRATION_MARKER ); } catch ( Throwable $error ) {
 		rmdir( $path );

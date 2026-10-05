@@ -266,7 +266,7 @@ function assertFinalRows( MysqliOptionDatabase $database, BindingRecord $binding
 	$target = $database->get_var( $database->prepare( "SELECT option_value FROM {$database->options} WHERE option_name = %s LIMIT 1", targetName( $binding ) ) );
 	if ( ! is_string( $target ) || null === $winner['state'] ) {
 		throw new RuntimeException( 'Final coordinator row is missing.' );
-	} if ( $winner['state'] !== json_decode( $target, true, 64, JSON_THROW_ON_ERROR ) ) {
+	} if ( json_decode( $target, true, 64, JSON_THROW_ON_ERROR ) !== $winner['state'] ) {
 		throw new RuntimeException( 'Final self-contained state does not match the selected winner.' );
 	} }
 /** @param array<string,mixed> $facts */

@@ -47,14 +47,19 @@ function WP_Filesystem(): bool {
 	$GLOBALS['wp_filesystem'] = new WP_Filesystem_Direct();
 	return true;
 }
+// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WordPress requires this positional stub signature; this consumer proof intentionally ignores these inputs.
 function add_action( string $hook, callable $callback, int $priority = 10, int $arguments = 1 ): void {
 	$GLOBALS['rs_hooks'][] = compact( 'hook', 'callback', 'priority' ); }
+// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WordPress requires this positional stub signature; this consumer proof intentionally ignores these inputs.
 function add_filter( string $hook, callable $callback, int $priority = 10, int $arguments = 1 ): void {
 	$GLOBALS['rs_hooks'][] = compact( 'hook', 'callback', 'priority' ); }
+// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- WordPress requires this positional stub signature; this consumer proof intentionally ignores these inputs.
 function doing_action( string $hook ): bool {
 	return false; }
+// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- WordPress requires this positional stub signature; this consumer proof intentionally ignores these inputs.
 function did_action( string $hook ): int {
 	return 0; }
+// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- WordPress requires this positional stub signature; this consumer proof intentionally ignores these inputs.
 function wp_tempnam( string $name ): string|false {
 	$path = tempnam( $GLOBALS['rs_root'], 'rs-' );
 	if ( is_string( $path ) ) {
@@ -130,7 +135,7 @@ function rs_copy_verified( string $source, string $destination, array $facts ): 
 	} finally {
 		fclose( $input );
 		fclose( $output ); }
-	rs_assert( $size === filesize( $destination ), 'Prepared copy size changed.' );
+	rs_assert( filesize( $destination ) === $size, 'Prepared copy size changed.' );
 	rs_assert( hash_equals( $facts['artifact_sha256'], (string) hash_file( 'sha256', $destination ) ), 'Prepared copy digest changed.' );
 }
 
