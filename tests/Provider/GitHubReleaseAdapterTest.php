@@ -32,15 +32,20 @@ namespace {
 				throw new RuntimeException( 'Unexpected GitHub test request.' );
 			}
 			if ( isset( $args['filename'], $response['file'] ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for provider response and archive fixtures; WordPress helpers would alter the boundary under test.
 				file_put_contents( $args['filename'], $response['file'] );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 				chmod( $args['filename'], 0600 );
 			}
 			if ( isset( $args['filename'], $response['file_size'] ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- The fixture needs the native stream mode and handle, including exclusive creation or archive truncation semantics.
 				$handle = fopen( $args['filename'], 'c+b' );
 				if ( false === $handle || ! ftruncate( $handle, $response['file_size'] ) ) {
 					throw new RuntimeException( 'Could not create the sparse GitHub test response.' );
 				}
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 				fclose( $handle );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 				chmod( $args['filename'], 0600 );
 			}
 			return $response;
@@ -76,6 +81,7 @@ namespace {
 			unset( $filename );
 			$path = tempnam( sys_get_temp_dir(), 'ran-github-test-' );
 			if ( is_string( $path ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 				chmod( $path, 0600 );
 				$GLOBALS['ran_github_temp_paths'][] = $path;
 			}
@@ -105,6 +111,7 @@ namespace RAN\WPReleaseUpdater\V1\Provider\GitHub {
 			--$GLOBALS['ran_github_chmod_failures'];
 			return false;
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- The namespaced test seam delegates to native chmod after the injected permission-failure case.
 		return \chmod( $path, $permissions );
 	}
 
@@ -124,6 +131,7 @@ namespace RAN\WPReleaseUpdater\V1\Provider\GitHub {
 			--$GLOBALS['ran_github_unlink_failures'];
 			return false;
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- The namespaced test seam delegates to native unlink after the injected deletion-failure case.
 		return \unlink( $path );
 	}
 }
@@ -162,6 +170,7 @@ namespace Tests\Provider {
 		protected function tearDown(): void {
 			foreach ( $GLOBALS['ran_github_temp_paths'] as $path ) {
 				if ( is_string( $path ) && ( is_file( $path ) || is_link( $path ) ) ) {
+					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 					@unlink( $path );
 				}
 			}
@@ -581,6 +590,7 @@ namespace Tests\Provider {
 			}
 			$unreleased_path = $GLOBALS['ran_github_temp_paths'][ count( $GLOBALS['ran_github_temp_paths'] ) - 1 ];
 			self::assertFileExists( $unreleased_path );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			self::assertTrue( \unlink( $unreleased_path ) );
 
 			$service                                = $this->public_service();
@@ -2090,13 +2100,17 @@ namespace Tests\Provider {
 			);
 			$artifact                        = $adapter->acquire( $descriptor );
 			$path                            = $artifact->inspect( static fn ( string $path ): string => $path );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for provider response and archive fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $path, 'replacement' );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 			chmod( $path, 0600 );
 
 			self::assertFalse( $artifact->discard() );
 			unset( $artifact );
 			self::assertFileExists( $path );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for provider response and archive fixtures without requiring WordPress filesystem initialization.
 			self::assertSame( 'replacement', file_get_contents( $path ) );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			self::assertTrue( unlink( $path ) );
 		}
 
@@ -2221,8 +2235,10 @@ namespace Tests\Provider {
 				self::assertTrue( $zip->addFromString( $name, $contents ) );
 			}
 			$zip->close();
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for provider response and archive fixtures without requiring WordPress filesystem initialization.
 			$archive = file_get_contents( $path );
 			self::assertIsString( $archive );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			self::assertTrue( unlink( $path ) );
 			return $archive;
 		}
@@ -2234,8 +2250,10 @@ namespace Tests\Provider {
 			self::assertTrue( $zip->open( $path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) );
 			self::assertTrue( $zip->addFromString( 'repository/style.css', $header ) );
 			$zip->close();
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for provider response and archive fixtures without requiring WordPress filesystem initialization.
 			$archive = file_get_contents( $path );
 			self::assertIsString( $archive );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			self::assertTrue( unlink( $path ) );
 			return $archive;
 		}

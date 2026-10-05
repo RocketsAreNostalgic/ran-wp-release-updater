@@ -5,6 +5,7 @@ declare(strict_types=1);
 $package = dirname( __DIR__, 2 );
 $root    = sys_get_temp_dir() . '/ran-release-updater-no-dev-' . bin2hex( random_bytes( 6 ) );
 
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 if ( ! mkdir( $root, 0700, true ) ) {
 	throw new RuntimeException( 'Could not create the isolated consumer root.' );
 }
@@ -19,13 +20,17 @@ register_shutdown_function(
 					RecursiveIteratorIterator::CHILD_FIRST
 				);
 				foreach ( $iterator as $file ) {
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir, WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 					$file->isDir() ? rmdir( $file->getPathname() ) : unlink( $file->getPathname() );
 				}
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				rmdir( $path );
 			} else {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				unlink( $path );
 			}
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		rmdir( $root );
 	}
 );
@@ -43,8 +48,10 @@ $manifest = array(
 		),
 	),
 );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 file_put_contents( $root . '/composer.json', json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
 
+// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated no-dev consumer command with an argument vector and captured exit status.
 $process = proc_open(
 	array( 'composer', 'update', '--no-dev', '--no-interaction', '--prefer-dist', '--no-progress' ),
 	array(
@@ -58,10 +65,13 @@ $process = proc_open(
 if ( ! is_resource( $process ) ) {
 	throw new RuntimeException( 'Could not start Composer for the isolated consumer.' );
 }
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[0] );
 $stdout = stream_get_contents( $pipes[1] );
 $stderr = stream_get_contents( $pipes[2] );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[1] );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[2] );
 if ( 0 !== proc_close( $process ) ) {
 	throw new RuntimeException( 'No-dev consumer installation failed: ' . $stdout . $stderr );
@@ -90,7 +100,9 @@ $safe = $archiveClass::normalize_path('package/asset.php');
 $rejected = $archiveClass::normalize_path('../asset.php');
 echo json_encode(array('registrar' => is_object($registrar), 'file' => $archiveSafety->getFileName(), 'safe' => $safe, 'rejected' => $rejected), JSON_THROW_ON_ERROR);
 PHP;
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 file_put_contents( $root . '/probe.php', $probe );
+// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated no-dev consumer command with an argument vector and captured exit status.
 $process = proc_open(
 	array( PHP_BINARY, $root . '/probe.php', $installed ),
 	array(
@@ -103,10 +115,13 @@ $process = proc_open(
 if ( ! is_resource( $process ) ) {
 	throw new RuntimeException( 'Could not start the isolated bootstrap probe.' );
 }
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[0] );
 $stdout = stream_get_contents( $pipes[1] );
 $stderr = stream_get_contents( $pipes[2] );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[1] );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[2] );
 if ( 0 !== proc_close( $process ) ) {
 	throw new RuntimeException( 'No-dev consumer bootstrap failed: ' . $stdout . $stderr );

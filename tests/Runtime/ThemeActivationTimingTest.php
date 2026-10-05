@@ -13,9 +13,13 @@ final class ThemeActivationTimingTest extends TestCase {
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/theme-activation-timing-' . bin2hex( random_bytes( 6 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root . '/active-theme', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root . '/inactive-theme', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/active-theme/style.css', "/*\nTheme Name: Active Theme\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/active-theme\n*/\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/inactive-theme/style.css', "/*\nTheme Name: Inactive Theme\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/inactive-theme\n*/\n" );
 	}
 
@@ -94,7 +98,9 @@ PHP
 			'inactive'  => $this->root . '/inactive-theme/style.css',
 		);
 		$prefix = '<?php define("WP_PLUGIN_DIR", ' . var_export( $this->root, true ) . '); require ' . var_export( $data['hooks'], true ) . '; $GLOBALS["wpdb"]=new stdClass(); $GLOBALS["wp_theme_directories"]=array(' . var_export( $this->root, true ) . '); $GLOBALS["wp_version"]="6.8.0"; $data=' . var_export( $data, true ) . ';';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $prefix . $body );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root ) . ' ' . escapeshellarg( $file ), $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
@@ -102,6 +108,7 @@ PHP
 
 	private function package_copy(): string {
 		$copy = $this->root . '/runtime';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $copy, 0700, true );
 		copy( dirname( __DIR__, 2 ) . '/bootstrap.php', $copy . '/bootstrap.php' );
 		copy( dirname( __DIR__, 2 ) . '/runtime.php', $copy . '/runtime.php' );
@@ -118,6 +125,7 @@ PHP
 		foreach ( $files as $runtime_file ) {
 			$payload .= $runtime_file . "\0" . hash_file( 'sha256', $copy . '/' . $runtime_file ) . "\n";
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$copy . '/runtime-copy.json',
 			json_encode(
@@ -136,6 +144,7 @@ PHP
 	}
 
 	private function copy_directory( string $source, string $destination ): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $destination, 0700, true );
 		foreach ( scandir( $source ) ?: array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {

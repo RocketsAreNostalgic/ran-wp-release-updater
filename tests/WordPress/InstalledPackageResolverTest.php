@@ -15,7 +15,9 @@ final class InstalledPackageResolverTest extends TestCase {
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.1/installed-resolver-' . bin2hex( random_bytes( 6 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 		mkdir( $this->root . '/plugins', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 		mkdir( $this->root . '/themes', 0700, true );
 		$GLOBALS['wp_version'] = '6.8.0';
 	}
@@ -39,7 +41,9 @@ final class InstalledPackageResolverTest extends TestCase {
 
 	public function test_registered_ancestor_symlink_equivalent_maps_and_ambiguous_maps(): void {
 		$actual = $this->root . '/actual/slug';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 		mkdir( $actual, 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $actual . '/main.php', $this->plugin_header() );
 		$logical = $this->root . '/plugins/slug';
 		symlink( $actual, $logical );
@@ -59,7 +63,9 @@ final class InstalledPackageResolverTest extends TestCase {
 
 	public function test_explicit_plugin_mapping_beats_generic_plugin_directory_for_logical_and_real_files(): void {
 		$actual = $this->root . '/plugins/shared/foo';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 		mkdir( $actual, 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $actual . '/main.php', $this->plugin_header() );
 		$logical = $this->root . '/plugins/foo';
 		symlink( $actual, $logical );
@@ -82,7 +88,9 @@ final class InstalledPackageResolverTest extends TestCase {
 
 	public function test_symlinked_registered_roots_and_unregistered_internal_links(): void {
 		$actual_plugins = $this->root . '/actual-plugins';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 		mkdir( $actual_plugins . '/slug', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $actual_plugins . '/slug/main.php', $this->plugin_header() );
 		$logical_plugins = $this->root . '/logical-plugins';
 		symlink( $actual_plugins, $logical_plugins );
@@ -90,7 +98,9 @@ final class InstalledPackageResolverTest extends TestCase {
 		self::assertSame( 'slug/main.php', $plugins->resolve( $this->declaration( 'plugin', $logical_plugins . '/slug/main.php' ) )['installed_package_identity'] );
 		self::assertSame( 'slug/main.php', $plugins->resolve( $this->declaration( 'plugin', $actual_plugins . '/slug/main.php' ) )['installed_package_identity'] );
 		$actual_themes = $this->root . '/actual-themes';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 		mkdir( $actual_themes . '/slug', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $actual_themes . '/slug/style.css', $this->theme_header() );
 		$logical_themes = $this->root . '/logical-themes';
 		symlink( $actual_themes, $logical_themes );
@@ -98,11 +108,15 @@ final class InstalledPackageResolverTest extends TestCase {
 		self::assertSame( 'slug', $themes->resolve( $this->declaration( 'theme', $logical_themes . '/slug/style.css' ) )['installed_package_identity'] );
 		self::assertSame( 'slug', $themes->resolve( $this->declaration( 'theme', $actual_themes . '/slug/style.css' ) )['installed_package_identity'] );
 		$external = $this->root . '/external';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 		mkdir( $external . '/plugin', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $external . '/plugin/main.php', $this->plugin_header() );
 		symlink( $external . '/plugin', $this->root . '/plugins/inside' );
 		self::assertSame( 'installed_file_outside_root', $this->resolver()->resolve( $this->declaration( 'plugin', $this->root . '/plugins/inside/main.php' ) )['code'] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 		mkdir( $external . '/theme', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $external . '/theme/style.css', $this->theme_header() );
 		symlink( $external . '/theme', $this->root . '/themes/inside' );
 		self::assertSame( 'installed_file_outside_root', $this->resolver()->resolve( $this->declaration( 'theme', $this->root . '/themes/inside/style.css' ) )['code'] );
@@ -150,7 +164,9 @@ final class InstalledPackageResolverTest extends TestCase {
 		self::assertSame( 'theme_nested_identity_unsupported', $resolver->resolve( $this->declaration( 'theme', $this->file( 'themes/group/theme/style.css', $this->theme_header() ) ) )['code'] ); // T05.
 		self::assertSame( 'theme_header_file_invalid', $resolver->resolve( $this->declaration( 'theme', $this->file( 'themes/bad/theme.css', $this->theme_header() ) ) )['code'] ); // T06.
 		$custom = $this->root . '/custom-themes';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 		mkdir( $custom . '/custom', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $custom . '/custom/style.css', $this->theme_header() );
 		self::assertSame( 'custom', ( new InstalledPackageResolver( '', array(), array( $custom ) ) )->resolve( $this->declaration( 'theme', $custom . '/custom/style.css' ) )['installed_package_identity'] ); // T02.
 	}
@@ -175,6 +191,7 @@ final class InstalledPackageResolverTest extends TestCase {
 		$property->setValue(
 			$resolver,
 			static function ( string $file ): void {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 				file_put_contents( $file, "<?php\n/* Plugin Name: Changed\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n*/\n" );
 			}
 		);
@@ -184,7 +201,9 @@ final class InstalledPackageResolverTest extends TestCase {
 		$before->setValue(
 			$resolver,
 			static function ( string $file ): void {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- Move the real fixture entry to exercise replacement identity; an abstract filesystem would change the scenario.
 				rename( $file, $file . '.old' );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 				file_put_contents( $file, "<?php\n/* Plugin Name: Replacement\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n*/\n" );
 			}
 		);
@@ -209,6 +228,7 @@ final class InstalledPackageResolverTest extends TestCase {
 		foreach ( array(
 			'lock'   => static fn (): bool => false,
 			'rewind' => static fn (): bool => false,
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read the native stream directly to preserve bounded reads and injected failure behavior.
 			'read'   => static fn ( mixed $stream, int $read ): string|false => 2 === $read ? false : fread( $stream, 8192 ),
 		) as $property => $seam ) {
 			$resolver = $this->resolver();
@@ -231,17 +251,21 @@ final class InstalledPackageResolverTest extends TestCase {
 	private function file( string $relative, string $contents ): string {
 		$path = $this->root . '/' . $relative;
 		if ( ! is_dir( dirname( $path ) ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 			mkdir( dirname( $path ), 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 		} file_put_contents( $path, $contents );
 		return $path; }
 	private function remove( string $path ): void {
 		if ( ! is_dir( $path ) || is_link( $path ) ) {
 			if ( file_exists( $path ) || is_link( $path ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				unlink( $path );
 			} return;
 		} foreach ( scandir( $path ) ?: array() as $name ) {
 			if ( '.' !== $name && '..' !== $name ) {
 				$this->remove( $path . '/' . $name );
 			}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		} rmdir( $path ); }
 }

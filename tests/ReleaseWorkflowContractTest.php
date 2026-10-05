@@ -9,9 +9,12 @@ use PHPUnit\Framework\TestCase;
 final class ReleaseWorkflowContractTest extends TestCase {
 
 	public function test_shared_profile_a_and_json_version_updater_are_exact(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository contract assertions without requiring WordPress filesystem initialization.
 		$workflow = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/release-please.yml' );
-		$ci       = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/ci.yml' );
-		$config   = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/release-please-config.json' ), true, 512, JSON_THROW_ON_ERROR );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository contract assertions without requiring WordPress filesystem initialization.
+		$ci = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/ci.yml' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository contract assertions without requiring WordPress filesystem initialization.
+		$config = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/release-please-config.json' ), true, 512, JSON_THROW_ON_ERROR );
 
 		self::assertStringContainsString( 'workflow_run:', $workflow );
 		self::assertStringContainsString( 'workflows: [CI]', $workflow );
@@ -34,6 +37,7 @@ final class ReleaseWorkflowContractTest extends TestCase {
 	}
 
 	public function test_quality_fan_in_requires_every_verification_lane(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository contract assertions without requiring WordPress filesystem initialization.
 		$ci = (string) file_get_contents( dirname( __DIR__ ) . '/.github/workflows/ci.yml' );
 
 		$required_needs = <<<'YAML'
@@ -64,9 +68,13 @@ YAML;
 	}
 
 	public function test_bootstrap_and_archive_contracts_remain_release_safe(): void {
-		$config     = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/release-please-config.json' ), true, 512, JSON_THROW_ON_ERROR );
-		$manifest   = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/.release-please-manifest.json' ), true, 512, JSON_THROW_ON_ERROR );
-		$copy       = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository contract assertions without requiring WordPress filesystem initialization.
+		$config = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/release-please-config.json' ), true, 512, JSON_THROW_ON_ERROR );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository contract assertions without requiring WordPress filesystem initialization.
+		$manifest = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/.release-please-manifest.json' ), true, 512, JSON_THROW_ON_ERROR );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository contract assertions without requiring WordPress filesystem initialization.
+		$copy = json_decode( (string) file_get_contents( dirname( __DIR__ ) . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository contract assertions without requiring WordPress filesystem initialization.
 		$attributes = (string) file_get_contents( dirname( __DIR__ ) . '/.gitattributes' );
 
 		self::assertMatchesRegularExpression( '/^[a-f0-9]{40}$/', $config['bootstrap-sha'] );

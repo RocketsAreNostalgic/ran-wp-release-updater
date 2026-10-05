@@ -13,6 +13,7 @@ final class P03NegativeCompositionTest extends TestCase {
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/p03-negative-' . bin2hex( random_bytes( 6 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root, 0700, true );
 	}
 
@@ -164,16 +165,20 @@ PHP,
 
 	private function plugin( string $headers ): string {
 		$directory = $this->root . '/plugin';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $directory, 0700, true );
 		$file = $directory . '/main.php';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, "<?php\n/*\n{$headers}*/\n" );
 		return $file;
 	}
 
 	private function theme( string $headers ): string {
 		$directory = $this->root . '/theme';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $directory, 0700, true );
 		$file = $directory . '/style.css';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, "/*\n{$headers}*/\n" );
 		return $file;
 	}
@@ -192,7 +197,9 @@ PHP,
 			. '$GLOBALS["wpdb"]=new class { public function __call(string $name,array $arguments): mixed { ++$GLOBALS["p03_database_calls"]; return null; } };'
 			. '$GLOBALS["wp_version"]="6.8.0";$GLOBALS["wp_theme_directories"]=array(' . var_export( $this->root, true ) . ');'
 			. '$data=' . var_export( $data, true ) . ';$GLOBALS["p03_method"]=$data["method"]??"direct";';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $probe, $prefix . $body );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec(
 			escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root ) . ' ' . escapeshellarg( $probe ),
 			$output,
@@ -205,6 +212,7 @@ PHP,
 	private function package_copy(): string {
 		$source = dirname( __DIR__, 2 );
 		$copy   = $this->root . '/runtime-' . bin2hex( random_bytes( 6 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $copy, 0700, true );
 		copy( $source . '/bootstrap.php', $copy . '/bootstrap.php' );
 		copy( $source . '/runtime.php', $copy . '/runtime.php' );
@@ -221,6 +229,7 @@ PHP,
 		foreach ( $files as $file ) {
 			$payload .= $file . "\0" . hash_file( 'sha256', $copy . '/' . $file ) . "\n";
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$copy . '/runtime-copy.json',
 			json_encode(
@@ -239,6 +248,7 @@ PHP,
 	}
 
 	private function copy_directory( string $source, string $destination ): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $destination, 0700, true );
 		foreach ( scandir( $source ) ?: array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {

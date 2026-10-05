@@ -10,9 +10,12 @@ use ReflectionMethod;
 final class ReleaseSourceContractDocumentationTest extends TestCase {
 
 	public function test_issue44_public_contract_clarifications_remain_documented(): void {
-		$root            = dirname( __DIR__, 2 );
-		$readme          = file_get_contents( $root . '/README.md' );
-		$integration     = file_get_contents( $root . '/docs/integration.md' );
+		$root = dirname( __DIR__, 2 );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for executable documentation fixtures without requiring WordPress filesystem initialization.
+		$readme = file_get_contents( $root . '/README.md' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for executable documentation fixtures without requiring WordPress filesystem initialization.
+		$integration = file_get_contents( $root . '/docs/integration.md' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for executable documentation fixtures without requiring WordPress filesystem initialization.
 		$release_sources = file_get_contents( $root . '/docs/release-sources.md' );
 
 		self::assertIsString( $readme );

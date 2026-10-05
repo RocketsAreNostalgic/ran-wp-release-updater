@@ -78,6 +78,7 @@ $target_type      = getenv( 'RAN_WP_RELEASE_UPDATER_TARGET_TYPE' );
 
 $marker_root    = $marker_file ? realpath( dirname( $marker_file ) ) : false;
 $workspace_root = $marker_root ? realpath( dirname( $marker_root ) ) : false;
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 if ( 'RAN_WP_RELEASE_UPDATER_PHASE24' !== $marker || ! $marker_file || ! is_file( $marker_file ) || is_link( $marker_file ) || file_get_contents( $marker_file ) !== $marker . "\n" || false === $marker_root || false === $workspace_root || ! str_ends_with( str_replace( '\\', '/', $workspace_root ), '/.workspaces/p0.4' ) || ! in_array( $mode, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $failure_stage, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $target_type, array( 'plugin', 'theme' ), true ) || ! is_string( $archive ) || ! is_file( $archive ) ) {
 	throw new RuntimeException( 'Guarded phase-2.4 harness missing required marker/env settings.' );
 }
@@ -169,6 +170,7 @@ add_action(
 		);
 		$encoded                   = json_encode( $evidence, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR );
 		$evidence['post_shutdown']['credential_absent_from_evidence'] = ! str_contains( $encoded, 'phase24-token' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 		file_put_contents( $output_path, json_encode( $evidence, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
 	},
 	PHP_INT_MAX
@@ -633,14 +635,17 @@ function backup_dir( string $type, string $slug ): string {
 function rrmdir_recursive( string $path ): void {
 	if ( ! is_dir( $path ) ) {
 		if ( is_link( $path ) || is_file( $path ) ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@unlink( $path );
 		}
 		return;
 	}
 	$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $path, FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST );
 	foreach ( $iterator as $entry ) {
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		is_dir( $entry->getPathname() ) ? @rmdir( $entry->getPathname() ) : @unlink( $entry->getPathname() );
 	}
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 	@rmdir( $path );
 }
 

@@ -15,10 +15,12 @@ final class SealedProviderCatalogTest extends TestCase {
 		$this->root = dirname( __DIR__, 2 )
 			. '/.workspaces/p0.2/php-tmp/sealed-catalog-'
 			. bin2hex( random_bytes( 6 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root, 0700, true );
 	}
 
 	public function test_runtime_ships_only_the_private_github_catalog_and_no_catalog_extension_seam(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for isolated runtime and installed-package fixtures without requiring WordPress filesystem initialization.
 		$runtime = (string) file_get_contents( dirname( __DIR__, 2 ) . '/runtime.php' );
 
 		self::assertStringContainsString( "'github' => array(", $runtime );
@@ -220,9 +222,11 @@ PHP;
 	private function plugin( string $name, string $uri ): string {
 		$directory = $this->root . '/installed-' . $name;
 		if ( ! is_dir( $directory ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 			mkdir( $directory, 0700, true );
 		}
 		$file = $directory . '/plugin.php';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, "<?php\n/*\nPlugin Name: {$name}\nVersion: 1.0.0\nUpdate URI: {$uri}\n*/\n" );
 		return $file;
 	}
@@ -230,6 +234,7 @@ PHP;
 	private function package( string $name, string $version, bool $synthetic ): string {
 		$source = dirname( __DIR__, 2 );
 		$root   = $this->root . '/' . $name;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $root . '/src', 0700, true );
 		copy( $source . '/bootstrap.php', $root . '/bootstrap.php' );
 		foreach ( new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $source . '/src', \FilesystemIterator::SKIP_DOTS ) ) as $file ) {
@@ -239,11 +244,13 @@ PHP;
 			$relative    = substr( $file->getPathname(), strlen( $source . '/src/' ) );
 			$destination = $root . '/src/' . $relative;
 			if ( ! is_dir( dirname( $destination ) ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 				mkdir( dirname( $destination ), 0700, true );
 			}
 			copy( $file->getPathname(), $destination );
 		}
 
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for isolated runtime and installed-package fixtures without requiring WordPress filesystem initialization.
 		$runtime = (string) file_get_contents( $source . '/runtime.php' );
 		if ( $synthetic ) {
 			$needle      = "\n);\n\nreturn new class(";
@@ -252,6 +259,7 @@ PHP;
 			self::assertSame( 1, $count, 'The synthetic fixture must replace exactly one catalog literal.' );
 		}
 
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $root . '/runtime.php', $runtime );
 		$manifest = array(
 			'package_revision' => $this->identity( $root ),
@@ -261,6 +269,7 @@ PHP;
 			'runtime_protocol' => 5,
 			'wordpress_floor'  => '6.5.0',
 		);
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $root . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );
 		return $root;
 	}
@@ -406,6 +415,7 @@ PHP;
 		self::assertSame( 1, $count );
 		$prefix = str_replace( '__DATA__', var_export( $data, true ), $prefix, $count );
 		self::assertSame( 1, $count );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $prefix . "\n" . $body );
 
 		$temporary = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp';
@@ -416,6 +426,7 @@ PHP;
 			. escapeshellarg( PHP_BINARY )
 			. ' -n -d sys_temp_dir=' . escapeshellarg( $temporary )
 			. ' ' . escapeshellarg( $file );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( $command, $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );

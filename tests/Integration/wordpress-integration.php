@@ -244,6 +244,7 @@ try {
 	$json = json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . "\n";
 	if ( is_string( $report ) ) {
 		writeFile( $report, $json );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Keep the redacted result file private using native permission bits.
 		chmod( $report, 0600 );
 	}
 	echo $json;
@@ -261,6 +262,7 @@ function inputDirectory( string $name, bool $writable = true ): string {
 	$path  = is_string( $value ) ? realpath( $value ) : false;
 	requireFact(
 		is_string( $path ) && ! is_link( (string) $value ) && is_dir( $path )
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Check real permissions before admitting the configured disposable filesystem root.
 		&& ( ! $writable || is_writable( $path ) ),
 		$name . ' must name an existing non-symlink directory.'
 	);
@@ -275,11 +277,13 @@ function inputExecutable( string $name ): string {
 }
 
 function makeDirectory( string $path ): string {
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	requireFact( mkdir( $path, 0700, true ), 'Could not create a fixture directory.' );
 	return $path;
 }
 
 function writeFile( string $path, string $bytes ): void {
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 	requireFact( strlen( $bytes ) === file_put_contents( $path, $bytes, LOCK_EX ), 'Could not write a fixture file.' );
 }
 
@@ -288,6 +292,7 @@ function ownDirectory( string $parent_directory, string $prefix ): string {
 	$path = makeDirectory( $parent_directory . '/' . $prefix . bin2hex( random_bytes( 6 ) ) );
 	try {
 		writeFile( $path . '/.integration-owner', INTEGRATION_MARKER ); } catch ( Throwable $error ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		rmdir( $path );
 		throw $error; }
 		$owned_directories[] = $path;
@@ -297,6 +302,7 @@ function ownDirectory( string $parent_directory, string $prefix ): string {
 function removeOwnedDirectory( string $path ): void {
 	requireFact(
 		! is_link( $path ) && is_dir( $path )
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 		&& INTEGRATION_MARKER === file_get_contents( $path . '/.integration-owner' ),
 		'Refusing cleanup without the run ownership marker.'
 	);
@@ -305,9 +311,11 @@ function removeOwnedDirectory( string $path ): void {
 		RecursiveIteratorIterator::CHILD_FIRST
 	);
 	foreach ( $iterator as $file ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		$removed = $file->isLink() || ! $file->isDir() ? unlink( $file->getPathname() ) : rmdir( $file->getPathname() );
 		requireFact( $removed, 'Owned fixture cleanup failed.' );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 	requireFact( rmdir( $path ), 'Owned run directory cleanup failed.' );
 }
 
@@ -318,6 +326,7 @@ function redact( string $value ): string {
 
 function startProcess( array $command, string $cwd, string $label, array $extra = array(), string $stdin = '' ): int {
 	global $processes, $environment;
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
 	$process = proc_open(
 		$command,
 		array(
@@ -340,8 +349,10 @@ function startProcess( array $command, string $cwd, string $label, array $extra 
 		'exit'    => null,
 	);
 	if ( '' !== $stdin ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write fixture bytes to the native stream while preserving its existing partial-write or subprocess protocol.
 		fwrite( $pipes[0], $stdin );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $pipes[0] );
 	stream_set_blocking( $pipes[1], false );
 	stream_set_blocking( $pipes[2], false );
@@ -377,6 +388,7 @@ function finishProcess( int $id, int $timeout = 60 ): string {
 	pollProcess( $id );
 	$entry = $processes[ $id ];
 	foreach ( array( 1, 2 ) as $number ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $entry['pipes'][ $number ] );
 	}
 	$closed = proc_close( $entry['process'] );
@@ -412,6 +424,7 @@ function stopProcess( int $id ): void {
 	}
 	requireFact( ! pollProcess( $id )['running'], 'Owned process did not stop: ' . $processes[ $id ]['label'] );
 	foreach ( array( 1, 2 ) as $number ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $processes[ $id ]['pipes'][ $number ] );
 	}
 	proc_close( $process );
@@ -424,6 +437,7 @@ function attestDatabase( int $server, string $socket, string $data, string $pid_
 	do {
 		$status = pollProcess( $server );
 		requireFact( $status['running'], 'Owned MySQL exited before socket attestation.' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 		if ( is_file( $pid_file ) && trim( (string) file_get_contents( $pid_file ) ) === (string) $status['pid'] ) {
 			try {
 				$db = mysqli_init();
@@ -489,6 +503,7 @@ function copyRuntime( string $source, string $destination ): void {
 }
 
 function wordpressVersion( string $source ): string {
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 	$bytes = (string) file_get_contents( $source . '/wp-includes/version.php' );
 	requireFact( 1 === preg_match( '/\$wp_version\s*=\s*[\'"]([^\'"]+)[\'"]/', $bytes, $matches ), 'Could not read the WordPress fixture version.' );
 	return $matches[1];
@@ -569,6 +584,7 @@ function installWordpress( array $base, string $site, string $password, bool $ne
 	command( array_merge( $base, $arguments ), $site, $network ? 'install-multisite' : 'install-wordpress', stdin: $password . "\n" );
 	if ( $network ) {
 		// WP-CLI installs the network tables; subsequent requests also need its constants.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 		$config      = (string) file_get_contents( $site . '/wp-config.php' );
 		$definitions = '';
 		foreach ( array(
@@ -682,6 +698,7 @@ function assertNetwork( array $main, array $child ): void {
 }
 
 function readJson( string $path ): array {
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 	$record = json_decode( (string) file_get_contents( $path ), true, 128, JSON_THROW_ON_ERROR );
 	requireFact( is_array( $record ), 'Expected a JSON evidence object.' );
 	return $record;

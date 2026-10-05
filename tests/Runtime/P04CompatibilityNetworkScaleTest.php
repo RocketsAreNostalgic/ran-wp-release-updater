@@ -16,6 +16,7 @@ final class P04CompatibilityNetworkScaleTest extends TestCase {
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.4/php-tmp/' . bin2hex( random_bytes( 8 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->root, 0700, true );
 	}
 
@@ -191,8 +192,10 @@ PHP,
 
 	private function write_target( string $file, string $contents ): string {
 		if ( ! is_dir( dirname( $file ) ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 			mkdir( dirname( $file ), 0700, true );
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $contents );
 		return $file;
 	}
@@ -200,6 +203,7 @@ PHP,
 	private function package( string $name ): string {
 		$source = dirname( __DIR__, 2 );
 		$copy   = $this->root . '/' . $name;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $copy . '/src', 0700, true );
 		foreach ( array( 'bootstrap.php', 'runtime.php' ) as $file ) {
 			copy( $source . '/' . $file, $copy . '/' . $file );
@@ -210,10 +214,12 @@ PHP,
 			}
 			$destination = $copy . '/src/' . substr( $file->getPathname(), strlen( $source . '/src/' ) );
 			if ( ! is_dir( dirname( $destination ) ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 				mkdir( dirname( $destination ), 0700, true );
 			}
 			copy( $file->getPathname(), $destination );
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$copy . '/runtime-copy.json',
 			json_encode(
@@ -242,7 +248,9 @@ PHP,
 			. '$GLOBALS["p04_hooks"]=array(); $GLOBALS["wpdb"]=new stdClass(); '
 			. '$GLOBALS["wp_version"]="7.0.4"; $GLOBALS["wp_theme_directories"]=array('
 			. var_export( $this->root . '/themes', true ) . '); $data=' . var_export( $data, true ) . '; ';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $prefix . $body );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root ) . ' ' . escapeshellarg( $file ), $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );

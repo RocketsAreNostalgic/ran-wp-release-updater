@@ -48,7 +48,8 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 
 	/** @return list<string> */
 	private function profile_diagnostics( string $path, string $source ): array {
-		$root    = dirname( __DIR__, 2 );
+		$root = dirname( __DIR__, 2 );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the locked checker with an argument vector and stdin source; capture its diagnostics without executing the probe.
 		$process = proc_open(
 			array( PHP_BINARY, $root . '/vendor/bin/phpcs', '--standard=' . $root . '/.phpcs.xml', '--report=json', '-q', '--no-colors', '--stdin-path=' . $root . '/tests/' . $path, '-' ),
 			array(
@@ -60,11 +61,15 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 			$root
 		);
 		self::assertIsResource( $process );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write fixture bytes to the native stream while preserving its existing partial-write or subprocess protocol.
 		fwrite( $pipes[0], $source );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes[0] );
 		$output = stream_get_contents( $pipes[1] );
 		$error  = stream_get_contents( $pipes[2] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes[1] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes[2] );
 		$status = proc_close( $process );
 		self::assertContains( $status, array( 0, 1, 2, 3 ), $error );

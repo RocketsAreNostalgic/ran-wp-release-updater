@@ -13,6 +13,7 @@ final class RequestBrokerTest extends TestCase {
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->parent = dirname( __DIR__, 2 ) . '/.workspaces/p0.1/request-broker-' . bin2hex( random_bytes( 8 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $this->parent, 0700, true );
 	}
 
@@ -35,6 +36,7 @@ final class RequestBrokerTest extends TestCase {
 			'refresh_target'     => 'refreshTarget',
 		);
 		foreach ( array( 'bootstrap.php', 'runtime.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RequestProtocolValidator.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' ) as $file ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for isolated runtime and installed-package fixtures without requiring WordPress filesystem initialization.
 			$source = (string) file_get_contents( $legacy . '/' . $file );
 			foreach ( $names as $snake => $camel ) {
 				$source = str_replace( array( 'function ' . $snake . '(', '->' . $snake . '(', "'" . $snake . "'" ), array( 'function ' . $camel . '(', '->' . $camel . '(', "'" . $camel . "'" ), $source );
@@ -44,11 +46,14 @@ final class RequestBrokerTest extends TestCase {
 			$source = str_replace( "array( \$ran_wp_release_updater_broker, 'protocol_version' )", "array( \$ran_wp_release_updater_broker, 'protocolVersion' )", $source );
 			$source = preg_replace( '/(runtime_protocol|protocol_version)(\x27\s*=>\s*)5\b/', '$1${2}4', $source );
 			$source = str_replace( array( 'return 5;', '5 !==', '5 ===' ), array( 'return 4;', '4 !==', '4 ===' ), $source );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $legacy . '/' . $file, $source );
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for isolated runtime and installed-package fixtures without requiring WordPress filesystem initialization.
 		$manifest                     = json_decode( (string) file_get_contents( $legacy . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 		$manifest['runtime_protocol'] = 4;
 		$manifest['package_revision'] = $this->identity( $legacy );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $legacy . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );
 		foreach ( array( array( $legacy, $current ), array( $current, $legacy ) ) as $order ) {
 			$result = $this->probe(
@@ -108,6 +113,7 @@ final class RequestBrokerTest extends TestCase {
 			self::assertTrue( $result['result']['loaded'] );
 			self::assertSame( array(), $result['result']['diagnostics'] );
 			self::assertSame( 'new', $result['marker'] );
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Reset the observed selection marker between isolated load-order cases, tolerating prior deletion. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@unlink( $this->parent . '/selected.txt' );
 		}
 	}
@@ -137,6 +143,7 @@ final class RequestBrokerTest extends TestCase {
 			self::assertTrue( $result['activation']['loaded'] );
 			self::assertSame( 4, $result['candidates'] );
 			self::assertSame( 'beta-four', $result['marker'] );
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Reset the observed selection marker between isolated load-order cases, tolerating prior deletion. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@unlink( $this->parent . '/selected.txt' );
 		}
 	}
@@ -214,7 +221,9 @@ final class RequestBrokerTest extends TestCase {
 	public function test_foreign_broker_with_an_incomplete_shape_is_untouched_and_returns_a_conflict_registrar(): void {
 		$copy    = $this->copy( 'copy', '0.1.0-beta.2', 'a' );
 		$foreign = $this->parent . '/foreign';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $foreign, 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$foreign . '/bootstrap.php',
 			<<<'PHP'
@@ -252,6 +261,7 @@ PHP
 		self::assertSame( 'runtime_handoff_invalid', $invalid['code'] );
 
 		$foreign_file = $this->parent . '/foreign-handoff.php';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $foreign_file, "<?php class P0ForeignHandoff { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array(); } }\n" );
 		$foreign = $this->copy( 'foreign-handoff', '0.1.0-beta.2', 'c' );
 		$this->replace_runtime( $foreign, "<?php\nrequire_once " . var_export( $foreign_file, true ) . ";\nreturn new P0ForeignHandoff();\n" );
@@ -262,6 +272,7 @@ PHP
 
 	public function test_wrong_origin_target_handle_during_boot_invalidates_the_handoff(): void {
 		$foreign_file = $this->parent . '/foreign-target.php';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $foreign_file, "<?php class P0ForeignTarget { public function status(): array { return array(); } public function diagnostics(): array { return array(); } public function refresh(): bool { return true; } }\n" );
 		$copy = $this->copy( 'foreign-target', '0.1.0-beta.2', 'a' );
 		$this->replace_runtime( $copy, "<?php\nrequire_once " . var_export( $foreign_file, true ) . ";\nreturn new class { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(static fn(array \$submission): array => array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()), \$submissions)); } public function register_target(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()); } };\n" );
@@ -437,7 +448,9 @@ PHP
 	 */
 	private function probe( string $body, array $data ): array {
 		$file = $this->parent . '/probe-' . bin2hex( random_bytes( 4 ) ) . '.php';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, '<?php $data = ' . var_export( $data, true ) . '; ' . $body );
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 			exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->parent ) . ' ' . escapeshellarg( $file ), $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
@@ -445,11 +458,14 @@ PHP
 
 	private function copy( string $name, string $version, string $revision ): string {
 		$root = $this->parent . '/' . $name;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $root . '/src/Runtime', 0700, true );
 		foreach ( array( 'bootstrap.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RequestProtocolValidator.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' ) as $file ) {
 			copy( dirname( __DIR__, 2 ) . '/' . $file, $root . '/' . $file );
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $root . '/runtime.php', "<?php\n// " . $revision . "\nfile_put_contents('" . addslashes( $this->parent . '/selected.txt' ) . "', basename(__DIR__));\nreturn new class { public function boot(array \$environment,array \$submissions): array { unset( \$environment ); return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(static fn(array \$submission): array => array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null), \$submissions)); } public function register_target(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>false,'code'=>'target_composition_failed','target_key'=>null,'target_handle'=>null); } public function release_source(array \$declaration): array { unset(\$declaration); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); } };\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$root . '/runtime-copy.json',
 			json_encode(
@@ -469,9 +485,12 @@ PHP
 
 	/** Replace a copied runtime and bind its manifest to its new production bytes. */
 	private function replace_runtime( string $root, string $source ): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $root . '/runtime.php', $source );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for isolated runtime and installed-package fixtures without requiring WordPress filesystem initialization.
 		$copy                     = json_decode( (string) file_get_contents( $root . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 		$copy['package_revision'] = $this->identity( $root );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $root . '/runtime-copy.json', json_encode( $copy, JSON_THROW_ON_ERROR ) );
 	}
 
@@ -506,8 +525,10 @@ PHP
 				continue;
 			}
 			$child = $path . '/' . $name;
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			is_dir( $child ) && ! is_link( $child ) ? $this->remove( $child ) : unlink( $child );
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		rmdir( $path );
 	}
 }

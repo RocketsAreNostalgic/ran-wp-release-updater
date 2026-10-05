@@ -37,11 +37,15 @@ if (
 	throw new RuntimeException( 'Could not resolve a safe local WordPress root.' );
 }
 $php_temp_dir = $workspace . '/php-tmp';
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 if ( ! is_dir( $php_temp_dir ) && ! mkdir( $php_temp_dir, 0700, true ) ) {
 	throw new RuntimeException( 'Could not prepare the PHP temporary directory.' );
 }
+// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv -- This standalone proof configures temporary paths and its marker for descendant processes.
 putenv( 'TMPDIR=' . $php_temp_dir );
+// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv -- This standalone proof configures temporary paths and its marker for descendant processes.
 putenv( 'TMP=' . $php_temp_dir );
+// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv -- This standalone proof configures temporary paths and its marker for descendant processes.
 putenv( 'TEMP=' . $php_temp_dir );
 
 $mysqld    = getenv( 'RAN_UPDATER_MYSQLD_BIN' ) ?: '/Applications/Local.app/Contents/Resources/extraResources/lightning-services/mysql-8.4.0/bin/darwin-arm64/bin/mysqld';
@@ -58,14 +62,18 @@ $result = array(
 	'source_root'     => $plugin_root,
 );
 
+// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv -- This standalone proof configures temporary paths and its marker for descendant processes.
 putenv( 'RAN_WP_RELEASE_UPDATER_PHASE24=' . $marker );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 if ( ! mkdir( $base, 0700, false ) ) {
 	throw new RuntimeException( 'Could not prepare isolated proof root.' );
 }
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 if ( is_link( $base ) || realpath( $base ) !== $base || dirname( $base ) !== $workspace || false === file_put_contents( $marker_file, $marker . "\n" ) ) {
 	throw new RuntimeException( 'Could not establish a real disposable proof root and marker.' );
 }
 
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 if ( ! is_dir( $base . '/mysql' ) && ! mkdir( $base . '/mysql', 0700, true ) ) {
 	throw new RuntimeException( 'Could not prepare isolated MySQL working directory.' );
 }
@@ -76,6 +84,7 @@ try {
 		throw new RuntimeException( 'The isolated Local mysqld binary is unavailable.' );
 	}
 	run_command( array( $mysqld, '--no-defaults', '--initialize-insecure', '--datadir=' . $mysql_data_dir, '--socket=' . $socket, '--tmpdir=' . $mysql_dir, '--skip-mysqlx' ), $mysql_dir, null, true );
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Start the dedicated mysqld child with explicit argv and fixture paths; the harness owns its shutdown.
 	$server = proc_open(
 		array( $mysqld, '--no-defaults', '--datadir=' . $mysql_data_dir, '--bind-address=127.0.0.1', '--port=' . $port, '--socket=' . $socket, '--pid-file=' . $pid_file, '--tmpdir=' . $mysql_dir, '--skip-mysqlx', '--log-error=' . $mysql_dir . '/mysqld.err' ),
 		array(
@@ -89,6 +98,7 @@ try {
 	if ( ! is_resource( $server ) ) {
 		throw new RuntimeException( 'Could not launch isolated mysqld.' );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $server_pipes[0] );
 	$mode = 'isolated_mysql_server';
 
@@ -99,6 +109,7 @@ try {
 
 	copy_tree( $wp_root, $site_path, array( '.git', 'wp-content', 'wp-config.php', '.well-known' ) );
 	foreach ( array( $site_path . '/wp-content/plugins', $site_path . '/wp-content/themes', $site_path . '/wp-content/uploads' ) as $directory ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 		if ( ! is_dir( $directory ) && ! mkdir( $directory, 0700, true ) ) {
 			throw new RuntimeException( 'Could not create disposable wp-content directory.' );
 		}
@@ -120,6 +131,7 @@ try {
 	create_fixture_theme( $site_path, 'phase24-manager-theme', $manager_theme_uri );
 	create_manager_plugin( $site_path, 'phase24-manager-theme' );
 
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 	file_put_contents(
 		$site_path . '/wp-config.php',
 		"<?php\n" .
@@ -210,6 +222,7 @@ try {
 				$phase_env['TMP']                                  = $php_temp_dir;
 				$phase_env['TEMP']                                 = $php_temp_dir;
 				run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'eval-file', $plugin_root . '/tests/Integration/phase-2.4-wordpress-core-proof-harness.php' ), $site_path, $phase_env, true );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 				$one                    = json_decode( (string) file_get_contents( $phase_file ), true, 64, JSON_THROW_ON_ERROR );
 				$database               = is_array( $one ) ? ( $one['post_shutdown']['database'] ?? null ) : null;
 				$preoffer_failure       = in_array( $phase_mode, array( 'download', 'validation' ), true );
@@ -304,6 +317,7 @@ try {
 					$successful_digests[ $policy . ':' . $type ] = $one['post_shutdown']['digest'] ?? null;
 				}
 				$phase_output[ implode( ':', $phase ) ] = $one;
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				unlink( $phase_file );
 			}
 		}
@@ -373,6 +387,7 @@ try {
 	if ( isset( $port, $db_name ) ) {
 		try {
 			$cleanup = mysqli_init();
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- The isolated server may already be unavailable; connection success gates best-effort database teardown.
 			if ( @mysqli_real_connect( $cleanup, '127.0.0.1', $db_user, $db_password, null, $port ) ) {
 				$cleanup->query( 'DROP DATABASE IF EXISTS `' . $cleanup->real_escape_string( $db_name ) . '`' );
 				$cleanup->close();
@@ -383,8 +398,10 @@ try {
 	}
 
 	if ( is_file( $hook_file ) ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		unlink( $hook_file );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 	if ( is_link( $base ) || realpath( $base ) !== $base || dirname( $base ) !== $workspace || ! is_file( $marker_file ) || is_link( $marker_file ) || file_get_contents( $marker_file ) !== $marker . "\n" ) {
 		throw new RuntimeException( 'Refusing cleanup because disposable-root ownership cannot be revalidated.' );
 	}
@@ -397,6 +414,7 @@ try {
 echo json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . PHP_EOL;
 
 function run_command( array $command, string $cwd, ?array $env = null, bool $require_zero = true, string $stdin = '' ): array {
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
 	$process = proc_open(
 		$command,
 		array(
@@ -411,18 +429,25 @@ function run_command( array $command, string $cwd, ?array $env = null, bool $req
 	if ( ! is_resource( $process ) ) {
 		throw new RuntimeException( 'Could not run command: ' . implode( ' ', $command ) );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write fixture bytes to the native stream while preserving its existing partial-write or subprocess protocol.
 	if ( '' !== $stdin && false === fwrite( $pipes[0], $stdin ) ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes[0] );
 		proc_terminate( $process );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes[1] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $pipes[2] );
 		proc_close( $process );
 		throw new RuntimeException( 'Could not provide command input.' );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $pipes[0] );
 	$stdout = stream_get_contents( $pipes[1] );
 	$stderr = stream_get_contents( $pipes[2] );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $pipes[1] );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $pipes[2] );
 	$exit = proc_close( $process );
 	if ( $require_zero && 0 !== $exit ) {
@@ -441,6 +466,7 @@ function reserveLoopbackPort(): int {
 		throw new RuntimeException( 'Could not reserve an isolated loopback port: ' . $error_message . ' (' . $error_number . ')' );
 	}
 	$address = stream_socket_get_name( $listener, false );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $listener );
 	$separator = is_string( $address ) ? strrpos( $address, ':' ) : false;
 	$port      = false === $separator ? 0 : (int) substr( $address, $separator + 1 );
@@ -497,6 +523,7 @@ function copy_tree( string $source, string $destination, array $exclude = array(
 	if ( ! is_dir( $source ) ) {
 		throw new RuntimeException( 'Source path does not exist for copy_tree: ' . $source );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	if ( ! mkdir( $destination, 0700, true ) && ! is_dir( $destination ) ) {
 		throw new RuntimeException( 'Could not create tree copy destination.' );
 	}
@@ -523,14 +550,17 @@ function copy_tree( string $source, string $destination, array $exclude = array(
 		}
 		$target = $destination . '/' . $relative;
 		if ( $entry->isDir() ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 			mkdir( $target, 0700, true );
 		} else {
 			if ( ! is_readable( $entry->getPathname() ) ) {
 				continue;
 			}
 			if ( ! is_dir( dirname( $target ) ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 				mkdir( dirname( $target ), 0700, true );
 			}
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Copy failure is checked and translated to the harness exception; suppress only the native warning.
 			if ( false === @copy( $entry->getPathname(), $target ) ) {
 				throw new RuntimeException( 'Could not copy file: ' . $entry->getPathname() );
 			}
@@ -540,29 +570,37 @@ function copy_tree( string $source, string $destination, array $exclude = array(
 
 function create_fixture_plugin( string $site, string $identity, string $uri ): void {
 	$root = $site . '/wp-content/plugins/' . $identity;
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 		throw new RuntimeException( 'Could not create fixture plugin directory.' );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 	file_put_contents( $root . '/' . $identity . '.php', fixture_plugin_source( $uri, '1.0.0' ) );
 }
 
 function create_fixture_theme( string $site, string $identity, string $uri ): void {
 	$root = $site . '/wp-content/themes/' . $identity;
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 		throw new RuntimeException( 'Could not create fixture theme directory.' );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 	file_put_contents( $root . '/style.css', fixture_theme_stylesheet( $uri, '1.0.0' ) );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 	file_put_contents( $root . '/index.php', "<?php\n// Phase24 disposable theme fixture.\n" );
 	if ( 'phase24-theme' === $identity ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 		file_put_contents( $root . '/functions.php', fixture_theme_registration_source() );
 	}
 }
 
 function create_manager_plugin( string $site, string $theme ): void {
 	$root = $site . '/wp-content/plugins/phase24-manager';
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 		throw new RuntimeException( 'Could not create manager plugin directory.' );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 	file_put_contents( $root . '/phase24-manager.php', "<?php\n/*\nPlugin Name: Phase24 Manager\nVersion: 1.0.0\n*/\n\$phase24 = require dirname( __DIR__ ) . '/ran-wp-release-updater/bootstrap.php';\n\$phase24Handle = \$phase24->theme( 'github', WP_CONTENT_DIR . '/themes/{$theme}/style.css', 'phase24-owner/phase24-manager-theme', '102', 'stable', 'disabled' );\n\$phase24Handle->register();\n\$GLOBALS['phase24_handles']['manager'] = \$phase24Handle;\n" );
 }
 
@@ -601,7 +639,9 @@ function removeTree( string $path ): void {
 	}
 	$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $path, FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST );
 	foreach ( $iterator as $entry ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir, WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		is_dir( $entry->getPathname() ) ? rmdir( $entry->getPathname() ) : unlink( $entry->getPathname() );
 	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 	rmdir( $path );
 }

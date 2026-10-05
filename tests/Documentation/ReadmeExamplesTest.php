@@ -15,11 +15,15 @@ final class ReadmeExamplesTest extends TestCase {
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->root = dirname( __DIR__, 2 ) . '/.workspaces/p0.5/php-tmp/readme-examples-' . bin2hex( random_bytes( 6 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for executable documentation fixtures with the specified permissions.
 		mkdir( $this->root . '/plugins/example-plugin/vendor/ran', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for executable documentation fixtures with the specified permissions.
 		mkdir( $this->root . '/themes/example-theme/vendor/ran', 0700, true );
 		symlink( dirname( __DIR__, 2 ), $this->root . '/plugins/example-plugin/vendor/ran/wp-release-updater' );
 		symlink( dirname( __DIR__, 2 ), $this->root . '/themes/example-theme/vendor/ran/wp-release-updater' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for executable documentation fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/plugins/example-plugin/example-plugin.php', "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.2.3\nRequires at least: 6.5\nRequires PHP: 8.2\nUpdate URI: https://github.com/acme/example-plugin\n*/\n" );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for executable documentation fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->root . '/themes/example-theme/style.css', "/*\nTheme Name: Example Theme\nVersion: 1.2.3\nRequires at least: 6.5\nRequires PHP: 8.2\nUpdate URI: https://github.com/acme/example-theme\n*/\n" );
 	}
 
@@ -31,8 +35,10 @@ final class ReadmeExamplesTest extends TestCase {
 		}
 		$files = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $this->root, RecursiveDirectoryIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST );
 		foreach ( $files as $file ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir, WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			$file->isDir() && ! $file->isLink() ? rmdir( $file->getPathname() ) : unlink( $file->getPathname() );
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		rmdir( $this->root );
 	}
 
@@ -65,13 +71,19 @@ final class ReadmeExamplesTest extends TestCase {
 	}
 
 	public function test_public_guides_stay_forward_looking_and_link_the_durable_documentation_set(): void {
-		$root         = dirname( __DIR__, 2 );
-		$readme       = file_get_contents( $root . '/README.md' );
+		$root = dirname( __DIR__, 2 );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for executable documentation fixtures without requiring WordPress filesystem initialization.
+		$readme = file_get_contents( $root . '/README.md' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for executable documentation fixtures without requiring WordPress filesystem initialization.
 		$contributing = file_get_contents( $root . '/CONTRIBUTING.md' );
 		$guides       = array(
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for executable documentation fixtures without requiring WordPress filesystem initialization.
 			'architecture'    => file_get_contents( $root . '/docs/architecture.md' ),
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for executable documentation fixtures without requiring WordPress filesystem initialization.
 			'integration'     => file_get_contents( $root . '/docs/integration.md' ),
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for executable documentation fixtures without requiring WordPress filesystem initialization.
 			'release-sources' => file_get_contents( $root . '/docs/release-sources.md' ),
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for executable documentation fixtures without requiring WordPress filesystem initialization.
 			'testing'         => file_get_contents( $root . '/docs/testing.md' ),
 		);
 		self::assertIsString( $readme );
@@ -108,6 +120,7 @@ final class ReadmeExamplesTest extends TestCase {
 			foreach ( array( 'happy', 'liveness', 'discard' ) as $scenario ) {
 				$command = $this->child_php_command( $script, array( $type, $scenario ) );
 				$output  = array();
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 				exec( $command, $output, $status );
 				self::assertSame( 0, $status, implode( "\n", $output ) );
 				$result = json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
@@ -158,6 +171,7 @@ final class ReadmeExamplesTest extends TestCase {
 		$script  = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
 		$fence   = '$source = $registrar->releases(provider: "github", package_type: "plugin", repository: "acme/consumer", repository_id: "99"); add_action("init", static function (): void {});';
 		$command = $this->child_php_command( $script, array( 'plugin', 'fence-list', base64_encode( $fence ) ) );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( $command, $output, $status );
 		self::assertNotSame( 0, $status, 'A release fence without an operation must fail its proof.' );
 	}
@@ -169,6 +183,7 @@ final class ReadmeExamplesTest extends TestCase {
 
 	/** @return list<string> */
 	private function php_fences( string $path ): array {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for executable documentation fixtures without requiring WordPress filesystem initialization.
 		$contents = file_get_contents( $path );
 		self::assertIsString( $contents );
 		preg_match_all( '/```php\\n(.*?)\\n```/s', $contents, $matches );
@@ -178,6 +193,7 @@ final class ReadmeExamplesTest extends TestCase {
 	private function assert_release_source_fence( string $type, string $scenario, string $fence ): void {
 		$script  = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
 		$command = $this->child_php_command( $script, array( $type, $scenario, base64_encode( $fence ) ) );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( $command, $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		$result = json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
@@ -285,8 +301,10 @@ final class ReadmeExamplesTest extends TestCase {
 			. 'function get_theme_root(string $stylesheet=""):string{return ' . var_export( $this->root . '/themes', true ) . ';}'
 			. 'function readmeSnapshot(object $registrar):array{$broker=$registrar->diagnostics();$submissions=(new ReflectionProperty($GLOBALS["ran_wp_release_updater_v1_broker"],"submissions"))->getValue($GLOBALS["ran_wp_release_updater_v1_broker"]);return ["broker"=>$broker,"schedule"=>array_map(static fn(array $hook):array=>["hook"=>$hook["hook"],"priority"=>$hook["priority"]],$GLOBALS["readme_hooks"]),"declaration"=>$submissions[1]["declaration"]??null];}'
 			. 'function runAfterSetupTheme():void{foreach($GLOBALS["readme_hooks"] as $registered){if("after_setup_theme"===$registered["hook"]){$registered["callback"]();}}}';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for executable documentation fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $prefix . "\n" . $body );
 		$command = escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->root ) . ' ' . escapeshellarg( $file );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( $command, $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );

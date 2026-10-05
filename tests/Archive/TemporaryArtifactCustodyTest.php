@@ -14,15 +14,19 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function setUp(): void {
 		$this->directory = sys_get_temp_dir() . '/ran-artifact-custody-' . bin2hex( random_bytes( 8 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for archive custody and identity fixtures with the specified permissions.
 		self::assertTrue( mkdir( $this->directory, 0700 ) );
 	}
 
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 	protected function tearDown(): void {
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Best-effort fixture teardown tolerates paths already removed by the scenario. Set real fixture permission bits for archive custody and permission-boundary checks.
 		@chmod( $this->directory, 0700 );
 		foreach ( glob( $this->directory . '/*' ) ?: array() as $path ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@unlink( $path );
 		}
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		@rmdir( $this->directory );
 	}
 
@@ -33,6 +37,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		$this->expectExceptionCode( 1001 );
 		$artifact->inspect(
 			function ( string $path ): string {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for archive custody and identity fixtures; WordPress helpers would alter the boundary under test.
 				file_put_contents( $path, 'changed' );
 				return 'must not escape';
 			}
@@ -112,10 +117,12 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 
 	public function test_discard_attempt_denies_further_use_and_can_retry_unchanged_file(): void {
 		$artifact = $this->artifact( 'original' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 		chmod( $this->directory, 0500 );
 		try {
 			self::assertFalse( $artifact->discard() );
 		} finally {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 			chmod( $this->directory, 0700 );
 		}
 
@@ -132,11 +139,15 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 	public function test_discard_will_not_delete_foreign_replacement(): void {
 		$artifact = $this->artifact( 'original' );
 		$path     = $this->path();
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- Move the real fixture entry to exercise replacement identity; an abstract filesystem would change the scenario.
 		self::assertTrue( rename( $path, $path . '.owned' ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Replace the original pathname with foreign bytes to prove custody refuses changed identity.
 		file_put_contents( $path, 'foreign' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 		chmod( $path, 0600 );
 
 		self::assertFalse( $artifact->discard() );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for archive custody and identity fixtures without requiring WordPress filesystem initialization.
 		self::assertSame( 'foreign', file_get_contents( $path ) );
 	}
 
@@ -174,7 +185,9 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 
 	private function artifact( string $contents, ?callable $liveness_guard = null ): TemporaryArtifact {
 		$path = $this->path();
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for archive custody and identity fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $path, $contents );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 		chmod( $path, 0600 );
 		$stat = lstat( $path );
 		self::assertIsArray( $stat );

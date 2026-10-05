@@ -17,6 +17,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 	protected function tearDown(): void {
 		foreach ( $this->archives as $archive ) {
 			if ( is_file( $archive ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				unlink( $archive );
 			}
 		}

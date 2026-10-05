@@ -45,6 +45,7 @@ namespace Tests\WordPress {
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function setUp(): void {
 			$this->temporary_directory = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/native-package-updater-' . bin2hex( random_bytes( 6 ) );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 			mkdir( $this->temporary_directory, 0700, true );
 			$GLOBALS['ran_wp_release_updater_test_hooks']            = array();
 			$GLOBALS['ran_wp_release_updater_test_filter_callbacks'] = array();
@@ -53,15 +54,19 @@ namespace Tests\WordPress {
 		protected function tearDown(): void {
 			foreach ( $this->paths as $path ) {
 				if ( is_file( $path ) ) {
+					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 					@unlink( $path );
 				}
 				if ( is_dir( $path ) ) {
 					foreach ( glob( $path . '/*' ) ?: array() as $child_path ) {
+						// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 						@unlink( $child_path );
 					}
+					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 					@rmdir( $path );
 				}
 			}
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@rmdir( $this->temporary_directory );
 		}
 		public function test_state_construction_and_register_are_passive(): void {
@@ -565,6 +570,7 @@ namespace Tests\WordPress {
 			$after_open->setValue(
 				$validator,
 				static function ( string $path ): void {
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 					chmod( $path, 0644 );
 				}
 			);
@@ -627,6 +633,7 @@ namespace Tests\WordPress {
 			$after_open->setValue(
 				$validator,
 				static function ( string $path ): void {
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 					file_put_contents( $path, 'replacement bytes' );
 					throw new \RuntimeException( 'unexpected validation failure' );
 				}
@@ -652,6 +659,7 @@ namespace Tests\WordPress {
 			self::assertSame( 'candidate_validation_failed', $updater->status()['candidate_validation_code'] );
 			self::assertNull( $updater->status()['offered_release_identity'] );
 			self::assertFileExists( $adapter->acquired_paths[0] );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for installed-package lifecycle fixtures without requiring WordPress filesystem initialization.
 			self::assertSame( 'replacement bytes', file_get_contents( $adapter->acquired_paths[0] ) );
 		}
 		public function test_offer_status_binds_the_exact_verified_release_identity_rather_than_the_version(): void {
@@ -1069,10 +1077,12 @@ namespace Tests\WordPress {
 			$owned_archive   = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 			self::assertIsString( $owned_archive );
 			self::assertNull( $updater->filter_pre_unzip_file( null, $owned_archive, '/tmp', array(), 0.0 ) );
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Simulate Core consuming the acquired archive; it may already be absent after extraction. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@unlink( $owned_archive );
 			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
 			$staged_package = $this->staged();
 			self::assertSame( $staged_package, $updater->filter_source_selection( $staged_package, '/tmp', null, $this->extra() ) );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $staged_package . '/package.php', 'changed' );
 			$updater->capture_install_package_result( array( 'destination' => $staged_package ), $this->extra() );
 			$updater->observe_completion(
@@ -1105,7 +1115,9 @@ namespace Tests\WordPress {
 			$path                                 = tempnam( $this->temporary_directory, 'ran-unverified-download-' );
 			self::assertIsString( $path );
 			$this->paths[] = $path;
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 			chmod( $path, 0600 );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $path, 'untrusted archive' );
 			$calls = 0;
 			$GLOBALS['ran_wp_release_updater_test_filter_callbacks']['ran_wp_release_updater_v1_core_artifact_handoff'] = static function () use ( &$calls ): mixed {
@@ -1150,6 +1162,7 @@ namespace Tests\WordPress {
 			$owned_archive = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 			self::assertIsString( $owned_archive );
 			self::assertNull( $updater->filter_pre_unzip_file( null, $owned_archive, '/tmp', array(), 0.0 ) );
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Simulate Core consuming the acquired archive; it may already be absent after extraction. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@unlink( $owned_archive );
 			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
 			$staged_package = $this->staged();
@@ -1184,8 +1197,10 @@ namespace Tests\WordPress {
 		private function staged(): string {
 			$parent_path = $this->temporary_directory . '/ran-native-stage-' . bin2hex( random_bytes( 5 ) );
 			$staged_path = $parent_path . '/package';
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 			mkdir( $staged_path, 0700, true );
 			$this->paths[] = $parent_path;
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $staged_path . '/package.php', "<?php\n/*\nPlugin Name: Package\nVersion: 2.0.0\nUpdate URI: {$this->uri()}\n*/" );
 			return $staged_path;
 		}

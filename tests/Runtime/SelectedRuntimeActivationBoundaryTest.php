@@ -422,6 +422,7 @@ PHP
 	/** @return array<string,mixed> */
 	private function probe( string $body, array $extra = array() ): array {
 		$root = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/' . bin2hex( random_bytes( 6 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $root, 0700, true );
 		$file   = $root . '/probe.php';
 		$data   = array_merge(
@@ -432,7 +433,9 @@ PHP
 			$extra
 		);
 		$prefix = '<?php require ' . var_export( $data['hooks'], true ) . '; $GLOBALS["wp_version"]="6.8.0"; $data=' . var_export( $data, true ) . ';';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $prefix . $body );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp' ) . ' ' . escapeshellarg( $file ), $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
@@ -440,6 +443,7 @@ PHP
 
 	private function package_copy( string $name, string $version ): string {
 		$root = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/' . $name . '-' . bin2hex( random_bytes( 6 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $root, 0700, true );
 		copy( dirname( __DIR__, 2 ) . '/bootstrap.php', $root . '/bootstrap.php' );
 		copy( dirname( __DIR__, 2 ) . '/runtime.php', $root . '/runtime.php' );
@@ -456,6 +460,7 @@ PHP
 		foreach ( $files as $file ) {
 			$payload .= $file . "\0" . hash_file( 'sha256', $root . '/' . $file ) . "\n";
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$root . '/runtime-copy.json',
 			json_encode(
@@ -474,6 +479,7 @@ PHP
 	}
 
 	private function copy_directory( string $source, string $destination ): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $destination, 0700, true );
 		foreach ( scandir( $source ) ?: array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
