@@ -205,7 +205,9 @@ final class BindingFenceCoordinator {
 		if ( null === $table ) {
 			return null;
 		}
-		$sql   = $wpdb->prepare( "SELECT option_value FROM {$table} WHERE option_name = %s LIMIT 1", $name );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- The options-table identifier is validated before interpolation; data values remain prepared separately.
+		$sql = $wpdb->prepare( "SELECT option_value FROM {$table} WHERE option_name = %s LIMIT 1", $name );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The validated options-table identifier and prepared data values form this closed options persistence query.
 		$value = $wpdb->get_var( $sql );
 		return is_string( $value ) && strlen( $value ) <= self::MAX_JSON ? $value : null;
 	}
@@ -221,6 +223,7 @@ final class BindingFenceCoordinator {
 		if ( null === $table ) {
 			return false;
 		} $sql = "INSERT INTO {$table} (option_name,option_value,autoload) VALUES (%s,%s,'no')";
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The validated options-table identifier and prepared data values form this closed options persistence query.
 		return 1 === $wpdb->query( $wpdb->prepare( $sql, $name, $value ) );
 	}
 	private static function cas( object $wpdb, string $name, string $old, string $replacement, int $deadline, bool $expired = false ): bool {
@@ -232,11 +235,13 @@ final class BindingFenceCoordinator {
 			return false;
 		} $operator = $expired ? '>' : '<=';
 		$sql        = "UPDATE {$table} SET option_value = %s WHERE option_name = %s AND BINARY option_value = BINARY %s AND UNIX_TIMESTAMP() {$operator} %d";
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- The validated options-table identifier and prepared data values form this closed options persistence query.
 		return 1 === $wpdb->query( $wpdb->prepare( $sql, $replacement, $name, $old, $deadline ) );
 	}
 	/** @param array<string,mixed> $value */
 	private static function json( array $value ): ?string {
 		try {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			$json = json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ); } catch ( \JsonException ) {
 			return null; }
 			return strlen( $json ) <= self::MAX_JSON ? $json : null;

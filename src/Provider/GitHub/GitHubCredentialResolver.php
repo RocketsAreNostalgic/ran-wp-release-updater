@@ -26,6 +26,7 @@ final class GitHubCredentialResolver {
 		try {
 			$credential = ( $this->source )();
 		} catch ( \Throwable $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new GitHubReleaseReadUnavailable( 'The GitHub credential is unavailable.', 1001, $exception );
 		}
 		if ( null === $credential ) {

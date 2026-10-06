@@ -31,6 +31,7 @@ final class MysqliOptionDatabase {
 	public function get_var( string $query ): string|int|null {
 		$result = $this->mysqli->query( $query );
 		if ( false === $result ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new \RuntimeException( $this->mysqli->error );
 		}
 		$row = $result->fetch_row();

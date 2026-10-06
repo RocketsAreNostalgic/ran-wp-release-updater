@@ -14,7 +14,7 @@ Core dependency update. The native-operation refinement below was delivered sepa
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
 | Generated `src/Dependency/ArchiveSafety.php` | PHPCS excluded; namespace-only byte parity against the locked `ran/updater-support` source and direct level-8 analysis remain required. Never hand-edit this file. |
-| All `tests/` PHP, including root files and future/nested roots | Owned methods, variables, Yoda conditions, unused parameters and reserved parameter names have no file/root exclusions. Thirty-one PHPUnit lifecycle overrides, twelve unused foreign-stub parameter reports, the existing skin override parameter and native ZipArchive property uses retain exact local exceptions. No test-path exclusions remain. Global-variable prefixing has fourteen named file-wide allowances; other fixture-specific exceptions are diagnostic-local as listed below. |
+| All `tests/` PHP, including root files and future/nested roots | Owned methods, variables, Yoda conditions, unused parameters and reserved parameter names have no file/root exclusions. Thirty-one PHPUnit lifecycle overrides, twelve unused foreign-stub parameter reports, the existing skin override parameter and native ZipArchive property uses retain exact local exceptions. No test-path exclusions remain. Global-variable prefixing and other fixture-specific exceptions are occurrence-local as listed below. |
 
 `composer check` retains strict validation, generated-copy parity, live advisory
 audit, syntax, shared standards/compatibility, level-8 analysis, unit tests and
@@ -22,7 +22,9 @@ the no-dev consumer proof. Native PHP 8.2/8.5, installed WordPress 6.5/7.1,
 MySQL CAS, Windows portability and JavaScript checks still feed terminal
 `quality`. No workflow or stronger gate is removed.
 
-## Standalone script prefix refinement
+## Standalone script prefix refinement (historical checkpoint)
+
+The later occurrence refinement below supersedes the two file-wide variable allowances described in this checkpoint.
 
 The whole `PrefixAllGlobals` exemption for `scripts/` is removed. The locked
 checker exposed 23 global-variable reports in the two standalone entrypoints
@@ -39,21 +41,22 @@ settings are unchanged; script behavior is preserved.
 
 ## Retained exceptions
 
-The retained rule/path list lives in `.phpcs.xml`; native production/tool
-operations now carry exact diagnostic codes at their occurrences. These are
+Retained allowances live beside their exact source occurrences. `.phpcs.xml`
+contains no diagnostic severity below five and no rule-specific file exemptions;
+only the separately parity-checked generated file remains excluded as a whole. These are
 local product requirements, not shared-standard exemptions.
 
 | Boundary | Reason and retained protection |
 | --- | --- |
-| Internal exception text | It is closed failure data, not HTML output. EscapeOutput's exception diagnostic is disabled; public failure projection and message-sanitization tests remain. |
+| Internal exception text | It is closed failure data, not HTML output. EscapeOutput's exception diagnostic is locally excepted only at existing failure occurrences; public failure projection and message-sanitization tests remain. |
 | Native JSON | Protocol hashes and canonical bytes require native `json_encode` flags and `JSON_THROW_ON_ERROR`, including before WordPress helpers exist. JSON/hash regression tests remain. |
 | Native URL parsing | Provider-neutral canonicalization/bootstrap cannot require WordPress URL helpers. Canonical URI and redirect rejection tests remain. |
 | Native filesystem and local warning suppression | Archive/custody, installed identity, atomic persistence and cleanup require native identity/permission/rename checks. The seven affected production files and two tools use occurrence-local diagnostic annotations; test-fixture native and process operations likewise use exact occurrence-local annotations after the refinement below. Checked failure, observed deletion/retry and best-effort cleanup retain their distinct behavior. Archive, symlink, cleanup, Windows and no-dev proofs remain. |
 | Trusted local metadata reads | Bootstrap and RuntimeCopySelector read verified local metadata. Only their native file-read diagnostic is excepted; runtime content identity/provenance and selection/refusal tests remain. |
-| Prepared SQL identifier/CAS boundary | BindingFenceCoordinator validates the table identifier and prepares data values. Only two SQL parser false-positive rules are excepted for that file. MySQL CAS and setup-failure proofs remain required. |
+| Prepared SQL identifier/CAS boundary | BindingFenceCoordinator validates the table identifier and prepares data values. Only the actual SQL parser false-positive occurrences are excepted; neighboring queries remain checked. MySQL CAS and setup-failure proofs remain required. |
 | Bounded base64 operation tokens | NativePackageUpdater uses URL-safe base64 for opaque operation tokens, not executable code. Only its encode/decode rules and test fixtures are excepted. |
 | Native `ZipArchive::$numFiles` | Two line-local property-name ignores cover three reads of the external extension property. Owned members remain enforced. |
-| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Owned free functions/classes/constants follow the package prefix and the existing Tests dev namespace has declaration-local exceptions. Fourteen named global-variable prefix allowances are file-wide; foreign signatures, synthetic syntax and native/process exceptions are diagnostic-local. No test-path exclusions remain. These retained boundaries do not exempt production. |
+| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Owned free functions/classes/constants follow the package prefix and the existing Tests dev namespace has declaration-local exceptions. Existing shared-state/global-variable prefix allowances are occurrence-local; foreign signatures, synthetic syntax and native/process exceptions are diagnostic-local. No test-path exclusions remain. These retained boundaries do not exempt production. |
 
 Seven declaration-local PHPStan exceptions remain: RequestBroker's
 Reflection-invoked private validation seam; ReleaseSource's direct-filesystem
@@ -397,11 +400,11 @@ cleanup retains its original existence fence. One increment receives explicit
 parentheses and adjacent generated-PHP literals are combined without changing
 output bytes.
 
-The 515 global-variable prefix reports have a deliberate file-wide disposition,
+At this historical checkpoint, the 515 global-variable prefix reports had a file-wide disposition,
 not 515 corrections. Twelve standalone CLI/eval/measurement files retain local
 scenario globals; two provider tests retain their shared transport-state globals.
 Only `WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound`
-is disabled in these named files:
+was disabled in these named files (superseded by the occurrence refinement below):
 
 - `tests/Integration/no-dev-consumer.php`
 - `tests/Integration/phase-2.4-wordpress-core-proof-harness.php`
@@ -418,8 +421,8 @@ is disabled in these named files:
 - `tests/Provider/GitHubReleaseAdapterTest.php`
 - `tests/Provider/GitHubResponseRoutingTest.php`
 
-The EOF re-enable does not protect new variables inserted inside these files:
-new globals there also receive this exact-code allowance. Variable snake_case,
+That EOF re-enable did not protect new variables inserted inside those files:
+new globals there also received the allowance. The later refinement removes it. Variable snake_case,
 function/class/constant prefixing and all other naming checks remain active.
 The checker guard exercises that distinction using an actual annotated harness,
 plus fresh current/future paths where new unprefixed globals must fail.
@@ -537,3 +540,57 @@ fallback never rejected non-regular types. The helper now reads native attribute
 with getExternalAttributesIndex and fails if they cannot be obtained. A regression
 runs the exact repository helper against a regular-file ZIP (accepted) and UNIX
 symlink ZIP (rejected). This changes test validation, not production/runtime code.
+
+
+## Occurrence-only WPCS refinement after all-maintained analysis
+
+Based on PR #107 head `4ccf560da39fdff4aa7590a1f3b9f8cfc015a9db`, this
+candidate removes the remaining three global severity-zero diagnostics and all
+rule-specific XML file allowances. It also replaces all sixteen global-variable
+spans: the fourteen test files inventoried above plus the two standalone scripts.
+Existing shared variables and embedded fixture bytes are not renamed or rewritten.
+Future assignments in those same files now require their own reviewed disposition.
+
+The locked-checker exposure probe produced 691 non-format diagnostics, not 691
+proven defects: 549 global-variable prefixes, 58 internal exception messages,
+64 native JSON calls, nine native URL parses, two local metadata reads, four SQL
+construction reports, three opaque-token base64 operations and two CLI parser
+process/output occurrences. Each retained allowance names the exact diagnostic
+and concrete contract at its occurrence. Diagnostic counts do not establish
+acceptance; independent candidate review must disposition these groups:
+
+- Existing CLI/shared-state identities remain intact at their exact assignments.
+  No allowance applies to future variables in those files.
+- Native JSON and URL parsing preserve canonical bytes and bootstrap behavior
+  independently of WordPress helper availability or fallback semantics.
+- Exception messages remain internal failure data; public sanitized failure
+  projections remain protected by the existing runtime tests.
+- The options-table identifier is validated and data values are prepared before
+  each retained SQL operation. The allowance does not apply to other queries.
+- Metadata reads remain local and provenance-checked. URL-safe base64 remains an
+  opaque operation-token boundary. Parser subprocesses retain blocking statuses,
+  and diagnostic output remains a CLI-only channel.
+
+The existing analysis/standards suites now reject blanket, broad-selector and
+case-variant annotations, old settings/ignore directives, file-scoped diagnostic
+exceptions, severity below five, success-on-error configuration and checker
+arguments that narrow enforcement. They preserve broad root selection and the
+dependency exclusions. The generated-helper exclusion now uses an anchored,
+relative exact path; real directory probes keep nested same-path and suffix
+neighbors checked. Locked PHPCS normalizes separator matching on Windows. Rule
+include-pattern narrowing and conditional phpcs-only/phpcbf-only attributes are
+also rejected; real conditional method-rule mutations lose the diagnostic and
+are caught by the guard.
+Real-checker controls reuse actual annotations and require new neighboring
+variables, exception throws, JSON/URL calls, SQL, base64 and file reads to fail.
+The pre-existing naming controls now also reject new globals inside the former
+harness/script exception spans. Owned inherited-method enforcement is exercised
+without a command-line sniff override, including actual rule-removal mutation.
+
+All executable PHP token sequences and inline HTML outside the two changed guard
+test classes are unchanged. Production annotation bytes necessarily change the
+content-addressed `runtime-copy.json.package_revision`; its deterministic refresh
+preserves package version, runtime protocol and every runtime capability. The
+generated dependency bytes and locked tooling remain unchanged. This candidate
+requires exact-head independent review and native CI; it does not authorize merge,
+release, consumer adoption or ecosystem-wide acceptance.

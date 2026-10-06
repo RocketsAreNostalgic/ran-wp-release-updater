@@ -1,5 +1,4 @@
 <?php
-// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 // wp eval-file wraps this fixture before execution, so strict_types cannot lead.
 
@@ -16,13 +15,17 @@ final class RAN_WP_RELEASE_UPDATER_Test_Integration_Skin extends WP_Upgrader_Ski
 	public function footer(): void {}
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $plugin_zip = ran_wp_release_updater_test_required_input( 'RAN_UPDATER_PLUGIN_ZIP' );
-$theme_zip  = ran_wp_release_updater_test_required_input( 'RAN_UPDATER_THEME_ZIP' );
-$output     = ran_wp_release_updater_test_required_input( 'RAN_UPDATER_OUTPUT' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$theme_zip = ran_wp_release_updater_test_required_input( 'RAN_UPDATER_THEME_ZIP' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$output = ran_wp_release_updater_test_required_input( 'RAN_UPDATER_OUTPUT' );
 // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 $mode = ran_wp_release_updater_test_required_input( 'RAN_UPDATER_DISTRIBUTION_MODE' );
 
 if ( 'install' === $mode ) {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$skin = new RAN_WP_RELEASE_UPDATER_Test_Integration_Skin();
 	if ( ! ( new Plugin_Upgrader( $skin ) )->install( $plugin_zip ) ) {
 		throw new RuntimeException( 'Plugin_Upgrader could not install the exact consumer ZIP.' );
@@ -38,19 +41,28 @@ if ( 'observe' !== $mode ) {
 
 // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 $plugin = $GLOBALS['ran_updater_plugin_handle'] ?? null;
-$theme  = $GLOBALS['ran_updater_theme_handle'] ?? null;
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$theme = $GLOBALS['ran_updater_theme_handle'] ?? null;
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
 if ( ! is_object( $plugin ) || ! is_object( $theme ) || ! is_object( $broker ) ) {
 	throw new RuntimeException( 'Installed consumer boot did not expose public handles.' );
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $credentials_at_boot = $GLOBALS['ran_updater_credential_calls'] ?? null;
-$http_at_boot        = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
-$plugin_callbacks    = ran_wp_release_updater_test_native_callbacks( 'update_plugins_github.com' );
-$theme_callbacks     = ran_wp_release_updater_test_native_callbacks( 'update_themes_github.com' );
-$runtime_root        = WP_PLUGIN_DIR . '/ran-neutral-plugin/vendor/ran/wp-release-updater';
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$http_at_boot = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$plugin_callbacks = ran_wp_release_updater_test_native_callbacks( 'update_plugins_github.com' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$theme_callbacks = ran_wp_release_updater_test_native_callbacks( 'update_themes_github.com' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$runtime_root = WP_PLUGIN_DIR . '/ran-neutral-plugin/vendor/ran/wp-release-updater';
 
-$plugin_data  = get_plugin_data( WP_PLUGIN_DIR . '/ran-neutral-plugin/ran-neutral-plugin.php', false, false );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$plugin_data = get_plugin_data( WP_PLUGIN_DIR . '/ran-neutral-plugin/ran-neutral-plugin.php', false, false );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $theme_object = wp_get_theme( 'ran-neutral-theme' );
 // phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- The native WordPress update hook includes the hostname github.com. Exercise the native WordPress hostname-specific update hook; its foreign identifier must stay exact.
 apply_filters( 'update_plugins_github.com', false, $plugin_data, 'ran-neutral-plugin/ran-neutral-plugin.php', array() );
@@ -69,10 +81,14 @@ apply_filters(
 	array()
 );
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $credentials_after = $GLOBALS['ran_updater_credential_calls'] ?? null;
-$http_after        = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
-$diagnostics       = $broker->diagnostics();
-$proof             = array(
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$http_after = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$diagnostics = $broker->diagnostics();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$proof = array(
 	'boot'                 => array(
 		'candidate_count'      => $diagnostics['candidate_count'] ?? null,
 		'logical_target_count' => $diagnostics['logical_target_count'] ?? null,
@@ -86,7 +102,9 @@ $proof             = array(
 		'credential_callbacks'    => $credentials_after,
 		'http_callback_delta'     => $http_after - $http_at_boot,
 	),
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 	'plugin_manifest_hash' => hash( 'sha256', json_encode( ran_wp_release_updater_test_archive_manifest( $plugin_zip, 'ran-neutral-plugin' ), JSON_THROW_ON_ERROR ) ),
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 	'theme_manifest_hash'  => hash( 'sha256', json_encode( ran_wp_release_updater_test_archive_manifest( $theme_zip, 'ran-neutral-theme' ), JSON_THROW_ON_ERROR ) ),
 	'plugin_status'        => $plugin->status(),
 	'theme_status'         => $theme->status(),
@@ -113,13 +131,14 @@ $proof             = array(
 		&& null === ( $plugin->status()['native']['offered_release_identity'] ?? null )
 		&& null === ( $theme->status()['native']['offered_release_identity'] ?? null ),
 );
-// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write the installed-distribution proof result for the parent harness to validate.
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write the installed-distribution proof result for the parent harness to validate. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 file_put_contents( $output, json_encode( $proof, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . "\n" );
 
 // phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them.
 function ran_wp_release_updater_test_required_input( string $name ): string {
 	$value = getenv( $name );
 	if ( ! is_string( $value ) || '' === $value ) {
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 		throw new RuntimeException( $name . ' is required.' );
 	}
 	return $value;
@@ -214,5 +233,3 @@ function ran_wp_release_updater_test_directory_manifest( string $root ): array {
 	ksort( $manifest );
 	return $manifest;
 }
-
-// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

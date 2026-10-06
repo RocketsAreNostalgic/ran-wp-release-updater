@@ -120,6 +120,7 @@ final class NativePackageUpdater {
 			return;
 		}
 
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
 		$host = parse_url( $this->update_uri, PHP_URL_HOST );
 		if ( ! is_string( $host ) || '' === $host ) {
 			return;
@@ -847,9 +848,11 @@ final class NativePackageUpdater {
 			'schema'       => 1,
 		);
 		try {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			$json = json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
 		} catch ( \JsonException ) {
 			return null; }
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- URL-safe base64 represents the bounded opaque operation token or its fixture; it does not encode executable code.
 		$token = 'ran-wp-release-updater:v1:' . rtrim( strtr( base64_encode( $json ), '+/', '-_' ), '=' );
 		return strlen( $token ) <= 8192 ? $token : null;
 	}
@@ -862,12 +865,15 @@ final class NativePackageUpdater {
 		if ( '' === $encoded || 1 === preg_match( '/[^A-Za-z0-9_-]/', $encoded ) ) {
 			return null;
 		}
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Decode the bounded opaque operation token for structural validation; never execute decoded bytes.
 		$raw = base64_decode( strtr( $encoded, '-_', '+/' ) . str_repeat( '=', ( 4 - strlen( $encoded ) % 4 ) % 4 ), true );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- URL-safe base64 represents the bounded opaque operation token or its fixture; it does not encode executable code.
 		if ( ! is_string( $raw ) || strlen( $raw ) > 6144 || ! hash_equals( $encoded, rtrim( strtr( base64_encode( $raw ), '+/', '-_' ), '=' ) ) ) {
 			return null;
 		}
 		try {
-			$value     = json_decode( $raw, true, 32, JSON_THROW_ON_ERROR );
+			$value = json_decode( $raw, true, 32, JSON_THROW_ON_ERROR );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			$canonical = json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
 			if ( ! is_string( $canonical ) || ! hash_equals( $raw, $canonical ) ) {
 				return null;

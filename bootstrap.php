@@ -33,6 +33,7 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 		return null;
 	}
 	try {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read only trusted local runtime metadata bytes before WordPress bootstrap; this is not a remote request.
 		$copy = json_decode( (string) file_get_contents( $copy_file ), true, 512, JSON_THROW_ON_ERROR );
 		$keys = array( 'package_revision', 'package_version', 'php_floor', 'runtime_file', 'runtime_protocol', 'wordpress_floor' );
 		if (
@@ -658,6 +659,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				}
 				$facts = $value;
 				unset( $facts['fingerprint'] );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 				return hash_equals( 'v2:' . hash( 'sha256', json_encode( $facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ), $value['fingerprint'] );
 			}
 
@@ -678,6 +680,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				if ( ! $this->bounded_identity( $value, 2048 ) || str_contains( $value, '\\' ) ) {
 					return false;
 				}
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
 				$parts = parse_url( $value );
 				return is_array( $parts ) && 'https' === strtolower( $parts['scheme'] ?? '' )
 					&& isset( $parts['host'], $parts['path'] ) && '' !== $parts['host']

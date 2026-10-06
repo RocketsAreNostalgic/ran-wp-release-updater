@@ -181,6 +181,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			$state     = BindingState::rehydrate( json_decode( $database->rows()[ $name ]['option_value'], true, 32, JSON_THROW_ON_ERROR ) );
 			$successor = BindingState::create( $binding, str_repeat( 'b', 64 ), 101, $state->binding_generation() + 1, $state->fence_epoch() + 1 );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			$database->force_option_value( $name, json_encode( $successor->to_array(), JSON_THROW_ON_ERROR ) );
 			self::assertFalse(
 				$updater->filter_update(
@@ -730,14 +731,14 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$binding_facts                 = json_decode( $decoded_token, true, 32, JSON_THROW_ON_ERROR );
 			$binding_facts['binding_hash'] = str_repeat( 'b', 64 );
 			$tampered_binding_token        = 'ran-wp-release-updater:v1:' . rtrim(
-				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests.
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 				strtr( base64_encode( json_encode( $binding_facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) ), '+/', '-_' ),
 				'='
 			);
 			$fingerprint_facts                          = json_decode( $decoded_token, true, 32, JSON_THROW_ON_ERROR );
 			$fingerprint_facts['descriptor']['version'] = '2.0.1';
 			$tampered_fingerprint_token                 = 'ran-wp-release-updater:v1:' . rtrim(
-				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests.
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 				strtr( base64_encode( json_encode( $fingerprint_facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) ), '+/', '-_' ),
 				'='
 			);
@@ -822,6 +823,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				)
 			);
 			$successor                      = BindingState::create( $rebound_binding, str_repeat( 'b', 64 ), $state->lease_deadline(), $state->binding_generation() + 1, $state->fence_epoch() + 1 );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			$database->force_option_value( $name, json_encode( $successor->to_array(), JSON_THROW_ON_ERROR ) );
 			self::assertInstanceOf( \WP_Error::class, $updater->filter_source_selection( $this->staged(), '/tmp', null, $this->extra() ) );
 		}
@@ -1330,7 +1332,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				'descriptor'   => $descriptor->to_array(),
 				'schema'       => 1,
 			);
-			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests.
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			return 'ran-wp-release-updater:v1:' . rtrim( strtr( base64_encode( json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) ), '+/', '-_' ), '=' );
 		}
 		private function uri(): string {

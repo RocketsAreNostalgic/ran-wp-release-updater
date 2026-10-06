@@ -94,6 +94,7 @@ final class StagedPackageManifest {
 
 	/** @param array<string,array{sha256:string,size:int}> $manifest */
 	public function hash( array $manifest ): string {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		return hash( 'sha256', json_encode( $manifest, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) );
 	}
 

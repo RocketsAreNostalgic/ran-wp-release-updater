@@ -33,6 +33,7 @@ final class RuntimeCopySelector {
 		try {
 			$facts = json_decode( $this->read( $file ), true, 512, JSON_THROW_ON_ERROR );
 		} catch ( \JsonException $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new RuntimeException( 'Invalid runtime copy.', 0, $exception );
 		}
 		if (
@@ -253,6 +254,7 @@ final class RuntimeCopySelector {
 	}
 
 	private function read( string $file ): string {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read only trusted local runtime metadata bytes before WordPress bootstrap; this is not a remote request.
 		$content = file_get_contents( $file );
 		if ( false === $content ) {
 			throw new RuntimeException( 'Unreadable runtime copy.' );
