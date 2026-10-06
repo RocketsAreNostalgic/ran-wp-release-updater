@@ -47,6 +47,40 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		self::assertSame( $this->maintained_files( $root ), $this->analyzed_files( $root, $root . '/phpstan.neon' ) );
 	}
 
+	public function test_every_maintained_script_is_directly_analyzed(): void {
+		$root     = dirname( __DIR__, 2 );
+		$expected = array_map( static fn ( string $file ): string => 'scripts/' . $file, $this->maintained_files( $root . '/scripts', array() ) );
+		self::assertSame( $expected, $this->analyzed_files( $root, $root . '/phpstan-tools.neon' ) );
+	}
+
+	public function test_new_and_split_scripts_are_covered_and_exclusions_are_detected(): void {
+		$this->write_fixture( 'scripts/NewTool.php', '<?php' );
+		$this->write_fixture( 'scripts/Nested/Split.php', '<?php' );
+		$this->write_fixture( 'scripts/tests/Tool.php', '<?php' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the real tool profile to exercise its effective discovery without editing repository sources.
+		$config = file_get_contents( dirname( __DIR__, 2 ) . '/phpstan-tools.neon' );
+		self::assertIsString( $config );
+		$this->write_fixture( 'tools.neon', $config );
+		$expected = array_map( static fn ( string $file ): string => 'scripts/' . $file, $this->maintained_files( $this->fixture . '/scripts', array() ) );
+		self::assertSame( $expected, $this->analyzed_files( $this->fixture, $this->fixture . '/tools.neon' ) );
+		$this->write_fixture( 'tools-excluded.neon', $config . "\texcludePaths:\n\t\tanalyseAndScan:\n\t\t\t- scripts/Nested/*\n" );
+		self::assertSame( array( 'scripts/Nested/Split.php' ), array_values( array_diff( $expected, $this->analyzed_files( $this->fixture, $this->fixture . '/tools-excluded.neon' ) ) ) );
+	}
+
+	public function test_new_script_body_is_checked_by_the_tool_profile(): void {
+		$this->write_fixture( 'scripts/NewTool.php', '<?php function ran_release_tool_probe(): int { return "invalid"; }' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Use the repository profile in an isolated fixture to prove body analysis at the configured level.
+		$config = file_get_contents( dirname( __DIR__, 2 ) . '/phpstan-tools.neon' );
+		self::assertIsString( $config );
+		$this->write_fixture( 'tools.neon', $config );
+		$result = $this->analyze_fixture( $this->fixture . '/tools.neon' );
+		self::assertSame( 1, $result['exit'] );
+		self::assertStringContainsString( 'return.type', $result['output'] );
+		$this->write_fixture( 'scripts/NewTool.php', '<?php function ran_release_tool_probe(): int { return 1; }' );
+		$result = $this->analyze_fixture( $this->fixture . '/tools.neon' );
+		self::assertSame( 0, $result['exit'], $result['output'] );
+	}
+
 	public function test_new_root_nested_and_relocated_sources_are_covered(): void {
 		$this->write_fixture( 'bootstrap.php', '<?php' );
 		$this->write_fixture( 'src/Original.php', '<?php' );
@@ -146,15 +180,18 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		);
 	}
 
-	/** @return list<string> */
-	private function maintained_files( string $root ): array {
+	/**
+	 * @param list<string> $excluded_roots Root-relative non-maintained boundaries.
+	 * @return list<string>
+	 */
+	private function maintained_files( string $root, array $excluded_roots = self::NON_PRODUCTION_ROOTS ): array {
 		$files    = array();
 		$iterator = new RecursiveIteratorIterator(
 			new RecursiveCallbackFilterIterator(
 				new RecursiveDirectoryIterator( $root, RecursiveDirectoryIterator::SKIP_DOTS ),
-				static function ( SplFileInfo $file ) use ( $root ): bool {
+				static function ( SplFileInfo $file ) use ( $root, $excluded_roots ): bool {
 					$relative = substr( $file->getPathname(), strlen( $root ) + 1 );
-					return ! in_array( explode( DIRECTORY_SEPARATOR, $relative )[0], self::NON_PRODUCTION_ROOTS, true );
+					return ! in_array( explode( DIRECTORY_SEPARATOR, $relative )[0], $excluded_roots, true );
 				}
 			)
 		);
@@ -180,6 +217,7 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 	/** @return list<string> */
 	private function analyzed_files( string $root, string $config ): array {
 		$container = ( new ContainerFactory( $root ) )->create( $this->fixture . '/.phpunit.cache/container', array( $config ), array() );
+		self::assertSame( 8, $container->getParameter( 'level' ) );
 		// Use the same effective finder, extensions and exclusions as PHPStan's command.
 		$files = $container->getService( 'fileFinderAnalyse' )->findFiles( $container->getParameter( 'paths' ) )->getFiles();
 		// PHPStan's command removes configured stubs after discovery; their declarations are not directly analyzed bodies.

@@ -36,7 +36,27 @@ list and an explicitly excluded generated production file. A bounded header chec
 also detects extensionless PHP/shebang entrypoints: a new unselected entrypoint
 fails coverage until its analysis boundary is deliberately accounted for. Existing production
 coverage remains 36/36; this prevents future omissions rather than correcting a
-current uncovered file. Tests and scripts retain their existing development gates.
+current uncovered production file.
+
+`composer analyze` also runs `phpstan-tools.neon` at level 8 over the entire
+`scripts/` directory in a separate invocation. Its two maintained PHP scripts
+are now directly analyzed, without adding their declarations to the production
+symbol world. New and split scripts enter automatically. The existing coverage
+test independently discovers all script PHP, including nested `scripts/tests`,
+compares effective selection, asserts level 8, detects an excluded nested script,
+and proves a new script's incorrect return fails actual analysis.
+
+Coverage is 38/96 maintained PHP files: 36 production and two scripts. The 58
+test PHP files remain pending, not accepted exemptions. A temporary combined
+level-5 probe exposes 92 diagnostics, which are exposure estimates rather than
+92 defects. Several are caused by combining isolated runtime worlds: three
+`ran_wp_release_updater_test_connect` declarations have incompatible signatures,
+as do two `ran_wp_release_updater_test_attest_server` declarations; standalone
+WordPress hook fixtures also conflict. The next adoption step must preserve
+these separate executable harnesses with appropriate analysis profiles instead
+of suppressing the resulting false cross-world calls. No baseline, test
+exemption approval, production runtime change or test analysis acceptance is
+introduced here.
 
 All 36 maintained production PHP files (`bootstrap.php`, `runtime.php` and
 production PHP under `src/`) now have direct level-8 roots. Issue #60 records the historical

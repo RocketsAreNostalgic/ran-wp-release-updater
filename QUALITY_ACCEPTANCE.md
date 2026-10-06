@@ -459,3 +459,19 @@ allowance is removed. The 43 existing test namespace declarations instead carry
 exact namespace-only annotations, and separate namespace/global-declaration
 negative probes cover production src, a root entrypoint and future tests.
 No executable fixture tokens change in this correction beyond the checker guard.
+
+
+## Maintained script analysis (proposed)
+
+Both maintained `scripts/` PHP files now enter a separate level-8 invocation of
+`composer analyze`; directory selection includes future split and nested scripts.
+The independent selection guard checks the whole scripts tree without inheriting
+production's root-relative exclusions, and verifies the required level and actual
+body diagnostics. The production level-8 symbol world remains unchanged.
+
+This advances direct analysis from 36 to 38 of 96 maintained PHP files. The 58
+test files remain unqualified pending isolated-harness profiles; the combined
+level-5 probe's 92 diagnostics include incompatible same-name functions from
+separate executable harnesses. That is not a reviewed exemption or a justification
+for blanket ignores. See docs/testing.md for the reproduced scope and next step.
+No runtime PHP, dependency, fixture identity or existing exemption is changed.

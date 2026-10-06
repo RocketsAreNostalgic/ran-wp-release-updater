@@ -34,6 +34,11 @@ generated helper. Root-relative tests/scripts, dependencies and disposable state
 are explicit exclusions; a production subdirectory with the same name is not.
 ProductionAnalysisCoverageTest compares effective analyzer selection against
 independent maintained-file discovery and protects new, split and excluded files.
+The separate `phpstan-tools.neon` level-8 invocation in `composer analyze`
+automatically includes all `scripts/` PHP without adding script symbols to
+production analysis. The same coverage guard checks that profile independently.
+The 58 test PHP files still need isolated-harness analysis; their exclusion is
+pending debt, not ecosystem-wide acceptance or an approved permanent exemption.
 
 Purpose-built test harnesses and fixture interfaces follow owned naming;
 actual production calls, named arguments, Reflection seams and callback strings
