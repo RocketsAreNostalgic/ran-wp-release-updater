@@ -28,8 +28,8 @@ namespace {
 	}
 }
 
-// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture. Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\WordPress {
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture.
+namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 	require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 	require_once dirname( __DIR__ ) . '/Support/ControllableReleaseAdapter.php';
 	use PHPUnit\Framework\TestCase;
@@ -42,8 +42,8 @@ namespace Tests\WordPress {
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 	use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
-	use Tests\Support\ControllableReleaseAdapter;
-	use Tests\Support\FakeOptionDatabase;
+	use RAN\WPReleaseUpdater\V1\Tests\Support\ControllableReleaseAdapter;
+	use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 	// phpcs:ignore Generic.Files.OneObjectStructurePerFile.MultipleFound -- Keep the conditional WordPress stub and its test class in the same self-contained fixture.
 	final class NativePackageUpdaterTest extends TestCase {
 		/** @var list<string> */

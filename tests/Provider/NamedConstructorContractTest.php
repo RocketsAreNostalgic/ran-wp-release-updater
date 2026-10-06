@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Provider;
+namespace RAN\WPReleaseUpdater\V1\Tests\Provider;
 
 use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubApiClient;

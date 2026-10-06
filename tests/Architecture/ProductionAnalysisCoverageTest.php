@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace, not a production declaration.
-namespace Tests\Architecture;
+namespace RAN\WPReleaseUpdater\V1\Tests\Architecture;
 
 use PHPStan\DependencyInjection\ContainerFactory;
 use PHPStan\File\FileExcluder;

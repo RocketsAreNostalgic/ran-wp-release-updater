@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Performance;
+namespace RAN\WPReleaseUpdater\V1\Tests\Performance;
 
 require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 
@@ -13,7 +12,7 @@ use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
-use Tests\Support\FakeOptionDatabase;
+use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 
 /**
  * Local deterministic throughput budgets, not provider or network benchmarks.

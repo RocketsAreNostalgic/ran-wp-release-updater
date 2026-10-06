@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Runtime;
+namespace RAN\WPReleaseUpdater\V1\Tests\Runtime;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -93,7 +92,7 @@ function add_action(string $hook, mixed $callback, int $priority, int $arguments
 }
 function get_filesystem_method(): string { return 'direct'; }
 $GLOBALS['p03_paired_hooks'] = array();
-$GLOBALS['wpdb'] = new \Tests\Support\FakeOptionDatabase(100);
+$GLOBALS['wpdb'] = new \RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase(100);
 $GLOBALS['wp_version'] = '6.8.0';
 $GLOBALS['wp_theme_directories'] = array(__ROOT__);
 $data = __DATA__;

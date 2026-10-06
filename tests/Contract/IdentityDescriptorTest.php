@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Contract;
+namespace RAN\WPReleaseUpdater\V1\Tests\Contract;
 
 require_once dirname( __DIR__, 2 ) . '/src/Contract/CanonicalUpdateUri.php';
 require_once dirname( __DIR__, 2 ) . '/src/Contract/IdentityDescriptor.php';

@@ -134,11 +134,11 @@ namespace {
 	}
 }
 
-// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture. Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Performance {
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture.
+namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 	require_once dirname( __DIR__ ) . '/Support/WordPressHookFixture.php';
 	require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
-	use Tests\Support\FakeOptionDatabase;
+	use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 	const NATIVE_MEASURE_COUNTS = array( 1, 5, 10, 20 );
 	function native_measure_assert( bool $condition, string $message ): void {
 		if ( ! $condition ) {

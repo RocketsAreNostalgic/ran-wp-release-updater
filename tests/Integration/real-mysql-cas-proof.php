@@ -9,7 +9,7 @@ use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
-use Tests\Support\MysqliOptionDatabase;
+use RAN\WPReleaseUpdater\V1\Tests\Support\MysqliOptionDatabase;
 
 require_once dirname( __DIR__ ) . '/bootstrap.php';
 require_once dirname( __DIR__ ) . '/Support/MysqliOptionDatabase.php';

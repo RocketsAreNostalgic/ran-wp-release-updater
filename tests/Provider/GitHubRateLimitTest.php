@@ -18,8 +18,8 @@ namespace {
 	}
 }
 
-// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture. Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Provider {
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture.
+namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 	use PHPUnit\Framework\TestCase;
 	use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService;
 	use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;

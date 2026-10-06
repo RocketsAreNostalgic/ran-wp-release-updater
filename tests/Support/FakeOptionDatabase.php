@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Support;
+namespace RAN\WPReleaseUpdater\V1\Tests\Support;
 
 /** Minimal wpdb double: its opaque prepared tokens prevent tests from parsing SQL. */
 final class FakeOptionDatabase {
