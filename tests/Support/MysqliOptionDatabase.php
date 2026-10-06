@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Support;
 
 /** Minimal wpdb-compatible adapter for the isolated real-MySQL CAS proof. */

@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 declare(strict_types = 1);
 /*
@@ -8,22 +9,28 @@ declare(strict_types = 1);
  *     tests/Performance/native-discovery-measure.php
  * PHP CLI needs ext-zip and uses the caller's INI configuration.
  */
+// phpcs:ignore Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden -- Keep global WordPress stubs and namespaced test code in the same isolated fixture. WordPress stubs must be declared in the global namespace used by production calls.
 namespace {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound, Generic.Classes.DuplicateClassName.Found -- This stub must occupy the WordPress global class identity used by production calls. The same foreign stub name is reused behind conditional or isolated-process load boundaries.
 	final class WP_Error {
 		public function __construct( public string $code, public string $message ) {
 		}
 	}
+	// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them. WordPress calls this global stub by its exact foreign function name.
 	function is_wp_error( mixed $value ): bool {
 		return $value instanceof WP_Error;
 	}
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function get_filesystem_method(): string {
 		return 'direct';
 	}
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function get_current_network_id(): int {
 		return 1;
 	}
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function wp_safe_remote_get( string $url, array $args ): array {
-		$response = native_measure_response( $url );
+		$response = ran_wp_release_updater_test_native_measure_response( $url );
 		$body     = $response ['body'];
 		++$GLOBALS ['native_measure'] ['http_calls'];
 		$GLOBALS ['native_measure'] ['body_bytes'] += strlen( $body );
@@ -40,19 +47,23 @@ namespace {
 			'response' => array( 'code' => 200 ),
 		);
 	}
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function wp_remote_retrieve_response_code( array $r ): int {
 		return $r ['response'] ['code'];
 	}
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function wp_remote_retrieve_header( array $r, string $name ): mixed {
 		return $r ['headers'] [ strtolower( $name ) ] ?? null;
 	}
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function wp_remote_retrieve_body( array $r ): string {
 		return $r ['body'];
 	}
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function wp_http_validate_url( string $url ): string {
 		return $url;
 	}
-	// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- WordPress requires the filename parameter; this fixture allocates its own temporary filename.
+	// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress requires the filename parameter; this fixture allocates its own temporary filename. WordPress calls this global stub by its exact foreign function name.
 	function wp_tempnam( string $name ): string|false {
 		$path = tempnam( $GLOBALS ['native_measure'] ['temp'], 'asset-' );
 		if ( is_string( $path ) ) {
@@ -62,7 +73,7 @@ namespace {
 		}
 		return $path;
 	}
-	function native_measure_response( string $url ): array {
+	function ran_wp_release_updater_test_native_measure_response( string $url ): array {
 		$u          = & $GLOBALS ['native_measure'];
 		$parts      = parse_url( $url );
 		$repository = (string) ( $u ['repository'] ?? 'repository' );
@@ -72,14 +83,14 @@ namespace {
 			throw new \RuntimeException( 'Unexpected fixture request: ' . $url );
 		}
 		if ( $prefix . '/releases' === $path && isset( $parts ['query'] ) ) {
-			return array( 'body' => json_encode( native_measure_releases( $u ['scenario'] ) ) );
+			return array( 'body' => json_encode( ran_wp_release_updater_test_native_measure_releases( $u ['scenario'] ) ) );
 		}
 		if ( 1 === preg_match( '~^' . preg_quote( $prefix, '~' ) . '/releases/assets/8$~D', $path ) ) {
 			++$u ['acquisitions'];
 			return array( 'body' => $u ['zip'] );
 		}
 		if ( 1 === preg_match( '~^' . preg_quote( $prefix, '~' ) . '/releases/([0-9]+)$~D', $path, $m ) ) {
-			return array( 'body' => json_encode( native_measure_release( (int) $m [1], $u ['changed'] && $u ['after_offer'], 'incompatible' === $u ['scenario'] ) ) );
+			return array( 'body' => json_encode( ran_wp_release_updater_test_native_measure_release( (int) $m [1], $u ['changed'] && $u ['after_offer'], 'incompatible' === $u ['scenario'] ) ) );
 		}
 		if ( 1 === preg_match( '~^' . preg_quote( $prefix, '~' ) . '/commits/[A-Za-z0-9._/-]+$~D', $path ) ) {
 			return array( 'body' => json_encode( array( 'sha' => $u ['changed'] && $u ['after_offer'] ? str_repeat( 'b', 40 ) : str_repeat( 'a', 40 ) ) ) );
@@ -90,15 +101,15 @@ namespace {
 		$number = preg_match( '/-(\d+)$/', $repository, $match ) ? (int) $match [1] : 0;
 		return array( 'body' => json_encode( array( 'id' => 99 + $number ) ) );
 	}
-	function native_measure_releases( string $scenario ): array {
+	function ran_wp_release_updater_test_native_measure_releases( string $scenario ): array {
 		$n   = 'incompatible' === $scenario ? 8 : 1;
 		$all = array();
 		for ( $i = 0; $i < $n; ++$i ) {
-			$all [] = native_measure_release( $i + 1, false, 'incompatible' === $scenario );
+			$all [] = ran_wp_release_updater_test_native_measure_release( $i + 1, false, 'incompatible' === $scenario );
 		}
 		return $all;
 	}
-	function native_measure_release( int $id, bool $changed = false, bool $incompatible = false ): array {
+	function ran_wp_release_updater_test_native_measure_release( int $id, bool $changed = false, bool $incompatible = false ): array {
 		$v          = $incompatible ? '2.0.' . $id : ( 'no-newer' === $GLOBALS ['native_measure'] ['scenario'] ? '1.0.0' : '2.0.0' );
 		$repository = $GLOBALS ['native_measure'] ['repository'] ?? 'repository';
 		return array(
@@ -123,6 +134,7 @@ namespace {
 	}
 }
 
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture. Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Performance {
 	require_once dirname( __DIR__ ) . '/Support/WordPressHookFixture.php';
 	require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
@@ -196,7 +208,8 @@ namespace Tests\Performance {
 	function native_measure_shared_request( array $roots, int $targets, string $scenario, bool $callback_control = false, string $target_type = 'plugin', bool $callback_revoked = false ): array {
 		native_measure_assert( array() !== $roots && count( $roots ) === count( array_unique( $roots ) ), 'Physical runtime roots are not distinct.' );
 		$runtime_protocol           = native_measure_current_runtime_protocol( (string) getenv( 'RAN_NATIVE_MEASURE_TRUSTED_ROOT' ), $roots );
-		$temp                       = getenv( 'RAN_NATIVE_MEASURE_TEMP' ) ?: sys_get_temp_dir();
+		$temp                       = getenv( 'RAN_NATIVE_MEASURE_TEMP' );
+		$temp                       = $temp ? $temp : sys_get_temp_dir();
 		$GLOBALS ['native_measure'] = array(
 			'temp'             => $temp,
 			'scenario'         => $scenario,
@@ -215,14 +228,20 @@ namespace Tests\Performance {
 		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
 			define( 'WP_PLUGIN_DIR', $installed_root );
 		}
-		$GLOBALS ['wp_version']           = '6.8.0';
-		$GLOBALS ['wpdb']                 = new FakeOptionDatabase( 100 );
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
+		$GLOBALS ['wp_version'] = '6.8.0';
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
+		$GLOBALS ['wpdb'] = new FakeOptionDatabase( 100 );
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 		$GLOBALS ['wp_theme_directories'] = array( $installed_root );
-		$GLOBALS ['wp_filter']            = array();
-		$GLOBALS ['wp_actions']           = array();
-		$GLOBALS ['wp_current_filter']    = array();
-		$api                              = null;
-		$target_fixtures                  = array();
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
+		$GLOBALS ['wp_filter'] = array();
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
+		$GLOBALS ['wp_actions'] = array();
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
+		$GLOBALS ['wp_current_filter'] = array();
+		$api                           = null;
+		$target_fixtures               = array();
 		for ( $index = 0; $index < $targets; ++$index ) {
 			$slug = 'repository-' . $index;
 			$uri  = 'https://github.com/owner/' . $slug;
@@ -631,3 +650,5 @@ namespace Tests\Performance {
 		native_measure_main();
 	}
 }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

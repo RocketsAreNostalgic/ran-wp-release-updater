@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 declare(strict_types=1);
 
@@ -12,7 +13,8 @@ if ( ! mkdir( $root, 0700, true ) ) {
 
 register_shutdown_function(
 	static function () use ( $root ): void {
-		$paths = glob( $root . '/*' ) ?: array();
+		$paths = glob( $root . '/*' );
+		$paths = $paths ? $paths : array();
 		foreach ( $paths as $path ) {
 			if ( is_dir( $path ) ) {
 				$iterator = new RecursiveIteratorIterator(
@@ -141,3 +143,5 @@ if (
 }
 
 echo "PASS no-dev Composer consumer bootstrap uses the packaged scoped helper\n";
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

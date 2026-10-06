@@ -9,6 +9,7 @@ declare(strict_types=1);
  * tests: priority ordering, callbacks added during a hook run, current
  * priority, and action/filter bookkeeping.
  */
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound -- This stub must occupy the WordPress global class identity used by production calls.
 final class WP_Hook {
 
 	/** @var array<int,list<array{function:callable,accepted_args:int}>> */
@@ -71,18 +72,24 @@ final class WP_Hook {
 	}
 }
 
+// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them. WordPress calls this global stub by its exact foreign function name.
 function add_filter( string $hook, callable $callback, int $priority = 10, int $accepted_args = 1 ): bool {
+	// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 	$GLOBALS['wp_filter'][ $hook ] ??= new WP_Hook();
 	$GLOBALS['wp_filter'][ $hook ]->add_filter( $hook, $callback, $priority, $accepted_args );
 	return true;
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 function add_action( string $hook, callable $callback, int $priority = 10, int $accepted_args = 1 ): bool {
 	return add_filter( $hook, $callback, $priority, $accepted_args );
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 function do_action( string $hook, mixed ...$arguments ): void {
+	// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 	$GLOBALS['wp_actions'][ $hook ] = ( $GLOBALS['wp_actions'][ $hook ] ?? 0 ) + 1;
+	// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 	$GLOBALS['wp_current_filter'][] = $hook;
 	try {
 		if ( isset( $GLOBALS['wp_filter'][ $hook ] ) ) {
@@ -93,7 +100,9 @@ function do_action( string $hook, mixed ...$arguments ): void {
 	}
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 function apply_filters( string $hook, mixed $value, mixed ...$arguments ): mixed {
+	// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 	$GLOBALS['wp_current_filter'][] = $hook;
 	try {
 		return isset( $GLOBALS['wp_filter'][ $hook ] )
@@ -104,12 +113,14 @@ function apply_filters( string $hook, mixed $value, mixed ...$arguments ): mixed
 	}
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 function doing_action( ?string $hook = null ): bool {
 	return null === $hook
 		? array() !== ( $GLOBALS['wp_current_filter'] ?? array() )
 		: in_array( $hook, $GLOBALS['wp_current_filter'] ?? array(), true );
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 function did_action( string $hook ): int {
 	return $GLOBALS['wp_actions'][ $hook ] ?? 0;
 }

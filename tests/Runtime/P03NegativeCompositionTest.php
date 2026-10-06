@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Runtime;
 
 use PHPUnit\Framework\TestCase;
@@ -188,14 +189,17 @@ PHP,
 		$runtime           = $this->package_copy();
 		$probe             = $this->root . '/probe-' . bin2hex( random_bytes( 6 ) ) . '.php';
 		$data['bootstrap'] = $runtime . '/bootstrap.php';
-		$prefix            = '<?php define("WP_PLUGIN_DIR", ' . var_export( $this->root, true ) . '); '
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
+		$prefix = '<?php define("WP_PLUGIN_DIR", ' . var_export( $this->root, true ) . '); '
 			. 'function add_filter(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["p03_hooks"][]=array("hook"=>$hook,"callback"=>$callback);} '
 			. 'function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["p03_hooks"][]=array("hook"=>$hook,"callback"=>$callback);} '
 			. 'function get_filesystem_method():string{return $GLOBALS["p03_method"];} '
 			. 'function wp_remote_get():mixed{++$GLOBALS["p03_http_calls"];return false;} '
 			. '$GLOBALS["p03_hooks"]=array();$GLOBALS["p03_http_calls"]=0;$GLOBALS["p03_database_calls"]=0;'
 			. '$GLOBALS["wpdb"]=new class { public function __call(string $name,array $arguments): mixed { ++$GLOBALS["p03_database_calls"]; return null; } };'
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			. '$GLOBALS["wp_version"]="6.8.0";$GLOBALS["wp_theme_directories"]=array(' . var_export( $this->root, true ) . ');'
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			. '$data=' . var_export( $data, true ) . ';$GLOBALS["p03_method"]=$data["method"]??"direct";';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $probe, $prefix . $body );
@@ -250,7 +254,8 @@ PHP,
 	private function copy_directory( string $source, string $destination ): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $destination, 0700, true );
-		foreach ( scandir( $source ) ?: array() as $name ) {
+		$fixture_entries = scandir( $source );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
 				continue;
 			}

@@ -1,8 +1,10 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 declare( strict_types = 1 );
 
-$plugin_root   = realpath( __DIR__ . '/../../' ) ?: __DIR__ . '/../../';
+$plugin_root   = realpath( __DIR__ . '/../../' );
+$plugin_root   = $plugin_root ? $plugin_root : __DIR__ . '/../../';
 $wp_root_input = getenv( 'RAN_WP_RELEASE_UPDATER_LOCAL_WP_ROOT' );
 $wp_root       = is_string( $wp_root_input ) && '' !== $wp_root_input ? realpath( $wp_root_input ) : false;
 
@@ -18,12 +20,15 @@ $hook_file        = $base . '/phase24-harness-output-' . $db_name . '.json';
 $marker_file      = $base . '/RAN_WP_RELEASE_UPDATER_PHASE24.marker';
 $wp_cli_cmd       = '/usr/local/bin/wp';
 $php82_candidates = glob( '/Applications/Local.app/Contents/Resources/extraResources/lightning-services/php-8.2*/bin/darwin-arm64/bin/php' );
-$wp_cli_php       = getenv( 'RAN_WP_RELEASE_UPDATER_PHP82' ) ?: ( is_array( $php82_candidates ) && isset( $php82_candidates[0] ) ? $php82_candidates[0] : '' );
+$wp_cli_php       = getenv( 'RAN_WP_RELEASE_UPDATER_PHP82' );
+$wp_cli_php       = $wp_cli_php ? $wp_cli_php : ( is_array( $php82_candidates ) && isset( $php82_candidates[0] ) ? $php82_candidates[0] : '' );
 $server           = null;
-$mode             = 'isolated_mysql_server';
-$db_user          = getenv( 'RAN_WP_RELEASE_UPDATER_DB_USER' ) ?: 'root';
-$db_pass_raw      = getenv( 'RAN_WP_RELEASE_UPDATER_DB_PASSWORD' );
-$db_password      = false === $db_pass_raw ? '' : $db_pass_raw;
+// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
+$mode        = 'isolated_mysql_server';
+$db_user     = getenv( 'RAN_WP_RELEASE_UPDATER_DB_USER' );
+$db_user     = $db_user ? $db_user : 'root';
+$db_pass_raw = getenv( 'RAN_WP_RELEASE_UPDATER_DB_PASSWORD' );
+$db_password = false === $db_pass_raw ? '' : $db_pass_raw;
 
 if ( false === $workspace || ! is_dir( $workspace ) || file_exists( $base ) || is_link( $base ) || dirname( $base ) !== $workspace ) {
 	throw new RuntimeException( 'Refusing to run harness outside its durable workspace.' );
@@ -48,11 +53,12 @@ putenv( 'TMP=' . $php_temp_dir );
 // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv -- This standalone proof configures temporary paths and its marker for descendant processes.
 putenv( 'TEMP=' . $php_temp_dir );
 
-$mysqld    = getenv( 'RAN_UPDATER_MYSQLD_BIN' ) ?: '/Applications/Local.app/Contents/Resources/extraResources/lightning-services/mysql-8.4.0/bin/darwin-arm64/bin/mysqld';
+$mysqld    = getenv( 'RAN_UPDATER_MYSQLD_BIN' );
+$mysqld    = $mysqld ? $mysqld : '/Applications/Local.app/Contents/Resources/extraResources/lightning-services/mysql-8.4.0/bin/darwin-arm64/bin/mysqld';
 $mysql_dir = $base . '/mysql';
 $socket    = 'mysql.sock';
 $pid_file  = 'mysqld.pid';
-$port      = reserveLoopbackPort();
+$port      = ran_wp_release_updater_test_reserve_loopback_port();
 
 $result = array(
 	'marker'          => $marker,
@@ -83,7 +89,7 @@ try {
 	if ( ! is_file( $mysqld ) || ! is_executable( $mysqld ) ) {
 		throw new RuntimeException( 'The isolated Local mysqld binary is unavailable.' );
 	}
-	run_command( array( $mysqld, '--no-defaults', '--initialize-insecure', '--datadir=' . $mysql_data_dir, '--socket=' . $socket, '--tmpdir=' . $mysql_dir, '--skip-mysqlx' ), $mysql_dir, null, true );
+	ran_wp_release_updater_test_run_command( array( $mysqld, '--no-defaults', '--initialize-insecure', '--datadir=' . $mysql_data_dir, '--socket=' . $socket, '--tmpdir=' . $mysql_dir, '--skip-mysqlx' ), $mysql_dir, null, true );
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Start the dedicated mysqld child with explicit argv and fixture paths; the harness owns its shutdown.
 	$server = proc_open(
 		array( $mysqld, '--no-defaults', '--datadir=' . $mysql_data_dir, '--bind-address=127.0.0.1', '--port=' . $port, '--socket=' . $socket, '--pid-file=' . $pid_file, '--tmpdir=' . $mysql_dir, '--skip-mysqlx', '--log-error=' . $mysql_dir . '/mysqld.err' ),
@@ -100,14 +106,15 @@ try {
 	}
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $server_pipes[0] );
+	// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 	$mode = 'isolated_mysql_server';
 
 	$result['database_mode'] = $mode;
-	$mysqli                  = attest_server( $server, $port, $mysql_data_dir, $db_user, $db_password );
+	$mysqli                  = ran_wp_release_updater_test_attest_server( $server, $port, $mysql_data_dir, $db_user, $db_password );
 	$mysqli->query( 'CREATE DATABASE IF NOT EXISTS `' . $mysqli->real_escape_string( $db_name ) . '`' );
 	$mysqli->close();
 
-	copy_tree( $wp_root, $site_path, array( '.git', 'wp-content', 'wp-config.php', '.well-known' ) );
+	ran_wp_release_updater_test_copy_tree( $wp_root, $site_path, array( '.git', 'wp-content', 'wp-config.php', '.well-known' ) );
 	foreach ( array( $site_path . '/wp-content/plugins', $site_path . '/wp-content/themes', $site_path . '/wp-content/uploads' ) as $directory ) {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 		if ( ! is_dir( $directory ) && ! mkdir( $directory, 0700, true ) ) {
@@ -115,7 +122,7 @@ try {
 		}
 	}
 	$copied_updater = $site_path . '/wp-content/plugins/ran-wp-release-updater';
-	copy_tree( $plugin_root, $copied_updater, array( 'tests', '.git', '.github', '.phpunit.cache', '.workspaces', 'node_modules', 'vendor' ) );
+	ran_wp_release_updater_test_copy_tree( $plugin_root, $copied_updater, array( 'tests', '.git', '.github', '.phpunit.cache', '.workspaces', 'node_modules', 'vendor' ) );
 	if ( is_dir( $copied_updater . '/.phpunit.cache' ) || is_dir( $copied_updater . '/.workspaces' ) ) {
 		throw new RuntimeException( 'Disposable updater copy includes a private work or cache root.' );
 	}
@@ -123,13 +130,13 @@ try {
 	$plugin_uri        = 'https://github.com/phase24-owner/phase24-plugin';
 	$theme_uri         = 'https://github.com/phase24-owner/phase24-theme';
 	$manager_theme_uri = 'https://github.com/phase24-owner/phase24-manager-theme';
-	$plugin_archive    = make_fixture_archive( $site_path, 'phase24-plugin', $plugin_uri, 'plugin', '2.0.0', false );
-	$theme_archive     = make_fixture_archive( $site_path, 'phase24-theme', $theme_uri, 'theme', '2.0.0', true );
+	$plugin_archive    = ran_wp_release_updater_test_make_fixture_archive( $site_path, 'phase24-plugin', $plugin_uri, 'plugin', '2.0.0', false );
+	$theme_archive     = ran_wp_release_updater_test_make_fixture_archive( $site_path, 'phase24-theme', $theme_uri, 'theme', '2.0.0', true );
 
-	create_fixture_plugin( $site_path, 'phase24-plugin', $plugin_uri );
-	create_fixture_theme( $site_path, 'phase24-theme', $theme_uri );
-	create_fixture_theme( $site_path, 'phase24-manager-theme', $manager_theme_uri );
-	create_manager_plugin( $site_path, 'phase24-manager-theme' );
+	ran_wp_release_updater_test_create_fixture_plugin( $site_path, 'phase24-plugin', $plugin_uri );
+	ran_wp_release_updater_test_create_fixture_theme( $site_path, 'phase24-theme', $theme_uri );
+	ran_wp_release_updater_test_create_fixture_theme( $site_path, 'phase24-manager-theme', $manager_theme_uri );
+	ran_wp_release_updater_test_create_manager_plugin( $site_path, 'phase24-manager-theme' );
 
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 	file_put_contents(
@@ -172,10 +179,10 @@ try {
 		throw new RuntimeException( 'Required local WP-CLI or PHP 8.2 runtime is unavailable.' );
 	}
 	$admin_password = bin2hex( random_bytes( 32 ) );
-	run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'core', 'install', '--skip-email', '--url=http://127.0.0.1', '--title=phase24', '--admin_user=admin', '--prompt=admin_password', '--admin_email=admin@example.test' ), $site_path, $cli_env, true, $admin_password . "\n" );
-	run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'plugin', 'activate', 'phase24-plugin' ), $site_path, $cli_env, true );
-	run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'plugin', 'activate', 'phase24-manager' ), $site_path, $cli_env, true );
-	run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'theme', 'activate', 'phase24-theme' ), $site_path, $cli_env, true );
+	ran_wp_release_updater_test_run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'core', 'install', '--skip-email', '--url=http://127.0.0.1', '--title=phase24', '--admin_user=admin', '--prompt=admin_password', '--admin_email=admin@example.test' ), $site_path, $cli_env, true, $admin_password . "\n" );
+	ran_wp_release_updater_test_run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'plugin', 'activate', 'phase24-plugin' ), $site_path, $cli_env, true );
+	ran_wp_release_updater_test_run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'plugin', 'activate', 'phase24-manager' ), $site_path, $cli_env, true );
+	ran_wp_release_updater_test_run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'theme', 'activate', 'phase24-theme' ), $site_path, $cli_env, true );
 
 	$probe_env = array(
 		'RAN_WP_RELEASE_UPDATER_PHASE24'                   => $marker,
@@ -188,10 +195,10 @@ try {
 		'RAN_WP_RELEASE_UPDATER_MANAGER_THEME_URI'         => $manager_theme_uri,
 		'RAN_WP_RELEASE_UPDATER_PLUGIN_ARCHIVE'            => $plugin_archive,
 		'RAN_WP_RELEASE_UPDATER_THEME_ARCHIVE'             => $theme_archive,
-		'RAN_WP_RELEASE_UPDATER_PLUGIN_FAILURE_ARCHIVE'    => make_fixture_archive( $site_path, 'phase24-plugin', $plugin_uri, 'plugin-failure', '3.0.0', false ),
-		'RAN_WP_RELEASE_UPDATER_THEME_FAILURE_ARCHIVE'     => make_fixture_archive( $site_path, 'phase24-theme', $theme_uri, 'theme-failure', '3.0.0', true ),
-		'RAN_WP_RELEASE_UPDATER_PLUGIN_VALIDATION_ARCHIVE' => make_fixture_archive( $site_path, 'phase24-plugin', $plugin_uri . '-wrong', 'plugin-validation', '3.0.0', false ),
-		'RAN_WP_RELEASE_UPDATER_THEME_VALIDATION_ARCHIVE'  => make_fixture_archive( $site_path, 'phase24-theme', $theme_uri . '-wrong', 'theme-validation', '3.0.0', true ),
+		'RAN_WP_RELEASE_UPDATER_PLUGIN_FAILURE_ARCHIVE'    => ran_wp_release_updater_test_make_fixture_archive( $site_path, 'phase24-plugin', $plugin_uri, 'plugin-failure', '3.0.0', false ),
+		'RAN_WP_RELEASE_UPDATER_THEME_FAILURE_ARCHIVE'     => ran_wp_release_updater_test_make_fixture_archive( $site_path, 'phase24-theme', $theme_uri, 'theme-failure', '3.0.0', true ),
+		'RAN_WP_RELEASE_UPDATER_PLUGIN_VALIDATION_ARCHIVE' => ran_wp_release_updater_test_make_fixture_archive( $site_path, 'phase24-plugin', $plugin_uri . '-wrong', 'plugin-validation', '3.0.0', false ),
+		'RAN_WP_RELEASE_UPDATER_THEME_VALIDATION_ARCHIVE'  => ran_wp_release_updater_test_make_fixture_archive( $site_path, 'phase24-theme', $theme_uri . '-wrong', 'theme-validation', '3.0.0', true ),
 		'RAN_WP_RELEASE_UPDATER_OUTPUT'                    => $hook_file,
 		'RAN_WP_RELEASE_UPDATER_MARKER_FILE'               => $marker_file,
 	);
@@ -199,14 +206,15 @@ try {
 	$phase_output       = array();
 	$successful_digests = array();
 	foreach ( array( 'manual', 'automatic' ) as $policy ) {
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
 			foreach ( array( 'success', 'download', 'validation', 'install' ) as $phase_mode ) {
 						$phase = array( $policy, $phase_mode, $type );
 				if ( 'success' === $phase_mode ) {
 					if ( 'plugin' === $type ) {
-						create_fixture_plugin( $site_path, 'phase24-plugin', $plugin_uri );
+						ran_wp_release_updater_test_create_fixture_plugin( $site_path, 'phase24-plugin', $plugin_uri );
 					} else {
-						create_fixture_theme( $site_path, 'phase24-theme', $theme_uri );
+						ran_wp_release_updater_test_create_fixture_theme( $site_path, 'phase24-theme', $theme_uri );
 					}
 				}
 				$phase_file                                      = $base . '/phase24-' . implode( '-', $phase ) . '.json';
@@ -221,7 +229,7 @@ try {
 				$phase_env['TMPDIR']                               = $php_temp_dir;
 				$phase_env['TMP']                                  = $php_temp_dir;
 				$phase_env['TEMP']                                 = $php_temp_dir;
-				run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'eval-file', $plugin_root . '/tests/Integration/phase-2.4-wordpress-core-proof-harness.php' ), $site_path, $phase_env, true );
+				ran_wp_release_updater_test_run_command( array( $wp_cli_php, '-n', '-d', 'sys_temp_dir=' . $php_temp_dir, $wp_cli_cmd, '--path=' . $site_path, 'eval-file', $plugin_root . '/tests/Integration/phase-2.4-wordpress-core-proof-harness.php' ), $site_path, $phase_env, true );
 				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 				$one                    = json_decode( (string) file_get_contents( $phase_file ), true, 64, JSON_THROW_ON_ERROR );
 				$database               = is_array( $one ) ? ( $one['post_shutdown']['database'] ?? null ) : null;
@@ -322,7 +330,7 @@ try {
 			}
 		}
 	}
-	$readback = run_command(
+	$readback = ran_wp_release_updater_test_run_command(
 		array(
 			$wp_cli_php,
 			'-n',
@@ -370,6 +378,7 @@ try {
 	if ( is_resource( $server ) ) {
 		proc_terminate( $server, 15 );
 		for ( $attempt = 0; $attempt < 100; ++$attempt ) {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 			$status = proc_get_status( $server );
 			if ( ! $status['running'] ) {
 				proc_close( $server );
@@ -386,12 +395,14 @@ try {
 
 	if ( isset( $port, $db_name ) ) {
 		try {
+			// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_init -- The isolated proof owns a dedicated native MySQL connection before or outside WordPress database initialization.
 			$cleanup = mysqli_init();
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- The isolated server may already be unavailable; connection success gates best-effort database teardown.
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.DB.RestrictedFunctions.mysql_mysqli_real_connect -- The isolated server may already be unavailable; connection success gates best-effort database teardown. Connect only to the isolated fixture database; preserve its socket/port and server-attestation boundary.
 			if ( @mysqli_real_connect( $cleanup, '127.0.0.1', $db_user, $db_password, null, $port ) ) {
 				$cleanup->query( 'DROP DATABASE IF EXISTS `' . $cleanup->real_escape_string( $db_name ) . '`' );
 				$cleanup->close();
 			}
+		// phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- An unavailable isolated server is expected during startup/teardown; preserve the bounded retry or cleanup path.
 		} catch ( mysqli_sql_exception ) {
 			// The isolated server may fail before it has created its socket.
 		}
@@ -405,7 +416,7 @@ try {
 	if ( is_link( $base ) || realpath( $base ) !== $base || dirname( $base ) !== $workspace || ! is_file( $marker_file ) || is_link( $marker_file ) || file_get_contents( $marker_file ) !== $marker . "\n" ) {
 		throw new RuntimeException( 'Refusing cleanup because disposable-root ownership cannot be revalidated.' );
 	}
-	removeTree( $base );
+	ran_wp_release_updater_test_remove_tree( $base );
 	if ( file_exists( $base ) || is_link( $base ) ) {
 		throw new RuntimeException( 'Disposable proof root was not fully removed.' );
 	}
@@ -413,7 +424,7 @@ try {
 
 echo json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . PHP_EOL;
 
-function run_command( array $command, string $cwd, ?array $env = null, bool $require_zero = true, string $stdin = '' ): array {
+function ran_wp_release_updater_test_run_command( array $command, string $cwd, ?array $env = null, bool $require_zero = true, string $stdin = '' ): array {
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
 	$process = proc_open(
 		$command,
@@ -460,7 +471,7 @@ function run_command( array $command, string $cwd, ?array $env = null, bool $req
 	);
 }
 
-function reserveLoopbackPort(): int {
+function ran_wp_release_updater_test_reserve_loopback_port(): int {
 	$listener = stream_socket_server( 'tcp://127.0.0.1:0', $error_number, $error_message );
 	if ( false === $listener ) {
 		throw new RuntimeException( 'Could not reserve an isolated loopback port: ' . $error_message . ' (' . $error_number . ')' );
@@ -476,12 +487,12 @@ function reserveLoopbackPort(): int {
 	return $port;
 }
 
-function attest_server( mixed $server, int $port, string $data_directory, string $user, string $password ): mysqli {
+function ran_wp_release_updater_test_attest_server( mixed $server, int $port, string $data_directory, string $user, string $password ): mysqli {
 	$status = is_resource( $server ) ? proc_get_status( $server ) : false;
 	if ( ! is_array( $status ) || ! $status['running'] ) {
 		throw new RuntimeException( 'Isolated MySQL stopped before attestation.' );
 	}
-	$mysqli = connect( $port, $user, $password );
+	$mysqli = ran_wp_release_updater_test_connect( $port, $user, $password );
 	try {
 		$result   = $mysqli->query( 'SELECT @@datadir AS datadir' );
 		$row      = $result->fetch_assoc();
@@ -497,15 +508,18 @@ function attest_server( mixed $server, int $port, string $data_directory, string
 	}
 }
 
-function connect( int $port, string $user, string $password ): mysqli {
+function ran_wp_release_updater_test_connect( int $port, string $user, string $password ): mysqli {
 	$attempts = 0;
 	while ( $attempts < 120 ) {
+		// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_init -- The isolated proof owns a dedicated native MySQL connection before or outside WordPress database initialization.
 		$mysqli = mysqli_init();
 		try {
+			// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_real_connect -- Connect only to the isolated fixture database; preserve its socket/port and server-attestation boundary.
 			$connected = is_object( $mysqli ) && mysqli_real_connect( $mysqli, '127.0.0.1', $user, $password, null, $port );
 			if ( $connected ) {
 				return $mysqli;
 			}
+		// phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- An unavailable isolated server is expected during startup/teardown; preserve the bounded retry or cleanup path.
 		} catch ( mysqli_sql_exception ) {
 		}
 		if ( is_object( $mysqli ) ) {
@@ -517,7 +531,7 @@ function connect( int $port, string $user, string $password ): mysqli {
 	throw new RuntimeException( 'Could not connect to MySQL socket.' );
 }
 
-function copy_tree( string $source, string $destination, array $exclude = array() ): void {
+function ran_wp_release_updater_test_copy_tree( string $source, string $destination, array $exclude = array() ): void {
 	$source      = rtrim( $source, '/\\' );
 	$destination = rtrim( $destination, '/\\' );
 	if ( ! is_dir( $source ) ) {
@@ -568,33 +582,33 @@ function copy_tree( string $source, string $destination, array $exclude = array(
 	}
 }
 
-function create_fixture_plugin( string $site, string $identity, string $uri ): void {
+function ran_wp_release_updater_test_create_fixture_plugin( string $site, string $identity, string $uri ): void {
 	$root = $site . '/wp-content/plugins/' . $identity;
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 		throw new RuntimeException( 'Could not create fixture plugin directory.' );
 	}
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
-	file_put_contents( $root . '/' . $identity . '.php', fixture_plugin_source( $uri, '1.0.0' ) );
+	file_put_contents( $root . '/' . $identity . '.php', ran_wp_release_updater_test_fixture_plugin_source( $uri, '1.0.0' ) );
 }
 
-function create_fixture_theme( string $site, string $identity, string $uri ): void {
+function ran_wp_release_updater_test_create_fixture_theme( string $site, string $identity, string $uri ): void {
 	$root = $site . '/wp-content/themes/' . $identity;
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 		throw new RuntimeException( 'Could not create fixture theme directory.' );
 	}
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
-	file_put_contents( $root . '/style.css', fixture_theme_stylesheet( $uri, '1.0.0' ) );
+	file_put_contents( $root . '/style.css', ran_wp_release_updater_test_fixture_theme_stylesheet( $uri, '1.0.0' ) );
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 	file_put_contents( $root . '/index.php', "<?php\n// Phase24 disposable theme fixture.\n" );
 	if ( 'phase24-theme' === $identity ) {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
-		file_put_contents( $root . '/functions.php', fixture_theme_registration_source() );
+		file_put_contents( $root . '/functions.php', ran_wp_release_updater_test_fixture_theme_registration_source() );
 	}
 }
 
-function create_manager_plugin( string $site, string $theme ): void {
+function ran_wp_release_updater_test_create_manager_plugin( string $site, string $theme ): void {
 	$root = $site . '/wp-content/plugins/phase24-manager';
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
@@ -604,36 +618,36 @@ function create_manager_plugin( string $site, string $theme ): void {
 	file_put_contents( $root . '/phase24-manager.php', "<?php\n/*\nPlugin Name: Phase24 Manager\nVersion: 1.0.0\n*/\n\$phase24 = require dirname( __DIR__ ) . '/ran-wp-release-updater/bootstrap.php';\n\$phase24Handle = \$phase24->theme( 'github', WP_CONTENT_DIR . '/themes/{$theme}/style.css', 'phase24-owner/phase24-manager-theme', '102', 'stable', 'disabled' );\n\$phase24Handle->register();\n\$GLOBALS['phase24_handles']['manager'] = \$phase24Handle;\n" );
 }
 
-function make_fixture_archive( string $site, string $identity, string $uri, string $archive_tag, string $version, bool $is_theme ): string {
+function ran_wp_release_updater_test_make_fixture_archive( string $site, string $identity, string $uri, string $archive_tag, string $version, bool $is_theme ): string {
 	$zip_path = $site . '/wp-content/uploads/' . $archive_tag . '-' . $identity . '.zip';
 	$zip      = new ZipArchive();
 	if ( true !== $zip->open( $zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
 		throw new RuntimeException( 'Could not create fixture archive.' );
 	}
 	$archive_root = $identity . '/';
-	$zip->addFromString( $archive_root . ( $is_theme ? 'style.css' : $identity . '.php' ), $is_theme ? fixture_theme_stylesheet( $uri, $version ) : fixture_plugin_source( $uri, $version ) );
+	$zip->addFromString( $archive_root . ( $is_theme ? 'style.css' : $identity . '.php' ), $is_theme ? ran_wp_release_updater_test_fixture_theme_stylesheet( $uri, $version ) : ran_wp_release_updater_test_fixture_plugin_source( $uri, $version ) );
 	if ( $is_theme ) {
 		$zip->addFromString( $archive_root . 'index.php', "<?php\n// Phase24 disposable theme fixture.\n" );
-		$zip->addFromString( $archive_root . 'functions.php', fixture_theme_registration_source() );
+		$zip->addFromString( $archive_root . 'functions.php', ran_wp_release_updater_test_fixture_theme_registration_source() );
 	}
 	$zip->addFromString( $archive_root . 'readme.txt', "Phase24 fixture archive {$archive_tag}\n" );
 	$zip->close();
 	return $zip_path;
 }
 
-function fixture_plugin_source( string $uri, string $version ): string {
+function ran_wp_release_updater_test_fixture_plugin_source( string $uri, string $version ): string {
 	return "<?php\n/*\nPlugin Name: Phase24 Plugin\nVersion: {$version}\nUpdate URI: {$uri}\nRequires PHP: 8.2\nRequires at least: 6.8\n*/\n// phase24-plugin-v{$version}\n\$phase24 = require dirname( __DIR__ ) . '/ran-wp-release-updater/bootstrap.php';\n\$phase24Handle = \$phase24->plugin( 'github', __FILE__, 'phase24-owner/phase24-plugin', '101', 'stable', getenv( 'RAN_WP_RELEASE_UPDATER_POLICY' ) ?: 'manual', static fn (): string => 'phase24-token' );\n\$phase24Handle->register();\n\$GLOBALS['phase24_handles']['plugin'] = \$phase24Handle;\n";
 }
 
-function fixture_theme_stylesheet( string $uri, string $version ): string {
+function ran_wp_release_updater_test_fixture_theme_stylesheet( string $uri, string $version ): string {
 	return "/*\nTheme Name: Phase24 Theme\nVersion: {$version}\nUpdate URI: {$uri}\nRequires PHP: 8.2\nRequires at least: 6.8\n*/\n";
 }
 
-function fixture_theme_registration_source(): string {
+function ran_wp_release_updater_test_fixture_theme_registration_source(): string {
 	return "<?php\n\$phase24 = require dirname( __DIR__, 2 ) . '/plugins/ran-wp-release-updater/bootstrap.php';\n\$phase24Handle = \$phase24->theme( 'github', __DIR__ . '/style.css', 'phase24-owner/phase24-theme', '101', 'stable', getenv( 'RAN_WP_RELEASE_UPDATER_POLICY' ) ?: 'manual', static fn (): string => 'phase24-token' );\n\$phase24Handle->register();\n\$GLOBALS['phase24_handles']['theme'] = \$phase24Handle;\n";
 }
 
-function removeTree( string $path ): void {
+function ran_wp_release_updater_test_remove_tree( string $path ): void {
 	if ( ! is_dir( $path ) ) {
 		return;
 	}
@@ -645,3 +659,5 @@ function removeTree( string $path ): void {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 	rmdir( $path );
 }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

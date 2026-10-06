@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Documentation;
 
 use PHPUnit\Framework\TestCase;
@@ -168,8 +169,9 @@ final class ReadmeExamplesTest extends TestCase {
 	}
 
 	public function test_release_fence_cannot_pass_when_its_callback_does_no_operation(): void {
-		$script  = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
-		$fence   = '$source = $registrar->releases(provider: "github", package_type: "plugin", repository: "acme/consumer", repository_id: "99"); add_action("init", static function (): void {});';
+		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
+		$fence  = '$source = $registrar->releases(provider: "github", package_type: "plugin", repository: "acme/consumer", repository_id: "99"); add_action("init", static function (): void {});';
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Carry exact repository documentation-fence bytes through the escaped CLI argument; this is a controlled test payload.
 		$command = $this->child_php_command( $script, array( 'plugin', 'fence-list', base64_encode( $fence ) ) );
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( $command, $output, $status );
@@ -191,7 +193,8 @@ final class ReadmeExamplesTest extends TestCase {
 	}
 
 	private function assert_release_source_fence( string $type, string $scenario, string $fence ): void {
-		$script  = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
+		$script = dirname( __DIR__, 2 ) . '/tests/Integration/release-source-consumer-proof.php';
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Carry exact repository documentation-fence bytes through the escaped CLI argument; this is a controlled test payload.
 		$command = $this->child_php_command( $script, array( $type, $scenario, base64_encode( $fence ) ) );
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( $command, $output, $status );
@@ -293,11 +296,14 @@ final class ReadmeExamplesTest extends TestCase {
 		$file   = $directory . '/' . $name;
 		$body   = str_replace( '<?php', '', $body );
 		$prefix = '<?php '
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			. 'define("WP_PLUGIN_DIR", ' . var_export( $this->root . '/plugins', true ) . ');'
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			. '$GLOBALS["readme_hooks"]=[];$GLOBALS["readme_credential_calls"]=0;$GLOBALS["wpdb"]=new stdClass();$GLOBALS["wp_version"]="6.8.0";$GLOBALS["wp_theme_directories"]=[' . var_export( $this->root . '/themes', true ) . '];'
 			. 'function add_filter(string $hook,mixed $callback,int $priority=10,int $arguments=1):void{$GLOBALS["readme_hooks"][]=["hook"=>$hook,"callback"=>$callback,"priority"=>$priority];}'
 			. 'function add_action(string $hook,mixed $callback,int $priority=10,int $arguments=1):void{$GLOBALS["readme_hooks"][]=["hook"=>$hook,"callback"=>$callback,"priority"=>$priority];}'
 			. 'function doing_action(string $hook):bool{return false;}function did_action(string $hook):int{return 0;}'
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			. 'function get_theme_root(string $stylesheet=""):string{return ' . var_export( $this->root . '/themes', true ) . ';}'
 			. 'function readmeSnapshot(object $registrar):array{$broker=$registrar->diagnostics();$submissions=(new ReflectionProperty($GLOBALS["ran_wp_release_updater_v1_broker"],"submissions"))->getValue($GLOBALS["ran_wp_release_updater_v1_broker"]);return ["broker"=>$broker,"schedule"=>array_map(static fn(array $hook):array=>["hook"=>$hook["hook"],"priority"=>$hook["priority"]],$GLOBALS["readme_hooks"]),"declaration"=>$submissions[1]["declaration"]??null];}'
 			. 'function runAfterSetupTheme():void{foreach($GLOBALS["readme_hooks"] as $registered){if("after_setup_theme"===$registered["hook"]){$registered["callback"]();}}}';

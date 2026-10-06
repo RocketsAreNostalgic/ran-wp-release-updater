@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 declare(strict_types=1);
 
@@ -50,7 +51,8 @@ try {
 	if ( 0 === $exit || ! str_contains( $stdout . $stderr, 'requires RAN_UPDATER_MYSQLD_BIN' ) ) {
 		throw new RuntimeException( 'Setup-failure proof did not fail while resolving mysqld.' );
 	}
-	$entries = array_values( array_diff( scandir( $root ) ?: array(), array( '.', '..' ) ) );
+	$fixture_entries = scandir( $root );
+	$entries         = array_values( array_diff( $fixture_entries ? $fixture_entries : array(), array( '.', '..' ) ) );
 	if ( array() !== $entries ) {
 		throw new RuntimeException( 'Setup-failure proof leaked an isolated MySQL child directory.' );
 	}
@@ -76,8 +78,13 @@ try {
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv -- Restore the caller environment after the setup-failure subprocess.
 		putenv( 'RAN_UPDATER_MYSQLD_BIN=' . $original_mysqld );
 	}
-	if ( is_dir( $root ) && array() === array_values( array_diff( scandir( $root ) ?: array(), array( '.', '..' ) ) ) ) {
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
-		rmdir( $root );
+	if ( is_dir( $root ) ) {
+		$fixture_entries = scandir( $root );
+		if ( array() === array_values( array_diff( $fixture_entries ? $fixture_entries : array(), array( '.', '..' ) ) ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
+			rmdir( $root );
+		}
 	}
 }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

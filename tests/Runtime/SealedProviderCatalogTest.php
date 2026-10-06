@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Runtime;
 
 use PHPUnit\Framework\TestCase;
@@ -409,10 +410,13 @@ define( 'FS_METHOD', 'direct' );
 function get_filesystem_method(): string { return 'direct'; }
 $data = __DATA__;
 PHP;
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$prefix = str_replace( '__ROOT__', var_export( $this->root, true ), $prefix, $count );
 		self::assertSame( 1, $count );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$prefix = str_replace( '__FAKE_DATABASE__', var_export( dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php', true ), $prefix, $count );
 		self::assertSame( 1, $count );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$prefix = str_replace( '__DATA__', var_export( $data, true ), $prefix, $count );
 		self::assertSame( 1, $count );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.

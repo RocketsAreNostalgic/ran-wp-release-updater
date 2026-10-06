@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Runtime;
 
 use PHPUnit\Framework\TestCase;
@@ -90,13 +91,14 @@ PHP
 
 	/** @return array<string,mixed> */
 	private function probe( string $body ): array {
-		$file   = $this->root . '/probe.php';
-		$data   = array(
+		$file = $this->root . '/probe.php';
+		$data = array(
 			'active'    => $this->root . '/active-theme/style.css',
 			'bootstrap' => $this->package_copy() . '/bootstrap.php',
 			'hooks'     => dirname( __DIR__ ) . '/Support/WordPressHookFixture.php',
 			'inactive'  => $this->root . '/inactive-theme/style.css',
 		);
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$prefix = '<?php define("WP_PLUGIN_DIR", ' . var_export( $this->root, true ) . '); require ' . var_export( $data['hooks'], true ) . '; $GLOBALS["wpdb"]=new stdClass(); $GLOBALS["wp_theme_directories"]=array(' . var_export( $this->root, true ) . '); $GLOBALS["wp_version"]="6.8.0"; $data=' . var_export( $data, true ) . ';';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $prefix . $body );
@@ -146,7 +148,8 @@ PHP
 	private function copy_directory( string $source, string $destination ): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $destination, 0700, true );
-		foreach ( scandir( $source ) ?: array() as $name ) {
+		$fixture_entries = scandir( $source );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
 				continue;
 			}

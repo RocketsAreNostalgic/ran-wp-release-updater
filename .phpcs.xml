@@ -33,7 +33,6 @@
 	<rule ref="WordPress.PHP.YodaConditions"/>
 
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
-		<exclude-pattern>/tests/</exclude-pattern>
 		<exclude-pattern>/scripts/</exclude-pattern>
 		<properties>
 			<property name="prefixes" type="array">
@@ -95,23 +94,20 @@
 	<!-- NativePackageUpdater uses URL-safe base64 solely as a bounded opaque operation token, never to conceal executable code. -->
 	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode">
 		<exclude-pattern>/src/WordPress/NativePackageUpdater.php</exclude-pattern>
-		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode">
 		<exclude-pattern>/src/WordPress/NativePackageUpdater.php</exclude-pattern>
-		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 
 	<!--
-		Integration/compatibility tests intentionally construct synthetic plugins,
-		classes, namespaces, hooks and subprocesses. These rules are meaningful for
-		production code but would make the fixtures less representative.
+		Test helpers follow owned naming and syntax rules. Foreign declarations,
+		synthetic fixtures, controlled globals and CLI diagnostics retain exact
+		local exceptions with their concrete contract reasons.
 	-->
-	<rule ref="WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="WordPress.PHP.DevelopmentFunctions.error_log_var_export"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="Universal.Operators.DisallowShortTernary.Found"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid"/>
+	<rule ref="WordPress.PHP.DevelopmentFunctions.error_log_var_export"/>
+	<rule ref="Universal.Operators.DisallowShortTernary.Found"/>
 	<rule ref="WordPress.WP.GlobalVariablesOverride.Prohibited">
-		<exclude-pattern>/tests/</exclude-pattern>
 		<exclude-pattern>/scripts/</exclude-pattern>
 	</rule>
 	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec"/>
@@ -120,27 +116,24 @@
 	</rule>
 	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec"/>
 	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv"/>
-	<rule ref="Universal.Files.SeparateFunctionsFromOO.Mixed"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="Universal.Namespaces.OneDeclarationPerFile.MultipleFound"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="Generic.Files.OneObjectStructurePerFile">
-		<exclude-pattern>/tests/</exclude-pattern>
-	</rule>
-	<rule ref="Generic.Classes.DuplicateClassName.Found"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="Generic.CodeAnalysis.EmptyStatement.DetectedCatch"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="Generic.CodeAnalysis.ForLoopWithTestFunctionCall.NotAllowed"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="WordPress.NamingConventions.ValidHookName.UseUnderscores"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="WordPress.DB.RestrictedFunctions.mysql_mysqli_init"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="WordPress.DB.RestrictedFunctions.mysql_mysqli_real_connect"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="WordPress.DB.RestrictedFunctions.mysql_mysqli_report"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="Squiz.PHP.Eval.Discouraged"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="Generic.Strings.UnnecessaryStringConcat.Found"><exclude-pattern>/tests/</exclude-pattern></rule>
-	<rule ref="Squiz.Operators.IncrementDecrementUsage.NoBrackets"><exclude-pattern>/tests/</exclude-pattern></rule>
+	<rule ref="Universal.Files.SeparateFunctionsFromOO.Mixed"/>
+	<rule ref="Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden"/>
+	<rule ref="Universal.Namespaces.OneDeclarationPerFile.MultipleFound"/>
+	<rule ref="Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden"/>
+	<rule ref="Generic.Files.OneObjectStructurePerFile"/>
+	<rule ref="Generic.Classes.DuplicateClassName.Found"/>
+	<rule ref="Generic.CodeAnalysis.EmptyStatement.DetectedCatch"/>
+	<rule ref="Generic.CodeAnalysis.ForLoopWithTestFunctionCall.NotAllowed"/>
+	<rule ref="WordPress.NamingConventions.ValidHookName.UseUnderscores"/>
+	<rule ref="WordPress.DB.RestrictedFunctions.mysql_mysqli_init"/>
+	<rule ref="WordPress.DB.RestrictedFunctions.mysql_mysqli_real_connect"/>
+	<rule ref="WordPress.DB.RestrictedFunctions.mysql_mysqli_report"/>
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize"/>
+	<rule ref="WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize"/>
+	<rule ref="Squiz.PHP.Eval.Discouraged"/>
+	<rule ref="Generic.Strings.UnnecessaryStringConcat.Found"/>
+	<rule ref="Squiz.Operators.IncrementDecrementUsage.NoBrackets"/>
 	<rule ref="WordPress.Security.EscapeOutput.OutputNotEscaped">
 		<exclude-pattern>/scripts/lint-php.php</exclude-pattern>
-		<exclude-pattern>/tests/</exclude-pattern>
 	</rule>
 </ruleset>

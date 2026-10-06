@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 // wp eval-file wraps this fixture before execution, so strict_types cannot lead.
 
@@ -7,7 +8,7 @@ require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
 require_once ABSPATH . 'wp-admin/includes/class-plugin-upgrader.php';
 require_once ABSPATH . 'wp-admin/includes/class-theme-upgrader.php';
 
-final class RAN_Updater_Integration_Skin extends WP_Upgrader_Skin {
+final class RAN_WP_RELEASE_UPDATER_Test_Integration_Skin extends WP_Upgrader_Skin {
 
 	// phpcs:ignore Universal.NamingConventions.NoReservedKeywordParameterNames.stringFound -- Preserve this existing WP_Upgrader_Skin override parameter for named-call compatibility.
 	public function feedback( $string, ...$args ): void {}
@@ -15,13 +16,14 @@ final class RAN_Updater_Integration_Skin extends WP_Upgrader_Skin {
 	public function footer(): void {}
 }
 
-$plugin_zip = requiredInput( 'RAN_UPDATER_PLUGIN_ZIP' );
-$theme_zip  = requiredInput( 'RAN_UPDATER_THEME_ZIP' );
-$output     = requiredInput( 'RAN_UPDATER_OUTPUT' );
-$mode       = requiredInput( 'RAN_UPDATER_DISTRIBUTION_MODE' );
+$plugin_zip = ran_wp_release_updater_test_required_input( 'RAN_UPDATER_PLUGIN_ZIP' );
+$theme_zip  = ran_wp_release_updater_test_required_input( 'RAN_UPDATER_THEME_ZIP' );
+$output     = ran_wp_release_updater_test_required_input( 'RAN_UPDATER_OUTPUT' );
+// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
+$mode = ran_wp_release_updater_test_required_input( 'RAN_UPDATER_DISTRIBUTION_MODE' );
 
 if ( 'install' === $mode ) {
-	$skin = new RAN_Updater_Integration_Skin();
+	$skin = new RAN_WP_RELEASE_UPDATER_Test_Integration_Skin();
 	if ( ! ( new Plugin_Upgrader( $skin ) )->install( $plugin_zip ) ) {
 		throw new RuntimeException( 'Plugin_Upgrader could not install the exact consumer ZIP.' );
 	}
@@ -34,6 +36,7 @@ if ( 'observe' !== $mode ) {
 	throw new RuntimeException( 'Distribution mode is invalid.' );
 }
 
+// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 $plugin = $GLOBALS['ran_updater_plugin_handle'] ?? null;
 $theme  = $GLOBALS['ran_updater_theme_handle'] ?? null;
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
@@ -43,14 +46,16 @@ if ( ! is_object( $plugin ) || ! is_object( $theme ) || ! is_object( $broker ) )
 
 $credentials_at_boot = $GLOBALS['ran_updater_credential_calls'] ?? null;
 $http_at_boot        = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
-$plugin_callbacks    = nativeCallbacks( 'update_plugins_github.com' );
-$theme_callbacks     = nativeCallbacks( 'update_themes_github.com' );
+$plugin_callbacks    = ran_wp_release_updater_test_native_callbacks( 'update_plugins_github.com' );
+$theme_callbacks     = ran_wp_release_updater_test_native_callbacks( 'update_themes_github.com' );
 $runtime_root        = WP_PLUGIN_DIR . '/ran-neutral-plugin/vendor/ran/wp-release-updater';
 
 $plugin_data  = get_plugin_data( WP_PLUGIN_DIR . '/ran-neutral-plugin/ran-neutral-plugin.php', false, false );
 $theme_object = wp_get_theme( 'ran-neutral-theme' );
+// phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- The native WordPress update hook includes the hostname github.com. Exercise the native WordPress hostname-specific update hook; its foreign identifier must stay exact.
 apply_filters( 'update_plugins_github.com', false, $plugin_data, 'ran-neutral-plugin/ran-neutral-plugin.php', array() );
 apply_filters(
+	// phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- The native WordPress update hook includes the hostname github.com. Exercise the native WordPress hostname-specific update hook; its foreign identifier must stay exact.
 	'update_themes_github.com',
 	false,
 	array(
@@ -77,16 +82,16 @@ $proof             = array(
 	'callbacks'            => array(
 		'plugin_native_callbacks' => count( $plugin_callbacks ),
 		'theme_native_callbacks'  => count( $theme_callbacks ),
-		'origins'                 => callbackOrigins( array_merge( $plugin_callbacks, $theme_callbacks ) ),
+		'origins'                 => ran_wp_release_updater_test_callback_origins( array_merge( $plugin_callbacks, $theme_callbacks ) ),
 		'credential_callbacks'    => $credentials_after,
 		'http_callback_delta'     => $http_after - $http_at_boot,
 	),
-	'plugin_manifest_hash' => hash( 'sha256', json_encode( archiveManifest( $plugin_zip, 'ran-neutral-plugin' ), JSON_THROW_ON_ERROR ) ),
-	'theme_manifest_hash'  => hash( 'sha256', json_encode( archiveManifest( $theme_zip, 'ran-neutral-theme' ), JSON_THROW_ON_ERROR ) ),
+	'plugin_manifest_hash' => hash( 'sha256', json_encode( ran_wp_release_updater_test_archive_manifest( $plugin_zip, 'ran-neutral-plugin' ), JSON_THROW_ON_ERROR ) ),
+	'theme_manifest_hash'  => hash( 'sha256', json_encode( ran_wp_release_updater_test_archive_manifest( $theme_zip, 'ran-neutral-theme' ), JSON_THROW_ON_ERROR ) ),
 	'plugin_status'        => $plugin->status(),
 	'theme_status'         => $theme->status(),
-	'pass'                 => archiveManifest( $plugin_zip, 'ran-neutral-plugin' ) === directoryManifest( WP_PLUGIN_DIR . '/ran-neutral-plugin' )
-		&& archiveManifest( $theme_zip, 'ran-neutral-theme' ) === directoryManifest( get_theme_root() . '/ran-neutral-theme' )
+	'pass'                 => ran_wp_release_updater_test_archive_manifest( $plugin_zip, 'ran-neutral-plugin' ) === ran_wp_release_updater_test_directory_manifest( WP_PLUGIN_DIR . '/ran-neutral-plugin' )
+		&& ran_wp_release_updater_test_archive_manifest( $theme_zip, 'ran-neutral-theme' ) === ran_wp_release_updater_test_directory_manifest( get_theme_root() . '/ran-neutral-theme' )
 		&& is_plugin_active( 'ran-neutral-plugin/ran-neutral-plugin.php' ) && 'ran-neutral-theme' === get_stylesheet()
 		&& 2 === ( $diagnostics['candidate_count'] ?? null ) && 2 === ( $diagnostics['logical_target_count'] ?? null )
 		&& 5 === ( $diagnostics['protocol_version'] ?? null )
@@ -95,7 +100,7 @@ $proof             = array(
 			'theme'  => 0,
 		) === $credentials_at_boot && 0 === $http_at_boot
 		&& 1 === count( $plugin_callbacks ) && 1 === count( $theme_callbacks )
-		&& originsAreInstalled( array_merge( $plugin_callbacks, $theme_callbacks ), $runtime_root )
+		&& ran_wp_release_updater_test_origins_are_installed( array_merge( $plugin_callbacks, $theme_callbacks ), $runtime_root )
 		&& array(
 			'plugin' => 1,
 			'theme'  => 1,
@@ -111,7 +116,8 @@ $proof             = array(
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write the installed-distribution proof result for the parent harness to validate.
 file_put_contents( $output, json_encode( $proof, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . "\n" );
 
-function requiredInput( string $name ): string {
+// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them.
+function ran_wp_release_updater_test_required_input( string $name ): string {
 	$value = getenv( $name );
 	if ( ! is_string( $value ) || '' === $value ) {
 		throw new RuntimeException( $name . ' is required.' );
@@ -119,7 +125,7 @@ function requiredInput( string $name ): string {
 	return $value;
 }
 /** @return list<object> */
-function nativeCallbacks( string $hook ): array {
+function ran_wp_release_updater_test_native_callbacks( string $hook ): array {
 	$registered = $GLOBALS['wp_filter'][ $hook ] ?? null;
 	if ( ! $registered instanceof WP_Hook ) {
 		return array();
@@ -136,19 +142,19 @@ function nativeCallbacks( string $hook ): array {
 	return $found;
 }
 /** @param list<object> $callbacks @return list<string> */
-function callbackOrigins( array $callbacks ): array {
+function ran_wp_release_updater_test_callback_origins( array $callbacks ): array {
 	return array_map( static fn( object $callback ): string => (string) ( new ReflectionClass( $callback ) )->getFileName(), $callbacks );
 }
 /** @param list<object> $callbacks */
-function originsAreInstalled( array $callbacks, string $runtime_root ): bool {
-	foreach ( callbackOrigins( $callbacks ) as $origin ) {
+function ran_wp_release_updater_test_origins_are_installed( array $callbacks, string $runtime_root ): bool {
+	foreach ( ran_wp_release_updater_test_callback_origins( $callbacks ) as $origin ) {
 		if ( ! str_starts_with( $origin, $runtime_root . '/' ) ) {
 			return false;
 		}
 	}
 	return array() !== $callbacks;
 }
-function archiveManifest( string $zip, string $root ): array {
+function ran_wp_release_updater_test_archive_manifest( string $zip, string $root ): array {
 	$archive = new ZipArchive();
 	if ( true !== $archive->open( $zip ) ) {
 		throw new RuntimeException( 'Could not read exact ZIP.' );
@@ -186,7 +192,7 @@ function archiveManifest( string $zip, string $root ): array {
 	return $manifest;
 }
 
-function directoryManifest( string $root ): array {
+function ran_wp_release_updater_test_directory_manifest( string $root ): array {
 	$manifest = array();
 	$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );
 	foreach ( $iterator as $file ) {
@@ -205,3 +211,5 @@ function directoryManifest( string $root ): array {
 	ksort( $manifest );
 	return $manifest;
 }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Support;
 
 /** Minimal wpdb double: its opaque prepared tokens prevent tests from parsing SQL. */
@@ -82,7 +83,7 @@ final class FakeOptionDatabase {
 	}
 
 	public function prepare( string $sql, mixed ...$args ): string {
-		$token                    = 'prepared-' . ++$this->sequence;
+		$token                    = 'prepared-' . ( ++$this->sequence );
 		$this->prepared[ $token ] = array(
 			'sql'  => $sql,
 			'args' => $args,

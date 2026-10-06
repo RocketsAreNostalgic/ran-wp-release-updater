@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Runtime;
 
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -97,10 +98,13 @@ $GLOBALS['wp_version'] = '6.8.0';
 $GLOBALS['wp_theme_directories'] = array(__ROOT__);
 $data = __DATA__;
 PHP;
-		$prefix    = str_replace( '__ROOT__', var_export( $this->root, true ), $prefix, $count );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
+		$prefix = str_replace( '__ROOT__', var_export( $this->root, true ), $prefix, $count );
 		self::assertSame( 2, $count );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$prefix = str_replace( '__DATABASE__', var_export( dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php', true ), $prefix, $count );
 		self::assertSame( 1, $count );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$prefix = str_replace( '__DATA__', var_export( $data, true ), $prefix, $count );
 		self::assertSame( 1, $count );
 		$body = <<<'PHP'
@@ -333,7 +337,8 @@ PHP;
 	private function copy_directory( string $source, string $destination ): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $destination, 0700, true );
-		foreach ( scandir( $source ) ?: array() as $name ) {
+		$fixture_entries = scandir( $source );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
 				continue;
 			}

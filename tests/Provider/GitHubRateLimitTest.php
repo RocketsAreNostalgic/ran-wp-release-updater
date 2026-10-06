@@ -2,24 +2,29 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden -- Keep global WordPress stubs and namespaced test code in the same isolated fixture. WordPress stubs must be declared in the global namespace used by production calls.
 namespace {
 	if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_remote_retrieve_response_code( array $response ): int|string {
 			return $response['response']['code'];
 		}
 	}
 	if ( ! function_exists( 'wp_remote_retrieve_header' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_remote_retrieve_header( array $response, string $name ): mixed {
 			return $response['headers'][ strtolower( $name ) ] ?? null;
 		}
 	}
 }
 
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture. Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Provider {
 	use PHPUnit\Framework\TestCase;
 	use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService;
 	use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 
+	// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them.
 	final class GitHubRateLimitTest extends TestCase {
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'classification_provider' )]
 		public function test_rate_limit_classification_uses_only_git_hub_signals( int $status, array $headers, int $now, array $expected ): void {

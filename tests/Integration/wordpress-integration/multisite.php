@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 // wp eval-file wraps this fixture before execution, so strict_types cannot lead.
 
@@ -16,6 +17,7 @@ if ( ! is_object( $handle ) || ! is_object( $duplicate_handle ) || ! is_object( 
 $duplicate_accepted = $duplicate_handle->register();
 $provider_before    = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
 $plugin_data        = get_plugin_data( WP_PLUGIN_DIR . '/ran-network-target/main.php', false, false );
+// phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- The native WordPress update hook includes the hostname github.com. Exercise the native WordPress hostname-specific update hook; its foreign identifier must stay exact.
 apply_filters( 'update_plugins_github.com', false, $plugin_data, 'ran-network-target/main.php', array() );
 $provider_after = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
 
@@ -32,7 +34,7 @@ $raw                 = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM
 $state               = is_string( $raw ) ? json_decode( $raw, true ) : null;
 $diagnostics         = $broker->diagnostics();
 $provider_suppressed = 0 === ( $provider_after - $provider_before );
-$native_callbacks    = nativeCallbacks( 'update_plugins_github.com' );
+$native_callbacks    = ran_wp_release_updater_test_native_callbacks( 'update_plugins_github.com' );
 $proof               = array(
 	'blog_id'                         => get_current_blog_id(),
 	'network_id'                      => $network_id,
@@ -57,6 +59,7 @@ file_put_contents( $output, json_encode( $proof, JSON_PRETTY_PRINT | JSON_UNESCA
 
 $release = getenv( 'RAN_UPDATER_NETWORK_RELEASE' );
 if ( is_string( $release ) && '' !== $release ) {
+	// phpcs:ignore Generic.CodeAnalysis.ForLoopWithTestFunctionCall.NotAllowed -- Re-observe child liveness or the release file on each bounded poll; caching the condition would break synchronization.
 	for ( $attempt = 0; $attempt < 400 && ! is_file( $release ); ++$attempt ) {
 		usleep( 50000 );
 	}
@@ -66,7 +69,7 @@ if ( is_string( $release ) && '' !== $release ) {
 }
 
 /** @return list<object> */
-function nativeCallbacks( string $hook ): array {
+function ran_wp_release_updater_test_native_callbacks( string $hook ): array {
 	$registered = $GLOBALS['wp_filter'][ $hook ] ?? null;
 	if ( ! $registered instanceof WP_Hook ) {
 		return array();
@@ -82,3 +85,5 @@ function nativeCallbacks( string $hook ): array {
 	}
 	return $found;
 }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

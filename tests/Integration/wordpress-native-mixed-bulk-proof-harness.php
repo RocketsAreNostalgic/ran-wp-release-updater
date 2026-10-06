@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
@@ -13,7 +14,9 @@ $expected_source_root = is_string( $marker_root ) ? $marker_root . '/site/wp-con
 if ( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK' !== getenv( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK' ) || ! is_string( $source_root ) || realpath( $source_root ) !== $expected_source_root || ! is_file( (string) $marker_file ) || is_link( (string) $marker_file ) || "RAN_WP_RELEASE_UPDATER_MIXED_BULK\n" !== file_get_contents( (string) $marker_file ) ) {
 	throw new RuntimeException( 'The mixed-bulk harness is not inside its owned disposable site.' );
 }
+// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 $type = (string) getenv( 'RAN_WP_RELEASE_UPDATER_BULK_TYPE' );
+// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 $mode = (string) getenv( 'RAN_WP_RELEASE_UPDATER_BULK_MODE' );
 if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! in_array( $mode, array( 'success', 'failure' ), true ) ) {
 	throw new RuntimeException( 'Invalid mixed-bulk scenario.' );
@@ -32,7 +35,7 @@ if ( true !== ( $activation['loaded'] ?? null ) ) {
 foreach ( array( 'file.php', 'misc.php', 'plugin.php', 'template.php', 'class-wp-upgrader.php', 'class-plugin-upgrader.php', 'class-theme-upgrader.php', 'class-bulk-upgrader-skin.php', 'class-bulk-plugin-upgrader-skin.php', 'class-bulk-theme-upgrader-skin.php' ) as $file ) {
 	require_once ABSPATH . 'wp-admin/includes/' . $file;
 }
-final class MixedBulkFixtureAdapter implements ReleaseAdapter {
+final class RAN_WP_RELEASE_UPDATER_Test_MixedBulkFixtureAdapter implements ReleaseAdapter {
 	public int $list_calls    = 0;
 	public int $inspect_calls = 0;
 	public int $acquire_calls = 0;
@@ -115,12 +118,13 @@ $archives                   = array(
 	'managed-b' => (string) getenv( 'RAN_WP_RELEASE_UPDATER_MANAGED_B_ARCHIVE' ),
 );
 $expected_archive_manifests = array(
-	'managed-a' => archive_file_manifest( $archives['managed-a'], 'managed-a' ),
-	'managed-b' => archive_file_manifest( $archives['managed-b'], 'managed-b' ),
+	'managed-a' => ran_wp_release_updater_test_archive_file_manifest( $archives['managed-a'], 'managed-a' ),
+	'managed-b' => ran_wp_release_updater_test_archive_file_manifest( $archives['managed-b'], 'managed-b' ),
 );
-$before_owned_directories   = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR ) ?: array();
-$managed_a                  = build_mixed_bulk_target( $type, 'managed-a', 'Managed A', $archives['managed-a'] );
-$managed_b                  = build_mixed_bulk_target( $type, 'managed-b', 'Managed B', $archives['managed-b'] );
+$before_owned_directories   = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR );
+$before_owned_directories   = $before_owned_directories ? $before_owned_directories : array();
+$managed_a                  = ran_wp_release_updater_test_build_mixed_bulk_target( $type, 'managed-a', 'Managed A', $archives['managed-a'] );
+$managed_b                  = ran_wp_release_updater_test_build_mixed_bulk_target( $type, 'managed-b', 'Managed B', $archives['managed-b'] );
 $observations               = array_fill_keys( $ids, array() );
 add_filter(
 	'upgrader_pre_download',
@@ -136,12 +140,12 @@ add_filter(
 	PHP_INT_MIN,
 	4
 );
-prime_mixed_bulk_transient( $type, $ids, $managed_a, $managed_b, $archives['ordinary'] );
+ran_wp_release_updater_test_prime_mixed_bulk_transient( $type, $ids, $managed_a, $managed_b, $archives['ordinary'] );
 $before_bytes = array();
 foreach ( $ids as $identity ) {
-	$before_bytes[ $identity ] = target_bytes( $type, $identity );
+	$before_bytes[ $identity ] = ran_wp_release_updater_test_target_bytes( $type, $identity );
 }
-$active_before = active_states( $type, $ids );
+$active_before = ran_wp_release_updater_test_active_states( $type, $ids );
 $injected      = array(
 	'post_copy_seen'    => false,
 	'destination_bytes' => null,
@@ -157,7 +161,7 @@ if ( 'failure' === $mode ) {
 			}
 
 			$injected['post_copy_seen']    = true;
-			$injected['destination_bytes'] = target_bytes( $type, $ids[0] );
+			$injected['destination_bytes'] = ran_wp_release_updater_test_target_bytes( $type, $ids[0] );
 			$injected['backup_present']    = is_dir( WP_CONTENT_DIR . '/upgrade-temp-backup/' . ( 'plugin' === $type ? 'plugins/' : 'themes/' ) . ( 'plugin' === $type ? dirname( $ids[0] ) : $ids[0] ) );
 			return new WP_Error( 'mixed_bulk_injected_post_copy_failure', 'Injected after Core copied the failing target.' );
 		},
@@ -179,13 +183,14 @@ add_action(
 	'shutdown',
 	static function () use ( $output_path, $type, $mode, $ids, $results, $result_codes, $active_before, $before_bytes, $injected, $observations, $archives, $expected_archive_manifests, $managed_a, $managed_b, $before_owned_directories, &$network_calls ): void {
 		global $wpdb;
-		$after_owned_directories = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR ) ?: array();
+		$after_owned_directories = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR );
+		$after_owned_directories = $after_owned_directories ? $after_owned_directories : array();
 		$new_owned_directories   = array_values( array_diff( $after_owned_directories, $before_owned_directories ) );
 		$versions                = array();
 		foreach ( $ids as $identity ) {
-			$versions[ $identity ] = target_version( $type, $identity );
+			$versions[ $identity ] = ran_wp_release_updater_test_target_version( $type, $identity );
 		}
-		$active            = active_states( $type, $ids );
+		$active            = ran_wp_release_updater_test_active_states( $type, $ids );
 		$adapter_evidence  = array();
 		$updater_evidence  = array();
 		$manifest_evidence = array();
@@ -202,7 +207,7 @@ add_action(
 				'diagnostics'  => $target['updater']->diagnostics(),
 				'failure_code' => $target['updater']->status()['failure_code'],
 			);
-			$installed_manifest         = target_file_manifest( $type, $target['identity'] );
+			$installed_manifest         = ran_wp_release_updater_test_target_file_manifest( $type, $target['identity'] );
 			$expected_manifest          = $expected_archive_manifests[ $slug ] ?? array();
 			$manifest_evidence[ $slug ] = array(
 				'expected'    => $expected_manifest,
@@ -225,7 +230,7 @@ add_action(
 		}
 		$bytes_after = array();
 		foreach ( $ids as $identity ) {
-			$bytes_after[ $identity ] = target_bytes( $type, $identity );
+			$bytes_after[ $identity ] = ran_wp_release_updater_test_target_bytes( $type, $identity );
 		}
 		$backup_root                  = WP_CONTENT_DIR . '/upgrade-temp-backup/' . ( 'plugin' === $type ? 'plugins' : 'themes' );
 		$backups_absent               = ! is_dir( $backup_root . '/managed-a' ) && ! is_dir( $backup_root . '/ordinary' ) && ! is_dir( $backup_root . '/managed-b' );
@@ -256,7 +261,7 @@ add_action(
 					&& null === $updater_evidence['managed-b']['failure_code']
 				: $failure_exact
 					&& $injected['post_copy_seen']
-					&& '2.0.0' === target_header_version_from_bytes( $type, (string) $injected['destination_bytes'] )
+					&& '2.0.0' === ran_wp_release_updater_test_target_header_version_from_bytes( $type, (string) $injected['destination_bytes'] )
 					&& $injected['backup_present']
 					&& $before_bytes[ $ids[0] ] === $bytes_after[ $ids[0] ]
 					&& array( '1.0.0', '2.0.0', '2.0.0' ) === array_values( $versions )
@@ -289,7 +294,8 @@ add_action(
 	PHP_INT_MAX
 );
 /** @return array{identity:string,offer:array<string,mixed>,adapter:MixedBulkFixtureAdapter,updater:NativePackageUpdater} */
-function build_mixed_bulk_target( string $type, string $slug, string $name, string $archive ): array {
+// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them.
+function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, string $slug, string $name, string $archive ): array {
 	global $wpdb;
 	$identity            = 'plugin' === $type ? $slug . '/' . $slug . '.php' : $slug;
 	$uri                 = 'https://mixed-bulk.invalid/' . $slug . '/repository';
@@ -342,7 +348,7 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 			'wordpress_runtime_version'    => '6.8',
 		)
 	);
-	$adapter             = new MixedBulkFixtureAdapter( $descriptor, $archive );
+	$adapter             = new RAN_WP_RELEASE_UPDATER_Test_MixedBulkFixtureAdapter( $descriptor, $archive );
 	$headers             = array(
 		'Author'      => 'Fixture',
 		'Description' => 'Mixed bulk fixture',
@@ -387,6 +393,7 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 	}
 	$updater->register();
 	$offer = apply_filters(
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Select the native WordPress plugin/theme update hook for the controlled fixture URI.
 		( 'plugin' === $type ? 'update_plugins_' : 'update_themes_' ) . parse_url( $uri, PHP_URL_HOST ),
 		false,
 		array(
@@ -406,10 +413,10 @@ function build_mixed_bulk_target( string $type, string $slug, string $name, stri
 		'updater'  => $updater,
 	);
 }
-function target_install_path( string $type, string $identity ): string {
+function ran_wp_release_updater_test_target_install_path( string $type, string $identity ): string {
 	return 'plugin' === $type ? WP_PLUGIN_DIR . '/' . dirname( $identity ) : WP_CONTENT_DIR . '/themes/' . $identity;
 }
-function prime_mixed_bulk_transient( string $type, array $ids, array $managed_a, array $managed_b, string $ordinary_archive ): void {
+function ran_wp_release_updater_test_prime_mixed_bulk_transient( string $type, array $ids, array $managed_a, array $managed_b, string $ordinary_archive ): void {
 	$transient = (object) array(
 		'last_checked' => time(),
 		'checked'      => array(),
@@ -450,10 +457,10 @@ function prime_mixed_bulk_transient( string $type, array $ids, array $managed_a,
 	);
 	set_site_transient( 'plugin' === $type ? 'update_plugins' : 'update_themes', $transient, 60 );
 }
-function target_path( string $type, string $identity ): string {
-	return 'plugin' === $type ? target_install_path( $type, $identity ) . '/' . basename( $identity ) : target_install_path( $type, $identity ) . '/style.css';
+function ran_wp_release_updater_test_target_path( string $type, string $identity ): string {
+	return 'plugin' === $type ? ran_wp_release_updater_test_target_install_path( $type, $identity ) . '/' . basename( $identity ) : ran_wp_release_updater_test_target_install_path( $type, $identity ) . '/style.css';
 }
-function archive_file_manifest( string $archive, string $root ): array {
+function ran_wp_release_updater_test_archive_file_manifest( string $archive, string $root ): array {
 	$zip = new \ZipArchive();
 	if ( true !== $zip->open( $archive ) ) {
 		throw new RuntimeException( 'The fixture archive could not be inspected for manifest.' );
@@ -487,8 +494,8 @@ function archive_file_manifest( string $archive, string $root ): array {
 	ksort( $manifest );
 	return $manifest;
 }
-function target_file_manifest( string $type, string $identity ): array {
-	$base = target_install_path( $type, $identity );
+function ran_wp_release_updater_test_target_file_manifest( string $type, string $identity ): array {
+	$base = ran_wp_release_updater_test_target_install_path( $type, $identity );
 	if ( ! is_dir( $base ) ) {
 		return array();
 	}
@@ -514,20 +521,22 @@ function target_file_manifest( string $type, string $identity ): array {
 	ksort( $manifest );
 	return $manifest;
 }
-function target_bytes( string $type, string $identity ): string {
+function ran_wp_release_updater_test_target_bytes( string $type, string $identity ): string {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
-	return (string) file_get_contents( target_path( $type, $identity ) );
+	return (string) file_get_contents( ran_wp_release_updater_test_target_path( $type, $identity ) );
 }
-function target_version( string $type, string $identity ): ?string {
-	return target_header_version_from_bytes( $type, target_bytes( $type, $identity ) );
+function ran_wp_release_updater_test_target_version( string $type, string $identity ): ?string {
+	return ran_wp_release_updater_test_target_header_version_from_bytes( $type, ran_wp_release_updater_test_target_bytes( $type, $identity ) );
 }
-function active_states( string $type, array $ids ): array {
+function ran_wp_release_updater_test_active_states( string $type, array $ids ): array {
 	$active = array();
 	foreach ( $ids as $identity ) {
 		$active [ $identity ] = 'plugin' === $type ? is_plugin_active( $identity ) : get_stylesheet() === $identity;
 	}
 	return $active;
 }
-function target_header_version_from_bytes( string $type, string $bytes ): ?string {
+function ran_wp_release_updater_test_target_header_version_from_bytes( string $type, string $bytes ): ?string {
 	return 1 === preg_match( '/^Version:\s*(.+)$/mi', $bytes, $matches ) ? trim( $matches [1] ) : null;
 }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

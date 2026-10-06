@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Runtime;
 
 use PHPUnit\Framework\TestCase;
@@ -442,8 +443,8 @@ PHP
 	/** @return array<string,mixed> */
 	/** @param array<string,mixed> $extra */
 	private function probe( string $body, array $extra = array() ): array {
-		$file   = $this->root . '/probe.php';
-		$data   = array_merge(
+		$file = $this->root . '/probe.php';
+		$data = array_merge(
 			array(
 				'bootstrap' => dirname( __DIR__, 2 ) . '/bootstrap.php',
 				'plugin'    => $this->root . '/plugin/plugin.php',
@@ -457,6 +458,7 @@ PHP
 			),
 			$extra
 		);
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$prefix = '<?php define("WP_PLUGIN_DIR", ' . var_export( $this->root, true ) . '); function add_filter(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["p0_1_hooks"][]=array("hook"=>$hook,"callback"=>$callback);} function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["p0_1_hooks"][]=array("hook"=>$hook,"callback"=>$callback);} $GLOBALS["p0_1_hooks"]=array();$GLOBALS["wpdb"]=new stdClass();$GLOBALS["wp_version"]="6.8.0";$GLOBALS["wp_theme_directories"]=array(' . var_export( $this->root, true ) . ');$data=' . var_export( $data, true ) . ';';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $prefix . $body );

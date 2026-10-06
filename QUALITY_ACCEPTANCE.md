@@ -14,7 +14,7 @@ Core dependency update. The native-operation refinement below was delivered sepa
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
 | Generated `src/Dependency/ArchiveSafety.php` | PHPCS excluded; namespace-only byte parity against the locked `ran/updater-support` source and direct level-8 analysis remain required. Never hand-edit this file. |
-| All `tests/` PHP, including root files and future/nested roots | Owned methods, variables, Yoda conditions, unused parameters and reserved parameter names have no file/root exclusions. Thirty-one PHPUnit lifecycle overrides, twelve unused foreign-stub parameter reports, the existing skin override parameter and native ZipArchive property uses retain exact local exceptions. Other fixture-specific rule boundaries remain listed below. |
+| All `tests/` PHP, including root files and future/nested roots | Owned methods, variables, Yoda conditions, unused parameters and reserved parameter names have no file/root exclusions. Thirty-one PHPUnit lifecycle overrides, twelve unused foreign-stub parameter reports, the existing skin override parameter and native ZipArchive property uses retain exact local exceptions. No test-path exclusions remain. Global-variable prefixing has fourteen named file-wide allowances; other fixture-specific exceptions are diagnostic-local as listed below. |
 
 `composer check` retains strict validation, generated-copy parity, live advisory
 audit, syntax, shared standards/compatibility, level-8 analysis, unit tests and
@@ -38,7 +38,7 @@ local product requirements, not shared-standard exemptions.
 | Prepared SQL identifier/CAS boundary | BindingFenceCoordinator validates the table identifier and prepares data values. Only two SQL parser false-positive rules are excepted for that file. MySQL CAS and setup-failure proofs remain required. |
 | Bounded base64 operation tokens | NativePackageUpdater uses URL-safe base64 for opaque operation tokens, not executable code. Only its encode/decode rules and test fixtures are excepted. |
 | Native `ZipArchive::$numFiles` | Two line-local property-name ignores cover three reads of the external extension property. Owned members remain enforced. |
-| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Free-function/global naming and the other fixture-specific rules remain explicitly scoped; native/process exceptions are occurrence-local; condition/unused/reserved-parameter file exclusions are removed. These retained boundaries do not exempt production. |
+| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Owned free functions/classes/constants follow the package prefix and the existing Tests dev namespace has declaration-local exceptions. Fourteen named global-variable prefix allowances are file-wide; foreign signatures, synthetic syntax and native/process exceptions are diagnostic-local. No test-path exclusions remain. These retained boundaries do not exempt production. |
 
 Seven declaration-local PHPStan exceptions remain: RequestBroker's
 Reflection-invoked private validation seam; ReleaseSource's direct-filesystem
@@ -360,3 +360,87 @@ Legacy Local-only phase-2.4/mixed-bulk end-to-end suites require their original
 external prerequisites and are not claimed as locally executed. Native CI
 continues to own the installed WordPress, MySQL and Windows qualification.
 This refinement does not authorize a merge, release or connected adoption.
+
+
+## Remaining test-profile closeout
+
+Re-scoped on main `02dbc1166b159701326c71d308663c183bb32a2c`, removing the
+remaining test-path exclusions exposed 965 reports (903 errors, 62 warnings)
+across 56 files. This proposal removes those exclusions; shared global policy
+and production/script exceptions remain. It does not claim zero exceptions or
+completion of ecosystem-wide retained-exception acceptance.
+
+Owned declarations now comply: 110 global helpers (including 50 camelCase
+helpers), three classes and one constant use the package prefix. Calls follow
+the declarations; foreign WordPress signatures, member APIs, wire keys and
+fixture payloads retain their identity. The existing Composer `Tests` development
+namespace has declaration-local namespace exceptions. It is not added to the
+repository-wide accepted prefixes; production and new test declarations using
+Tests-prefixed names still fail without an explicit applicable exception. Thirty-two short ternaries become
+full ternaries with single evaluation and the same falsy fallback; directory
+cleanup retains its original existence fence. One increment receives explicit
+parentheses and adjacent generated-PHP literals are combined without changing
+output bytes.
+
+The 515 global-variable prefix reports have a deliberate file-wide disposition,
+not 515 corrections. Twelve standalone CLI/eval/measurement files retain local
+scenario globals; two provider tests retain their shared transport-state globals.
+Only `WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound`
+is disabled in these named files:
+
+- `tests/Integration/no-dev-consumer.php`
+- `tests/Integration/phase-2.4-wordpress-core-proof-harness.php`
+- `tests/Integration/phase-2.4-wordpress-core-proof.php`
+- `tests/Integration/real-mysql-cas-proof.php`
+- `tests/Integration/real-mysql-cas-setup-failure-proof.php`
+- `tests/Integration/release-source-consumer-proof.php`
+- `tests/Integration/wordpress-integration.php`
+- `tests/Integration/wordpress-integration/distribution.php`
+- `tests/Integration/wordpress-integration/multisite.php`
+- `tests/Integration/wordpress-native-mixed-bulk-proof-harness.php`
+- `tests/Integration/wordpress-native-mixed-bulk-proof.php`
+- `tests/Performance/native-discovery-measure.php`
+- `tests/Provider/GitHubReleaseAdapterTest.php`
+- `tests/Provider/GitHubResponseRoutingTest.php`
+
+The EOF re-enable does not protect new variables inserted inside these files:
+new globals there also receive this exact-code allowance. Variable snake_case,
+function/class/constant prefixing and all other naming checks remain active.
+The checker guard exercises that distinction using an actual annotated harness,
+plus fresh current/future paths where new unprefixed globals must fail.
+
+Other retained reports use exact-code local annotations for foreign stubs,
+synthetic namespace/class composition, native WordPress hooks, controlled PHP
+literal generation, isolated MySQL calls, denial/serialization probes, opaque
+operation tokens, CLI output, deliberate exception observations and liveness
+polling. Repeated conditional WP_Error stubs declare their duplicate-class
+exception locally so parallel checker ordering cannot change acceptance.
+
+The existing real-checker guard covers these rules at current and future test
+paths, including malformed naming and unsafe syntax controls. No production
+source, public API, dependency, persistent state, runtime-copy identity, checker
+level or workflow changes are included. PHPStan stays at level 8. Installed
+WordPress/MySQL proofs require native CI; the legacy Local-only phase-2.4 and
+mixed-bulk end-to-end environments remain a separately stated limitation.
+
+Local validation on PHP 8.3.6: `composer --no-interaction check` exits zero;
+syntax checks 95 PHP files, PHPCS is clean, PHPStan level 8 is clean, PHPUnit
+passes 478 tests / 26,506 assertions and the no-dev consumer proof passes.
+Composer audit reports no advisories but falls back to cached Packagist data
+after a proxy timeout; fresh advisory verification remains native CI evidence.
+The focused profile guard passes 1 test / 190 assertions, with no test discovery
+loss (477 existing plus one new guard). Six representative old-scope negative
+controls prove the former exclusions hide the newly enforced diagnostics.
+PHPCBF repeatability is clean. Native discovery produces 96 matrix rows and its
+existing controls; isolated MySQL setup-failure cleanup passes. Literal-token
+comparison preserves all changed fixtures except the equivalent generated-config
+concatenation. Independent actual base/head review and native CI qualify the
+published candidate separately; local evidence alone is not merge admission.
+
+
+Review correction: the initial candidate added `Tests` to the shared prefix
+property, which also admitted Tests-prefixed production declarations. That
+allowance is removed. The 43 existing test namespace declarations instead carry
+exact namespace-only annotations, and separate namespace/global-declaration
+negative probes cover production src, a root entrypoint and future tests.
+No executable fixture tokens change in this correction beyond the checker guard.
