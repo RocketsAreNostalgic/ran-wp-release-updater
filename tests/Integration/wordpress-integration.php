@@ -18,6 +18,9 @@ $result      = array(
 
 try {
 	$scenario = 'all';
+	if ( ! isset( $argv ) ) {
+		throw new RuntimeException( 'Use --scenario=all|distribution|multisite.' );
+	}
 	foreach ( array_slice( $argv, 1 ) as $argument ) {
 		if ( ! preg_match( '/\A--scenario=(all|distribution|multisite)\z/', $argument, $match ) ) {
 			throw new RuntimeException( 'Use --scenario=all|distribution|multisite.' );
