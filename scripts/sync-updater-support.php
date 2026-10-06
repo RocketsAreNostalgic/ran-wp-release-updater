@@ -7,8 +7,8 @@ declare(strict_types=1);
 $root   = dirname( __DIR__ );
 $source = $root . '/vendor/ran/updater-support/src/ArchiveSafety.php';
 $target = $root . '/src/Dependency/ArchiveSafety.php';
-$check  = array_slice( $argv, 1 ) === array( '--check' );
-if ( ! $check && 0 !== count( array_slice( $argv, 1 ) ) ) {
+$check  = array_slice( $argv ?? array(), 1 ) === array( '--check' );
+if ( ! $check && 0 !== count( array_slice( $argv ?? array(), 1 ) ) ) {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write directly to the CLI descriptor without requiring a WordPress runtime.
 	fwrite( STDERR, "Usage: sync-updater-support.php [--check]\n" );
 	exit( 2 );

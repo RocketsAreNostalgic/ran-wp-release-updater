@@ -474,4 +474,7 @@ test files remain unqualified pending isolated-harness profiles; the combined
 level-5 probe's 92 diagnostics include incompatible same-name functions from
 separate executable harnesses. That is not a reviewed exemption or a justification
 for blanket ignores. See docs/testing.md for the reproduced scope and next step.
-No runtime PHP, dependency, fixture identity or existing exemption is changed.
+PHP 8.5 analysis also exposed the CLI argument array as potentially absent.
+The sync script uses an empty-array fallback at its two argument reads; normal
+CLI invocations preserve their behavior. No production runtime PHP, dependency,
+fixture identity or existing exemption is changed.
