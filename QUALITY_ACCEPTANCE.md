@@ -22,6 +22,21 @@ the no-dev consumer proof. Native PHP 8.2/8.5, installed WordPress 6.5/7.1,
 MySQL CAS, Windows portability and JavaScript checks still feed terminal
 `quality`. No workflow or stronger gate is removed.
 
+## Standalone script prefix refinement
+
+The whole `PrefixAllGlobals` exemption for `scripts/` is removed. The locked
+checker exposed 23 global-variable reports in the two standalone entrypoints
+(12 in `lint-php.php`, 11 in `sync-updater-support.php`). Only
+`NonPrefixedVariableFound` uses an exact-code file-wide annotation in those two files:
+they execute as isolated CLI processes and do not register WordPress globals.
+Functions, classes, constants, namespaces and hooks remain checked there.
+Future scripts and same-named nested paths do not inherit the variable exemption.
+The scripts-wide WordPress global-override exclusion is also removed; the lint
+loop now uses the owned `$source_path` name instead of `$path`. Actual-checker
+controls keep unrelated WordPress-global overrides visible in current/future
+scripts. Production executable bytes, generated copy, dependencies and analysis
+settings are unchanged; script behavior is preserved.
+
 ## Retained exceptions
 
 The retained rule/path list lives in `.phpcs.xml`; native production/tool

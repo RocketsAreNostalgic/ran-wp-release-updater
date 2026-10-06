@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- This standalone CLI entrypoint owns process-local variables and never loads into WordPress global scope.
+
 $root   = dirname( __DIR__ );
 $source = $root . '/vendor/ran/updater-support/src/ArchiveSafety.php';
 $target = $root . '/src/Dependency/ArchiveSafety.php';

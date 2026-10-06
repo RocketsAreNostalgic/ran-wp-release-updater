@@ -97,6 +97,30 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 		self::assertContains( 'WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid', $diagnostics );
 	}
 
+
+	public function test_script_variable_exemptions_do_not_hide_other_declarations_or_future_paths(): void {
+		$variable_code = 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound';
+		$probe         = '$unprefixed_probe = 1; function unowned_probe() {} class UnownedProbe {} const UNOWNED_PROBE = 1; $post = 1;';
+		foreach ( array( '../scripts/lint-php.php', '../scripts/sync-updater-support.php', '../scripts/Future.php', 'scripts/lint-php.php' ) as $path ) {
+			$source = '<?php ';
+			if ( in_array( $path, array( '../scripts/lint-php.php', '../scripts/sync-updater-support.php' ), true ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Inspect the actual standalone annotation without executing the script or mutated probe.
+				$source = file_get_contents( dirname( __DIR__, 2 ) . '/' . substr( $path, 3 ) );
+				self::assertIsString( $source );
+			}
+			$diagnostics = $this->profile_diagnostics( $path, $source . "\n" . $probe, true );
+			self::assertContains( 'WordPress.WP.GlobalVariablesOverride.Prohibited', $diagnostics, $path );
+			foreach ( array( 'NonPrefixedFunctionFound', 'NonPrefixedClassFound', 'NonPrefixedConstantFound' ) as $suffix ) {
+				self::assertContains( 'WordPress.NamingConventions.PrefixAllGlobals.' . $suffix, $diagnostics, $path );
+			}
+			if ( in_array( $path, array( '../scripts/lint-php.php', '../scripts/sync-updater-support.php' ), true ) ) {
+				self::assertNotContains( $variable_code, $diagnostics, $path );
+			} else {
+				self::assertContains( $variable_code, $diagnostics, $path );
+			}
+		}
+	}
+
 	/** @return list<string> */
 	private function profile_diagnostics( string $path, string $source, bool $all = false ): array {
 		$root = dirname( __DIR__, 2 );

@@ -20,7 +20,25 @@ Its five private race/read/lock/rewind seams are assigned through Reflection by
 `InstalledPackageResolverTest`; only `property.unusedType` is ignored at those
 specific declarations. Their callable types and all method bodies remain checked.
 `scanDirectories: src` supplies symbol discovery; it does not itself analyse
-method bodies. All 36 shipped PHP files (`bootstrap.php`, `runtime.php` and
+method bodies. Production analysis now defaults to the repository root rather
+than enumerating individual source files. Root-relative tests/scripts, installed
+dependencies and disposable cache/workspace/coverage directories are excluded;
+they are separate development or generated state, not omitted production. The
+generated ArchiveSafety helper remains directly analyzed. Exclusions apply to
+analysis and scanning so fixture-defined constants do not change production
+type inference.
+
+`ProductionAnalysisCoverageTest` uses PHPStan's effective finder and exclusions
+and compares them with independent recursive maintained-PHP discovery. Isolated
+controls exercise new root files, new/nested source directories, relocation and
+splitting, a production `src/tests` directory, an intentionally incomplete path
+list and an explicitly excluded generated production file. A bounded header check
+also detects extensionless PHP/shebang entrypoints: a new unselected entrypoint
+fails coverage until its analysis boundary is deliberately accounted for. Existing production
+coverage remains 36/36; this prevents future omissions rather than correcting a
+current uncovered file. Tests and scripts retain their existing development gates.
+
+All 36 maintained production PHP files (`bootstrap.php`, `runtime.php` and
 production PHP under `src/`) now have direct level-8 roots. Issue #60 records the historical
 source acceptance; this coverage count does not certify later exception changes.
 

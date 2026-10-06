@@ -29,6 +29,11 @@ The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded and is
 namespace-only parity checked against the locked upstream package. All 36
 shipped PHP files, including that generated copy, remain directly analysed at
 PHPStan level 8.
+Analysis defaults to the repository root, including new root/nested PHP and the
+generated helper. Root-relative tests/scripts, dependencies and disposable state
+are explicit exclusions; a production subdirectory with the same name is not.
+ProductionAnalysisCoverageTest compares effective analyzer selection against
+independent maintained-file discovery and protects new, split and excluded files.
 
 Purpose-built test harnesses and fixture interfaces follow owned naming;
 actual production calls, named arguments, Reflection seams and callback strings

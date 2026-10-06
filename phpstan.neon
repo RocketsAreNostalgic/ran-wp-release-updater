@@ -4,38 +4,21 @@ includes:
 parameters:
 	level: 8
 	treatPhpDocTypesAsCertain: false
+	# Include new root files and nested/split production code without a path-list edit.
 	paths:
-		- bootstrap.php
-		- runtime.php
-		- src/Archive
-		- src/Contract
-		# Generated upstream copy: analyse directly; preserve namespace-only parity.
-		- src/Dependency/ArchiveSafety.php
-		# Security-sensitive custody, state, runtime selection, and provider collaborators are required to remain level-8 clean.
-		- src/WordPress/NativePackageUpdater.php
-		- src/WordPress/InstalledPackageResolver.php
-		- src/WordPress/OwnedArchiveStore.php
-		- src/WordPress/StagedPackageManifest.php
-		- src/WordPress/PendingInstallState.php
-		- src/WordPress/BindingState.php
-		- src/WordPress/BindingFenceCoordinator.php
-		- src/Runtime/ReleaseSource.php
-		- src/Runtime/ReleaseFailure.php
-		- src/Runtime/RequestProtocolValidator.php
-		- src/Runtime/RequestBroker.php
-		- src/Runtime/RuntimeCopySelector.php
-		- src/Runtime/SelectedRuntimeState.php
-		- src/Provider/GitHub/GitHubApiClient.php
-		- src/Provider/GitHub/GitHubArtifactCustodyFailure.php
-		- src/Provider/GitHub/GitHubArtifactStore.php
-		- src/Provider/GitHub/GitHubCredentialResolver.php
-		- src/Provider/GitHub/GitHubReleaseService.php
-		- src/Provider/GitHub/GitHubReleaseAdapter.php
-		- src/Provider/GitHub/GitHubReleaseReadUnavailable.php
-		- src/Provider/GitHub/ProspectiveReleaseArtifact.php
-		- src/Provider/GitHub/ProspectiveReleaseInspection.php
+		- .
 	scanDirectories:
 		- src
+	# Keep synthetic development declarations out of production symbol discovery too.
 	excludePaths:
-		analyse:
-			- tests
+		analyseAndScan:
+			# Root-relative development surfaces retain syntax/standards/behavior gates.
+			- tests/*
+			- scripts/*
+			# Dependencies and disposable state are not maintained production sources.
+			- vendor/*
+			- node_modules/*
+			- .git/*
+			- .phpunit.cache/*
+			- .workspaces/*
+			- coverage/*

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- This standalone CLI entrypoint owns process-local variables and never loads into WordPress global scope.
+
 $root  = dirname( __DIR__ );
 $paths = array(
 	$root . '/bootstrap.php',
@@ -11,16 +13,16 @@ $paths = array(
 	$root . '/tests',
 );
 $files = array();
-foreach ( $paths as $path ) {
-	if ( is_file( $path ) && str_ends_with( $path, '.php' ) ) {
-		$files[] = $path;
+foreach ( $paths as $source_path ) {
+	if ( is_file( $source_path ) && str_ends_with( $source_path, '.php' ) ) {
+		$files[] = $source_path;
 		continue;
 	}
-	if ( ! is_dir( $path ) ) {
+	if ( ! is_dir( $source_path ) ) {
 		continue;
 	}
 	$iterator = new RecursiveIteratorIterator(
-		new RecursiveDirectoryIterator( $path, FilesystemIterator::SKIP_DOTS )
+		new RecursiveDirectoryIterator( $source_path, FilesystemIterator::SKIP_DOTS )
 	);
 	foreach ( $iterator as $file ) {
 		if ( $file->isFile() && 'php' === strtolower( $file->getExtension() ) ) {
