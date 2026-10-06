@@ -41,8 +41,14 @@ Inline sniff-property overrides (`phpcs:set` and legacy
 `@codingStandardsChangeSetting`) are forbidden in maintained PHP comments.
 The existing coverage suite scans all maintained PHP for these directives,
 case-insensitively; fixture strings remain data.
-The 58 test PHP files still need isolated-harness analysis; their exclusion is
-pending debt, not ecosystem-wide acceptance or an approved permanent exemption.
+Every maintained test PHP file now enters a separate level-5 invocation via
+`scripts/analyze-tests.php`. Its recursive effective selection defaults to all
+`tests/`; new roots and split files need no profile-list update. Keep
+`phpstan-tests.neon` free of broad analysis paths: the runner supplies one file
+per invocation to prevent unrelated executable fixture symbols leaking in.
+Production and tooling retain separate level-8 analysis. No maintained PHP
+file is exempt from direct analysis.
+
 
 Purpose-built test harnesses and fixture interfaces follow owned naming;
 actual production calls, named arguments, Reflection seams and callback strings

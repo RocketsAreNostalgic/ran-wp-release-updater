@@ -352,7 +352,7 @@ function ran_wp_release_updater_test_run_core_upgrade_failure_scenario( array $t
 	);
 	$inject_failure = static function ( mixed $response, array $hook_extra, array $install_result ) use ( $type, $identity, &$injected ): mixed {
 		$key = 'plugin' === $type ? 'plugin' : 'theme';
-		if ( ( $hook_extra[ $key ] ?? null ) !== $identity || ! is_array( $install_result ) ) {
+		if ( ( $hook_extra[ $key ] ?? null ) !== $identity || ! is_array( $install_result ) ) { // @phpstan-ignore function.alreadyNarrowedType (Retain runtime evidence validation at the external WordPress or native-process boundary.)
 			return $response;
 		}
 		$injected['post_copy_seen']      = true;
@@ -378,8 +378,8 @@ function ran_wp_release_updater_test_run_core_upgrade_failure_scenario( array $t
 
 	return array(
 		'failure_stage'                 => $failure_stage,
-		'failed'                        => is_wp_error( $install_result ),
-		'result_code'                   => is_wp_error( $install_result ) ? $install_result->get_error_code() : null,
+		'failed'                        => is_wp_error( $install_result ), // @phpstan-ignore function.alreadyNarrowedType (Retain runtime evidence validation at the external WordPress or native-process boundary.)
+		'result_code'                   => is_wp_error( $install_result ) ? $install_result->get_error_code() : null, // @phpstan-ignore function.alreadyNarrowedType (Retain runtime evidence validation at the external WordPress or native-process boundary.)
 		'version_before'                => $before,
 		'version_after'                 => ran_wp_release_updater_test_file_version( $type, $identity ),
 		'bytes_after'                   => ran_wp_release_updater_test_fixture_bytes( $type, $identity ),

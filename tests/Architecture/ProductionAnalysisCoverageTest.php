@@ -78,6 +78,79 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		return false;
 	}
 
+	public function test_every_maintained_test_is_selected_by_the_isolated_runner(): void {
+		$root     = dirname( __DIR__, 2 );
+		$expected = array_map( static fn ( string $file ): string => 'tests/' . $file, $this->maintained_files( $root . '/tests', array() ) );
+		self::assertSame( $expected, $this->analyzed_files( $root, $root . '/phpstan-tests.neon', 5, array( $root . '/tests' ) ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Verify the canonical aggregate runs analysis, rather than only exposing the discovered file list.
+		$manifest = file_get_contents( $root . '/composer.json' );
+		self::assertIsString( $manifest );
+		$composer = json_decode( $manifest, true, 512, JSON_THROW_ON_ERROR );
+		self::assertContains( '@analyze', $composer['scripts']['check'] );
+		self::assertContains( 'php scripts/analyze-tests.php', $composer['scripts']['analyze'] );
+
+		$result = $this->run_command( array( PHP_BINARY, $root . '/scripts/analyze-tests.php', '--list' ), $root );
+		self::assertSame( 0, $result['exit'], $result['output'] );
+		$selected = json_decode( $result['output'], true, 512, JSON_THROW_ON_ERROR );
+		self::assertSame( $expected, array_map( static fn ( string $file ): string => str_replace( DIRECTORY_SEPARATOR, '/', substr( $file, strlen( $root ) + 1 ) ), $selected ) );
+	}
+
+	public function test_future_test_files_are_selected_and_analyzed_in_separate_symbol_worlds(): void {
+		$root = dirname( __DIR__, 2 );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Exercise the actual test profile on isolated synthetic declarations without changing repository files.
+		$config = file_get_contents( $root . '/phpstan-tests.neon' );
+		self::assertIsString( $config );
+		$config = str_replace( 'vendor/szepeviktor/phpstan-wordpress/extension.neon', str_replace( '\\', '/', $root ) . '/vendor/szepeviktor/phpstan-wordpress/extension.neon', $config );
+		$this->write_fixture( 'src/Existing.php', '<?php' );
+		$this->write_fixture( 'tests/NewRoot/First.php', '<?php function add_filter(string $hook, mixed $callback, int $priority, int $accepted): void {}' );
+		$this->write_fixture( 'tests/NewRoot/Nested/Second.php', '<?php add_filter("ran_test", static fn(): bool => true);' );
+		$this->write_fixture( 'tests.neon', $config );
+		$expected = array( 'tests/NewRoot/First.php', 'tests/NewRoot/Nested/Second.php' );
+		self::assertSame( $expected, $this->analyzed_files( $this->fixture, $this->fixture . '/tests.neon', 5, array( $this->fixture . '/tests' ) ) );
+		foreach ( $expected as $file ) {
+			$result = $this->analyze_fixture( $this->fixture . '/tests.neon', array( $this->fixture . '/' . $file ) );
+			self::assertSame( 0, $result['exit'], $result['output'] );
+		}
+
+		$this->write_fixture( 'combined.neon', $config . "\tpaths:\n\t\t- tests\n" );
+		$combined = '';
+		foreach ( $expected as $file ) {
+			$result    = $this->analyze_fixture( $this->fixture . '/combined.neon', array( $this->fixture . '/' . $file ) );
+			$combined .= $result['output'];
+		}
+		self::assertStringContainsString( 'arguments.count', $combined );
+		$this->write_fixture( 'tests/NewRoot/Nested/Second.php', '<?php function ran_isolated_probe(string $value): int { return $value; }' );
+		$result = $this->analyze_fixture( $this->fixture . '/tests.neon', array( $this->fixture . '/tests/NewRoot/Nested/Second.php' ) );
+		self::assertSame( 1, $result['exit'] );
+		self::assertStringContainsString( 'return.type', $result['output'] );
+		$this->write_fixture( 'excluded.neon', $config . "\texcludePaths:\n\t\tanalyseAndScan:\n\t\t\t- tests/NewRoot/Nested/*\n" );
+		self::assertSame( array( 'tests/NewRoot/Nested/Second.php' ), array_values( array_diff( $expected, $this->analyzed_files( $this->fixture, $this->fixture . '/excluded.neon', 5, array( $this->fixture . '/tests' ) ) ) ) );
+	}
+
+	public function test_exact_negative_contract_annotations_do_not_hide_the_next_occurrence(): void {
+		$cases = array(
+			array( 'Contract/AcquisitionReceiptTest.php', 'argument.type', '<?php /** @param array<mixed> $d */ function ran_negative_probe(int $a, string $b, bool $c, array $d, object $e): void {}', 'ran_negative_probe(array(), array(), array(), 1, "wrong", 6);' ),
+			array( 'Archive/PackageIdentityValidatorTest.php', 'expr.resultUnused', '<?php $object = new stdClass();', 'clone $object;' ),
+			array( 'Integration/real-mysql-cas-proof.php', 'function.alreadyNarrowedType', '<?php', 'if (is_array(array())) { echo 1; }' ),
+			array( 'Architecture/ProductionAnalysisCoverageTest.php', 'phpstanApi.constructor', '<?php', 'new \\PHPStan\\File\\FileExcluder(new \\PHPStan\\File\\FileHelper(__DIR__), array());' ),
+		);
+		foreach ( $cases as [$file, $identifier, $prefix, $statement] ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reuse the actual occurrence-local annotation so the negative control protects its current scope.
+			$source = file_get_contents( dirname( __DIR__ ) . '/' . $file );
+			self::assertIsString( $source );
+			self::assertSame( 1, preg_match( '/\/\/ @phpstan-ignore ' . preg_quote( $identifier, '/' ) . '[^\r\n]*/', $source, $matches ) );
+			$this->write_fixture( 'src/Probe.php', $prefix . "\n" . $statement . ' ' . $matches[0] . "\n" );
+			$config = $this->fixture_config();
+			$result = $this->analyze_fixture( $config );
+			self::assertSame( 0, $result['exit'], $result['output'] );
+			$this->write_fixture( 'src/Probe.php', $prefix . "\n" . $statement . ' ' . $matches[0] . "\n" . $statement . "\n" );
+			$result = $this->analyze_fixture( $config );
+			self::assertSame( 1, $result['exit'] );
+			self::assertStringContainsString( $identifier, $result['output'] );
+			self::assertStringNotContainsString( 'ignore.unmatchedIdentifier', $result['output'] );
+		}
+	}
+
 	public function test_every_maintained_script_is_directly_analyzed(): void {
 		$root     = dirname( __DIR__, 2 );
 		$expected = array_map( static fn ( string $file ): string => 'scripts/' . $file, $this->maintained_files( $root . '/scripts', array() ) );
@@ -187,17 +260,28 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		self::assertSame( 0, $leaked['exit'], $leaked['output'] );
 	}
 
-	/** @return array{exit: int, output: string} */
-	private function analyze_fixture( string $config ): array {
+	/**
+	 * @param list<string> $paths Explicit per-file worlds, matching the test runner.
+	 * @return array{exit: int, output: string}
+	 */
+	private function analyze_fixture( string $config, array $paths = array() ): array {
+		return $this->run_command( array_merge( array( PHP_BINARY, dirname( __DIR__, 2 ) . '/vendor/bin/phpstan', 'analyse', '--configuration=' . $config, '--no-progress', '--error-format=json' ), $paths ), $this->fixture );
+	}
+
+	/**
+	 * @param list<string> $command Locked tool invocation.
+	 * @return array{exit: int, output: string}
+	 */
+	private function run_command( array $command, string $directory ): array {
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Exercise the locked analyzer on disposable source bytes to prove reflection isolation, without loading fixture code in this process.
 		$process = proc_open(
-			array( PHP_BINARY, dirname( __DIR__, 2 ) . '/vendor/bin/phpstan', 'analyse', '--configuration=' . $config, '--no-progress', '--error-format=json' ),
+			$command,
 			array(
 				1 => array( 'pipe', 'w' ),
 				2 => array( 'pipe', 'w' ),
 			),
 			$pipes,
-			$this->fixture
+			$directory
 		);
 		self::assertIsResource( $process );
 		$output = stream_get_contents( $pipes[1] ) . stream_get_contents( $pipes[2] );
@@ -245,15 +329,23 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		return 1 === preg_match( '/\\A(?:#![^\\r\\n]*\\r?\\n)?[ \\t\\r\\n]*<\\?(?:php(?:\\s|$)|=)/i', $header );
 	}
 
-	/** @return list<string> */
-	private function analyzed_files( string $root, string $config ): array {
-		$container = ( new ContainerFactory( $root ) )->create( $this->fixture . '/.phpunit.cache/container', array( $config ), array() );
-		self::assertSame( 8, $container->getParameter( 'level' ) );
+	/**
+	 * @param list<string> $paths Explicit selection for the isolated test runner.
+	 * @return list<string>
+	 */
+	private function analyzed_files( string $root, string $config, int $level = 8, array $paths = array() ): array {
+		$container = ( new ContainerFactory( $root ) )->create( $this->fixture . '/.phpunit.cache/container', array( $config ), $paths );
+		self::assertSame( $level, $container->getParameter( 'level' ) );
+		if ( 5 === $level ) {
+			self::assertSame( array(), $container->getParameter( 'ignoreErrors' ) );
+			self::assertTrue( $container->getParameter( 'reportUnmatchedIgnoredErrors' ) );
+		}
+
 		// Use the same effective finder, extensions and exclusions as PHPStan's command.
-		$files = $container->getService( 'fileFinderAnalyse' )->findFiles( $container->getParameter( 'paths' ) )->getFiles();
+		$files = $container->getService( 'fileFinderAnalyse' )->findFiles( array() === $paths ? $container->getParameter( 'paths' ) : $paths )->getFiles();
 		// PHPStan's command removes configured stubs after discovery; their declarations are not directly analyzed bodies.
-		$stub_excluder = new FileExcluder( new FileHelper( $root ), $container->getParameter( 'stubFiles' ) );
-		$files         = array_values( array_filter( $files, static fn ( string $file ): bool => ! $stub_excluder->isExcludedFromAnalysing( $file ) ) );
+		$stub_excluder = new FileExcluder( new FileHelper( $root ), $container->getParameter( 'stubFiles' ) ); // @phpstan-ignore phpstanApi.constructor, phpstanApi.constructor (Match the locked PHPStan CLI stub filter; effective-selection regression tests protect this internal API dependency.)
+		$files         = array_values( array_filter( $files, static fn ( string $file ): bool => ! $stub_excluder->isExcludedFromAnalysing( $file ) ) ); // @phpstan-ignore phpstanApi.method (Match the locked PHPStan CLI stub filter; effective-selection regression tests protect this internal API dependency.)
 		$files         = array_map( static fn ( string $file ): string => str_replace( DIRECTORY_SEPARATOR, '/', substr( $file, strlen( $root ) + 1 ) ), $files );
 		sort( $files );
 		return $files;

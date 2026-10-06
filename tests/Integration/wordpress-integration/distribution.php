@@ -174,7 +174,10 @@ function ran_wp_release_updater_test_archive_manifest( string $zip, string $root
 		if ( '' === $relative || str_contains( $relative, '../' ) || isset( $manifest[ $relative ] ) ) {
 			throw new RuntimeException( 'Consumer ZIP entry is ambiguous.' );
 		}
-		$mode = (int) ( ( $stat['external_attributes'] ?? 0 ) >> 16 ) & 0170000;
+		if ( ! $archive->getExternalAttributesIndex( $index, $operating_system, $attributes ) ) {
+			throw new RuntimeException( 'Consumer ZIP entry attributes cannot be read.' );
+		}
+		$mode = ( $attributes >> 16 ) & 0170000;
 		if ( 0 !== $mode && 0100000 !== $mode ) {
 			throw new RuntimeException( 'Consumer ZIP contains a non-regular entry.' );
 		}

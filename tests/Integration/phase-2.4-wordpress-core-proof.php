@@ -75,7 +75,7 @@ if ( ! mkdir( $base, 0700, false ) ) {
 	throw new RuntimeException( 'Could not prepare isolated proof root.' );
 }
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
-if ( is_link( $base ) || realpath( $base ) !== $base || dirname( $base ) !== $workspace || false === file_put_contents( $marker_file, $marker . "\n" ) ) {
+if ( is_link( $base ) || realpath( $base ) !== $base || dirname( $base ) !== $workspace || false === file_put_contents( $marker_file, $marker . "\n" ) ) { // @phpstan-ignore booleanOr.leftAlwaysFalse (Retain the independent filesystem ownership recheck before destructive fixture cleanup.)
 	throw new RuntimeException( 'Could not establish a real disposable proof root and marker.' );
 }
 
@@ -299,11 +299,11 @@ try {
 				&& ( $one['core_upgrade']['failure_stage'] ?? null ) === $phase_mode
 				&& '2.0.0' === ( $one['core_upgrade']['version_before'] ?? null )
 				&& '3.0.0' === ( $one['core_upgrade']['version_after'] ?? null )
-				&& ( 'install' !== $phase_mode || 'phase24_injected_post_copy_failure' === ( $one['core_upgrade']['result_code'] ?? null ) )
-				&& ( 'install' !== $phase_mode || true === ( $one['core_upgrade']['injected_post_copy']['post_copy_seen'] ?? null ) )
-				&& ( 'install' !== $phase_mode || '3.0.0' === ( $one['core_upgrade']['injected_post_copy']['destination_version'] ?? null ) )
-				&& ( 'install' !== $phase_mode || true === ( $one['core_upgrade']['injected_post_copy']['backup_present'] ?? null ) )
-				&& ( 'install' !== $phase_mode || true === ( $one['core_upgrade']['rollback_backup_path_exists'] ?? null ) )
+				&& 'phase24_injected_post_copy_failure' === ( $one['core_upgrade']['result_code'] ?? null )
+				&& true === ( $one['core_upgrade']['injected_post_copy']['post_copy_seen'] ?? null )
+				&& '3.0.0' === ( $one['core_upgrade']['injected_post_copy']['destination_version'] ?? null )
+				&& true === ( $one['core_upgrade']['injected_post_copy']['backup_present'] ?? null )
+				&& true === ( $one['core_upgrade']['rollback_backup_path_exists'] ?? null )
 				&& false === ( $one['core_upgrade']['maintenance_file_exists'] ?? null )
 				&& true === ( $one['core_upgrade']['offer_token_used'] ?? null )
 				&& 1 === ( $one['core_upgrade']['package_handoff_calls'] ?? null )
@@ -393,7 +393,7 @@ try {
 		}
 	}
 
-	if ( isset( $port, $db_name ) ) {
+	if ( isset( $port, $db_name ) ) { // @phpstan-ignore isset.variable, isset.variable (Finally cleanup must also handle an earlier exception before resource initialization.)
 		try {
 			// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_init -- The isolated proof owns a dedicated native MySQL connection before or outside WordPress database initialization.
 			$cleanup = mysqli_init();
@@ -417,7 +417,7 @@ try {
 		throw new RuntimeException( 'Refusing cleanup because disposable-root ownership cannot be revalidated.' );
 	}
 	ran_wp_release_updater_test_remove_tree( $base );
-	if ( file_exists( $base ) || is_link( $base ) ) {
+	if ( file_exists( $base ) || is_link( $base ) ) { // @phpstan-ignore booleanOr.rightAlwaysFalse (Retain the independent filesystem ownership recheck after destructive fixture cleanup.)
 		throw new RuntimeException( 'Disposable proof root was not fully removed.' );
 	}
 }

@@ -109,7 +109,7 @@ add_filter(
 		return new WP_Error( 'mixed_bulk_network_forbidden', 'Network is forbidden in the mixed-bulk proof.' );
 	},
 	PHP_INT_MIN,
-	3
+	0
 );
 $ids                        = 'plugin' === $type ? array( 'managed-a/managed-a.php', 'ordinary/ordinary.php', 'managed-b/managed-b.php' ) : array( 'managed-a', 'ordinary', 'managed-b' );
 $archives                   = array(
@@ -156,7 +156,7 @@ if ( 'failure' === $mode ) {
 		'upgrader_post_install',
 		static function ( mixed $response, array $extra, array $install ) use ( $type, $ids, &$injected ): mixed {
 			$key = 'plugin' === $type ? 'plugin' : 'theme';
-			if ( ( $extra[ $key ] ?? null ) !== $ids[0] || ! is_array( $install ) ) {
+			if ( ( $extra[ $key ] ?? null ) !== $ids[0] || ! is_array( $install ) ) { // @phpstan-ignore function.alreadyNarrowedType (Retain runtime evidence validation at the external WordPress or native-process boundary.)
 				return $response;
 			}
 
@@ -208,7 +208,7 @@ add_action(
 				'failure_code' => $target['updater']->status()['failure_code'],
 			);
 			$installed_manifest         = ran_wp_release_updater_test_target_file_manifest( $type, $target['identity'] );
-			$expected_manifest          = $expected_archive_manifests[ $slug ] ?? array();
+			$expected_manifest          = $expected_archive_manifests[ $slug ] ?? array(); // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
 			$manifest_evidence[ $slug ] = array(
 				'expected'    => $expected_manifest,
 				'installed'   => $installed_manifest,
@@ -217,9 +217,9 @@ add_action(
 		}
 		$tokens               = array( $managed_a['offer']['package'], $managed_b['offer']['package'] );
 		$observation_evidence = array(
-			'managed_a_exact_token'   => 1 === count( $observations[ $ids[0] ] ) && ( $observations[ $ids[0] ][0] ?? null ) === $tokens[0],
-			'ordinary_direct_archive' => 1 === count( $observations[ $ids[1] ] ) && ( $observations[ $ids[1] ][0] ?? null ) === $archives['ordinary'],
-			'managed_b_exact_token'   => 1 === count( $observations[ $ids[2] ] ) && ( $observations[ $ids[2] ][0] ?? null ) === $tokens[1],
+			'managed_a_exact_token'   => 1 === count( $observations[ $ids[0] ] ) && ( $observations[ $ids[0] ][0] ?? null ) === $tokens[0], // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
+			'ordinary_direct_archive' => 1 === count( $observations[ $ids[1] ] ) && ( $observations[ $ids[1] ][0] ?? null ) === $archives['ordinary'], // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
+			'managed_b_exact_token'   => 1 === count( $observations[ $ids[2] ] ) && ( $observations[ $ids[2] ][0] ?? null ) === $tokens[1], // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
 			'managed_tokens_distinct' => $tokens[0] !== $tokens[1],
 		);
 		$values               = $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'ran\\_wp\\_release\\_updater\\_target\\_v1\\_%' ORDER BY option_name" );
@@ -293,7 +293,7 @@ add_action(
 	},
 	PHP_INT_MAX
 );
-/** @return array{identity:string,offer:array<string,mixed>,adapter:MixedBulkFixtureAdapter,updater:NativePackageUpdater} */
+/** @return array{identity:string,offer:array<string,mixed>,adapter:RAN_WP_RELEASE_UPDATER_Test_MixedBulkFixtureAdapter,updater:NativePackageUpdater} */
 // phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them.
 function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, string $slug, string $name, string $archive ): array {
 	global $wpdb;
@@ -468,7 +468,7 @@ function ran_wp_release_updater_test_archive_file_manifest( string $archive, str
 	$manifest = array();
 	// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- ZipArchive exposes this native property name.
 	$entry_count = $zip->numFiles;
-	if ( ! is_int( $entry_count ) ) {
+	if ( ! is_int( $entry_count ) ) { // @phpstan-ignore function.alreadyNarrowedType (Retain runtime evidence validation at the external WordPress or native-process boundary.)
 		throw new RuntimeException( 'The fixture archive manifest could not be enumerated.' );
 	}
 	$root_prefix = $root . '/';

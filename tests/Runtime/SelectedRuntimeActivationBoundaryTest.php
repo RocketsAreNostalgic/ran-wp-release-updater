@@ -99,6 +99,7 @@ $registrar = require $data['bootstrap'];
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
 echo json_encode(array('state' => $broker->diagnostics()['state'], 'diagnostics' => $registrar->diagnostics()['diagnostics'], 'hooks' => false));
 PHP,
+			default => throw new \UnhandledMatchError(),
 			}
 		);
 

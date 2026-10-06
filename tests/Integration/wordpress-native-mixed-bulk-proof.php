@@ -133,7 +133,7 @@ try {
 	}
 	if ( file_exists( $base ) ) {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
-		if ( is_link( $base ) || realpath( $base ) !== $base || ! is_file( $marker_file ) || file_get_contents( $marker_file ) !== $marker . "\n" ) {
+		if ( is_link( $base ) || realpath( $base ) !== $base || ! is_file( $marker_file ) || file_get_contents( $marker_file ) !== $marker . "\n" ) { // @phpstan-ignore booleanOr.leftAlwaysFalse (Retain the independent filesystem ownership recheck before destructive fixture cleanup.)
 			throw new RuntimeException( 'Refusing unvalidated disposable proof cleanup.' );
 		}
 		ran_wp_release_updater_test_remove_tree( $base );

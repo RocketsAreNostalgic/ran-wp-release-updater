@@ -205,7 +205,7 @@ function ran_wp_release_updater_test_create_isolated_root(): string {
 
 function ran_wp_release_updater_test_attest_server( $server, string $data ): mysqli {
 	$status = proc_get_status( $server );
-	if ( ! is_array( $status ) || ! $status['running'] ) {
+	if ( ! is_array( $status ) || ! $status['running'] ) { // @phpstan-ignore function.alreadyNarrowedType (Retain runtime evidence validation at the external WordPress or native-process boundary.)
 		throw new RuntimeException( 'Isolated MySQL stopped before attestation.' );
 	}
 	$mysqli = ran_wp_release_updater_test_connect();
@@ -283,7 +283,6 @@ function ran_wp_release_updater_test_assert_final_rows( MysqliOptionDatabase $da
 	} if ( json_decode( $target, true, 64, JSON_THROW_ON_ERROR ) !== $winner['state'] ) {
 		throw new RuntimeException( 'Final self-contained state does not match the selected winner.' );
 	} }
-/** @param array<string,mixed> $facts */
 function ran_wp_release_updater_test_target_name( BindingRecord $binding ): string {
 	$facts = $binding->to_array();
 	return 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(

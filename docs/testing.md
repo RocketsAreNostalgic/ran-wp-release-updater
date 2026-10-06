@@ -46,17 +46,35 @@ test independently discovers all script PHP, including nested `scripts/tests`,
 compares effective selection, asserts level 8, detects an excluded nested script,
 and proves a new script's incorrect return fails actual analysis.
 
-Coverage is 38/96 maintained PHP files: 36 production and two scripts. The 58
-test PHP files remain pending, not accepted exemptions. A temporary combined
-level-5 probe exposes 92 diagnostics, which are exposure estimates rather than
-92 defects. Several are caused by combining isolated runtime worlds: three
-`ran_wp_release_updater_test_connect` declarations have incompatible signatures,
-as do two `ran_wp_release_updater_test_attest_server` declarations; standalone
-WordPress hook fixtures also conflict. The next adoption step must preserve
-these separate executable harnesses with appropriate analysis profiles instead
-of suppressing the resulting false cross-world calls. No baseline, test
-exemption approval, production runtime change or test analysis acceptance is
-introduced here.
+Direct analysis covers all 97 maintained PHP files: 36 production files and
+three scripts at level 8, plus 58 test files at level 5. The small
+`scripts/analyze-tests.php` runner discovers the whole tests directory through
+PHPStan's file finder, then passes each file separately to the locked analyzer.
+`--list` exposes exactly that selection to the independent coverage guard.
+No file registry, baseline, test exclusions or ignored-error configuration is
+used. Nonstandard PHP entrypoints still fail the independent discovery comparison
+until explicitly included, just as for production.
+
+The test profile deliberately has no configured `paths`: otherwise declarations
+from unrelated executable fixtures can enter symbol discovery despite passing
+one CLI path. Existing same-name connection helpers and WordPress hook fixtures
+require separate worlds. Regression controls demonstrate clean isolated worlds,
+the failing combined-world counterexample, an automatically selected future
+nested test, an excluded-file omission and a real return-type violation.
+
+The test-only profile does not remember possibly impure function values.
+Updater status changes through callbacks/helper calls and shared global state;
+remembering an earlier `status()` observation incorrectly rejects later runtime
+assertions. Production/tool profiles retain their stronger existing settings.
+Shared fixture registries are read through their actual `$GLOBALS` identity,
+and captured mutable booleans have truthful type documentation.
+
+Exact identifier-local annotations preserve intentional malformed-call and
+private-clone rejection tests, locked internal analyzer API use, and defensive
+runtime/preflight/cleanup checks. They do not exempt files or whole lines from
+analysis; unmatched identifiers fail. Controls reuse actual annotations and
+prove the immediately following occurrence remains diagnosed. See
+QUALITY_ACCEPTANCE.md for dispositions requiring candidate review.
 
 All 36 maintained production PHP files (`bootstrap.php`, `runtime.php` and
 production PHP under `src/`) now have direct level-8 roots. Issue #60 records the historical

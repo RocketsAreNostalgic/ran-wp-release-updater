@@ -135,6 +135,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 			'repository' => array( $limited ),
 			'release' => array( $this->response( 200, array( 'id' => 99 ) ), $limited ),
 			'commit' => array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 200, $this->release( 7, 'v1.2.3' ) ), $limited ),
+			default => throw new \UnhandledMatchError(),
 		};
 	}
 	/** @return list<array<string,mixed>> */
@@ -144,6 +145,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 			'asset' => array( $this->response( 200, array( 'id' => 99 ) ), $limited ),
 			'final_repository' => array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 200, null, array(), 'zip-data' ), $limited ),
 			'cdn' => array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 302, null, array( 'location' => 'https://objects.githubusercontent.com/repository.zip' ) ), $limited ),
+			default => throw new \UnhandledMatchError(),
 		};
 	}
 	/** @return list<mixed> */
@@ -159,6 +161,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 			'malformed' => array( $this->response( 99, null ) ),
 			'unsafe_redirect' => array( $this->response( 302, null, array( 'location' => 'https://example.test/repository.zip' ) ) ),
 			'second_redirect' => array( $this->response( 302, null, array( 'location' => 'https://api.github.com/repos/owner/repository' ) ), $this->response( 302, null, array( 'location' => 'https://api.github.com/repos/owner/repository' ) ) ),
+			default => throw new \UnhandledMatchError(),
 		};
 	}
 	private function descriptor(): IdentityDescriptor {

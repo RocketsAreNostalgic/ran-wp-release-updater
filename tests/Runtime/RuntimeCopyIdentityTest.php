@@ -370,7 +370,7 @@ PHP,
 		}
 	}
 
-	/** @param array<string, string> $data
+	/** @param array<string, string|list<string>> $data
 	 * @return array<string, mixed>
 	 */
 	private function probe( string $body, array $data ): array {

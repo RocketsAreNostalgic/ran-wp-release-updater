@@ -81,7 +81,7 @@ function wp_tempnam( string $name ): string|false {
 		chmod( $path, 0600 );
 		$GLOBALS['rs_paths'][] = $path;
 	} return $path; }
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name. @phpstan-ignore return.unusedType (The stub preserves the foreign WordPress HTTP return contract even when this scenario returns only an array.)
 function wp_safe_remote_get( string $url, array $args ): array|WP_Error {
 	$GLOBALS['rs_requests'][] = array(
 		'url'    => $url,
@@ -112,6 +112,7 @@ function ran_wp_release_updater_test_rs_response( mixed $body, ?string $file = n
 		'response' => array( 'code' => 200 ),
 		'file'     => $file,
 	); }
+/** @phpstan-assert true $condition */
 function ran_wp_release_updater_test_rs_assert( bool $condition, string $message ): void {
 	if ( ! $condition ) {
 		throw new RuntimeException( $message ); } }

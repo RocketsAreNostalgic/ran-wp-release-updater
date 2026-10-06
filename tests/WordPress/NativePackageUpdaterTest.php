@@ -955,6 +955,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					'source-selection' => $updater->filter_source_selection( 'source', '/tmp', null, $this->extra() ),
 					'pre-install' => $updater->filter_pre_install( true, $this->extra() ),
 					'install-result' => $updater->capture_install_package_result( array(), $this->extra() ),
+					default => throw new \UnhandledMatchError(),
 				};
 				self::assertInstanceOf( \WP_Error::class, $result );
 				self::assertFileDoesNotExist( $owned_archive );
@@ -1032,6 +1033,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					'pre-unzip' => $updater->filter_pre_unzip_file( null, $owned_archive, '/tmp', array(), 0.0 ),
 					'source-selection' => $updater->filter_source_selection( $this->staged(), '/tmp', null, $this->extra() ),
 					'pre-install' => $updater->filter_pre_install( true, $this->extra() ),
+					default => throw new \UnhandledMatchError(),
 				};
 				self::assertInstanceOf( \WP_Error::class, $result );
 			}
@@ -1235,7 +1237,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				'update_uri'                 => $this->uri(),
 			);
 		}
-		/** @return array<string,string> */
+		/** @return array<string,int|string> */
 		private function policy(): array {
 			return array(
 				'archive_root'               => 'package',
@@ -1330,15 +1332,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests.
 			return 'ran-wp-release-updater:v1:' . rtrim( strtr( base64_encode( json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) ), '+/', '-_' ), '=' );
-		}
-		/** @return array<string,mixed> */
-		private function claim( BindingState $state ): array {
-			return array(
-				'binding_generation' => $state->binding_generation(),
-				'binding_hash'       => $state->binding()->binding_hash(),
-				'lease_deadline'     => $state->lease_deadline(),
-				'owner_token'        => $state->owner_token(),
-			);
 		}
 		private function uri(): string {
 			return 'https://updates.example.test/owner/package';

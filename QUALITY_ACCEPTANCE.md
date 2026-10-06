@@ -491,3 +491,49 @@ source currently needs these directives. The existing coverage suite now scans
 all maintained PHP comments, including tests and scripts, and rejects both
 spellings case-insensitively. Literal fixture strings and existing diagnostic-local
 annotations are preserved. No new checker runner or production changes are needed.
+
+
+## Maintained test analysis (proposed)
+
+The dependent candidate on #106 extends direct analysis to all 97 maintained PHP
+files: production36/tools3 at level8, tests58 at level5. A 43-line CLI adapter
+uses the existing PHPStan finder and runs each discovered test file separately;
+there is no filename registry, baseline or test-file exemption. Independent
+selection, new nested file, exclusion, actual body diagnostic and symbol-isolation
+controls extend the existing architecture test. Production PHP is unchanged.
+
+Truthful fixes include policy/probe PHPDoc, the renamed mixed-bulk adapter type,
+an assertion helper contract, captured mutable boolean types and explicit shared
+process registries. Seven matches now explicitly throw their existing
+UnhandledMatchError for unsupported cases; two unused private helpers are removed.
+Redundant install-mode alternatives are simplified only inside the already
+established install branch. The mixed-bulk HTTP veto accepts zero hook arguments,
+matching its zero-parameter callback without changing the veto result.
+
+The test-only conservative function-value setting preserves assertions following
+callback-mediated updater mutations; it is not applied to production or tools.
+No diagnostic category is globally ignored. Twenty-five occurrence annotations
+retain specific, reviewed-in-this-candidate contracts:
+
+- AcquisitionReceiptTest deliberately supplies five invalid argument types and
+  one extra argument and must observe TypeError.
+- PackageIdentityValidatorTest and TemporaryArtifactCustodyTest exercise private
+  clone denial and verify original-object usability after Error.
+- ProductionAnalysisCoverageTest uses locked internal FileExcluder/FileHelper
+  APIs to match the analyzer CLI's configured-stub filtering.
+- The integration entrypoints retain unsupported-PHP preflight, exceptional-path
+  cleanup initialization, ownership rechecks and native/WordPress evidence guards.
+  The HTTP stub retains the foreign array-or-WP_Error return contract.
+
+Actual source annotations are reused in regression controls proving their intended
+occurrence is allowed while the next occurrence of the same diagnostic fails;
+existing runtime contract tests continue to prove the negative scenarios. This
+is a proposed disposition requiring independent review, not acceptance inferred
+from green CI or these explanations.
+
+A separate confirmed test-harness defect is corrected: ZipArchive::statIndex does
+not provide external_attributes, so the distribution manifest's former zero
+fallback never rejected non-regular types. The helper now reads native attributes
+with getExternalAttributesIndex and fails if they cannot be obtained. A regression
+runs the exact repository helper against a regular-file ZIP (accepted) and UNIX
+symlink ZIP (rejected). This changes test validation, not production/runtime code.

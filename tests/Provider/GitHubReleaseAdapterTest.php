@@ -534,6 +534,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$this->service_configuration( $this->binding() ),
 				null,
 				static function () use ( &$revoked ): ?string {
+					/** @var bool $revoked Mutated by the HTTP callback after this closure is created. */
 					return $revoked ? 'runtime_unavailable' : null; }
 			);
 			$GLOBALS['ran_github_request_callback'] = static function () use ( &$revoked ): void {
@@ -1161,6 +1162,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
 					$this->response( 500, null ),
 				),
+				default => throw new \UnhandledMatchError(),
 			};
 
 			try {

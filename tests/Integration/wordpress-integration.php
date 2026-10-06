@@ -5,12 +5,12 @@ declare(strict_types=1);
 
 // Run against pristine WordPress source and a new, socket-only MySQL instance.
 const RAN_WP_RELEASE_UPDATER_TEST_INTEGRATION_MARKER = 'ran-wp-release-updater-integration-v1';
-$processes         = array();
-$owned_directories = array();
-$redactions        = array();
-$environment       = array();
-$report            = null;
-$result            = array(
+$GLOBALS['processes']                                = array();
+$GLOBALS['owned_directories']                        = array();
+$redactions  = array();
+$environment = array();
+$report      = null;
+$result      = array(
 	'status'      => 'failed',
 	'php_version' => PHP_VERSION,
 	'scenarios'   => array(),
@@ -24,7 +24,7 @@ try {
 		}
 		$scenario = $match[1];
 	}
-	if ( PHP_VERSION_ID < 80200 || ! extension_loaded( 'mysqli' ) || ! extension_loaded( 'zip' ) ) {
+	if ( PHP_VERSION_ID < 80200 || ! extension_loaded( 'mysqli' ) || ! extension_loaded( 'zip' ) ) { // @phpstan-ignore smaller.alwaysFalse (Standalone preflight must reject unsupported PHP before using the package despite the analysis PHP floor.)
 		throw new RuntimeException( 'PHP 8.2 with mysqli and zip is required.' );
 	}
 	$source                            = dirname( __DIR__, 2 );
@@ -223,22 +223,22 @@ try {
 } finally {
 	$cleanup_errors = array();
 	// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
-	foreach ( array_reverse( array_keys( $processes ) ) as $id ) {
+	foreach ( array_reverse( array_keys( $GLOBALS['processes'] ) ) as $id ) {
 		try {
 			ran_wp_release_updater_test_stop_process( $id );
 		} catch ( Throwable $error ) {
 			$cleanup_errors[] = ran_wp_release_updater_test_redact( $error->getMessage() ); }
 	}
 	// Never remove a server's files unless all owned processes have stopped.
-	if ( array() === $processes ) {
-		foreach ( array_reverse( $owned_directories ) as $directory ) {
+	if ( array() === $GLOBALS['processes'] ) {
+		foreach ( array_reverse( $GLOBALS['owned_directories'] ) as $directory ) {
 			try {
 				ran_wp_release_updater_test_remove_owned_directory( $directory );
 			} catch ( Throwable $error ) {
 				$cleanup_errors[] = ran_wp_release_updater_test_redact( $error->getMessage() ); }
 		}
 	}
-	$result['cleanup'] = array() === $cleanup_errors && array() === $processes ? 'complete' : 'failed';
+	$result['cleanup'] = array() === $cleanup_errors && array() === $GLOBALS['processes'] ? 'complete' : 'failed';
 	if ( 'complete' !== $result['cleanup'] ) {
 		$result['status']         = 'failed';
 		$result['cleanup_errors'] = $cleanup_errors;
@@ -448,7 +448,7 @@ function ran_wp_release_updater_test_attest_database( int $server, string $socke
 				$db = mysqli_init();
 				$db->real_connect( 'localhost', 'root', '', null, 0, $socket );
 			} catch ( mysqli_sql_exception ) {
-				if ( isset( $db ) ) {
+				if ( isset( $db ) ) { // @phpstan-ignore isset.variable (Finally cleanup must also handle an earlier exception before resource initialization.)
 					$db->close();
 				}
 				usleep( 50000 );

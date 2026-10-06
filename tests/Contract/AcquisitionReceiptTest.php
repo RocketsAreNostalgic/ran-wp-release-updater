@@ -79,7 +79,7 @@ final class AcquisitionReceiptTest extends TestCase {
 				self::addToAssertionCount( 1 ); }
 		}
 		try {
-			AcquisitionReceipt::issue( array( 'archive_identity_verified' => false ), $state, $descriptor, $validator, $package, 10 );
+			AcquisitionReceipt::issue( array( 'archive_identity_verified' => false ), $state, $descriptor, $validator, $package, 10 ); // @phpstan-ignore argument.type, argument.type, argument.type, argument.type, argument.type, arguments.count (Deliberately malformed public call; this negative contract must raise TypeError.)
 			self::fail( 'Caller receipt flags were accepted.' );
 		} catch ( \TypeError ) {
 			self::addToAssertionCount( 1 ); }
@@ -166,7 +166,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$facts['artifact_sha256'] = hash_file( 'sha256', $path );
 		$facts['artifact_size']   = filesize( $path );
 		return IdentityDescriptor::create( $facts ); }
-	/** @return array<string,string> */
+	/** @return array<string,int|string> */
 	private function policy(): array {
 		return array(
 			'archive_root'               => 'x',
