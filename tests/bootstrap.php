@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 if ( ! function_exists( 'apply_filters' ) ) {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function apply_filters( string $hook, mixed $value, mixed ...$arguments ): mixed {
 		$callback = $GLOBALS['ran_wp_release_updater_test_filter_callbacks'][ $hook ] ?? null;
 		return is_callable( $callback ) ? $callback( $value, ...$arguments ) : $value;

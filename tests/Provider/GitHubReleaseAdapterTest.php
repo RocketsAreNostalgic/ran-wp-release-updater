@@ -1,9 +1,12 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled provider transport globals are shared with the WordPress stubs and reset by the fixture lifecycle; keep their cross-file identities.
 
 declare(strict_types=1);
 
+// phpcs:ignore Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden -- Keep global WordPress stubs and namespaced test code in the same isolated fixture. WordPress stubs must be declared in the global namespace used by production calls.
 namespace {
 	if ( ! class_exists( 'WP_Error' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound, Generic.Classes.DuplicateClassName.Found -- This stub must occupy the WordPress global class identity used by production calls. The same foreign stub name is reused behind conditional or isolated-process load boundaries.
 		final class WP_Error {
 
 			public function __construct( public string $code, public string $message ) {
@@ -12,12 +15,14 @@ namespace {
 	}
 
 	if ( ! function_exists( 'is_wp_error' ) ) {
+		// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them. WordPress calls this global stub by its exact foreign function name.
 		function is_wp_error( mixed $value ): bool {
 			return $value instanceof WP_Error;
 		}
 	}
 
 	if ( ! function_exists( 'wp_safe_remote_get' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_safe_remote_get( string $url, array $args ): array|WP_Error {
 			$GLOBALS['ran_github_requests'][] = array( $url, $args );
 			$callback                         = $GLOBALS['ran_github_request_callback'] ?? null;
@@ -53,30 +58,35 @@ namespace {
 	}
 
 	if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_remote_retrieve_response_code( array $response ): int|string {
 			return $response['response']['code'];
 		}
 	}
 
 	if ( ! function_exists( 'wp_remote_retrieve_header' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_remote_retrieve_header( array $response, string $name ): mixed {
 			return $response['headers'][ strtolower( $name ) ] ?? null;
 		}
 	}
 
 	if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_remote_retrieve_body( array $response ): string {
 			return $response['body'] ?? '';
 		}
 	}
 
 	if ( ! function_exists( 'wp_http_validate_url' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_http_validate_url( string $url ): string|false {
 			return false === ( $GLOBALS['ran_github_validate_urls'] ?? true ) ? false : $url;
 		}
 	}
 
 	if ( ! function_exists( 'wp_tempnam' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_tempnam( string $filename ): string|false {
 			unset( $filename );
 			$path = tempnam( sys_get_temp_dir(), 'ran-github-test-' );
@@ -90,21 +100,25 @@ namespace {
 	}
 
 	if ( ! defined( 'FS_METHOD' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- The fixture supplies the WordPress FS_METHOD constant consumed by the filesystem gate.
 		define( 'FS_METHOD', 'direct' ); }
 
 	if ( ! function_exists( 'add_filter' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function add_filter( string $hook, mixed $callback, int $priority, int $arguments ): void {
 			$GLOBALS['ran_wp_release_updater_test_hooks'][] = array( 'filter', $hook, $callback, $priority, $arguments );
 		}
 	}
 
 	if ( ! function_exists( 'add_action' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function add_action( string $hook, mixed $callback, int $priority, int $arguments ): void {
 			$GLOBALS['ran_wp_release_updater_test_hooks'][] = array( 'action', $hook, $callback, $priority, $arguments );
 		}
 	}
 }
 
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture.
 namespace RAN\WPReleaseUpdater\V1\Provider\GitHub {
 	function chmod( string $path, int $permissions ): bool {
 		if ( ( $GLOBALS['ran_github_chmod_failures'] ?? 0 ) > 0 ) {
@@ -136,6 +150,7 @@ namespace RAN\WPReleaseUpdater\V1\Provider\GitHub {
 	}
 }
 
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture.
 namespace Tests\Provider {
 
 	use PHPUnit\Framework\TestCase;
@@ -152,6 +167,7 @@ namespace Tests\Provider {
 	use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 	use RuntimeException;
 
+	// phpcs:ignore Generic.Files.OneObjectStructurePerFile.MultipleFound -- Keep the conditional WordPress stub and its test class in the same self-contained fixture.
 	final class GitHubReleaseAdapterTest extends TestCase {
 
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
@@ -276,6 +292,7 @@ namespace Tests\Provider {
 		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
 		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
 		public function test_public_release_source_lists_empty_and_maps_credential_failure_without_http(): void {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 			$GLOBALS['wp_version'] = '6.8.0';
 			$registrar             = require dirname( __DIR__, 2 ) . '/bootstrap.php';
 			$broker                = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
@@ -362,6 +379,7 @@ namespace Tests\Provider {
 		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
 		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
 		public function test_public_release_source_maps_asset_and_prospective_archive_failures(): void {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 			$GLOBALS['wp_version'] = '6.8.0';
 			$registrar             = require dirname( __DIR__, 2 ) . '/bootstrap.php';
 			$broker                = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
@@ -2084,6 +2102,7 @@ namespace Tests\Provider {
 			$descriptor                      = $adapter->inspect( '7' );
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 500, null ) );
 			try {
+				// phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- The deliberately failing acquisition only sets up the subsequent request-limit observation.
 				$adapter->acquire( $descriptor ); } catch ( RuntimeException ) {
 				}
 				self::assertSame( PHP_INT_MAX, $GLOBALS['ran_github_requests'][5][1]['limit_response_size'] );
@@ -2320,3 +2339,5 @@ namespace Tests\Provider {
 		}
 	}
 }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

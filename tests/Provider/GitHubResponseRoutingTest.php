@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled provider transport globals are shared with the WordPress stubs and reset by the fixture lifecycle; keep their cross-file identities.
 
 declare(strict_types=1);
 
@@ -228,3 +229,5 @@ final class GitHubResponseRoutingTest extends TestCase {
 		}
 	}
 }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

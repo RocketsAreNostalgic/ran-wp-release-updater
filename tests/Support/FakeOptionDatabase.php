@@ -82,7 +82,7 @@ final class FakeOptionDatabase {
 	}
 
 	public function prepare( string $sql, mixed ...$args ): string {
-		$token                    = 'prepared-' . ++$this->sequence;
+		$token                    = 'prepared-' . ( ++$this->sequence );
 		$this->prepared[ $token ] = array(
 			'sql'  => $sql,
 			'args' => $args,

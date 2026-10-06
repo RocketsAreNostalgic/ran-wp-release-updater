@@ -19,6 +19,7 @@ final class InstalledPackageResolverTest extends TestCase {
 		mkdir( $this->root . '/plugins', 0700, true );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 		mkdir( $this->root . '/themes', 0700, true );
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 		$GLOBALS['wp_version'] = '6.8.0';
 	}
 
@@ -184,6 +185,7 @@ final class InstalledPackageResolverTest extends TestCase {
 		self::assertSame( 'installed_header_verified', PackageIdentityValidator::parse_header( $this->plugin_header() . "\x00", 'plugin' )['code'] );
 		self::assertSame( 'installed_header_invalid', PackageIdentityValidator::parse_header( $this->theme_header( 'Template: ../parent' ), 'theme' )['code'] );
 		self::assertSame( 'installed_requirement_incompatible', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/requirements/main.php', $this->plugin_header( "\nRequires PHP: 99.0\n" ) ) ) )['code'] );
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 		$GLOBALS['wp_version'] = '6.9-beta1-60740';
 		self::assertSame( 'installed_requirement_incompatible', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/requires-newer-wordpress/main.php', $this->plugin_header( "\nRequires at least: 6.10\n" ) ) ) )['code'] );
 		$changed  = $this->file( 'plugins/changed/main.php', $this->plugin_header() );
@@ -262,7 +264,9 @@ final class InstalledPackageResolverTest extends TestCase {
 				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 				unlink( $path );
 			} return;
-		} foreach ( scandir( $path ) ?: array() as $name ) {
+		}
+		$fixture_entries = scandir( $path );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $name ) {
 			if ( '.' !== $name && '..' !== $name ) {
 				$this->remove( $path . '/' . $name );
 			}

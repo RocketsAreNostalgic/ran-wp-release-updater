@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 declare(strict_types=1);
 
@@ -13,10 +14,11 @@ use Tests\Support\MysqliOptionDatabase;
 require_once dirname( __DIR__ ) . '/bootstrap.php';
 require_once dirname( __DIR__ ) . '/Support/MysqliOptionDatabase.php';
 
+// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_report -- Use native strict MySQL reporting for the isolated proof connection and its failure handling.
 mysqli_report( MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT );
 
 if ( '--worker' === ( $argv[1] ?? null ) ) {
-	worker( $argv );
+	ran_wp_release_updater_test_worker( $argv );
 	exit( 0 );
 }
 
@@ -24,10 +26,10 @@ $root         = null;
 $server       = null;
 $original_cwd = getcwd();
 try {
-	$root   = createIsolatedRoot();
+	$root   = ran_wp_release_updater_test_create_isolated_root();
 	$data   = $root . '/data';
 	$pid    = $root . '/mysqld.pid';
-	$mysqld = resolveMysqld();
+	$mysqld = ran_wp_release_updater_test_resolve_mysqld();
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	if ( ! mkdir( $data, 0700, true ) ) {
 		throw new RuntimeException( 'Could not create isolated MySQL directory.' );
@@ -35,7 +37,7 @@ try {
 	if ( false === chdir( $data ) ) {
 		throw new RuntimeException( 'Could not enter isolated MySQL data directory.' );
 	}
-	run( array( $mysqld, '--no-defaults', '--initialize-insecure', '--datadir=' . $data, '--socket=mysql.sock', '--tmpdir=' . $root, '--skip-mysqlx' ), $data );
+	ran_wp_release_updater_test_run( array( $mysqld, '--no-defaults', '--initialize-insecure', '--datadir=' . $data, '--socket=mysql.sock', '--tmpdir=' . $root, '--skip-mysqlx' ), $data );
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Start the dedicated mysqld child with explicit argv and fixture paths; the harness owns its shutdown.
 	$server = proc_open(
 		array(
@@ -60,35 +62,35 @@ try {
 	if ( ! is_resource( $server ) ) {
 		throw new RuntimeException( 'Could not start isolated MySQL.' );
 	}
-	$mysqli = attestServer( $server, $data );
+	$mysqli = ran_wp_release_updater_test_attest_server( $server, $data );
 	$mysqli->query( 'CREATE DATABASE proof' );
 	$mysqli->select_db( 'proof' );
 	$mysqli->query( 'CREATE TABLE options (option_name varchar(191) NOT NULL PRIMARY KEY, option_value longtext NOT NULL, autoload varchar(20) NOT NULL) ENGINE=InnoDB' );
-	$binding = BindingRecord::create( bindingFacts() );
-	$cold    = workers( 'cold', $data );
-	assertOneClaim( $cold, 'cold claim' );
-	$winner                       = claimed( $cold );
+	$binding = BindingRecord::create( ran_wp_release_updater_test_binding_facts() );
+	$cold    = ran_wp_release_updater_test_workers( 'cold', $data );
+	ran_wp_release_updater_test_assert_one_claim( $cold, 'cold claim' );
+	$winner                       = ran_wp_release_updater_test_claimed( $cold );
 	$winner_state                 = BindingState::rehydrate( $winner['state'] );
-	list( $descriptor, $receipt ) = mintReceipt( $root . '/receipt.zip', $winner_state );
-	$target                       = targetName( $binding );
+	list( $descriptor, $receipt ) = ran_wp_release_updater_test_mint_receipt( $root . '/receipt.zip', $winner_state );
+	$target                       = ran_wp_release_updater_test_target_name( $binding );
 	$rows                         = $mysqli->query( 'SELECT option_name, autoload FROM options ORDER BY option_name' )->fetch_all( MYSQLI_ASSOC );
 	if ( 1 !== count( $rows ) || 'no' !== $rows[0]['autoload'] ) {
 		throw new RuntimeException( 'Option was not one non-autoload row.' );
 	}
 	$mysqli->query( "UPDATE options SET option_value = JSON_SET(option_value, '$.lease_deadline', 1) WHERE option_name = '" . $mysqli->real_escape_string( $target ) . "'" );
-	$takeover = workers( 'takeover', $data );
-	assertOneClaim( $takeover, 'expired takeover' );
-	$new = claimed( $takeover );
+	$takeover = ran_wp_release_updater_test_workers( 'takeover', $data );
+	ran_wp_release_updater_test_assert_one_claim( $takeover, 'expired takeover' );
+	$new = ran_wp_release_updater_test_claimed( $takeover );
 	if ( $winner['owner'] === $new['owner'] || $new['epoch'] <= $winner['epoch'] ) {
 		throw new RuntimeException( 'Takeover did not install a new owner and target fence epoch.' );
 	}
-	$database   = new MysqliOptionDatabase( connectProof(), 'options' );
-	$stale      = BindingFenceCoordinator::verify_persistent_binding_state( $database, $winner_state, claim( $winner['state'] ) );
-	$completion = BindingFenceCoordinator::complete_persistent_install( $database, $winner_state, claim( $winner['state'] ), $receipt, $descriptor );
+	$database   = new MysqliOptionDatabase( ran_wp_release_updater_test_connect_proof(), 'options' );
+	$stale      = BindingFenceCoordinator::verify_persistent_binding_state( $database, $winner_state, ran_wp_release_updater_test_claim( $winner['state'] ) );
+	$completion = BindingFenceCoordinator::complete_persistent_install( $database, $winner_state, ran_wp_release_updater_test_claim( $winner['state'] ), $receipt, $descriptor );
 	if ( 'binding_fence_lost' !== $stale['result'] || 'binding_fence_lost' !== $completion['result'] ) {
 		throw new RuntimeException( 'Stale writer or completion was not fenced.' );
 	}
-	assertFinalRows( $database, $binding, $new );
+	ran_wp_release_updater_test_assert_final_rows( $database, $binding, $new );
 	echo json_encode(
 		array(
 			'mysqld_binary'     => $mysqld,
@@ -103,28 +105,28 @@ try {
 	) . PHP_EOL;
 } finally {
 	if ( is_resource( $server ) ) {
-		stopServer( $server );
+		ran_wp_release_updater_test_stop_server( $server );
 	}
 	if ( is_string( $original_cwd ) ) {
 		chdir( $original_cwd );
 	}
 	if ( is_string( $root ) ) {
-		removeTree( $root );
+		ran_wp_release_updater_test_remove_tree( $root );
 	}
 }
 
 /** @param list<string> $argv */
-function worker( array $argv ): void {
+function ran_wp_release_updater_test_worker( array $argv ): void {
 	$start_at = (int) $argv[4];
 	while ( hrtime( true ) < $start_at ) {
 		usleep( 1000 );
 	}
-	$database = new MysqliOptionDatabase( connectProof(), 'options' );
-	$binding  = BindingRecord::create( bindingFacts() );
+	$database = new MysqliOptionDatabase( ran_wp_release_updater_test_connect_proof(), 'options' );
+	$binding  = BindingRecord::create( ran_wp_release_updater_test_binding_facts() );
 	$owner    = $argv[2];
 	$result   = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, $owner, 30 );
 	$epoch    = 0;
-	$target   = $database->get_var( $database->prepare( "SELECT option_value FROM {$database->options} WHERE option_name = %s LIMIT 1", targetName( $binding ) ) );
+	$target   = $database->get_var( $database->prepare( "SELECT option_value FROM {$database->options} WHERE option_name = %s LIMIT 1", ran_wp_release_updater_test_target_name( $binding ) ) );
 	if ( is_string( $target ) ) {
 		$epoch = json_decode( $target, true, 16, JSON_THROW_ON_ERROR )['fence_epoch'];
 	}
@@ -140,7 +142,7 @@ function worker( array $argv ): void {
 }
 
 /** @return list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> */
-function workers( string $scenario, string $data ): array {
+function ran_wp_release_updater_test_workers( string $scenario, string $data ): array {
 	$processes = array();
 	$start_at  = hrtime( true ) + 500000000;
 	$owners    = 'takeover' === $scenario
@@ -180,7 +182,7 @@ function workers( string $scenario, string $data ): array {
 	return $results;
 }
 
-function createIsolatedRoot(): string {
+function ran_wp_release_updater_test_create_isolated_root(): string {
 	$configured = getenv( 'RAN_UPDATER_MYSQL_ROOT' );
 	if ( ! is_string( $configured ) || '' === $configured ) {
 		throw new RuntimeException( 'Real MySQL CAS proof requires RAN_UPDATER_MYSQL_ROOT to name a durable directory.' );
@@ -201,12 +203,12 @@ function createIsolatedRoot(): string {
 	return $root;
 }
 
-function attestServer( $server, string $data ): mysqli {
+function ran_wp_release_updater_test_attest_server( $server, string $data ): mysqli {
 	$status = proc_get_status( $server );
 	if ( ! is_array( $status ) || ! $status['running'] ) {
 		throw new RuntimeException( 'Isolated MySQL stopped before attestation.' );
 	}
-	$mysqli = connect();
+	$mysqli = ran_wp_release_updater_test_connect();
 	try {
 		$result   = $mysqli->query( 'SELECT @@datadir AS datadir, @@skip_networking AS skip_networking' );
 		$row      = $result->fetch_assoc();
@@ -222,12 +224,15 @@ function attestServer( $server, string $data ): mysqli {
 	}
 }
 
-function connect(): mysqli {
+function ran_wp_release_updater_test_connect(): mysqli {
 	for ( $attempt = 0; $attempt < 100; ++$attempt ) {
+		// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_init -- The isolated proof owns a dedicated native MySQL connection before or outside WordPress database initialization.
 		$mysqli    = mysqli_init();
 		$connected = false;
 		try {
+			// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_real_connect -- Connect only to the isolated fixture database; preserve its socket/port and server-attestation boundary.
 			$connected = $mysqli instanceof mysqli && mysqli_real_connect( $mysqli, 'localhost', 'root', '', null, null, 'mysql.sock' );
+		// phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- An unavailable isolated server is expected during startup/teardown; preserve the bounded retry or cleanup path.
 		} catch ( mysqli_sql_exception ) {
 		}
 		if ( $connected ) {
@@ -241,15 +246,15 @@ function connect(): mysqli {
 	throw new RuntimeException( 'Timed out connecting to isolated Unix-socket MySQL.' );
 }
 
-function connectProof(): mysqli {
-	$mysqli = connect();
+function ran_wp_release_updater_test_connect_proof(): mysqli {
+	$mysqli = ran_wp_release_updater_test_connect();
 	if ( ! $mysqli->select_db( 'proof' ) ) {
 		$mysqli->close();
 		throw new RuntimeException( 'Could not select isolated proof database.' );
 	}
 	return $mysqli;
 }
-function resolveMysqld(): string {
+function ran_wp_release_updater_test_resolve_mysqld(): string {
 	$configured = getenv( 'RAN_UPDATER_MYSQLD_BIN' );
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec -- Fixed command discovers mysqld on PATH; the result must name an executable file before the isolated server starts.
 	$candidate = is_string( $configured ) && '' !== $configured ? $configured : trim( (string) shell_exec( 'command -v mysqld 2>/dev/null' ) );
@@ -257,29 +262,29 @@ function resolveMysqld(): string {
 		throw new RuntimeException( 'Real MySQL CAS proof requires RAN_UPDATER_MYSQLD_BIN to name an executable mysqld binary, or mysqld on PATH; it will not use a running server.' );
 	} return $candidate; }
 /** @param list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> $results */
-function assertOneClaim( array $results, string $label ): void {
+function ran_wp_release_updater_test_assert_one_claim( array $results, string $label ): void {
 	$winners = array_values( array_filter( $results, static fn ( array $result ): bool => 'claimed' === $result['result'] ) );
 	$losers  = array_values( array_filter( $results, static fn ( array $result ): bool => 'binding_fence_lost' === $result['result'] ) );
 	if ( 2 !== count( $results ) || 1 !== count( $winners ) || 1 !== count( $losers ) || null === $winners[0]['state'] || $winners[0]['owner'] === $losers[0]['owner'] ) {
 		throw new RuntimeException( $label . ' did not have one owner and one binding_fence_lost non-owner.' );
 	} }
 /** @param list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> $results @return array{owner:string,result:string,state:array<string,mixed>|null,epoch:int} */
-function claimed( array $results ): array {
+function ran_wp_release_updater_test_claimed( array $results ): array {
 	foreach ( $results as $result ) {
 		if ( 'claimed' === $result['result'] ) {
 			return $result;
 		}
 	} throw new RuntimeException( 'Missing claim winner.' ); }
 /** @param array{owner:string,result:string,state:array<string,mixed>|null,epoch:int} $winner */
-function assertFinalRows( MysqliOptionDatabase $database, BindingRecord $binding, array $winner ): void {
-	$target = $database->get_var( $database->prepare( "SELECT option_value FROM {$database->options} WHERE option_name = %s LIMIT 1", targetName( $binding ) ) );
+function ran_wp_release_updater_test_assert_final_rows( MysqliOptionDatabase $database, BindingRecord $binding, array $winner ): void {
+	$target = $database->get_var( $database->prepare( "SELECT option_value FROM {$database->options} WHERE option_name = %s LIMIT 1", ran_wp_release_updater_test_target_name( $binding ) ) );
 	if ( ! is_string( $target ) || null === $winner['state'] ) {
 		throw new RuntimeException( 'Final coordinator row is missing.' );
 	} if ( json_decode( $target, true, 64, JSON_THROW_ON_ERROR ) !== $winner['state'] ) {
 		throw new RuntimeException( 'Final self-contained state does not match the selected winner.' );
 	} }
 /** @param array<string,mixed> $facts */
-function targetName( BindingRecord $binding ): string {
+function ran_wp_release_updater_test_target_name( BindingRecord $binding ): string {
 	$facts = $binding->to_array();
 	return 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
 		array(
@@ -289,7 +294,7 @@ function targetName( BindingRecord $binding ): string {
 		)
 	); }
 /** @param array<string,mixed> $state @return array<string,mixed> */
-function claim( array $state ): array {
+function ran_wp_release_updater_test_claim( array $state ): array {
 	return array(
 		'binding_generation' => $state['binding_generation'],
 		'binding_hash'       => $state['binding']['binding_hash'],
@@ -297,7 +302,7 @@ function claim( array $state ): array {
 		'owner_token'        => $state['owner_token'],
 	); }
 /** @return array<string,mixed> */
-function bindingFacts(): array {
+function ran_wp_release_updater_test_binding_facts(): array {
 	return array(
 		'canonical_repository_locator' => 'fixture/repository',
 		'canonical_update_uri'         => 'https://example.invalid/fixture/repository',
@@ -314,7 +319,7 @@ function bindingFacts(): array {
 		'wordpress_runtime_version'    => '6.8',
 	); }
 /** @return array<string,mixed> */
-function descriptorFacts(): array {
+function ran_wp_release_updater_test_descriptor_facts(): array {
 	return array(
 		'artifact_filename'          => 'x.zip',
 		'artifact_identity'          => 'fixture-asset:1',
@@ -344,12 +349,12 @@ function descriptorFacts(): array {
 		'version'                    => '1.0.0',
 	); }
 /** @return array{IdentityDescriptor,AcquisitionReceipt} */
-function mintReceipt( string $path, \RAN\WPReleaseUpdater\V1\WordPress\BindingState $state ): array {
+function ran_wp_release_updater_test_mint_receipt( string $path, \RAN\WPReleaseUpdater\V1\WordPress\BindingState $state ): array {
 	$zip = new ZipArchive();
 	if ( true !== $zip->open( $path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) || ! $zip->addFromString( 'x/x.php', "<?php\n/*\nPlugin Name: Fixture\nVersion: 1.0.0\nUpdate URI: https://example.invalid/fixture/repository\n*/" ) ) {
 		throw new RuntimeException( 'Could not create proof receipt fixture.' );
 	} $zip->close();
-	$facts                    = descriptorFacts();
+	$facts                    = ran_wp_release_updater_test_descriptor_facts();
 	$facts['artifact_sha256'] = hash_file( 'sha256', $path );
 	$facts['artifact_size']   = filesize( $path );
 	$descriptor               = IdentityDescriptor::create( $facts );
@@ -379,7 +384,7 @@ function mintReceipt( string $path, \RAN\WPReleaseUpdater\V1\WordPress\BindingSt
 		throw new RuntimeException( 'Could not validate proof receipt fixture.' );
 	} return array( $descriptor, AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, time() ) ); }
 /** @param list<string> $command */
-function run( array $command, string $cwd ): void {
+function ran_wp_release_updater_test_run( array $command, string $cwd ): void {
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
 	$process = proc_open(
 		$command,
@@ -404,7 +409,7 @@ function run( array $command, string $cwd ): void {
 	if ( 0 !== proc_close( $process ) ) {
 		throw new RuntimeException( 'MySQL initialization failed: ' . $stdout . $stderr );
 	} }
-function stopServer( $server ): void {
+function ran_wp_release_updater_test_stop_server( $server ): void {
 	proc_terminate( $server, 15 ); for ( $attempt = 0; $attempt < 100; ++$attempt ) {
 		$status = proc_get_status( $server );
 		if ( ! $status['running'] ) {
@@ -413,7 +418,7 @@ function stopServer( $server ): void {
 		} usleep( 50000 );
 	} proc_terminate( $server, 9 );
 	proc_close( $server ); }
-function removeTree( string $path ): void {
+function ran_wp_release_updater_test_remove_tree( string $path ): void {
 	if ( ! is_dir( $path ) ) {
 		return;
 	} $iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $path, FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST );
@@ -422,3 +427,5 @@ function removeTree( string $path ): void {
 		$entry->isDir() ? rmdir( $entry->getPathname() ) : unlink( $entry->getPathname() );
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 	} rmdir( $path ); }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

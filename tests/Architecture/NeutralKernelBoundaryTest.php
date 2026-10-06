@@ -10,7 +10,8 @@ final class NeutralKernelBoundaryTest extends TestCase {
 
 	public function test_every_production_file_excludes_provider_protocol_and_identity_assumptions(): void {
 		$root  = dirname( __DIR__, 2 );
-		$files = glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE ) ?: array();
+		$files = glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE );
+		$files = $files ? $files : array();
 		self::assertNotEmpty( $files );
 		foreach ( $files as $file ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository architecture assertions without requiring WordPress filesystem initialization.
@@ -26,10 +27,12 @@ final class NeutralKernelBoundaryTest extends TestCase {
 	}
 
 	public function test_neutral_kernel_contains_no_provider_protocol_or_word_press_transport(): void {
-		$root  = dirname( __DIR__, 2 );
-		$files = array_merge(
-			glob( $root . '/src/Contract/*.php' ) ?: array(),
-			glob( $root . '/src/Runtime/*.php' ) ?: array()
+		$root           = dirname( __DIR__, 2 );
+		$contract_files = glob( $root . '/src/Contract/*.php' );
+		$runtime_files  = glob( $root . '/src/Runtime/*.php' );
+		$files          = array_merge(
+			$contract_files ? $contract_files : array(),
+			$runtime_files ? $runtime_files : array()
 		);
 
 		self::assertNotEmpty( $files );
@@ -121,7 +124,8 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		self::assertFileExists( $provider . '/ProspectiveReleaseArtifact.php' );
 		self::assertFileDoesNotExist( $provider . '/GitHubTemporaryArtifact.php' );
 		self::assertFileExists( $root . '/src/Archive/TemporaryArtifact.php' );
-		foreach ( glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE ) ?: array() as $file ) {
+		$fixture_entries = glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $file ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository architecture assertions without requiring WordPress filesystem initialization.
 			self::assertStringNotContainsString( 'GitHub', (string) file_get_contents( $file ), $file );
 		}

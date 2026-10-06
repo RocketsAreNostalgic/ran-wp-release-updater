@@ -18,6 +18,13 @@ Test native filesystem, warning-suppression, subprocess and environment
 operations also use exact occurrence-local exceptions. Preserve their real
 identity/permission/stream semantics, process isolation and observed failure
 or best-effort teardown behavior; unrelated new calls remain checked.
+The test profile has no test-path exclusions. Owned free functions, classes and
+constants use the package prefix; the existing `Tests` dev namespace is accepted.
+Foreign signatures and fixture syntax use exact local diagnostic annotations.
+Fourteen documented harness/shared-state files retain a file-wide allowance only
+for global-variable prefixing; variable snake_case and other naming stay checked.
+This also allows new unprefixed globals within those files: do not describe it as
+occurrence-local enforcement. See the named inventory in acceptance.
 The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded and is
 namespace-only parity checked against the locked upstream package. All 36
 shipped PHP files, including that generated copy, remain directly analysed at

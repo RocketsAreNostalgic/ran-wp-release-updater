@@ -264,6 +264,7 @@ PHP
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $foreign_file, "<?php class P0ForeignHandoff { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array()); } public function register_target(array \$submission): array { return array(); } }\n" );
 		$foreign = $this->copy( 'foreign-handoff', '0.1.0-beta.2', 'c' );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$this->replace_runtime( $foreign, "<?php\nrequire_once " . var_export( $foreign_file, true ) . ";\nreturn new P0ForeignHandoff();\n" );
 		$wrong_origin = $this->activate( $foreign );
 		self::assertFalse( $wrong_origin['loaded'] );
@@ -275,6 +276,7 @@ PHP
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $foreign_file, "<?php class P0ForeignTarget { public function status(): array { return array(); } public function diagnostics(): array { return array(); } public function refresh(): bool { return true; } }\n" );
 		$copy = $this->copy( 'foreign-target', '0.1.0-beta.2', 'a' );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$this->replace_runtime( $copy, "<?php\nrequire_once " . var_export( $foreign_file, true ) . ";\nreturn new class { public function boot(array \$environment, array \$submissions): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(static fn(array \$submission): array => array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()), \$submissions)); } public function register_target(array \$submission): array { return array('submission_id'=>\$submission['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P0ForeignTarget()); } };\n" );
 		$result = $this->probe( 'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $broker->register_target(array("target_type"=>"plugin","installed_file"=>"/registered.php","provider_code"=>"github","repository_locator"=>"acme/example","repository_identity"=>"123","channel"=>"stable","update_policy"=>"manual","credential_resolver"=>null,"maximum_artifact_bytes"=>52428800)); echo json_encode($broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>5,"wordpress_version"=>"6.8.0")));', array( 'copy' => $copy ) );
 		self::assertFalse( $result['loaded'] );
@@ -448,7 +450,7 @@ PHP
 	 */
 	private function probe( string $body, array $data ): array {
 		$file = $this->parent . '/probe-' . bin2hex( random_bytes( 4 ) ) . '.php';
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test. Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		file_put_contents( $file, '<?php $data = ' . var_export( $data, true ) . '; ' . $body );
 			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 			exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $this->parent ) . ' ' . escapeshellarg( $file ), $output, $status );
@@ -520,7 +522,8 @@ PHP
 		if ( ! is_dir( $path ) ) {
 			return;
 		}
-		foreach ( scandir( $path ) ?: array() as $name ) {
+		$fixture_entries = scandir( $path );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
 				continue;
 			}

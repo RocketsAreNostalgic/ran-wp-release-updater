@@ -2,26 +2,32 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden -- Keep global WordPress stubs and namespaced test code in the same isolated fixture. WordPress stubs must be declared in the global namespace used by production calls.
 namespace {
 	if ( ! class_exists( 'WP_Error' ) ) {
+		// phpcs:ignore Generic.Classes.DuplicateClassName.Found, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound -- Conditional WP_Error stubs model the same foreign class without redeclaring it when already loaded. This stub must occupy the WordPress global class identity used by production calls.
 		final class WP_Error {
 			public function __construct( public string $code, public string $message ) {}
 		}
 	}
 	if ( ! function_exists( 'add_filter' ) ) {
+		// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them. WordPress calls this global stub by its exact foreign function name.
 		function add_filter( string $hook, mixed $callback, int $priority, int $arguments ): void {
 			$GLOBALS['ran_wp_release_updater_test_hooks'][] = array( 'filter', $hook, $callback, $priority, $arguments ); }
 	}
 	if ( ! function_exists( 'add_action' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function add_action( string $hook, mixed $callback, int $priority, int $arguments ): void {
 			$GLOBALS['ran_wp_release_updater_test_hooks'][] = array( 'action', $hook, $callback, $priority, $arguments ); }
 	}
 	if ( ! function_exists( 'get_filesystem_method' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function get_filesystem_method(): string {
 			return $GLOBALS['ran_wp_release_updater_test_filesystem_method'] ?? 'direct'; }
 	}
 }
 
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture.
 namespace Tests\WordPress {
 
 	require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
@@ -37,6 +43,7 @@ namespace Tests\WordPress {
 	use Tests\Support\FakeOptionDatabase;
 
 	/** Exercises updater seams only; Core backup, rollback, and activation remain out of scope. */
+	// phpcs:ignore Generic.Files.OneObjectStructurePerFile.MultipleFound -- Keep the conditional WordPress stub and its test class in the same self-contained fixture.
 	final class FakeAdapterLifecycleTest extends TestCase {
 
 		/** @var list<string> */
@@ -502,7 +509,8 @@ namespace Tests\WordPress {
 			if ( ! is_dir( $path ) ) {
 				return;
 			}
-			foreach ( scandir( $path ) ?: array() as $entry ) {
+			$fixture_entries = scandir( $path );
+			foreach ( $fixture_entries ? $fixture_entries : array() as $entry ) {
 				if ( '.' !== $entry && '..' !== $entry ) {
 					$this->remove( $path . DIRECTORY_SEPARATOR . $entry );
 				}

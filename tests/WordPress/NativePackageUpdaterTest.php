@@ -1,28 +1,34 @@
 <?php
 declare(strict_types=1);
+// phpcs:ignore Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden -- Keep global WordPress stubs and namespaced test code in the same isolated fixture. WordPress stubs must be declared in the global namespace used by production calls.
 namespace {
 	if ( ! class_exists( 'WP_Error' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound, Generic.Classes.DuplicateClassName.Found -- This stub must occupy the WordPress global class identity used by production calls. The same foreign stub name is reused behind conditional or isolated-process load boundaries.
 		final class WP_Error {
 			public function __construct( public string $code, public string $message ) {}
 		}
 	}
 	if ( ! function_exists( 'add_filter' ) ) {
+		// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them. WordPress calls this global stub by its exact foreign function name.
 		function add_filter( string $hook, mixed $callback, int $priority, int $arguments ): void {
 			$GLOBALS['ran_wp_release_updater_test_hooks'][] = array( 'filter', $hook, $callback, $priority, $arguments );
 		}
 	}
 	if ( ! function_exists( 'add_action' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function add_action( string $hook, mixed $callback, int $priority, int $arguments ): void {
 			$GLOBALS['ran_wp_release_updater_test_hooks'][] = array( 'action', $hook, $callback, $priority, $arguments );
 		}
 	}
 	if ( ! function_exists( 'get_filesystem_method' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function get_filesystem_method(): string {
 			return 'direct';
 		}
 	}
 }
 
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture.
 namespace Tests\WordPress {
 	require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 	require_once dirname( __DIR__ ) . '/Support/ControllableReleaseAdapter.php';
@@ -38,6 +44,7 @@ namespace Tests\WordPress {
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
 	use Tests\Support\ControllableReleaseAdapter;
 	use Tests\Support\FakeOptionDatabase;
+	// phpcs:ignore Generic.Files.OneObjectStructurePerFile.MultipleFound -- Keep the conditional WordPress stub and its test class in the same self-contained fixture.
 	final class NativePackageUpdaterTest extends TestCase {
 		/** @var list<string> */
 		private array $paths = array();
@@ -58,7 +65,8 @@ namespace Tests\WordPress {
 					@unlink( $path );
 				}
 				if ( is_dir( $path ) ) {
-					foreach ( glob( $path . '/*' ) ?: array() as $child_path ) {
+					$fixture_entries = glob( $path . '/*' );
+					foreach ( $fixture_entries ? $fixture_entries : array() as $child_path ) {
 						// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 						@unlink( $child_path );
 					}
@@ -716,22 +724,26 @@ namespace Tests\WordPress {
 			$offer                     = $this->offer( $updater );
 			$token                     = $offer['package'];
 			$encoded_token             = substr( $token, strrpos( $token, ':' ) + 1 );
-			$decoded_token             = base64_decode( strtr( $encoded_token, '-_', '+/' ) . str_repeat( '=', ( 4 - strlen( $encoded_token ) % 4 ) % 4 ), true );
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests.
+			$decoded_token = base64_decode( strtr( $encoded_token, '-_', '+/' ) . str_repeat( '=', ( 4 - strlen( $encoded_token ) % 4 ) % 4 ), true );
 			self::assertIsString( $decoded_token );
-			$binding_facts                              = json_decode( $decoded_token, true, 32, JSON_THROW_ON_ERROR );
-			$binding_facts['binding_hash']              = str_repeat( 'b', 64 );
-			$tampered_binding_token                     = 'ran-wp-release-updater:v1:' . rtrim(
+			$binding_facts                 = json_decode( $decoded_token, true, 32, JSON_THROW_ON_ERROR );
+			$binding_facts['binding_hash'] = str_repeat( 'b', 64 );
+			$tampered_binding_token        = 'ran-wp-release-updater:v1:' . rtrim(
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests.
 				strtr( base64_encode( json_encode( $binding_facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) ), '+/', '-_' ),
 				'='
 			);
 			$fingerprint_facts                          = json_decode( $decoded_token, true, 32, JSON_THROW_ON_ERROR );
 			$fingerprint_facts['descriptor']['version'] = '2.0.1';
 			$tampered_fingerprint_token                 = 'ran-wp-release-updater:v1:' . rtrim(
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests.
 				strtr( base64_encode( json_encode( $fingerprint_facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) ), '+/', '-_' ),
 				'='
 			);
-			$invalid_tokens                             = array(
+			$invalid_tokens = array(
 				$token . '=',
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests.
 				'ran-wp-release-updater:v1:' . rtrim( strtr( base64_encode( '{"schema":1,"binding_hash":"x","descriptor":{}}' ), '+/', '-_' ), '=' ),
 				$tampered_binding_token,
 				$tampered_fingerprint_token,
@@ -1316,6 +1328,7 @@ namespace Tests\WordPress {
 				'descriptor'   => $descriptor->to_array(),
 				'schema'       => 1,
 			);
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encode/decode the existing opaque operation-token format for contract and malformed-token tests.
 			return 'ran-wp-release-updater:v1:' . rtrim( strtr( base64_encode( json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ) ), '+/', '-_' ), '=' );
 		}
 		/** @return array<string,mixed> */

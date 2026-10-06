@@ -359,7 +359,8 @@ PHP,
 	private function copy_directory( string $source, string $destination ): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $destination, 0700, true );
-		foreach ( scandir( $source ) ?: array() as $name ) {
+		$fixture_entries = scandir( $source );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
 				continue;
 			}
@@ -374,7 +375,7 @@ PHP,
 	 */
 	private function probe( string $body, array $data ): array {
 		$file = $this->parent . '/probe-' . bin2hex( random_bytes( 4 ) ) . '.php';
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test. Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		file_put_contents( $file, '<?php $data = ' . var_export( $data, true ) . '; ' . $body );
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
 		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp' ) . ' ' . escapeshellarg( $file ), $output, $status );
@@ -387,7 +388,8 @@ PHP,
 		if ( ! is_dir( $path ) ) {
 			return;
 		}
-		foreach ( scandir( $path ) ?: array() as $name ) {
+		$fixture_entries = scandir( $path );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
 				continue;
 			}

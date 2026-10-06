@@ -22,7 +22,8 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 	protected function tearDown(): void {
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Best-effort fixture teardown tolerates paths already removed by the scenario. Set real fixture permission bits for archive custody and permission-boundary checks.
 		@chmod( $this->directory, 0700 );
-		foreach ( glob( $this->directory . '/*' ) ?: array() as $path ) {
+		$fixture_entries = glob( $this->directory . '/*' );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $path ) {
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@unlink( $path );
 		}
@@ -156,6 +157,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		try {
 			clone $artifact;
 			self::fail( 'Cloning must be denied.' );
+		// phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- The expected artifact denial is followed by assertions that the original remains usable.
 		} catch ( \Error ) {
 		}
 
@@ -165,6 +167,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 
 	public function test_serialization_is_denied(): void {
 		$this->expectException( \LogicException::class );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- Inspect controlled fixture values or prove the artifact explicitly rejects serialization; no external payload is serialized.
 		serialize( $this->artifact( 'original' ) );
 	}
 
@@ -174,8 +177,10 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		$payload  = sprintf( 'O:%d:"%s":0:{}', strlen( $class ), $class );
 
 		try {
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize -- Deliberately deserialize a locally constructed payload with an exact class allowlist to prove rejection preserves the original artifact.
 			unserialize( $payload, array( 'allowed_classes' => array( $class ) ) );
 			self::fail( 'Unserialization must be denied.' );
+		// phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- The expected artifact denial is followed by assertions that the original remains usable.
 		} catch ( \LogicException ) {
 		}
 

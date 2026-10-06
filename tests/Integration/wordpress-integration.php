@@ -1,15 +1,16 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 declare(strict_types=1);
 
 // Run against pristine WordPress source and a new, socket-only MySQL instance.
-const INTEGRATION_MARKER = 'ran-wp-release-updater-integration-v1';
-$processes               = array();
-$owned_directories       = array();
-$redactions              = array();
-$environment             = array();
-$report                  = null;
-$result                  = array(
+const RAN_WP_RELEASE_UPDATER_TEST_INTEGRATION_MARKER = 'ran-wp-release-updater-integration-v1';
+$processes         = array();
+$owned_directories = array();
+$redactions        = array();
+$environment       = array();
+$report            = null;
+$result            = array(
 	'status'      => 'failed',
 	'php_version' => PHP_VERSION,
 	'scenarios'   => array(),
@@ -27,7 +28,7 @@ try {
 		throw new RuntimeException( 'PHP 8.2 with mysqli and zip is required.' );
 	}
 	$source                            = dirname( __DIR__, 2 );
-	$runtime                           = verifyRuntime( $source );
+	$runtime                           = ran_wp_release_updater_test_verify_runtime( $source );
 	$result['candidate_revision']      = $runtime['package_revision'];
 	$result['candidate_manifest_hash'] = hash_file( 'sha256', $source . '/runtime-copy.json' );
 	$suite_bytes                       = '';
@@ -35,25 +36,25 @@ try {
 		$suite_bytes .= basename( $file ) . "\0" . hash_file( 'sha256', $file ) . "\n";
 	}
 	$result['suite_revision'] = hash( 'sha256', $suite_bytes );
-	$wordpress                = inputDirectory( 'RAN_UPDATER_WP_ROOT', false );
+	$wordpress                = ran_wp_release_updater_test_input_directory( 'RAN_UPDATER_WP_ROOT', false );
 	if ( ! is_file( $wordpress . '/wp-load.php' ) ) {
 		throw new RuntimeException( 'RAN_UPDATER_WP_ROOT must contain pristine WordPress source.' );
 	}
-	$workspace        = inputDirectory( 'RAN_UPDATER_INTEGRATION_ROOT' );
-	$socket_parent    = getenv( 'RAN_UPDATER_SOCKET_ROOT' ) ? inputDirectory( 'RAN_UPDATER_SOCKET_ROOT' ) : $workspace;
-	$wp_cli           = inputExecutable( 'RAN_UPDATER_WP_CLI' );
-	$mysqld           = inputExecutable( 'RAN_UPDATER_MYSQLD_BIN' );
+	$workspace        = ran_wp_release_updater_test_input_directory( 'RAN_UPDATER_INTEGRATION_ROOT' );
+	$socket_parent    = getenv( 'RAN_UPDATER_SOCKET_ROOT' ) ? ran_wp_release_updater_test_input_directory( 'RAN_UPDATER_SOCKET_ROOT' ) : $workspace;
+	$wp_cli           = ran_wp_release_updater_test_input_executable( 'RAN_UPDATER_WP_CLI' );
+	$mysqld           = ran_wp_release_updater_test_input_executable( 'RAN_UPDATER_MYSQLD_BIN' );
 	$report           = $workspace . '/ran-wp-release-updater-result-' . bin2hex( random_bytes( 6 ) ) . '.json';
-	$run              = ownDirectory( $workspace, 'ran-wp-release-updater-run-' );
-	$socket_directory = ownDirectory( $socket_parent, 's-' );
+	$run              = ran_wp_release_updater_test_own_directory( $workspace, 'ran-wp-release-updater-run-' );
+	$socket_directory = ran_wp_release_updater_test_own_directory( $socket_parent, 's-' );
 	$socket           = $socket_directory . '/mysql.sock';
 	$socket_limit     = 'Darwin' === PHP_OS_FAMILY ? 103 : 107;
 	if ( strlen( $socket ) > $socket_limit || ! str_starts_with( $socket, '/' ) ) {
 		throw new RuntimeException( 'Set RAN_UPDATER_SOCKET_ROOT to a shorter durable absolute directory.' );
 	}
-	$scratch = makeDirectory( $run . '/scratch' );
+	$scratch = ran_wp_release_updater_test_make_directory( $run . '/scratch' );
 	$config  = $run . '/wp-cli.yml';
-	writeFile( $config, "{}\n" );
+	ran_wp_release_updater_test_write_file( $config, "{}\n" );
 	$environment = array_merge(
 		getenv(),
 		array(
@@ -61,13 +62,13 @@ try {
 			'TMP'                => $scratch,
 			'TEMP'               => $scratch,
 			'WP_CLI_CONFIG_PATH' => $config,
-			'WP_CLI_CACHE_DIR'   => makeDirectory( $run . '/wp-cache' ),
+			'WP_CLI_CACHE_DIR'   => ran_wp_release_updater_test_make_directory( $run . '/wp-cache' ),
 		)
 	);
-	$mysql       = makeDirectory( $run . '/mysql' );
-	$data        = makeDirectory( $mysql . '/data' );
+	$mysql       = ran_wp_release_updater_test_make_directory( $run . '/mysql' );
+	$data        = ran_wp_release_updater_test_make_directory( $mysql . '/data' );
 	$pid_file    = $mysql . '/mysqld.pid';
-	command(
+	ran_wp_release_updater_test_command(
 		array(
 			$mysqld,
 			'--no-defaults',
@@ -81,7 +82,7 @@ try {
 		'mysql-initialize',
 		timeout: 120
 	);
-	$server                      = startProcess(
+	$server                      = ran_wp_release_updater_test_start_process(
 		array(
 			$mysqld,
 			'--no-defaults',
@@ -96,7 +97,7 @@ try {
 		$mysql,
 		'mysql-server'
 	);
-	$database                    = attestDatabase( $server, $socket, $data, $pid_file );
+	$database                    = ran_wp_release_updater_test_attest_database( $server, $socket, $data, $pid_file );
 	$wp_command                  = array(
 		PHP_BINARY,
 		'-d',
@@ -109,14 +110,14 @@ try {
 	);
 	$password                    = bin2hex( random_bytes( 24 ) );
 	$redactions[]                = $password;
-	$result['wordpress_version'] = wordpressVersion( $wordpress );
+	$result['wordpress_version'] = ran_wp_release_updater_test_wordpress_version( $wordpress );
 	$result['runtime_protocol']  = $runtime['runtime_protocol'];
 
 	if ( 'all' === $scenario || 'distribution' === $scenario ) {
 		$started = hrtime( true );
-		$site    = createSite( $wordpress, $run . '/single', $database, $socket );
-		installWordpress( $wp_command, $site, $password, false );
-		$archives  = consumerArchives( $source, $run );
+		$site    = ran_wp_release_updater_test_create_site( $wordpress, $run . '/single', $database, $socket );
+		ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, false );
+		$archives  = ran_wp_release_updater_test_consumer_archives( $source, $run );
 		$arguments = array_merge( $wp_command, array( '--path=' . $site ) );
 		$inputs    = array(
 			'RAN_UPDATER_PLUGIN_ZIP' => $archives['plugin'],
@@ -124,31 +125,31 @@ try {
 			'RAN_UPDATER_OUTPUT'     => $run . '/distribution.json',
 		);
 		$observer  = __DIR__ . '/wordpress-integration/distribution.php';
-		command(
+		ran_wp_release_updater_test_command(
 			array_merge( $arguments, array( 'eval-file', $observer ) ),
 			$site,
 			'distribution-install',
 			array_merge( $inputs, array( 'RAN_UPDATER_DISTRIBUTION_MODE' => 'install' ) )
 		);
-		command( array_merge( $arguments, array( 'plugin', 'activate', 'ran-neutral-plugin' ) ), $site, 'activate-plugin' );
-		command( array_merge( $arguments, array( 'theme', 'activate', 'ran-neutral-theme' ) ), $site, 'activate-theme' );
-		command(
+		ran_wp_release_updater_test_command( array_merge( $arguments, array( 'plugin', 'activate', 'ran-neutral-plugin' ) ), $site, 'activate-plugin' );
+		ran_wp_release_updater_test_command( array_merge( $arguments, array( 'theme', 'activate', 'ran-neutral-theme' ) ), $site, 'activate-theme' );
+		ran_wp_release_updater_test_command(
 			array_merge( $arguments, array( 'eval-file', $observer ) ),
 			$site,
 			'distribution-observe',
 			array_merge( $inputs, array( 'RAN_UPDATER_DISTRIBUTION_MODE' => 'observe' ) )
 		);
-		$proof                               = readJson( $run . '/distribution.json' );
+		$proof                               = ran_wp_release_updater_test_read_json( $run . '/distribution.json' );
 		$result['scenarios']['distribution'] = $proof;
-		requireFact( true === ( $proof['pass'] ?? null ), 'Installed distribution assertions failed.' );
+		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ), 'Installed distribution assertions failed.' );
 		$result['scenarios']['distribution']['duration_ms'] = (int) ( ( hrtime( true ) - $started ) / 1000000 );
 	}
 	if ( 'all' === $scenario || 'multisite' === $scenario ) {
 		$started = hrtime( true );
-		$site    = createSite( $wordpress, $run . '/network', $database, $socket );
-		installWordpress( $wp_command, $site, $password, true );
+		$site    = ran_wp_release_updater_test_create_site( $wordpress, $run . '/network', $database, $socket );
+		ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, true );
 		$arguments = array_merge( $wp_command, array( '--path=' . $site ) );
-		$subsite   = command(
+		$subsite   = ran_wp_release_updater_test_command(
 			array_merge(
 				$arguments,
 				array(
@@ -162,14 +163,14 @@ try {
 			$site,
 			'create-subsite'
 		);
-		requireFact( ctype_digit( $subsite ), 'WordPress did not return a subsite ID.' );
-		networkConsumer( $source, $site );
-		command( array_merge( $arguments, array( 'plugin', 'activate', 'ran-network-target', '--network' ) ), $site, 'activate-network-plugin' );
+		ran_wp_release_updater_test_require_fact( ctype_digit( $subsite ), 'WordPress did not return a subsite ID.' );
+		ran_wp_release_updater_test_network_consumer( $source, $site );
+		ran_wp_release_updater_test_command( array_merge( $arguments, array( 'plugin', 'activate', 'ran-network-target', '--network' ) ), $site, 'activate-network-plugin' );
 		$observer     = __DIR__ . '/wordpress-integration/multisite.php';
 		$main_output  = $run . '/main.json';
 		$child_output = $run . '/subsite.json';
 		$release      = $run . '/release-main';
-		$winner       = startProcess(
+		$winner       = ran_wp_release_updater_test_start_process(
 			array_merge( $arguments, array( '--url=http://example.test', 'eval-file', $observer ) ),
 			$site,
 			'main-site-discovery',
@@ -178,33 +179,33 @@ try {
 				'RAN_UPDATER_NETWORK_RELEASE' => $release,
 			)
 		);
-		waitForOutput( $winner, $main_output );
-		command(
+		ran_wp_release_updater_test_wait_for_output( $winner, $main_output );
+		ran_wp_release_updater_test_command(
 			array_merge( $arguments, array( '--url=http://example.test/subsite/', 'eval-file', $observer ) ),
 			$site,
 			'subsite-discovery',
 			array( 'RAN_UPDATER_NETWORK_OUTPUT' => $child_output )
 		);
-		$main                             = readJson( $main_output );
-		$child                            = readJson( $child_output );
+		$main                             = ran_wp_release_updater_test_read_json( $main_output );
+		$child                            = ran_wp_release_updater_test_read_json( $child_output );
 		$result['scenarios']['multisite'] = array(
 			'main'    => $main,
 			'subsite' => $child,
 		);
-		assertNetwork( $main, $child );
-		writeFile( $release, "release\n" );
-		finishProcess( $winner );
+		ran_wp_release_updater_test_assert_network( $main, $child );
+		ran_wp_release_updater_test_write_file( $release, "release\n" );
+		ran_wp_release_updater_test_finish_process( $winner );
 		// Positive control: the subsite must discover once the competing owner exits.
 		$after_output = $run . '/subsite-after-release.json';
-		command(
+		ran_wp_release_updater_test_command(
 			array_merge( $arguments, array( '--url=http://example.test/subsite/', 'eval-file', $observer ) ),
 			$site,
 			'subsite-after-release',
 			array( 'RAN_UPDATER_NETWORK_OUTPUT' => $after_output )
 		);
-		$after = readJson( $after_output );
+		$after = ran_wp_release_updater_test_read_json( $after_output );
 		$result['scenarios']['multisite']['after_release'] = $after;
-		requireFact(
+		ran_wp_release_updater_test_require_fact(
 			1 === ( $after['provider_callback_delta'] ?? null ) && false === ( $after['suppressed_provider'] ?? null )
 			&& $after['blog_id'] === $child['blog_id'] && $after['option']['name'] === $main['option']['name']
 			&& true === $after['option']['owner_token_present']
@@ -218,22 +219,23 @@ try {
 	$database->close();
 	$result['status'] = 'passed';
 } catch ( Throwable $error ) {
-	$result['error'] = redact( $error->getMessage() );
+	$result['error'] = ran_wp_release_updater_test_redact( $error->getMessage() );
 } finally {
 	$cleanup_errors = array();
+	// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 	foreach ( array_reverse( array_keys( $processes ) ) as $id ) {
 		try {
-			stopProcess( $id );
+			ran_wp_release_updater_test_stop_process( $id );
 		} catch ( Throwable $error ) {
-			$cleanup_errors[] = redact( $error->getMessage() ); }
+			$cleanup_errors[] = ran_wp_release_updater_test_redact( $error->getMessage() ); }
 	}
 	// Never remove a server's files unless all owned processes have stopped.
 	if ( array() === $processes ) {
 		foreach ( array_reverse( $owned_directories ) as $directory ) {
 			try {
-				removeOwnedDirectory( $directory );
+				ran_wp_release_updater_test_remove_owned_directory( $directory );
 			} catch ( Throwable $error ) {
-				$cleanup_errors[] = redact( $error->getMessage() ); }
+				$cleanup_errors[] = ran_wp_release_updater_test_redact( $error->getMessage() ); }
 		}
 	}
 	$result['cleanup'] = array() === $cleanup_errors && array() === $processes ? 'complete' : 'failed';
@@ -243,24 +245,25 @@ try {
 	}
 	$json = json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . "\n";
 	if ( is_string( $report ) ) {
-		writeFile( $report, $json );
+		ran_wp_release_updater_test_write_file( $report, $json );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Keep the redacted result file private using native permission bits.
 		chmod( $report, 0600 );
 	}
+	// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Emit redacted JSON to CLI stdout for the parent process; HTML escaping would corrupt the machine-readable proof.
 	echo $json;
 }
 exit( 'passed' === $result['status'] ? 0 : 1 );
 
-function requireFact( bool $condition, string $message ): void {
+function ran_wp_release_updater_test_require_fact( bool $condition, string $message ): void {
 	if ( ! $condition ) {
 		throw new RuntimeException( $message );
 	}
 }
 
-function inputDirectory( string $name, bool $writable = true ): string {
+function ran_wp_release_updater_test_input_directory( string $name, bool $writable = true ): string {
 	$value = getenv( $name );
 	$path  = is_string( $value ) ? realpath( $value ) : false;
-	requireFact(
+	ran_wp_release_updater_test_require_fact(
 		is_string( $path ) && ! is_link( (string) $value ) && is_dir( $path )
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_is_writable -- Check real permissions before admitting the configured disposable filesystem root.
 		&& ( ! $writable || is_writable( $path ) ),
@@ -269,29 +272,29 @@ function inputDirectory( string $name, bool $writable = true ): string {
 	return $path;
 }
 
-function inputExecutable( string $name ): string {
+function ran_wp_release_updater_test_input_executable( string $name ): string {
 	$value = getenv( $name );
 	$path  = is_string( $value ) ? realpath( $value ) : false;
-	requireFact( is_string( $path ) && is_file( $path ) && is_executable( $path ), $name . ' must name an executable file.' );
+	ran_wp_release_updater_test_require_fact( is_string( $path ) && is_file( $path ) && is_executable( $path ), $name . ' must name an executable file.' );
 	return $path;
 }
 
-function makeDirectory( string $path ): string {
+function ran_wp_release_updater_test_make_directory( string $path ): string {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
-	requireFact( mkdir( $path, 0700, true ), 'Could not create a fixture directory.' );
+	ran_wp_release_updater_test_require_fact( mkdir( $path, 0700, true ), 'Could not create a fixture directory.' );
 	return $path;
 }
 
-function writeFile( string $path, string $bytes ): void {
+function ran_wp_release_updater_test_write_file( string $path, string $bytes ): void {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
-	requireFact( strlen( $bytes ) === file_put_contents( $path, $bytes, LOCK_EX ), 'Could not write a fixture file.' );
+	ran_wp_release_updater_test_require_fact( strlen( $bytes ) === file_put_contents( $path, $bytes, LOCK_EX ), 'Could not write a fixture file.' );
 }
 
-function ownDirectory( string $parent_directory, string $prefix ): string {
+function ran_wp_release_updater_test_own_directory( string $parent_directory, string $prefix ): string {
 	global $owned_directories;
-	$path = makeDirectory( $parent_directory . '/' . $prefix . bin2hex( random_bytes( 6 ) ) );
+	$path = ran_wp_release_updater_test_make_directory( $parent_directory . '/' . $prefix . bin2hex( random_bytes( 6 ) ) );
 	try {
-		writeFile( $path . '/.integration-owner', INTEGRATION_MARKER ); } catch ( Throwable $error ) {
+		ran_wp_release_updater_test_write_file( $path . '/.integration-owner', RAN_WP_RELEASE_UPDATER_TEST_INTEGRATION_MARKER ); } catch ( Throwable $error ) {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		rmdir( $path );
 		throw $error; }
@@ -299,11 +302,11 @@ function ownDirectory( string $parent_directory, string $prefix ): string {
 		return $path;
 }
 
-function removeOwnedDirectory( string $path ): void {
-	requireFact(
+function ran_wp_release_updater_test_remove_owned_directory( string $path ): void {
+	ran_wp_release_updater_test_require_fact(
 		! is_link( $path ) && is_dir( $path )
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
-		&& INTEGRATION_MARKER === file_get_contents( $path . '/.integration-owner' ),
+		&& RAN_WP_RELEASE_UPDATER_TEST_INTEGRATION_MARKER === file_get_contents( $path . '/.integration-owner' ),
 		'Refusing cleanup without the run ownership marker.'
 	);
 	$iterator = new RecursiveIteratorIterator(
@@ -313,18 +316,18 @@ function removeOwnedDirectory( string $path ): void {
 	foreach ( $iterator as $file ) {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		$removed = $file->isLink() || ! $file->isDir() ? unlink( $file->getPathname() ) : rmdir( $file->getPathname() );
-		requireFact( $removed, 'Owned fixture cleanup failed.' );
+		ran_wp_release_updater_test_require_fact( $removed, 'Owned fixture cleanup failed.' );
 	}
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
-	requireFact( rmdir( $path ), 'Owned run directory cleanup failed.' );
+	ran_wp_release_updater_test_require_fact( rmdir( $path ), 'Owned run directory cleanup failed.' );
 }
 
-function redact( string $value ): string {
+function ran_wp_release_updater_test_redact( string $value ): string {
 	global $redactions;
 	return str_replace( $redactions, '[redacted]', $value );
 }
 
-function startProcess( array $command, string $cwd, string $label, array $extra = array(), string $stdin = '' ): int {
+function ran_wp_release_updater_test_start_process( array $command, string $cwd, string $label, array $extra = array(), string $stdin = '' ): int {
 	global $processes, $environment;
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
 	$process = proc_open(
@@ -338,7 +341,7 @@ function startProcess( array $command, string $cwd, string $label, array $extra 
 		$cwd,
 		array_merge( $environment, $extra )
 	);
-	requireFact( is_resource( $process ), $label . ' could not start.' );
+	ran_wp_release_updater_test_require_fact( is_resource( $process ), $label . ' could not start.' );
 	$id               = (int) $process;
 	$processes[ $id ] = array(
 		'process' => $process,
@@ -359,7 +362,7 @@ function startProcess( array $command, string $cwd, string $label, array $extra 
 	return $id;
 }
 
-function pollProcess( int $id ): array {
+function ran_wp_release_updater_test_poll_process( int $id ): array {
 	global $processes;
 	$entry = &$processes[ $id ];
 	foreach ( array(
@@ -378,14 +381,14 @@ function pollProcess( int $id ): array {
 	return $status;
 }
 
-function finishProcess( int $id, int $timeout = 60 ): string {
+function ran_wp_release_updater_test_finish_process( int $id, int $timeout = 60 ): string {
 	global $processes;
 	$deadline = microtime( true ) + $timeout;
-	while ( pollProcess( $id )['running'] ) {
-		requireFact( microtime( true ) < $deadline, $processes[ $id ]['label'] . ' timed out.' );
+	while ( ran_wp_release_updater_test_poll_process( $id )['running'] ) {
+		ran_wp_release_updater_test_require_fact( microtime( true ) < $deadline, $processes[ $id ]['label'] . ' timed out.' );
 		usleep( 25000 );
 	}
-	pollProcess( $id );
+	ran_wp_release_updater_test_poll_process( $id );
 	$entry = $processes[ $id ];
 	foreach ( array( 1, 2 ) as $number ) {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
@@ -394,35 +397,35 @@ function finishProcess( int $id, int $timeout = 60 ): string {
 	$closed = proc_close( $entry['process'] );
 	unset( $processes[ $id ] );
 	$exit = $entry['exit'] >= 0 ? $entry['exit'] : $closed;
-	requireFact( 0 === $exit, $entry['label'] . ' failed (exit ' . $exit . '): ' . redact( substr( $entry['err'], -2000 ) ) );
+	ran_wp_release_updater_test_require_fact( 0 === $exit, $entry['label'] . ' failed (exit ' . $exit . '): ' . ran_wp_release_updater_test_redact( substr( $entry['err'], -2000 ) ) );
 	return trim( $entry['out'] );
 }
 
-function command( array $command, string $cwd, string $label, array $extra = array(), string $stdin = '', int $timeout = 60 ): string {
-	return finishProcess( startProcess( $command, $cwd, $label, $extra, $stdin ), $timeout );
+function ran_wp_release_updater_test_command( array $command, string $cwd, string $label, array $extra = array(), string $stdin = '', int $timeout = 60 ): string {
+	return ran_wp_release_updater_test_finish_process( ran_wp_release_updater_test_start_process( $command, $cwd, $label, $extra, $stdin ), $timeout );
 }
 
-function stopProcess( int $id ): void {
+function ran_wp_release_updater_test_stop_process( int $id ): void {
 	global $processes;
 	if ( ! isset( $processes[ $id ] ) ) {
 		return;
 	}
 	$process = $processes[ $id ]['process'];
-	if ( pollProcess( $id )['running'] ) {
+	if ( ran_wp_release_updater_test_poll_process( $id )['running'] ) {
 		proc_terminate( $process );
 	}
 	$deadline = microtime( true ) + 5;
-	while ( pollProcess( $id )['running'] && microtime( true ) < $deadline ) {
+	while ( ran_wp_release_updater_test_poll_process( $id )['running'] && microtime( true ) < $deadline ) {
 		usleep( 25000 );
 	}
-	if ( pollProcess( $id )['running'] ) {
+	if ( ran_wp_release_updater_test_poll_process( $id )['running'] ) {
 		proc_terminate( $process, 9 );
 	}
 	$deadline = microtime( true ) + 5;
-	while ( pollProcess( $id )['running'] && microtime( true ) < $deadline ) {
+	while ( ran_wp_release_updater_test_poll_process( $id )['running'] && microtime( true ) < $deadline ) {
 		usleep( 25000 );
 	}
-	requireFact( ! pollProcess( $id )['running'], 'Owned process did not stop: ' . $processes[ $id ]['label'] );
+	ran_wp_release_updater_test_require_fact( ! ran_wp_release_updater_test_poll_process( $id )['running'], 'Owned process did not stop: ' . $processes[ $id ]['label'] );
 	foreach ( array( 1, 2 ) as $number ) {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $processes[ $id ]['pipes'][ $number ] );
@@ -431,15 +434,17 @@ function stopProcess( int $id ): void {
 	unset( $processes[ $id ] );
 }
 
-function attestDatabase( int $server, string $socket, string $data, string $pid_file ): mysqli {
+function ran_wp_release_updater_test_attest_database( int $server, string $socket, string $data, string $pid_file ): mysqli {
+	// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_report -- Use native strict MySQL reporting for the isolated proof connection and its failure handling.
 	mysqli_report( MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT );
 	$deadline = microtime( true ) + 30;
 	do {
-		$status = pollProcess( $server );
-		requireFact( $status['running'], 'Owned MySQL exited before socket attestation.' );
+		$status = ran_wp_release_updater_test_poll_process( $server );
+		ran_wp_release_updater_test_require_fact( $status['running'], 'Owned MySQL exited before socket attestation.' );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 		if ( is_file( $pid_file ) && trim( (string) file_get_contents( $pid_file ) ) === (string) $status['pid'] ) {
 			try {
+				// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_init -- The isolated proof owns a dedicated native MySQL connection before or outside WordPress database initialization.
 				$db = mysqli_init();
 				$db->real_connect( 'localhost', 'root', '', null, 0, $socket );
 			} catch ( mysqli_sql_exception ) {
@@ -450,7 +455,7 @@ function attestDatabase( int $server, string $socket, string $data, string $pid_
 				continue;
 			}
 			$row = $db->query( 'SELECT @@datadir AS d, @@pid_file AS p, @@skip_networking AS n' )->fetch_assoc();
-			requireFact(
+			ran_wp_release_updater_test_require_fact(
 				realpath( (string) $row['d'] ) === realpath( $data )
 				&& realpath( (string) $row['p'] ) === realpath( $pid_file ) && 1 === (int) $row['n'],
 				'Owned MySQL attestation failed.'
@@ -462,11 +467,11 @@ function attestDatabase( int $server, string $socket, string $data, string $pid_
 	throw new RuntimeException( 'Timed out attesting the owned MySQL socket.' );
 }
 
-function runtimeFiles( string $source ): array {
+function ran_wp_release_updater_test_runtime_files( string $source ): array {
 	$files    = array( 'bootstrap.php', 'runtime.php' );
 	$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $source . '/src', FilesystemIterator::SKIP_DOTS ) );
 	foreach ( $iterator as $file ) {
-		requireFact( ! $file->isLink(), 'Runtime source must not contain symlinks.' );
+		ran_wp_release_updater_test_require_fact( ! $file->isLink(), 'Runtime source must not contain symlinks.' );
 		if ( $file->isFile() && 'php' === $file->getExtension() ) {
 			$files[] = substr( $file->getPathname(), strlen( $source ) + 1 );
 		}
@@ -475,13 +480,13 @@ function runtimeFiles( string $source ): array {
 	return $files;
 }
 
-function verifyRuntime( string $source ): array {
-	$runtime = readJson( $source . '/runtime-copy.json' );
+function ran_wp_release_updater_test_verify_runtime( string $source ): array {
+	$runtime = ran_wp_release_updater_test_read_json( $source . '/runtime-copy.json' );
 	$payload = '';
-	foreach ( runtimeFiles( $source ) as $file ) {
+	foreach ( ran_wp_release_updater_test_runtime_files( $source ) as $file ) {
 		$payload .= $file . "\0" . hash_file( 'sha256', $source . '/' . $file ) . "\n";
 	}
-	requireFact(
+	ran_wp_release_updater_test_require_fact(
 		5 === ( $runtime['runtime_protocol'] ?? null )
 		&& hash( 'sha256', $payload ) === ( $runtime['package_revision'] ?? null ),
 		'Runtime manifest does not match the Protocol 4 source bytes.'
@@ -489,28 +494,28 @@ function verifyRuntime( string $source ): array {
 	return $runtime;
 }
 
-function copyRuntime( string $source, string $destination ): void {
+function ran_wp_release_updater_test_copy_runtime( string $source, string $destination ): void {
 	global $runtime;
-	makeDirectory( $destination );
-	foreach ( array_merge( runtimeFiles( $source ), array( 'LICENSE', 'composer.json', 'runtime-copy.json' ) ) as $file ) {
+	ran_wp_release_updater_test_make_directory( $destination );
+	foreach ( array_merge( ran_wp_release_updater_test_runtime_files( $source ), array( 'LICENSE', 'composer.json', 'runtime-copy.json' ) ) as $file ) {
 		$target = $destination . '/' . $file;
 		if ( ! is_dir( dirname( $target ) ) ) {
-			makeDirectory( dirname( $target ) );
+			ran_wp_release_updater_test_make_directory( dirname( $target ) );
 		}
-		requireFact( ! is_link( $source . '/' . $file ) && copy( $source . '/' . $file, $target ), 'Runtime distribution copy failed.' );
+		ran_wp_release_updater_test_require_fact( ! is_link( $source . '/' . $file ) && copy( $source . '/' . $file, $target ), 'Runtime distribution copy failed.' );
 	}
-	requireFact( verifyRuntime( $destination ) === $runtime, 'Copied runtime changed after candidate verification.' );
+	ran_wp_release_updater_test_require_fact( ran_wp_release_updater_test_verify_runtime( $destination ) === $runtime, 'Copied runtime changed after candidate verification.' );
 }
 
-function wordpressVersion( string $source ): string {
+function ran_wp_release_updater_test_wordpress_version( string $source ): string {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 	$bytes = (string) file_get_contents( $source . '/wp-includes/version.php' );
-	requireFact( 1 === preg_match( '/\$wp_version\s*=\s*[\'"]([^\'"]+)[\'"]/', $bytes, $matches ), 'Could not read the WordPress fixture version.' );
+	ran_wp_release_updater_test_require_fact( 1 === preg_match( '/\$wp_version\s*=\s*[\'"]([^\'"]+)[\'"]/', $bytes, $matches ), 'Could not read the WordPress fixture version.' );
 	return $matches[1];
 }
 
-function createSite( string $wordpress, string $site, mysqli $db, string $socket ): string {
-	makeDirectory( $site );
+function ran_wp_release_updater_test_create_site( string $wordpress, string $site, mysqli $db, string $socket ): string {
+	ran_wp_release_updater_test_make_directory( $site );
 	$iterator = new RecursiveIteratorIterator(
 		new RecursiveDirectoryIterator( $wordpress, FilesystemIterator::SKIP_DOTS ),
 		RecursiveIteratorIterator::SELF_FIRST
@@ -521,16 +526,16 @@ function createSite( string $wordpress, string $site, mysqli $db, string $socket
 		if ( in_array( $first, array( 'wp-content', 'wp-config.php', '.git', '.well-known' ), true ) ) {
 			continue;
 		}
-		requireFact( ! $file->isLink(), 'Pristine WordPress fixture contains a symlink.' );
+		ran_wp_release_updater_test_require_fact( ! $file->isLink(), 'Pristine WordPress fixture contains a symlink.' );
 		$target = $site . '/' . $relative;
 		if ( $file->isDir() ) {
-			makeDirectory( $target );
+			ran_wp_release_updater_test_make_directory( $target );
 		} else {
-			requireFact( copy( $file->getPathname(), $target ), 'WordPress fixture copy failed.' );
+			ran_wp_release_updater_test_require_fact( copy( $file->getPathname(), $target ), 'WordPress fixture copy failed.' );
 		}
 	}
 	foreach ( array( 'plugins', 'themes', 'uploads', 'mu-plugins' ) as $directory ) {
-		makeDirectory( $site . '/wp-content/' . $directory );
+		ran_wp_release_updater_test_make_directory( $site . '/wp-content/' . $directory );
 	}
 	$name = 'ran_integration_' . bin2hex( random_bytes( 6 ) );
 	$db->query( 'CREATE DATABASE ' . $name );
@@ -546,11 +551,12 @@ function createSite( string $wordpress, string $site, mysqli $db, string $socket
 		'DISABLE_WP_CRON'    => true,
 		'WP_ALLOW_MULTISITE' => true,
 	) as $key => $value ) {
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$config .= 'define(' . var_export( $key, true ) . ', ' . var_export( $value, true ) . ");\n";
 	}
 	$config .= "\$table_prefix = 'wp_';\nif (!defined('ABSPATH')) define('ABSPATH', __DIR__ . '/');\nrequire_once ABSPATH . 'wp-settings.php';\n";
-	writeFile( $site . '/wp-config.php', $config );
-	writeFile(
+	ran_wp_release_updater_test_write_file( $site . '/wp-config.php', $config );
+	ran_wp_release_updater_test_write_file(
 		$site . '/wp-content/mu-plugins/integration-http.php',
 		<<<'PHP'
 <?php
@@ -566,7 +572,7 @@ PHP
 	return $site;
 }
 
-function installWordpress( array $base, string $site, string $password, bool $network ): void {
+function ran_wp_release_updater_test_install_wordpress( array $base, string $site, string $password, bool $network ): void {
 	$arguments = array(
 		'--path=' . $site,
 		'core',
@@ -581,7 +587,7 @@ function installWordpress( array $base, string $site, string $password, bool $ne
 	if ( $network ) {
 		$arguments[] = '--subdomains=0';
 	}
-	command( array_merge( $base, $arguments ), $site, $network ? 'install-multisite' : 'install-wordpress', stdin: $password . "\n" );
+	ran_wp_release_updater_test_command( array_merge( $base, $arguments ), $site, $network ? 'install-multisite' : 'install-wordpress', stdin: $password . "\n" );
 	if ( $network ) {
 		// WP-CLI installs the network tables; subsequent requests also need its constants.
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
@@ -595,18 +601,19 @@ function installWordpress( array $base, string $site, string $password, bool $ne
 			'SITE_ID_CURRENT_SITE' => 1,
 			'BLOG_ID_CURRENT_SITE' => 1,
 		) as $key => $value ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			$definitions .= 'define(' . var_export( $key, true ) . ', ' . var_export( $value, true ) . ");\n";
 		}
-		writeFile( $site . '/wp-config.php', str_replace( "require_once ABSPATH . 'wp-settings.php';", $definitions . "require_once ABSPATH . 'wp-settings.php';", $config ) );
+		ran_wp_release_updater_test_write_file( $site . '/wp-config.php', str_replace( "require_once ABSPATH . 'wp-settings.php';", $definitions . "require_once ABSPATH . 'wp-settings.php';", $config ) );
 	}
 }
 
-function consumerArchives( string $source, string $run ): array {
+function ran_wp_release_updater_test_consumer_archives( string $source, string $run ): array {
 	$archives = array();
 	foreach ( array( 'plugin', 'theme' ) as $type ) {
 		$slug = 'ran-neutral-' . $type;
-		$root = makeDirectory( $run . '/' . $slug );
-		copyRuntime( $source, $root . '/vendor/ran/wp-release-updater' );
+		$root = ran_wp_release_updater_test_make_directory( $run . '/' . $slug );
+		ran_wp_release_updater_test_copy_runtime( $source, $root . '/vendor/ran/wp-release-updater' );
 		$header = "/*\n" . ( 'plugin' === $type ? 'Plugin' : 'Theme' ) . " Name: Integration consumer\nVersion: 1.0.0\n"
 			. 'Update URI: https://github.com/fixture/neutral-' . $type . "\nRequires PHP: 8.2\nRequires at least: 6.5\n*/\n";
 		$entry  = 'plugin' === $type ? '__FILE__' : "__DIR__ . '/style.css'";
@@ -618,29 +625,29 @@ function consumerArchives( string $source, string $run ): array {
 			. ", 'fixture/neutral-" . $type . "', '" . ( 'plugin' === $type ? '123456789' : '123456790' ) . "', 'stable', 'manual', \$credentials);\n"
 			. "\$GLOBALS['ran_updater_" . $type . "_handle']->register();\n";
 		if ( 'plugin' === $type ) {
-			writeFile( $root . '/' . $slug . '.php', $php );
+			ran_wp_release_updater_test_write_file( $root . '/' . $slug . '.php', $php );
 		} else {
-			writeFile( $root . '/style.css', $header );
-			writeFile( $root . '/functions.php', $php );
-			writeFile( $root . '/index.php', "<?php\n" );
+			ran_wp_release_updater_test_write_file( $root . '/style.css', $header );
+			ran_wp_release_updater_test_write_file( $root . '/functions.php', $php );
+			ran_wp_release_updater_test_write_file( $root . '/index.php', "<?php\n" );
 		}
 		$archive = $run . '/' . $slug . '.zip';
 		$zip     = new ZipArchive();
-		requireFact( true === $zip->open( $archive, ZipArchive::CREATE | ZipArchive::EXCL ), 'Could not create consumer ZIP.' );
+		ran_wp_release_updater_test_require_fact( true === $zip->open( $archive, ZipArchive::CREATE | ZipArchive::EXCL ), 'Could not create consumer ZIP.' );
 		$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );
 		foreach ( $iterator as $file ) {
-			requireFact( $zip->addFile( $file->getPathname(), $slug . '/' . substr( $file->getPathname(), strlen( $root ) + 1 ) ), 'Could not add consumer ZIP entry.' );
+			ran_wp_release_updater_test_require_fact( $zip->addFile( $file->getPathname(), $slug . '/' . substr( $file->getPathname(), strlen( $root ) + 1 ) ), 'Could not add consumer ZIP entry.' );
 		}
-		requireFact( $zip->close(), 'Could not finish consumer ZIP.' );
+		ran_wp_release_updater_test_require_fact( $zip->close(), 'Could not finish consumer ZIP.' );
 		$archives[ $type ] = $archive;
 	}
 	return $archives;
 }
 
-function networkConsumer( string $source, string $site ): void {
-	$root = makeDirectory( $site . '/wp-content/plugins/ran-network-target' );
-	copyRuntime( $source, $root . '/vendor/ran/wp-release-updater' );
-	writeFile(
+function ran_wp_release_updater_test_network_consumer( string $source, string $site ): void {
+	$root = ran_wp_release_updater_test_make_directory( $site . '/wp-content/plugins/ran-network-target' );
+	ran_wp_release_updater_test_copy_runtime( $source, $root . '/vendor/ran/wp-release-updater' );
+	ran_wp_release_updater_test_write_file(
 		$root . '/main.php',
 		<<<'PHP'
 <?php
@@ -658,24 +665,24 @@ PHP
 	);
 }
 
-function waitForOutput( int $process, string $path ): void {
+function ran_wp_release_updater_test_wait_for_output( int $process, string $path ): void {
 	$deadline = microtime( true ) + 15;
 	while ( ! is_file( $path ) ) {
-		requireFact( pollProcess( $process )['running'], 'Main-site discovery exited before producing evidence.' );
-		requireFact( microtime( true ) < $deadline, 'Main-site discovery did not reach the synchronization barrier.' );
+		ran_wp_release_updater_test_require_fact( ran_wp_release_updater_test_poll_process( $process )['running'], 'Main-site discovery exited before producing evidence.' );
+		ran_wp_release_updater_test_require_fact( microtime( true ) < $deadline, 'Main-site discovery did not reach the synchronization barrier.' );
 		usleep( 25000 );
 	}
-	requireFact( pollProcess( $process )['running'], 'Main-site discovery must remain alive while the subsite runs.' );
+	ran_wp_release_updater_test_require_fact( ran_wp_release_updater_test_poll_process( $process )['running'], 'Main-site discovery must remain alive while the subsite runs.' );
 }
 
-function assertNetwork( array $main, array $child ): void {
-	requireFact(
+function ran_wp_release_updater_test_assert_network( array $main, array $child ): void {
+	ran_wp_release_updater_test_require_fact(
 		is_int( $main['blog_id'] ?? null ) && is_int( $child['blog_id'] ?? null )
 		&& $main['blog_id'] !== $child['blog_id'] && $main['network_id'] === $child['network_id'],
 		'Expected two sites in the same network.'
 	);
 	foreach ( array( $main, $child ) as $proof ) {
-		requireFact(
+		ran_wp_release_updater_test_require_fact(
 			true === ( $proof['duplicate_registration_accepted'] ?? null )
 			&& 1 === ( $proof['logical_target_count'] ?? null ) && 1 === ( $proof['native_callback_count'] ?? null )
 			&& 'target_active' === ( $proof['status']['code'] ?? null )
@@ -685,21 +692,23 @@ function assertNetwork( array $main, array $child ): void {
 			'Network target or live persisted fence is missing.'
 		);
 	}
-	requireFact(
+	ran_wp_release_updater_test_require_fact(
 		1 === $main['provider_callback_delta'] && false === $main['suppressed_provider']
 		&& 0 === $child['provider_callback_delta'] && true === $child['suppressed_provider'],
 		'Competing site was not fenced before provider access.'
 	);
-	requireFact(
+	ran_wp_release_updater_test_require_fact(
 		$main['option'] === $child['option']
 		&& 1 === preg_match( '/\A[0-9a-f]{64}\z/', $main['option']['owner_token_sha256'] ?? '' ),
 		'Sites did not observe the same unchanged fence owner.'
 	);
 }
 
-function readJson( string $path ): array {
+function ran_wp_release_updater_test_read_json( string $path ): array {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 	$record = json_decode( (string) file_get_contents( $path ), true, 128, JSON_THROW_ON_ERROR );
-	requireFact( is_array( $record ), 'Expected a JSON evidence object.' );
+	ran_wp_release_updater_test_require_fact( is_array( $record ), 'Expected a JSON evidence object.' );
 	return $record;
 }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

@@ -176,8 +176,9 @@ PHP
 
 	/** @return array<string,mixed> */
 	private function probe( string $body, array $data = array() ): array {
-		$file                  = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/release-source-' . bin2hex( random_bytes( 6 ) ) . '.php';
-		$filesystem_method     = array_key_exists( 'filesystem_method', $data ) ? $data['filesystem_method'] : 'direct';
+		$file              = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/release-source-' . bin2hex( random_bytes( 6 ) ) . '.php';
+		$filesystem_method = array_key_exists( 'filesystem_method', $data ) ? $data['filesystem_method'] : 'direct';
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$filesystem_definition = null === $filesystem_method ? '' : 'define("FS_METHOD",' . var_export( $filesystem_method, true ) . '); ';
 		$filesystem_class      = null === $filesystem_method ? 'class WP_Filesystem_Direct{} ' : '';
 		$prefix                = '<?php '
@@ -187,6 +188,7 @@ PHP
 			. 'function add_filter(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["release_source_hooks"][]=$hook;} '
 			. 'function wp_safe_remote_get():mixed{++$GLOBALS["release_source_http_calls"];return false;} function is_wp_error():bool{return false;} '
 			. '$GLOBALS["release_source_filesystem_gate_calls"]=0;$GLOBALS["release_source_http_calls"]=0;$GLOBALS["wp_version"]="6.8.0";' . $filesystem_definition
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			. '$data=' . var_export( array_merge( array( 'bootstrap' => dirname( __DIR__, 2 ) . '/bootstrap.php' ), $data ), true ) . '; ';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $prefix . $body );

@@ -241,12 +241,14 @@ PHP,
 	 * @return array<string,mixed>
 	 */
 	private function probe( string $body, array $data ): array {
-		$file   = $this->root . '/probe-' . bin2hex( random_bytes( 6 ) ) . '.php';
+		$file = $this->root . '/probe-' . bin2hex( random_bytes( 6 ) ) . '.php';
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		$prefix = '<?php define("WP_PLUGIN_DIR", ' . var_export( $this->root . '/plugins', true ) . '); '
 			. 'function add_filter(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["p04_hooks"][]=array("hook"=>$hook,"callback"=>$callback);} '
 			. 'function add_action(string $hook,mixed $callback,int $priority,int $arguments):void{$GLOBALS["p04_hooks"][]=array("hook"=>$hook,"callback"=>$callback);} '
 			. '$GLOBALS["p04_hooks"]=array(); $GLOBALS["wpdb"]=new stdClass(); '
 			. '$GLOBALS["wp_version"]="7.0.4"; $GLOBALS["wp_theme_directories"]=array('
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			. var_export( $this->root . '/themes', true ) . '); $data=' . var_export( $data, true ) . '; ';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $file, $prefix . $body );

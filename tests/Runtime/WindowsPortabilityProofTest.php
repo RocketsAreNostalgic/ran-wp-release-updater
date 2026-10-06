@@ -135,7 +135,8 @@ final class WindowsPortabilityProofTest extends TestCase {
 	private function copy_directory( string $source, string $destination ): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $destination, 0700, true );
-		foreach ( scandir( $source ) ?: array() as $name ) {
+		$fixture_entries = scandir( $source );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $name ) {
 			if ( '.' === $name || '..' === $name ) {
 				continue;
 			}
@@ -151,6 +152,7 @@ final class WindowsPortabilityProofTest extends TestCase {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$probe,
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			'<?php $data = ' . var_export( $data, true ) . <<<'PHP'
 ;
 define('WP_PLUGIN_DIR', $data['plugins']);
@@ -186,7 +188,8 @@ PHP
 			}
 			return;
 		}
-		foreach ( scandir( $path ) ?: array() as $name ) {
+		$fixture_entries = scandir( $path );
+		foreach ( $fixture_entries ? $fixture_entries : array() as $name ) {
 			if ( '.' !== $name && '..' !== $name ) {
 				$child = $path . '/' . $name;
 				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.

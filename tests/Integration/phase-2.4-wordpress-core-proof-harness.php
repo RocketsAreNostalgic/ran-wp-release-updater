@@ -1,4 +1,5 @@
 <?php
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 $source_root          = getenv( 'RAN_WP_RELEASE_UPDATER_SOURCE_ROOT' );
 $marker_file          = getenv( 'RAN_WP_RELEASE_UPDATER_MARKER_FILE' );
@@ -23,7 +24,7 @@ if ( ! class_exists( 'WP_Automatic_Updater' ) ) {
 	require_once ABSPATH . 'wp-admin/includes/class-wp-automatic-updater.php';
 }
 
-final class Phase24AutomaticUpdater extends WP_Automatic_Updater {
+final class RAN_WP_RELEASE_UPDATER_Test_Phase24AutomaticUpdater extends WP_Automatic_Updater {
 	public function update_one( string $type, object $item ): mixed {
 		return $this->update( $type, $item );
 	}
@@ -72,9 +73,10 @@ $theme_uri        = getenv( 'RAN_WP_RELEASE_UPDATER_THEME_URI' );
 $archive          = getenv( 'RAN_WP_RELEASE_UPDATER_ARCHIVE' );
 $marker           = getenv( 'RAN_WP_RELEASE_UPDATER_PHASE24' );
 $marker_file      = getenv( 'RAN_WP_RELEASE_UPDATER_MARKER_FILE' );
-$mode             = getenv( 'RAN_WP_RELEASE_UPDATER_MODE' );
-$failure_stage    = getenv( 'RAN_WP_RELEASE_UPDATER_FAILURE_STAGE' );
-$target_type      = getenv( 'RAN_WP_RELEASE_UPDATER_TARGET_TYPE' );
+// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
+$mode          = getenv( 'RAN_WP_RELEASE_UPDATER_MODE' );
+$failure_stage = getenv( 'RAN_WP_RELEASE_UPDATER_FAILURE_STAGE' );
+$target_type   = getenv( 'RAN_WP_RELEASE_UPDATER_TARGET_TYPE' );
 
 $marker_root    = $marker_file ? realpath( dirname( $marker_file ) ) : false;
 $workspace_root = $marker_root ? realpath( dirname( $marker_root ) ) : false;
@@ -100,13 +102,13 @@ add_filter(
 	static function ( mixed $preempt, array $args, string $url ) use ( &$http_requests, $target_type, $archive ): mixed {
 		unset( $preempt );
 		if ( 'https://phase24-network-guard.invalid/probe' === $url ) {
-			if ( request_contains_fixture_credential( $args ) ) {
+			if ( ran_wp_release_updater_test_request_contains_fixture_credential( $args ) ) {
 				++$http_requests['credential_leaks'];
 			}
 			++$http_requests['guard'];
 			return new WP_Error( 'phase24_network_forbidden', 'Network access is forbidden in the disposable proof.' );
 		}
-		$response = fixture_http_response( $url, $args, $target_type, $archive, $http_requests );
+		$response = ran_wp_release_updater_test_fixture_http_response( $url, $args, $target_type, $archive, $http_requests );
 		if ( $response instanceof WP_Error ) {
 			return $response;
 		}
@@ -131,12 +133,12 @@ if ( ! $network_guard_proved ) {
 
 $identity = 'plugin' === $target_type ? $plugin_id : $theme_id;
 $uri      = 'plugin' === $target_type ? $plugin_uri : $theme_uri;
-$target   = build_target( $target_type, $identity, $uri, $archive, 'success' === $mode ? '1.0.0' : '2.0.0' );
+$target   = ran_wp_release_updater_test_build_target( $target_type, $identity, $uri, $archive, 'success' === $mode ? '1.0.0' : '2.0.0' );
 
 $evidence = array(
 	'marker'                          => $marker,
 	'sourceRoot'                      => $source_root,
-	'core_upgrade'                    => 'success' === $mode ? run_core_upgrade_scenario( $target ) : ( in_array( $failure_stage, array( 'download', 'validation' ), true ) ? run_preoffer_failure_scenario( $target, $failure_stage ) : run_core_upgrade_failure_scenario( $target, $failure_stage ) ),
+	'core_upgrade'                    => 'success' === $mode ? ran_wp_release_updater_test_run_core_upgrade_scenario( $target ) : ( in_array( $failure_stage, array( 'download', 'validation' ), true ) ? ran_wp_release_updater_test_run_preoffer_failure_scenario( $target, $failure_stage ) : ran_wp_release_updater_test_run_core_upgrade_failure_scenario( $target, $failure_stage ) ),
 	'automatic_vcs_checkout_override' => $phase24_vcs_checkout,
 	'activation_readback'             => array(
 		'plugin_active'        => is_plugin_active( $plugin_id ),
@@ -146,7 +148,7 @@ $evidence = array(
 	'registration'                    => $target['registration'],
 	'sanity'                          => $target['sanity'],
 	'database_readback'               => array(
-		$identity => readback_options( $target ),
+		$identity => ran_wp_release_updater_test_readback_options( $target ),
 	),
 );
 
@@ -155,13 +157,13 @@ add_action(
 	static function () use ( &$evidence, $output_path, $target_type, $identity, $target, &$http_requests, $network_guard_proved, &$mail_attempts ): void {
 		$slug                      = 'theme' === $target_type ? $identity : dirname( $identity );
 		$evidence['post_shutdown'] = array(
-			'version'                 => file_version( $target_type, $identity ),
-			'bytes'                   => fixture_bytes( $target_type, $identity ),
-			'digest'                  => fixture_digest( $target_type, $identity ),
-			'manifest'                => fixture_manifest( $target_type, $identity ),
-			'backup_absent'           => ! is_dir( backup_dir( $target_type, $slug ) ),
+			'version'                 => ran_wp_release_updater_test_file_version( $target_type, $identity ),
+			'bytes'                   => ran_wp_release_updater_test_fixture_bytes( $target_type, $identity ),
+			'digest'                  => ran_wp_release_updater_test_fixture_digest( $target_type, $identity ),
+			'manifest'                => ran_wp_release_updater_test_fixture_manifest( $target_type, $identity ),
+			'backup_absent'           => ! is_dir( ran_wp_release_updater_test_backup_dir( $target_type, $slug ) ),
 			'maintenance_absent'      => ! is_file( ABSPATH . '.maintenance' ),
-			'database'                => readback_options( $target ),
+			'database'                => ran_wp_release_updater_test_readback_options( $target ),
 			'network_guard_installed' => true,
 			'network_guard_proved'    => $network_guard_proved,
 			'mail_attempts'           => $mail_attempts,
@@ -177,8 +179,10 @@ add_action(
 );
 
 /** @return array<string,mixed> */
-function build_target( string $type, string $identity, string $uri, string $archive, string $installed_version ): array {
-	$policy        = getenv( 'RAN_WP_RELEASE_UPDATER_POLICY' ) ?: 'manual';
+// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them.
+function ran_wp_release_updater_test_build_target( string $type, string $identity, string $uri, string $archive, string $installed_version ): array {
+	$policy        = getenv( 'RAN_WP_RELEASE_UPDATER_POLICY' );
+	$policy        = $policy ? $policy : 'manual';
 	$failure_stage = getenv( 'RAN_WP_RELEASE_UPDATER_FAILURE_STAGE' );
 	$handles       = $GLOBALS['phase24_handles'] ?? null;
 	$target        = is_array( $handles ) ? ( $handles[ $type ] ?? null ) : null;
@@ -211,7 +215,8 @@ function build_target( string $type, string $identity, string $uri, string $arch
 		4
 	);
 
-	$offer         = apply_filters(
+	$offer = apply_filters(
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Exercise the native WordPress hostname-specific update hook; its foreign identifier must stay exact.
 		'update_' . ( 'plugin' === $type ? 'plugins_' : 'themes_' ) . parse_url( $uri, PHP_URL_HOST ),
 		false,
 		array(
@@ -275,16 +280,16 @@ function build_target( string $type, string $identity, string $uri, string $arch
 	);
 }
 
-function run_preoffer_failure_scenario( array $target, string $stage ): array {
-	$before   = file_version( $target['type'], $target['identity'] );
-	$manifest = fixture_manifest( $target['type'], $target['identity'] );
+function ran_wp_release_updater_test_run_preoffer_failure_scenario( array $target, string $stage ): array {
+	$before   = ran_wp_release_updater_test_file_version( $target['type'], $target['identity'] );
+	$manifest = ran_wp_release_updater_test_fixture_manifest( $target['type'], $target['identity'] );
 	$code     = 'validation' === $stage ? ( $target['validation_code'] ?? null ) : ( $target['failure_code'] ?? null );
 	return array(
 		'failure_stage'                 => $stage,
 		'failed'                        => is_string( $code ),
 		'result_code'                   => $code,
 		'version_before'                => $before,
-		'version_after'                 => file_version( $target['type'], $target['identity'] ),
+		'version_after'                 => ran_wp_release_updater_test_file_version( $target['type'], $target['identity'] ),
 		'manifest_before'               => $manifest,
 		'injected_post_copy'            => array(),
 		'rollback_backup_path_exists'   => false,
@@ -299,28 +304,28 @@ function run_preoffer_failure_scenario( array $target, string $stage ): array {
 }
 
 /** @return array<string,mixed> */
-function run_core_upgrade_scenario( array $target ): array {
+function ran_wp_release_updater_test_run_core_upgrade_scenario( array $target ): array {
 	$type     = $target['type'];
 	$identity = $target['identity'];
 	$offer    = $target['offer'];
 	$slug     = 'theme' === $type ? basename( $identity ) : dirname( $identity );
-	$backup   = backup_dir( $type, $slug );
+	$backup   = ran_wp_release_updater_test_backup_dir( $type, $slug );
 	if ( is_dir( $backup ) ) {
-		rrmdir_recursive( $backup );
+		ran_wp_release_updater_test_rrmdir_recursive( $backup );
 	}
 
-	$before          = file_version( $type, $identity );
-	$manifest_before = fixture_manifest( $type, $identity );
-	$execution       = execute_core_upgrade( $target );
+	$before          = ran_wp_release_updater_test_file_version( $type, $identity );
+	$manifest_before = ran_wp_release_updater_test_fixture_manifest( $type, $identity );
+	$execution       = ran_wp_release_updater_test_execute_core_upgrade( $target );
 	$result          = $execution['result'];
 
 	return array(
 		'upgraded'                      => true === $result,
 		'result_code'                   => is_wp_error( $result ) ? $result->get_error_code() : null,
 		'version_before'                => $before,
-		'version_after'                 => file_version( $type, $identity ),
+		'version_after'                 => ran_wp_release_updater_test_file_version( $type, $identity ),
 		'manifest_before'               => $manifest_before,
-		'bytes_after'                   => fixture_bytes( $type, $identity ),
+		'bytes_after'                   => ran_wp_release_updater_test_fixture_bytes( $type, $identity ),
 		'backup_cleaned'                => ! is_dir( $backup ),
 		'maintenance_file_absent'       => ! is_file( ABSPATH . '.maintenance' ),
 		'offer_token_used'              => 1 === $target['packageObservation']->calls && is_string( $target['packageObservation']->package ) && hash_equals( $offer['package'], $target['packageObservation']->package ),
@@ -332,12 +337,12 @@ function run_core_upgrade_scenario( array $target ): array {
 	);
 }
 
-function run_core_upgrade_failure_scenario( array $target, string $failure_stage ): array {
+function ran_wp_release_updater_test_run_core_upgrade_failure_scenario( array $target, string $failure_stage ): array {
 	$type           = $target['type'];
 	$identity       = $target['identity'];
 	$offer          = $target['offer'];
 	$slug           = 'theme' === $type ? basename( $identity ) : dirname( $identity );
-	$before         = file_version( $type, $identity );
+	$before         = ran_wp_release_updater_test_file_version( $type, $identity );
 	$injected       = array(
 		'post_copy_seen'      => false,
 		'destination_version' => null,
@@ -351,21 +356,21 @@ function run_core_upgrade_failure_scenario( array $target, string $failure_stage
 			return $response;
 		}
 		$injected['post_copy_seen']      = true;
-		$injected['destination_version'] = file_version( $type, $identity );
-		$injected['destination_bytes']   = fixture_bytes( $type, $identity );
-		$injected['destination_digest']  = fixture_digest( $type, $identity );
-		$injected['backup_present']      = is_dir( backup_dir( $type, 'theme' === $type ? $identity : dirname( $identity ) ) );
+		$injected['destination_version'] = ran_wp_release_updater_test_file_version( $type, $identity );
+		$injected['destination_bytes']   = ran_wp_release_updater_test_fixture_bytes( $type, $identity );
+		$injected['destination_digest']  = ran_wp_release_updater_test_fixture_digest( $type, $identity );
+		$injected['backup_present']      = is_dir( ran_wp_release_updater_test_backup_dir( $type, 'theme' === $type ? $identity : dirname( $identity ) ) );
 		return new WP_Error( 'phase24_injected_post_copy_failure', 'Injected after Core moved the valid archive into the destination.' );
 	};
 	if ( 'install' === $failure_stage ) {
 		add_filter( 'upgrader_post_install', $inject_failure, PHP_INT_MAX, 3 );
 	}
-	$execution = execute_core_upgrade( $target );
+	$execution = ran_wp_release_updater_test_execute_core_upgrade( $target );
 	$result    = $execution['result'];
 	if ( 'install' === $failure_stage ) {
 		remove_filter( 'upgrader_post_install', $inject_failure, PHP_INT_MAX );
 	}
-	$backup         = backup_dir( $type, $slug );
+	$backup         = ran_wp_release_updater_test_backup_dir( $type, $slug );
 	$install_result = $result;
 	if ( ! is_wp_error( $install_result ) ) {
 		$install_result = new WP_Error( 'failure_not_reported', 'Failure scenario did not expose the injected Core error.' );
@@ -376,8 +381,8 @@ function run_core_upgrade_failure_scenario( array $target, string $failure_stage
 		'failed'                        => is_wp_error( $install_result ),
 		'result_code'                   => is_wp_error( $install_result ) ? $install_result->get_error_code() : null,
 		'version_before'                => $before,
-		'version_after'                 => file_version( $type, $identity ),
-		'bytes_after'                   => fixture_bytes( $type, $identity ),
+		'version_after'                 => ran_wp_release_updater_test_file_version( $type, $identity ),
+		'bytes_after'                   => ran_wp_release_updater_test_fixture_bytes( $type, $identity ),
 		'injected_post_copy'            => $injected,
 		'rollback_backup_path_exists'   => is_dir( $backup ),
 		'maintenance_file_exists'       => is_file( ABSPATH . '.maintenance' ),
@@ -392,16 +397,16 @@ function run_core_upgrade_failure_scenario( array $target, string $failure_stage
 }
 
 /** @param array<string,mixed> $target @return array<string,mixed> */
-function execute_core_upgrade( array $target ): array {
+function ran_wp_release_updater_test_execute_core_upgrade( array $target ): array {
 	$type                          = $target['type'];
 	$identity                      = $target['identity'];
-	$item                          = prime_core_offer( $target );
+	$item                          = ran_wp_release_updater_test_prime_core_offer( $target );
 	$cron_context                  = wp_doing_cron();
 	$automatic_plugin_was_active   = 'plugin' === $type && is_plugin_active( $identity );
 	$manual_plugin_was_deactivated = null;
 	$automatic_result_observed     = false;
 	if ( 'automatic' === $target['policy'] ) {
-		$updater                   = new Phase24AutomaticUpdater();
+		$updater                   = new RAN_WP_RELEASE_UPDATER_Test_Phase24AutomaticUpdater();
 		$result                    = $updater->update_one( $type, $item );
 		$automatic_result_observed = true;
 	} elseif ( 'plugin' === $type ) {
@@ -426,7 +431,7 @@ function execute_core_upgrade( array $target ): array {
 }
 
 /** @param array<string,mixed> $target */
-function prime_core_offer( array $target ): object {
+function ran_wp_release_updater_test_prime_core_offer( array $target ): object {
 	$identity             = $target['identity'];
 	$offer                = $target['offer'];
 	$offer['new_version'] = $offer['version'];
@@ -455,17 +460,17 @@ function prime_core_offer( array $target ): object {
 }
 
 /** @param array<string,mixed> $args @param array<string,mixed> $counts @return array<string,mixed>|WP_Error|null */
-function fixture_http_response( string $url, array $args, string $type, string $archive, array &$counts ): array|WP_Error|null {
+function ran_wp_release_updater_test_fixture_http_response( string $url, array $args, string $type, string $archive, array &$counts ): array|WP_Error|null {
 	$parts = parse_url( $url );
 	if ( is_array( $parts ) && in_array( $parts['scheme'] ?? null, array( 'http', 'https' ), true ) && 'api.wordpress.org' === ( $parts['host'] ?? null ) && in_array( $parts['path'] ?? null, array( '/core/version-check/1.7/', '/plugins/update-check/1.1/', '/themes/update-check/1.1/' ), true ) ) {
-		if ( request_contains_fixture_credential( $args ) ) {
+		if ( ran_wp_release_updater_test_request_contains_fixture_credential( $args ) ) {
 			++$counts['credential_leaks'];
 		}
 		++$counts['core_denied'];
 		return new WP_Error( 'phase24_core_network_denied', 'WordPress.org refresh is denied in the disposable proof.' );
 	}
 	if ( is_array( $parts ) && 'http' === ( $parts['scheme'] ?? null ) && '127.0.0.1' === ( $parts['host'] ?? null ) && '/' === ( $parts['path'] ?? null ) && is_string( $parts['query'] ?? null ) ) {
-		if ( request_contains_fixture_credential( $args ) ) {
+		if ( ran_wp_release_updater_test_request_contains_fixture_credential( $args ) ) {
 			++$counts['credential_leaks'];
 		}
 		parse_str( $parts['query'], $query );
@@ -489,7 +494,7 @@ function fixture_http_response( string $url, array $args, string $type, string $
 	$commit     = 'https://api.github.com/repos/' . $locator . '/commits/' . rawurlencode( 'success' === getenv( 'RAN_WP_RELEASE_UPDATER_MODE' ) ? 'v2.0.0' : 'v3.0.0' );
 	$asset      = 'https://api.github.com/repos/' . $locator . '/releases/assets/301';
 	$known_urls = array( 'https://api.github.com/repos/' . $locator . '/releases?per_page=20&page=1', $repository, $release, $commit, $asset );
-	if ( ! in_array( $url, $known_urls, true ) || ! github_request_contract( $args, $asset === $url ) ) {
+	if ( ! in_array( $url, $known_urls, true ) || ! ran_wp_release_updater_test_github_request_contract( $args, $asset === $url ) ) {
 		return null;
 	}
 	++$counts['credentialed'];
@@ -513,16 +518,16 @@ function fixture_http_response( string $url, array $args, string $type, string $
 		),
 	);
 	if ( 'https://api.github.com/repos/' . $locator . '/releases?per_page=20&page=1' === $url ) {
-		return github_response( 200, array( $release_body ) );
+		return ran_wp_release_updater_test_github_response( 200, array( $release_body ) );
 	}
 	if ( $repository === $url ) {
-		return github_response( 200, array( 'id' => 101 ) );
+		return ran_wp_release_updater_test_github_response( 200, array( 'id' => 101 ) );
 	}
 	if ( $release === $url ) {
-		return github_response( 200, $release_body );
+		return ran_wp_release_updater_test_github_response( 200, $release_body );
 	}
 	if ( $commit === $url ) {
-		return github_response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) );
+		return ran_wp_release_updater_test_github_response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) );
 	}
 	if ( $asset === $url && true === ( $args['stream'] ?? false ) && is_string( $args['filename'] ?? null ) && '' !== $args['filename'] ) {
 		if ( 'download' === getenv( 'RAN_WP_RELEASE_UPDATER_FAILURE_STAGE' ) ) {
@@ -533,13 +538,13 @@ function fixture_http_response( string $url, array $args, string $type, string $
 			return null;
 		}
 		++$counts['asset_writes'];
-		return github_response( 200, null, $args['filename'] );
+		return ran_wp_release_updater_test_github_response( 200, null, $args['filename'] );
 	}
 	return null;
 }
 
 /** @param array<string,mixed> $args */
-function github_request_contract( array $args, bool $asset ): bool {
+function ran_wp_release_updater_test_github_request_contract( array $args, bool $asset ): bool {
 	$headers = $args['headers'] ?? null;
 	return is_array( $headers )
 		&& 'GET' === ( $args['method'] ?? null )
@@ -552,12 +557,13 @@ function github_request_contract( array $args, bool $asset ): bool {
 }
 
 /** @param array<string,mixed> $args */
-function request_contains_fixture_credential( array $args ): bool {
+function ran_wp_release_updater_test_request_contains_fixture_credential( array $args ): bool {
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- Inspect controlled fixture values or prove the artifact explicitly rejects serialization; no external payload is serialized.
 	return str_contains( serialize( $args ), 'phase24-token' );
 }
 
 /** @return array<string,mixed> */
-function github_response( int $status, mixed $body, ?string $file = null ): array {
+function ran_wp_release_updater_test_github_response( int $status, mixed $body, ?string $file = null ): array {
 	$response = array(
 		'body'     => null === $body ? '' : json_encode( $body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES ),
 		'headers'  => array(),
@@ -572,7 +578,7 @@ function github_response( int $status, mixed $body, ?string $file = null ): arra
 	return $response;
 }
 
-function file_version( string $type, string $identity ): ?string {
+function ran_wp_release_updater_test_file_version( string $type, string $identity ): ?string {
 	if ( 'plugin' === $type ) {
 		$plugin = WP_PLUGIN_DIR . '/' . $identity;
 		if ( ! is_file( $plugin ) ) {
@@ -590,18 +596,18 @@ function file_version( string $type, string $identity ): ?string {
 	return is_array( $data ) && isset( $data['Version'] ) ? (string) $data['Version'] : null;
 }
 
-function fixture_bytes( string $type, string $identity ): ?int {
+function ran_wp_release_updater_test_fixture_bytes( string $type, string $identity ): ?int {
 	$path = 'plugin' === $type ? WP_PLUGIN_DIR . '/' . $identity : get_theme_root( $identity ) . '/' . $identity . '/style.css';
 	return is_file( $path ) ? filesize( $path ) : null;
 }
 
-function fixture_digest( string $type, string $identity ): ?string {
-	$manifest = fixture_manifest( $type, $identity );
+function ran_wp_release_updater_test_fixture_digest( string $type, string $identity ): ?string {
+	$manifest = ran_wp_release_updater_test_fixture_manifest( $type, $identity );
 	return is_array( $manifest ) ? hash( 'sha256', json_encode( $manifest, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) ) : null;
 }
 
 /** @return array<string,array{size:int,sha256:string}>|null */
-function fixture_manifest( string $type, string $identity ): ?array {
+function ran_wp_release_updater_test_fixture_manifest( string $type, string $identity ): ?array {
 	$root = 'plugin' === $type ? dirname( WP_PLUGIN_DIR . '/' . $identity ) : get_theme_root( $identity ) . '/' . $identity;
 	if ( ! is_dir( $root ) || is_link( $root ) ) {
 		return null;
@@ -626,13 +632,13 @@ function fixture_manifest( string $type, string $identity ): ?array {
 	return $files;
 }
 
-function backup_dir( string $type, string $slug ): string {
+function ran_wp_release_updater_test_backup_dir( string $type, string $slug ): string {
 	$base   = WP_CONTENT_DIR . '/upgrade-temp-backup';
 	$bucket = 'plugin' === $type ? 'plugins' : 'themes';
 	return $base . '/' . $bucket . '/' . $slug;
 }
 
-function rrmdir_recursive( string $path ): void {
+function ran_wp_release_updater_test_rrmdir_recursive( string $path ): void {
 	if ( ! is_dir( $path ) ) {
 		if ( is_link( $path ) || is_file( $path ) ) {
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
@@ -650,9 +656,9 @@ function rrmdir_recursive( string $path ): void {
 }
 
 /** @param array<string,mixed> $target @return array<string,mixed> */
-function readback_options( array $target ): array {
+function ran_wp_release_updater_test_readback_options( array $target ): array {
 	$target_name    = $target['targetName'] ?? null;
-	$target_row     = is_string( $target_name ) ? option_row( $target_name ) : null;
+	$target_row     = is_string( $target_name ) ? ran_wp_release_updater_test_option_row( $target_name ) : null;
 	$target_value   = is_array( $target_row ) ? $target_row['option_value'] : null;
 	$target_decoded = is_string( $target_value ) ? json_decode( $target_value, true, 32, JSON_THROW_ON_ERROR ) : null;
 	return array(
@@ -661,11 +667,11 @@ function readback_options( array $target ): array {
 		'target_autoload' => is_array( $target_row ) ? $target_row['autoload'] : null,
 		'target_schema'   => is_array( $target_decoded ) ? ( $target_decoded['state_schema'] ?? null ) : null,
 		'target_value'    => $target_value,
-		'state_row_count' => option_prefix_count( 'ran_wp_release_updater_state_v1_' ),
+		'state_row_count' => ran_wp_release_updater_test_option_prefix_count( 'ran_wp_release_updater_state_v1_' ),
 	);
 }
 
-function option_prefix_count( string $prefix ): int {
+function ran_wp_release_updater_test_option_prefix_count( string $prefix ): int {
 	if ( ! isset( $GLOBALS['wpdb'] ) ) {
 		return -1;
 	}
@@ -679,10 +685,12 @@ function option_prefix_count( string $prefix ): int {
 }
 
 /** @return array{option_value:string,autoload:string}|null */
-function option_row( string $option_name ): ?array {
+function ran_wp_release_updater_test_option_row( string $option_name ): ?array {
 	if ( ! isset( $GLOBALS['wpdb'] ) ) {
 		return null;
 	}
 	$row = $GLOBALS['wpdb']->get_row( $GLOBALS['wpdb']->prepare( 'SELECT option_value, autoload FROM ' . $GLOBALS['wpdb']->options . ' WHERE option_name=%s LIMIT 1', $option_name ), ARRAY_A );
 	return is_array( $row ) && is_string( $row['option_value'] ?? null ) && is_string( $row['autoload'] ?? null ) ? $row : null;
 }
+
+// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound
