@@ -38,7 +38,7 @@ local product requirements, not shared-standard exemptions.
 | Prepared SQL identifier/CAS boundary | BindingFenceCoordinator validates the table identifier and prepares data values. Only two SQL parser false-positive rules are excepted for that file. MySQL CAS and setup-failure proofs remain required. |
 | Bounded base64 operation tokens | NativePackageUpdater uses URL-safe base64 for opaque operation tokens, not executable code. Only its encode/decode rules and test fixtures are excepted. |
 | Native `ZipArchive::$numFiles` | Two line-local property-name ignores cover three reads of the external extension property. Owned members remain enforced. |
-| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Owned free functions/classes/constants follow the package prefix and the existing Tests dev namespace is accepted. Fourteen named global-variable prefix allowances are file-wide; foreign signatures, synthetic syntax and native/process exceptions are diagnostic-local. No test-path exclusions remain. These retained boundaries do not exempt production. |
+| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Owned free functions/classes/constants follow the package prefix and the existing Tests dev namespace has declaration-local exceptions. Fourteen named global-variable prefix allowances are file-wide; foreign signatures, synthetic syntax and native/process exceptions are diagnostic-local. No test-path exclusions remain. These retained boundaries do not exempt production. |
 
 Seven declaration-local PHPStan exceptions remain: RequestBroker's
 Reflection-invoked private validation seam; ReleaseSource's direct-filesystem
@@ -374,7 +374,9 @@ Owned declarations now comply: 110 global helpers (including 50 camelCase
 helpers), three classes and one constant use the package prefix. Calls follow
 the declarations; foreign WordPress signatures, member APIs, wire keys and
 fixture payloads retain their identity. The existing Composer `Tests` development
-namespace is accepted by PrefixAllGlobals. Thirty-two short ternaries become
+namespace has declaration-local namespace exceptions. It is not added to the
+repository-wide accepted prefixes; production and new test declarations using
+Tests-prefixed names still fail without an explicit applicable exception. Thirty-two short ternaries become
 full ternaries with single evaluation and the same falsy fallback; directory
 cleanup retains its original existence fence. One increment receives explicit
 parentheses and adjacent generated-PHP literals are combined without changing
@@ -423,10 +425,10 @@ mixed-bulk end-to-end environments remain a separately stated limitation.
 
 Local validation on PHP 8.3.6: `composer --no-interaction check` exits zero;
 syntax checks 95 PHP files, PHPCS is clean, PHPStan level 8 is clean, PHPUnit
-passes 478 tests / 26,476 assertions and the no-dev consumer proof passes.
+passes 478 tests / 26,506 assertions and the no-dev consumer proof passes.
 Composer audit reports no advisories but falls back to cached Packagist data
 after a proxy timeout; fresh advisory verification remains native CI evidence.
-The focused profile guard passes 1 test / 160 assertions, with no test discovery
+The focused profile guard passes 1 test / 190 assertions, with no test discovery
 loss (477 existing plus one new guard). Six representative old-scope negative
 controls prove the former exclusions hide the newly enforced diagnostics.
 PHPCBF repeatability is clean. Native discovery produces 96 matrix rows and its
@@ -434,3 +436,11 @@ existing controls; isolated MySQL setup-failure cleanup passes. Literal-token
 comparison preserves all changed fixtures except the equivalent generated-config
 concatenation. Independent actual base/head review and native CI qualify the
 published candidate separately; local evidence alone is not merge admission.
+
+
+Review correction: the initial candidate added `Tests` to the shared prefix
+property, which also admitted Tests-prefixed production declarations. That
+allowance is removed. The 43 existing test namespace declarations instead carry
+exact namespace-only annotations, and separate namespace/global-declaration
+negative probes cover production src, a root entrypoint and future tests.
+No executable fixture tokens change in this correction beyond the checker guard.

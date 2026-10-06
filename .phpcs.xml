@@ -37,8 +37,6 @@
 		<properties>
 			<property name="prefixes" type="array">
 				<element value="ran_wp_release_updater"/>
-				<!-- Composer development namespace; no runtime namespace or class-file migration. -->
-				<element value="Tests"/>
 				<element value="RAN\WPReleaseUpdater\V1\"/>
 			</property>
 		</properties>

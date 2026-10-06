@@ -19,7 +19,7 @@ operations also use exact occurrence-local exceptions. Preserve their real
 identity/permission/stream semantics, process isolation and observed failure
 or best-effort teardown behavior; unrelated new calls remain checked.
 The test profile has no test-path exclusions. Owned free functions, classes and
-constants use the package prefix; the existing `Tests` dev namespace is accepted.
+constants use the package prefix; the existing `Tests` dev namespace uses declaration-local namespace exceptions.
 Foreign signatures and fixture syntax use exact local diagnostic annotations.
 Fourteen documented harness/shared-state files retain a file-wide allowance only
 for global-variable prefixing; variable snake_case and other naming stay checked.

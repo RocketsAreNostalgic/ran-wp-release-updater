@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
 namespace Tests\Dependency;
 
 use PHPUnit\Framework\TestCase;
@@ -72,9 +73,15 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 			}
 		}
 		foreach ( array( 'Integration/wordpress-integration.php', 'FutureRoot/FixtureProbe.php' ) as $path ) {
-			$diagnostics = $this->profile_diagnostics( $path, '<?php namespace Tests; function ran_wp_release_updater_test_helper() { return 1; }', true );
+			$diagnostics = $this->profile_diagnostics( $path, '<?php namespace RAN\\WPReleaseUpdater\\V1\\Probe; function ran_wp_release_updater_test_helper() { return 1; }', true );
 			self::assertNotContains( 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound', $diagnostics );
 			self::assertNotContains( 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound', $diagnostics );
+		}
+		foreach ( array( '../src/FutureProbe.php', '../runtime.php', 'FutureRoot/FixtureProbe.php' ) as $path ) {
+			$diagnostics = array_merge( $this->profile_diagnostics( $path, '<?php namespace Tests;', true ), $this->profile_diagnostics( $path, '<?php function Tests_probe() {} class Tests_Probe {} const Tests_PROBE = 1;', true ) );
+			foreach ( array( 'NonPrefixedNamespaceFound', 'NonPrefixedFunctionFound', 'NonPrefixedClassFound', 'NonPrefixedConstantFound' ) as $suffix ) {
+				self::assertContains( 'WordPress.NamingConventions.PrefixAllGlobals.' . $suffix, $diagnostics, $path );
+			}
 		}
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the maintained harness annotations for a checker-only control; never execute the mutated fixture.
 		$source = file_get_contents( dirname( __DIR__ ) . '/Integration/wordpress-integration.php' );
