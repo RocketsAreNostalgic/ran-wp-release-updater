@@ -478,3 +478,16 @@ PHP 8.5 analysis also exposed the CLI argument array as potentially absent.
 The sync script uses an empty-array fallback at its two argument reads; normal
 CLI invocations preserve their behavior. No production runtime PHP, dependency,
 fixture identity or existing exemption is changed.
+
+
+## Inline sniff-property overrides
+
+The locked checker accepts both `phpcs:set` (including case variants) and legacy
+`@codingStandardsChangeSetting` directives that silently replace required prefix
+properties. Actual-checker controls prove an unprefixed function is reported
+before mutation, hidden after changing the prefix, and an unrelated function
+immediately before the directive remains reported. No maintained
+source currently needs these directives. The existing coverage suite now scans
+all maintained PHP comments, including tests and scripts, and rejects both
+spellings case-insensitively. Literal fixture strings and existing diagnostic-local
+annotations are preserved. No new checker runner or production changes are needed.

@@ -47,6 +47,37 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		self::assertSame( $this->maintained_files( $root ), $this->analyzed_files( $root, $root . '/phpstan.neon' ) );
 	}
 
+	public function test_maintained_php_cannot_override_sniff_properties_inline(): void {
+		$root     = dirname( __DIR__, 2 );
+		$excluded = array_values( array_diff( self::NON_PRODUCTION_ROOTS, array( 'tests', 'scripts' ) ) );
+		foreach ( $this->maintained_files( $root, $excluded ) as $file ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Inspect maintained source comments without loading fixtures or changing runtime state.
+			$source = file_get_contents( $root . '/' . $file );
+			self::assertIsString( $source );
+			self::assertFalse( $this->has_inline_property_override( $source ), $file );
+		}
+	}
+
+	public function test_property_override_guard_checks_comment_forms_and_case(): void {
+		foreach ( array( 'phpcs:set', '@phpcs:set', 'PHPCS:SET', '@codingStandardsChangeSetting', '@CODINGSTANDARDSCHANGESETTING' ) as $directive ) {
+			foreach ( array( '// ', '# ', '/* ', '/** ' ) as $opening ) {
+				$source = '<?php ' . $opening . $directive . ' WordPress.NamingConventions.PrefixAllGlobals prefixes rogue */';
+				self::assertTrue( $this->has_inline_property_override( $source ), $source );
+			}
+			self::assertFalse( $this->has_inline_property_override( '<?php $fixture = "// ' . $directive . ' WordPress.NamingConventions.PrefixAllGlobals prefixes rogue";' ) );
+		}
+		self::assertFalse( $this->has_inline_property_override( '<?php // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Reviewed foreign identity.' ) );
+	}
+
+	private function has_inline_property_override( string $source ): bool {
+		foreach ( token_get_all( $source ) as $token ) {
+			if ( is_array( $token ) && in_array( $token[0], array( T_COMMENT, T_DOC_COMMENT ), true ) && 1 === preg_match( '/(?:@?phpcs:set|@codingStandardsChangeSetting)\\b/i', $token[1] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public function test_every_maintained_script_is_directly_analyzed(): void {
 		$root     = dirname( __DIR__, 2 );
 		$expected = array_map( static fn ( string $file ): string => 'scripts/' . $file, $this->maintained_files( $root . '/scripts', array() ) );

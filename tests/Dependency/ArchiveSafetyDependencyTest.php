@@ -120,6 +120,17 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 		}
 	}
 
+	public function test_inline_property_changes_can_hide_prefix_diagnostics(): void {
+		$code   = 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound';
+		$source = "<?php\nfunction rogue_function() {}\n";
+		self::assertContains( $code, $this->profile_diagnostics( '../scripts/FutureTool.php', $source, true ) );
+		foreach ( array( 'phpcs:set', 'PHPCS:SET', '@codingStandardsChangeSetting' ) as $directive ) {
+			$mutated = str_replace( '<?php', '<?php' . "\n// " . $directive . ' WordPress.NamingConventions.PrefixAllGlobals prefixes rogue', $source );
+			self::assertNotContains( $code, $this->profile_diagnostics( '../scripts/FutureTool.php', $mutated, true ), $directive );
+			self::assertContains( $code, $this->profile_diagnostics( '../scripts/FutureTool.php', str_replace( '<?php', '<?php function outside_function() {}', $mutated ), true ), $directive );
+		}
+	}
+
 	/** @return list<string> */
 	private function profile_diagnostics( string $path, string $source, bool $all = false ): array {
 		$root = dirname( __DIR__, 2 );

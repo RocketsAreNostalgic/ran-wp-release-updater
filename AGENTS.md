@@ -37,6 +37,10 @@ independent maintained-file discovery and protects new, split and excluded files
 The separate `phpstan-tools.neon` level-8 invocation in `composer analyze`
 automatically includes all `scripts/` PHP without adding script symbols to
 production analysis. The same coverage guard checks that profile independently.
+Inline sniff-property overrides (`phpcs:set` and legacy
+`@codingStandardsChangeSetting`) are forbidden in maintained PHP comments.
+The existing coverage suite scans all maintained PHP for these directives,
+case-insensitively; fixture strings remain data.
 The 58 test PHP files still need isolated-harness analysis; their exclusion is
 pending debt, not ecosystem-wide acceptance or an approved permanent exemption.
 
