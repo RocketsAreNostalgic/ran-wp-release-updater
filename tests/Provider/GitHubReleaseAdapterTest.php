@@ -1,5 +1,4 @@
 <?php
-// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled provider transport globals are shared with the WordPress stubs and reset by the fixture lifecycle; keep their cross-file identities.
 
 declare(strict_types=1);
 
@@ -24,6 +23,7 @@ namespace {
 	if ( ! function_exists( 'wp_safe_remote_get' ) ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_safe_remote_get( string $url, array $args ): array|WP_Error {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_requests'][] = array( $url, $args );
 			$callback                         = $GLOBALS['ran_github_request_callback'] ?? null;
 			if ( is_callable( $callback ) ) {
@@ -93,6 +93,7 @@ namespace {
 			if ( is_string( $path ) ) {
 				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 				chmod( $path, 0600 );
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 				$GLOBALS['ran_github_temp_paths'][] = $path;
 			}
 			return $path;
@@ -172,14 +173,22 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function setUp(): void {
-			$GLOBALS['ran_github_requests']         = array();
-			$GLOBALS['ran_github_responses']        = array();
-			$GLOBALS['ran_github_temp_paths']       = array();
-			$GLOBALS['ran_github_validate_urls']    = true;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_requests'] = array();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = array();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_temp_paths'] = array();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_validate_urls'] = true;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_request_callback'] = null;
-			$GLOBALS['ran_github_chmod_failures']   = 0;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_chmod_failures'] = 0;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_lstat_failure_at'] = 0;
-			$GLOBALS['ran_github_unlink_failures']  = 0;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_unlink_failures'] = 0;
 		}
 
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
@@ -311,6 +320,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$invalid_conditional = $source->list( array( 'etag' => 'invalid' ) );
 			self::assertSame( 'invalid_configuration', $invalid_conditional['code'] );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
 			$result                          = $source->list();
 			self::assertSame(
@@ -324,10 +334,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$result
 			);
 			self::assertSame( array(), $result['value']['candidates'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 304, null, array( 'etag' => '"same"' ) ) );
 			$not_modified                    = $source->list( array( 'etag' => '"old"' ) );
 			self::assertSame( 'releases_not_modified', $not_modified['code'] );
 			self::assertTrue( $not_modified['value']['not_modified'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 429, null, array( 'retry-after' => '12' ) ) );
 			$limited                         = $source->list();
 			self::assertSame(
@@ -340,15 +352,19 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				),
 				$limited
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 403, null, array( 'retry-after' => '8' ) ) );
 			self::assertSame( 8, $source->list()['retry_after'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 404, null ) );
 			self::assertSame( 'repository_access_unavailable', $source->list()['code'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 404, null ),
 			);
 			self::assertSame( 'release_unavailable', $source->inspect( '7', 'v1.2.3' )['code'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
@@ -394,12 +410,14 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					)
 				)['code']
 			);
-			$header                          = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
-			$archive                         = $this->prospective_archive( $header );
-			$source                          = $registrar->releases( 'github', 'plugin', 'owner/repository', '99' );
+			$header  = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
+			$archive = $this->prospective_archive( $header );
+			$source  = $registrar->releases( 'github', 'plugin', 'owner/repository', '99' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $source->inspect( '7', 'v1.2.3' );
 			self::assertSame( 'release_inspected', $inspection['code'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
@@ -408,18 +426,21 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$this->response( 404, null ),
 			);
 			self::assertSame( 'release_unavailable', $source->acquire( '7', 'v1.2.3', $inspection['value']['fingerprint'] )['code'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $source->inspect( '7', 'v1.2.3' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$changed                         = $source->acquire( '7', 'v1.2.3', 'v2:' . str_repeat( '0', 64 ) );
 			self::assertSame( 'release_changed', $changed['code'] );
 			self::assertSame( 'complete', $changed['cleanup_status'] );
 			self::assert_all_temporary_paths_absent();
-			$theme                           = $registrar->releases( 'github', 'theme', 'owner/repository', '99' );
-			$invalid                         = 'not-a-zip';
-			$release                         = $this->release( 7, 'v1.2.3' );
-			$release['assets'][0]['digest']  = 'sha256:' . hash( 'sha256', $invalid );
-			$release['assets'][0]['size']    = strlen( $invalid );
+			$theme                          = $registrar->releases( 'github', 'theme', 'owner/repository', '99' );
+			$invalid                        = 'not-a-zip';
+			$release                        = $this->release( 7, 'v1.2.3' );
+			$release['assets'][0]['digest'] = 'sha256:' . hash( 'sha256', $invalid );
+			$release['assets'][0]['size']   = strlen( $invalid );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $release ),
@@ -435,7 +456,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_public_service_keeps_repository_and_exact_release_failures_distinct(): void {
-			$service                         = $this->public_service();
+			$service = $this->public_service();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 404, null ) );
 			try {
 				$service->inspect( '7', 'v1.2.3' );
@@ -445,6 +467,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				self::assertSame( 'not_applicable', $failure->cleanup_status );
 			}
 
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 404, null ),
@@ -469,11 +492,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_public_service_cleans_rate_limited_and_invalid_stream_failures(): void {
-			$archive                         = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
-			$service                         = $this->public_service();
+			$archive = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+			$service = $this->public_service();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspect( '7', 'v1.2.3' );
 
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
@@ -491,6 +516,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			}
 			$this->assert_all_temporary_paths_absent();
 
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
@@ -529,17 +555,20 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_public_service_stops_after_liveness_changes_during_http_callback(): void {
-			$revoked                                = false;
-			$service                                = new GitHubReleaseService(
+			$revoked = false;
+			$service = new GitHubReleaseService(
 				$this->service_configuration( $this->binding() ),
 				null,
 				static function () use ( &$revoked ): ?string {
+					/** @var bool $revoked Mutated by the HTTP callback after this closure is created. */
 					return $revoked ? 'runtime_unavailable' : null; }
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_request_callback'] = static function () use ( &$revoked ): void {
 				$revoked = true;
 			};
-			$GLOBALS['ran_github_responses']        = array( $this->response( 200, array() ) );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
 			try {
 				$service->list();
 				self::fail( 'A revoked runtime must stop after the current HTTP return.' );
@@ -550,13 +579,16 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_public_service_retries_cleanup_once_and_reports_both_outcomes(): void {
-			$archive                         = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
-			$service                         = $this->public_service();
+			$archive = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+			$service = $this->public_service();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspect( '7', 'v1.2.3' );
 
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_unlink_failures'] = 1;
-			$GLOBALS['ran_github_responses']       = $this->invalid_stream_responses();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = $this->invalid_stream_responses();
 			try {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'Invalid bytes must fail after cleanup retry.' );
@@ -567,8 +599,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertSame( 0, $GLOBALS['ran_github_unlink_failures'] );
 			$this->assert_all_temporary_paths_absent();
 
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_unlink_failures'] = 2;
-			$GLOBALS['ran_github_responses']       = $this->invalid_stream_responses();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = $this->invalid_stream_responses();
 			try {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'Invalid bytes must expose an unreleased owned file.' );
@@ -583,9 +617,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		public function test_public_service_reports_temporary_allocation_cleanup_for_inspect_and_acquire(): void {
 			$archive = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
 
-			$service                              = $this->public_service();
+			$service = $this->public_service();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_chmod_failures'] = 1;
-			$GLOBALS['ran_github_responses']      = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			try {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'A chmod allocation failure must be structured.' );
@@ -595,10 +631,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			}
 			$this->assert_all_temporary_paths_absent();
 
-			$service                               = $this->public_service();
-			$GLOBALS['ran_github_chmod_failures']  = 1;
+			$service = $this->public_service();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_chmod_failures'] = 1;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_unlink_failures'] = 2;
-			$GLOBALS['ran_github_responses']       = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			try {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'An unreleased chmod allocation failure must be structured.' );
@@ -611,12 +650,16 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			self::assertTrue( \unlink( $unreleased_path ) );
 
-			$service                                = $this->public_service();
-			$GLOBALS['ran_github_unlink_failures']  = 0;
-			$GLOBALS['ran_github_responses']        = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-			$inspection                             = $service->inspect( '7', 'v1.2.3' );
+			$service = $this->public_service();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_unlink_failures'] = 0;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			$inspection                      = $service->inspect( '7', 'v1.2.3' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_lstat_failure_at'] = 2;
-			$GLOBALS['ran_github_responses']        = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			try {
 				$service->acquire( '7', 'v1.2.3', $inspection['fingerprint'] );
 				self::fail( 'An identity allocation failure must be structured.' );
@@ -626,9 +669,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			}
 			$this->assert_all_temporary_paths_absent();
 
-			$service                                = $this->public_service();
+			$service = $this->public_service();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_lstat_failure_at'] = 1;
-			$GLOBALS['ran_github_responses']        = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			try {
 				$service->inspect( '7', 'v1.2.3' );
 				self::fail( 'An unproven temporary file must be structured.' );
@@ -640,9 +685,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_public_services_resolve_independent_credentials_per_operation(): void {
-			$first_calls                     = 0;
-			$second_calls                    = 0;
-			$first                           = new GitHubReleaseService(
+			$first_calls  = 0;
+			$second_calls = 0;
+			$first        = new GitHubReleaseService(
 				$this->service_configuration( $this->binding() ),
 				new GitHubCredentialResolver(
 					static function () use ( &$first_calls ): string {
@@ -651,7 +696,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				),
 				static fn (): ?string => null
 			);
-			$second                          = new GitHubReleaseService(
+			$second       = new GitHubReleaseService(
 				$this->service_configuration( $this->binding() ),
 				new GitHubCredentialResolver(
 					static function () use ( &$second_calls ): string {
@@ -660,6 +705,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				),
 				static fn (): ?string => null
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ), $this->response( 200, array() ) );
 			$first->list();
 			$second->list();
@@ -670,14 +716,15 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_public_service_maps_runtime_loss_during_package_inspection(): void {
-			$checks                          = 0;
-			$service                         = new GitHubReleaseService(
+			$checks  = 0;
+			$service = new GitHubReleaseService(
 				$this->service_configuration( $this->binding() ),
 				null,
 				static function () use ( &$checks ): ?string {
 					return ++$checks >= 17 ? 'runtime_unavailable' : null; }
 			);
-			$archive                         = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+			$archive = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			try {
 				$service->inspect( '7', 'v1.2.3' );
@@ -690,14 +737,15 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_credentials_resolve_once_per_top_level_chain_and_fail_before_http(): void {
-			$calls                           = 0;
-			$resolver                        = new GitHubCredentialResolver(
+			$calls    = 0;
+			$resolver = new GitHubCredentialResolver(
 				static function () use ( &$calls ): string {
 					++$calls;
 					return 'private-token';
 				}
 			);
-			$adapter                         = new GitHubReleaseAdapter( $this->binding(), $resolver );
+			$adapter  = new GitHubReleaseAdapter( $this->binding(), $resolver );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( $this->release( 1, 'v1.0.0' ) ) ),
 			);
@@ -723,8 +771,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_null_credential_result_uses_anonymous_request(): void {
-			$calls                           = 0;
-			$adapter                         = new GitHubReleaseAdapter(
+			$calls   = 0;
+			$adapter = new GitHubReleaseAdapter(
 				$this->binding(),
 				new GitHubCredentialResolver(
 					static function () use ( &$calls ): ?string {
@@ -733,6 +781,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					}
 				)
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( $this->release( 1, 'v1.0.0' ) ) ),
 			);
@@ -744,7 +793,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_invalid_caller_input_does_not_resolve_credentials_or_call_git_hub(): void {
-			$valid                           = new GitHubReleaseAdapter( $this->binding() );
+			$valid = new GitHubReleaseAdapter( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $valid->inspect( '7' );
 			$facts                           = $descriptor->to_array();
@@ -752,8 +802,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$facts['artifact_identity'] = 'invalid-asset';
 			$invalid_descriptor         = IdentityDescriptor::create( $facts );
 
-			$calls                          = 0;
-			$service                        = $this->service(
+			$calls   = 0;
+			$service = $this->service(
 				$this->binding(),
 				new GitHubCredentialResolver(
 					static function () use ( &$calls ): string {
@@ -762,7 +812,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					}
 				)
 			);
-			$adapter                        = new GitHubReleaseAdapter(
+			$adapter = new GitHubReleaseAdapter(
 				$this->binding(),
 				new GitHubCredentialResolver(
 					static function () use ( &$calls ): string {
@@ -771,6 +821,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					}
 				)
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_requests'] = array();
 
 			foreach (
@@ -832,6 +883,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_listing_sorts_stable_numeric_identities_and_returns_release_details(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response(
 					200,
@@ -871,6 +923,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_listing_filters_invalid_versions_and_breaks_version_ties_by_identity(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response(
 					200,
@@ -892,6 +945,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_prerelease_listing_keeps_semver_ordering_within_its_channel(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response(
 					200,
@@ -913,6 +967,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_listing_rejects_malformed_members_and_oversized_bodies(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( $this->release( 1, 'v1.0.0' ), 'invalid-member' ) ),
 			);
@@ -924,8 +979,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				self::assertCount( 1, $GLOBALS['ran_github_requests'] );
 			}
 
-			$oversized                       = $this->response( 200, null );
-			$oversized['body']               = str_repeat( 'x', 262145 );
+			$oversized         = $this->response( 200, null );
+			$oversized['body'] = str_repeat( 'x', 262145 );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $oversized );
 			try {
 				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
@@ -936,6 +992,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_response_containers_distinguish_operation_and_candidate_failures(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, (object) array() ) );
 			try {
 				( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
@@ -944,6 +1001,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				self::assertSame( 'operation_failed', $failure->release_code );
 			}
 
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, (object) array() ),
@@ -977,6 +1035,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			for ( $index = 21; $index <= 30; ++$index ) {
 				$page_two[] = $this->release( $index, 'v2.0.' . ( $index - 21 ) );
 			}
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, $drafts ),
 				$this->response( 200, $page_two ),
@@ -998,7 +1057,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_conditional_not_modified_and_rate_limit_remain_closed_provider_state(): void {
-			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
+			$adapter = new GitHubReleaseAdapter( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response(
 					304,
@@ -1024,6 +1084,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$GLOBALS['ran_github_requests'][0][1]['headers']['If-None-Match']
 			);
 
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response(
 					429,
@@ -1041,6 +1102,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'read_unavailable_status_provider' )]
 		public function test_authenticated_authorization_failures_are_not_rate_limits( int $status ): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( $status, null ) );
 			$this->expectException( ReleaseFailure::class );
 			( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
@@ -1054,6 +1116,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_transport_and_credential_failures_signal_unavailable_read(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( new \WP_Error( 'transport', 'not connected' ) );
 			$this->expectException( ReleaseFailure::class );
 			try {
@@ -1110,6 +1173,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_server_errors_remain_generic_runtime_failures(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 500, null ) );
 			$this->expectException( ReleaseFailure::class );
 			try {
@@ -1120,7 +1184,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_inspection_binds_exact_numeric_repository_release_commit_and_asset(): void {
-			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
+			$adapter = new GitHubReleaseAdapter( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses(
 				7,
 				'v1.2.3',
@@ -1150,6 +1215,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			string $expected_code,
 			int $expected_requests
 		): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = match ( $scenario ) {
 				'repository_access_denied' => array( $this->response( 401, null ) ),
 				'concrete_release_unavailable' => array(
@@ -1161,6 +1227,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
 					$this->response( 500, null ),
 				),
+				default => throw new \UnhandledMatchError(),
 			};
 
 			try {
@@ -1219,6 +1286,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					$release['assets'][0]['state'] = 'new';
 					break;
 			}
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $release ),
@@ -1249,6 +1317,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_inspection_treats_missing_concrete_release_as_generic_candidate_failure(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 404, null ),
@@ -1271,6 +1340,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_inspection_treats_missing_concrete_commit_as_generic_candidate_failure(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
@@ -1295,6 +1365,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_inspection_rejects_locator_that_does_not_match_stable_repository_identity(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 100 ) ),
 			);
@@ -1312,7 +1383,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_mutable_release_remains_manual_only_and_prerelease_theme_is_bound(): void {
-			$adapter                         = new GitHubReleaseAdapter( $this->binding( 'prerelease', 'theme' ) );
+			$adapter = new GitHubReleaseAdapter( $this->binding( 'prerelease', 'theme' ) );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses(
 				7,
 				'v2.0.0-beta.1',
@@ -1330,8 +1402,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_inspection_preserves_uppercase_zip_suffix_identity(): void {
-			$release                         = $this->release( 7, 'v1.2.3', false, true );
-			$release['assets'][0]['name']    = 'Repository.ZIP';
+			$release                      = $this->release( 7, 'v1.2.3', false, true );
+			$release['assets'][0]['name'] = 'Repository.ZIP';
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $release ),
@@ -1344,10 +1417,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_inspection_accepts_native_integer_identity_and_size_boundaries(): void {
-			$identity                        = PHP_INT_MAX;
-			$release                         = $this->release( $identity, 'v1.2.3', false, true );
-			$release['assets'][0]['id']      = $identity;
-			$release['assets'][0]['size']    = 52_428_800;
+			$identity                     = PHP_INT_MAX;
+			$release                      = $this->release( $identity, 'v1.2.3', false, true );
+			$release['assets'][0]['id']   = $identity;
+			$release['assets'][0]['size'] = 52_428_800;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => $identity ) ),
 				$this->response( 200, $release ),
@@ -1365,9 +1439,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_custom_binding_accepts_its_exact_larger_asset_metadata(): void {
-			$limit                           = 52_428_800 + 1;
-			$release                         = $this->release( 7, 'v1.2.3' );
-			$release['assets'][0]['size']    = $limit;
+			$limit                        = 52_428_800 + 1;
+			$release                      = $this->release( 7, 'v1.2.3' );
+			$release['assets'][0]['size'] = $limit;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $release ),
@@ -1385,6 +1460,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$repository = array( 'id' => 99 );
 			$commit     = array( 'sha' => str_repeat( 'a', 40 ) );
 			$mutate( $repository, $release, $commit );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, $repository ),
 				$this->response( 200, $release ),
@@ -1552,8 +1628,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_private_credential_is_stripped_on_asset_redirect_and_custody_transfers_once(): void {
-			$calls                           = 0;
-			$adapter                         = new GitHubReleaseAdapter(
+			$calls   = 0;
+			$adapter = new GitHubReleaseAdapter(
 				$this->binding(),
 				new GitHubCredentialResolver(
 					static function () use ( &$calls ): string {
@@ -1562,10 +1638,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					}
 				)
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			self::assertSame( 1, $calls );
 			self::assertCount( 3, $GLOBALS['ran_github_requests'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response(
@@ -1603,13 +1681,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_prospective_inspection_keeps_release_and_descriptor_facts_then_discards(): void {
-			$calls                           = 0;
-			$archive                         = $this->prospective_archive(
+			$calls   = 0;
+			$archive = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
-			$service                         = $this->service(
+			$service = $this->service(
 				$this->binding(),
 				new GitHubCredentialResolver(
 					static function () use ( &$calls ): string {
@@ -1618,6 +1696,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					}
 				)
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses(
 				7,
 				'v1.2.3',
@@ -1638,8 +1717,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_private_theme_prospective_flow_resolves_once_per_chain_and_discards(): void {
-			$calls                           = 0;
-			$service                         = $this->service(
+			$calls   = 0;
+			$service = $this->service(
 				$this->binding( 'stable', 'theme' ),
 				new GitHubCredentialResolver(
 					static function () use ( &$calls ): string {
@@ -1648,6 +1727,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					}
 				)
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( $this->release( 7, 'v1.2.3' ) ) ),
 			);
@@ -1655,11 +1735,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertSame( 1, $calls );
 			self::assertSame( '7', $candidate['release_identity'] );
 
-			$archive                         = $this->prospective_theme_archive(
+			$archive = $this->prospective_theme_archive(
 				"/*\nTheme Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses(
 				7,
 				'v1.2.3',
@@ -1682,11 +1763,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_public_plugin_prospective_flow_sends_no_authorization(): void {
-			$archive                         = $this->prospective_archive(
+			$archive = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 
 			$inspection = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
@@ -1699,7 +1781,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_prospective_inspection_rejects_archive_and_still_discards(): void {
-			$archive                         = $this->prospective_archive(
+			$archive = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n*/",
 				array(
@@ -1707,7 +1789,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 						. "Update URI: https://github.com/owner/repository\n*/",
 				)
 			);
-			$service                         = $this->service( $this->binding() );
+			$service = $this->service( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses(
 				7,
 				'v1.2.3',
@@ -1723,13 +1806,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_prospective_acquisition_repeats_proof_and_transfers_exact_custody(): void {
-			$calls                           = 0;
-			$archive                         = $this->prospective_archive(
+			$calls   = 0;
+			$archive = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
-			$service                         = $this->service(
+			$service = $this->service(
 				$this->binding(),
 				new GitHubCredentialResolver(
 					static function () use ( &$calls ): string {
@@ -1738,9 +1821,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					}
 				)
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
 			$persisted                       = ProspectiveReleaseInspection::rehydrate( $inspection->to_array() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 
 			$owned = $service->acquire_prospective( $persisted, expected_fingerprint: $persisted->fingerprint_value() );
@@ -1765,12 +1850,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_prospective_acquisition_rejects_wrong_fingerprint_before_credential_or_http(): void {
-			$archive                         = $this->prospective_archive(
+			$archive = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
-			$service                         = $this->service( $this->binding() );
+			$service = $this->service( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
 			$requests                        = count( $GLOBALS['ran_github_requests'] );
@@ -1796,13 +1882,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_prospective_acquisition_discards_a_changed_archive_proof(): void {
-			$calls                           = 0;
-			$header                          = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			$calls   = 0;
+			$header  = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 			. "Update URI: https://github.com/owner/repository\n"
 			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/";
-			$initial                         = $this->prospective_archive( $header );
-			$changed                         = $this->prospective_archive( $header, array( 'repository/payload.php' => '<?php return true;' ) );
-			$service                         = $this->service(
+			$initial = $this->prospective_archive( $header );
+			$changed = $this->prospective_archive( $header, array( 'repository/payload.php' => '<?php return true;' ) );
+			$service = $this->service(
 				$this->binding(),
 				new GitHubCredentialResolver(
 					static function () use ( &$calls ): string {
@@ -1810,8 +1896,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 						return 'private-token'; }
 				)
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $initial );
 			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $changed );
 
 			try {
@@ -1825,16 +1913,18 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_prospective_acquisition_discards_changed_release_facts(): void {
-			$archive                         = $this->prospective_archive(
+			$archive = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
-			$service                         = $this->service( $this->binding() );
+			$service = $this->service( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
 			$responses                       = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$responses[2]                    = $this->response( 200, array( 'sha' => str_repeat( 'b', 40 ) ) );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $responses;
 
 			try {
@@ -1847,17 +1937,19 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_prospective_acquisition_discards_a_changed_hostile_archive(): void {
-			$header                          = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+			$header  = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 			. "Update URI: https://github.com/owner/repository\n"
 			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/";
-			$initial                         = $this->prospective_archive( $header );
-			$hostile                         = $this->prospective_archive(
+			$initial = $this->prospective_archive( $header );
+			$hostile = $this->prospective_archive(
 				$header,
 				array( 'repository/other.php' => str_replace( 'Repository', 'Other', $header ) )
 			);
-			$service                         = $this->service( $this->binding() );
+			$service = $this->service( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $initial );
 			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $hostile );
 
 			try {
@@ -1870,11 +1962,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_prospective_inspection_fingerprint_rejects_changed_runtime_and_package_facts(): void {
-			$archive                         = $this->prospective_archive(
+			$archive = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
 			$facts                           = $inspection->to_array();
@@ -1891,11 +1984,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_prospective_inspection_uses_exact_keys_and_defensive_accessors(): void {
-			$archive                         = $this->prospective_archive(
+			$archive = $this->prospective_archive(
 				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\n"
 				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
 			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
 			$inspection                      = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
 			self::assertSame( '7', $inspection->release_identity() );
@@ -1935,9 +2029,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafe_redirect_provider' )]
 		public function test_unsafe_expired_and_excess_redirects_fail_closed( string $location ): void {
-			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
+			$adapter = new GitHubReleaseAdapter( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 302, null, array( 'location' => $location ) ),
@@ -1975,9 +2071,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_second_redirect_and_downloaded_digest_mismatch_clean_owned_file(): void {
-			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
+			$adapter = new GitHubReleaseAdapter( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response(
@@ -1999,6 +2097,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$this->assert_all_temporary_paths_absent();
 			}
 
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), 'changed!' ),
@@ -2012,9 +2111,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_acquisition_rate_limit_is_distinct_and_cleans_owned_file(): void {
-			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
+			$adapter = new GitHubReleaseAdapter( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 429, null, array( 'retry-after' => '30' ) ),
@@ -2029,9 +2130,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_acquisition_asset_not_found_is_generic_and_cleans_owned_file(): void {
-			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
+			$adapter = new GitHubReleaseAdapter( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 404, null ),
@@ -2055,11 +2158,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_oversized_stream_is_rejected_and_cleaned_before_digesting(): void {
-			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
+			$adapter = new GitHubReleaseAdapter( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			$oversized                       = $this->response( 200, null );
 			$oversized['file_size']          = 52_428_800 + 1;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$oversized,
@@ -2074,12 +2179,14 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_custom_limit_bounds_the_download_and_rejects_an_over_custom_actual_size(): void {
-			$limit                           = 83886080;
-			$adapter                         = new GitHubReleaseAdapter( $this->binding( maximum_artifact_bytes: $limit ) );
+			$limit   = 83886080;
+			$adapter = new GitHubReleaseAdapter( $this->binding( maximum_artifact_bytes: $limit ) );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			$oversized                       = $this->response( 200, null );
 			$oversized['file_size']          = $limit + 1;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $oversized );
 			try {
 				$adapter->acquire( $descriptor );
@@ -2092,14 +2199,17 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_maximum_integer_limit_does_not_overflow_the_download_response_limit(): void {
-			$service                         = $this->service( $this->binding( maximum_artifact_bytes: PHP_INT_MAX ) );
+			$service = $this->service( $this->binding( maximum_artifact_bytes: PHP_INT_MAX ) );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
 			$service->list_releases();
 			self::assertSame( 262145, $GLOBALS['ran_github_requests'][0][1]['limit_response_size'] );
 			// The artifact request is the only request sized from the target limit; invoke its private boundary through acquisition setup below.
-			$adapter                         = new GitHubReleaseAdapter( $this->binding( maximum_artifact_bytes: PHP_INT_MAX ) );
+			$adapter = new GitHubReleaseAdapter( $this->binding( maximum_artifact_bytes: PHP_INT_MAX ) );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 500, null ) );
 			try {
 				// phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- The deliberately failing acquisition only sets up the subsequent request-limit observation.
@@ -2109,9 +2219,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 
 		public function test_temporary_artifact_rejects_replacement_and_never_deletes_unowned_bytes(): void {
-			$adapter                         = new GitHubReleaseAdapter( $this->binding() );
+			$adapter = new GitHubReleaseAdapter( $this->binding() );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), 'zip-data' ),
@@ -2320,6 +2432,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$response = array(
 				'body'     => null === $json
 					? ''
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 					: json_encode( $json, JSON_THROW_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION ),
 				'headers'  => $headers,
 				'response' => array( 'code' => $code ),
@@ -2339,5 +2452,3 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		}
 	}
 }
-
-// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

@@ -395,7 +395,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			return str_replace( "\n", $line_ending, "<?php\n/*\n{$name}{$suffix}\nVersion: {$version}{$suffix}\nUpdate URI: {$uri}{$suffix}\n*/" );
 		}
 
-		/** @return array<string,string> */
+		/** @return array<string,int|string> */
 		private function policy( string $target_type, string $uri ): array {
 			$header = 'plugin' === $target_type ? 'fake-release.php' : 'style.css';
 			return array(

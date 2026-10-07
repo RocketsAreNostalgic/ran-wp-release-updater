@@ -85,11 +85,10 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the maintained harness annotations for a checker-only control; never execute the mutated fixture.
 		$source = file_get_contents( dirname( __DIR__ ) . '/Integration/wordpress-integration.php' );
 		self::assertIsString( $source );
-		$enable = '// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound';
-		self::assertStringContainsString( $enable, $source );
-		$source      = str_replace( $enable, '$unprefixed_probe = 1; function ownedProbe() {} class UnprefixedProbe {} const UNPREFIXED_PROBE = 1;' . "\n" . $enable, $source );
+		self::assertStringNotContainsString( 'phpcs:disable', $source );
+		$source     .= "\n" . '$unprefixed_probe = 1; function ownedProbe() {} class UnprefixedProbe {} const UNPREFIXED_PROBE = 1;';
 		$diagnostics = $this->profile_diagnostics( 'Integration/wordpress-integration.php', $source, true );
-		self::assertNotContains( 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound', $diagnostics );
+		self::assertContains( 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound', $diagnostics );
 		foreach ( array( 'NonPrefixedFunctionFound', 'NonPrefixedClassFound', 'NonPrefixedConstantFound' ) as $suffix ) {
 			self::assertContains( 'WordPress.NamingConventions.PrefixAllGlobals.' . $suffix, $diagnostics );
 		}
@@ -112,11 +111,18 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 			foreach ( array( 'NonPrefixedFunctionFound', 'NonPrefixedClassFound', 'NonPrefixedConstantFound' ) as $suffix ) {
 				self::assertContains( 'WordPress.NamingConventions.PrefixAllGlobals.' . $suffix, $diagnostics, $path );
 			}
-			if ( in_array( $path, array( '../scripts/lint-php.php', '../scripts/sync-updater-support.php' ), true ) ) {
-				self::assertNotContains( $variable_code, $diagnostics, $path );
-			} else {
-				self::assertContains( $variable_code, $diagnostics, $path );
-			}
+			self::assertContains( $variable_code, $diagnostics, $path );
+		}
+	}
+
+	public function test_inline_property_changes_can_hide_prefix_diagnostics(): void {
+		$code   = 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound';
+		$source = "<?php\nfunction rogue_function() {}\n";
+		self::assertContains( $code, $this->profile_diagnostics( '../scripts/FutureTool.php', $source, true ) );
+		foreach ( array( 'phpcs:set', 'PHPCS:SET', '@codingStandardsChangeSetting' ) as $directive ) {
+			$mutated = str_replace( '<?php', '<?php' . "\n// " . $directive . ' WordPress.NamingConventions.PrefixAllGlobals prefixes rogue', $source );
+			self::assertNotContains( $code, $this->profile_diagnostics( '../scripts/FutureTool.php', $mutated, true ), $directive );
+			self::assertContains( $code, $this->profile_diagnostics( '../scripts/FutureTool.php', str_replace( '<?php', '<?php function outside_function() {}', $mutated ), true ), $directive );
 		}
 	}
 

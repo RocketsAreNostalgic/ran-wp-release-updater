@@ -53,7 +53,7 @@ final class RequestBrokerTest extends TestCase {
 		$manifest                     = json_decode( (string) file_get_contents( $legacy . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 		$manifest['runtime_protocol'] = 4;
 		$manifest['package_revision'] = $this->identity( $legacy );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		file_put_contents( $legacy . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );
 		foreach ( array( array( $legacy, $current ), array( $current, $legacy ) ) as $order ) {
 			$result = $this->probe(
@@ -445,7 +445,7 @@ PHP
 		self::assertContains( 'runtime_handoff_invalid', $result['codes'] );
 	}
 
-	/** @param array<string, string> $data
+	/** @param array<string, string|list<string>> $data
 	 * @return array<string, mixed>
 	 */
 	private function probe( string $body, array $data ): array {
@@ -470,6 +470,7 @@ PHP
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$root . '/runtime-copy.json',
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			json_encode(
 				array(
 					'package_revision' => $this->identity( $root ),
@@ -492,7 +493,7 @@ PHP
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for isolated runtime and installed-package fixtures without requiring WordPress filesystem initialization.
 		$copy                     = json_decode( (string) file_get_contents( $root . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 		$copy['package_revision'] = $this->identity( $root );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		file_put_contents( $root . '/runtime-copy.json', json_encode( $copy, JSON_THROW_ON_ERROR ) );
 	}
 

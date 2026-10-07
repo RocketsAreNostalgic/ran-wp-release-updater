@@ -138,6 +138,7 @@ final readonly class BindingRecord {
 	}
 	/** @param array<string,mixed> $value */
 	private static function canonical_json( array $value ): string {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		return json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 	}
 	/** @param list<string> $keys */

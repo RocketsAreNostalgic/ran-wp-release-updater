@@ -26,11 +26,13 @@ final class GitHubArtifactStore {
 			$clean = is_array( $created_identity )
 				? $this->remove( $path, $created_identity )
 				: ! file_exists( $path ) && ! is_link( $path );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new GitHubArtifactCustodyFailure( $clean, 'A private temporary file could not be created.' );
 		}
 		$identity = $this->identity( $path );
 		if ( null === $identity || 1 !== $identity['nlink'] ) {
 			$clean = $this->remove( $path, $created_identity );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new GitHubArtifactCustodyFailure( $clean, 'The private temporary file is invalid.' );
 		}
 		return array( $path, $identity );
