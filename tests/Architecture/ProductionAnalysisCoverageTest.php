@@ -516,6 +516,38 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		self::assertSame( $expected, $this->maintained_files( $this->fixture, array() ) );
 	}
 
+	public function test_bare_short_tags_are_discovered_independently_of_runtime_settings(): void {
+		$source = '<div>Preview</div><? echo "ran-short-tag-executed"; ?>';
+		$this->write_fixture( 'probe.phtml', $source );
+		foreach ( array( '0', '1' ) as $setting ) {
+			$result = $this->run_command( array( PHP_BINARY, '-d', 'short_open_tag=' . $setting, $this->fixture . '/probe.phtml' ), $this->fixture );
+			self::assertSame( 0, $result['exit'] );
+			self::assertSame( '1' === $setting ? '<div>Preview</div>ran-short-tag-executed' : $source, $result['output'] );
+		}
+		$expected = array( 'probe.phtml' );
+		foreach ( array( 'src', 'scripts', 'tests' ) as $scope ) {
+			foreach ( array( 'phtml', 'inc', 'html', 'htm', 'tpl', 'xml', 'invented', '' ) as $extension ) {
+				$path = $scope . '/short-tag' . ( '' === $extension ? '' : '.' . $extension );
+				$this->write_fixture( $path, "\xEF\xBB\xBF" . str_repeat( ' ', 300 ) . $source );
+				$expected[] = $path;
+			}
+		}
+		$this->write_fixture( 'README.md', "Example:\n```php\n<? echo 1; ?>\n```" );
+		$this->write_fixture( 'entrypoint.md', '<? echo 1;' );
+		$expected[] = 'entrypoint.md';
+		sort( $expected );
+		self::assertSame( $expected, $this->maintained_files( $this->fixture, array() ) );
+	}
+
+	public function test_only_a_genuine_leading_xml_declaration_is_treated_as_data(): void {
+		$this->write_fixture( 'declaration.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><example/>' );
+		self::assertSame( array(), $this->maintained_files( $this->fixture ) );
+		foreach ( array( '<?xmlfoo echo "invalid"; ?>', '<?xml version="1.0"?><example/><? echo "invalid"; ?>' ) as $source ) {
+			$this->write_fixture( 'declaration.xml', $source );
+			self::assertSame( array( 'declaration.xml' ), $this->maintained_files( $this->fixture ) );
+		}
+	}
+
 	public function test_effective_production_and_tool_ignores_are_rejected(): void {
 		foreach ( array( 'production', 'tools' ) as $profile ) {
 			$path = 'tools' === $profile ? 'scripts/Probe.php' : 'src/Probe.php';
@@ -655,7 +687,14 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Inspect complete template bytes without execution; Markdown examples retain a bounded entrypoint check.
 		$source = $documentation ? file_get_contents( $file->getPathname(), false, null, 0, 256 ) : file_get_contents( $file->getPathname() );
 		self::assertIsString( $source );
-		return 1 === preg_match( $documentation ? '/\\A(?:\\xEF\\xBB\\xBF)?(?:#![^\\r\\n]*\\r?\\n)?[ \\t\\r\\n]*<\\?(?:php(?:\\s|$)|=)/i' : '/<\\?(?:php(?:\\s|$)|=)/i', $source );
+		// Strip only a genuine leading XML declaration; later processing instructions may be PHP.
+		$source = preg_replace(
+			'~\A(?:\xEF\xBB\xBF)?<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(?:"1\.[01]"|\'1\.[01]\')(?:[ \t\r\n]+encoding[ \t\r\n]*=[ \t\r\n]*(?:"[A-Za-z][A-Za-z0-9._-]*"|\'[A-Za-z][A-Za-z0-9._-]*\'))?(?:[ \t\r\n]+standalone[ \t\r\n]*=[ \t\r\n]*(?:"(?:yes|no)"|\'(?:yes|no)\'))?[ \t\r\n]*\?>~',
+			'',
+			$source
+		);
+		self::assertIsString( $source );
+		return 1 === preg_match( $documentation ? '/\\A(?:\\xEF\\xBB\\xBF)?(?:#![^\\r\\n]*\\r?\\n)?[ \\t\\r\\n]*<\\?/' : '/<\\?/', $source );
 	}
 
 	/**
