@@ -145,7 +145,9 @@ final class GitHubReleaseService {
 			return $result;
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \InvalidArgumentException $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new ReleaseFailure( 'invalid_configuration', null, 'not_applicable', $exception ); } catch ( \Throwable $exception ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 				throw $this->operation_failure( $exception ); }
 	}
 
@@ -158,7 +160,9 @@ final class GitHubReleaseService {
 			return $result->to_array();
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \InvalidArgumentException $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new ReleaseFailure( 'invalid_release', null, 'not_applicable', $exception ); } catch ( \Throwable $exception ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 				throw $this->operation_failure( $exception ); }
 	}
 
@@ -187,7 +191,9 @@ final class GitHubReleaseService {
 			);
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \InvalidArgumentException $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new ReleaseFailure( 'invalid_release', null, 'not_applicable', $exception ); } catch ( \Throwable $exception ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 				throw $this->operation_failure( $exception ); }
 	}
 
@@ -293,6 +299,7 @@ final class GitHubReleaseService {
 			);
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \Throwable $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw $this->operation_failure( $exception ); }
 	}
 
@@ -317,6 +324,7 @@ final class GitHubReleaseService {
 			);
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \Throwable $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw $this->operation_failure( $exception ); }
 	}
 
@@ -347,6 +355,7 @@ final class GitHubReleaseService {
 			);
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \Throwable $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw $this->operation_failure( $exception ); }
 	}
 
@@ -396,6 +405,7 @@ final class GitHubReleaseService {
 			} else {
 				throw $exception;
 			}
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw $this->post_allocation_failure( $exception, $clean );
 		}
 	}
@@ -505,6 +515,7 @@ final class GitHubReleaseService {
 				// Preserve the primary failure and report the synchronous cleanup result.
 				$clean = false;
 			}
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw $this->post_allocation_failure( $exception, $clean );
 		}
 		if ( ! $retain_artifact ) {
@@ -775,6 +786,7 @@ final class GitHubReleaseService {
 		try {
 			$code = ( $this->liveness_guard )();
 		} catch ( \Throwable $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new ReleaseFailure( 'runtime_unavailable', null, 'not_applicable', $exception );
 		}
 		if ( null !== $code ) {
@@ -817,12 +829,14 @@ final class GitHubReleaseService {
 	): array {
 		$rate_limit = self::rate_limit( $response );
 		if ( $rate_limit['limited'] ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new ReleaseFailure( 'rate_limited', $rate_limit['retry_after'] );
 		}
 		self::require_success( $response, 'repository' === $context );
 		try {
 			return self::decode_object( GitHubApiClient::response_body( $response, $limit ) );
 		} catch ( \Throwable $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new ReleaseFailure( 'operation_failed', null, 'not_applicable', $exception );
 		}
 	}
@@ -831,6 +845,7 @@ final class GitHubReleaseService {
 	private function require_asset_success( array $response ): void {
 		$rate_limit = self::rate_limit( $response );
 		if ( $rate_limit['limited'] ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new ReleaseFailure( 'rate_limited', $rate_limit['retry_after'] );
 		}
 		self::require_success( $response, false );
@@ -869,6 +884,7 @@ final class GitHubReleaseService {
 		try {
 			$decoded = json_decode( $body, true, 32, JSON_THROW_ON_ERROR );
 		} catch ( \JsonException $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new RuntimeException( 'The GitHub response is invalid.', 0, $exception );
 		}
 		if ( ! is_array( $decoded ) || ! array_is_list( $decoded ) ) {
@@ -893,6 +909,7 @@ final class GitHubReleaseService {
 		try {
 			$decoded = json_decode( $body, true, 32, JSON_THROW_ON_ERROR );
 		} catch ( \JsonException $exception ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new RuntimeException( 'The GitHub response is invalid.', 0, $exception );
 		}
 		if ( ! is_array( $decoded ) ) {
@@ -1131,6 +1148,7 @@ final class GitHubReleaseService {
 		) {
 			return false;
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
 		$parts = parse_url( $url );
 		if (
 			! is_array( $parts )

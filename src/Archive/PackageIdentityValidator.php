@@ -237,6 +237,7 @@ final class PackageIdentityValidator {
 				return ValidatedPackage::blocked( 'archive_wordpress_requirement_incompatible' );
 			}
 			ksort( $manifest, SORT_STRING );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			$manifest_json = json_encode( $manifest, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
 			return $this->ready(
 				array(

@@ -37,6 +37,46 @@ final class IntegrationProofSecurityContractTest extends TestCase {
 		}
 	}
 
+	public function test_distribution_manifest_rejects_native_zip_symlink_attributes(): void {
+		$source = $this->proof( 'wordpress-integration/distribution.php' );
+		self::assertSame( 1, preg_match( '/function ran_wp_release_updater_test_archive_manifest\\(.*?^}/ms', $source, $matches ) );
+		$function = str_replace( 'function ran_wp_release_updater_test_archive_manifest', 'static function', $matches[0] );
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- Execute only the exact repository-owned manifest helper in isolation, without WordPress bootstrap or fixture side effects.
+		$reader = eval( 'namespace { return ' . $function . '; }' );
+		self::assertInstanceOf( \Closure::class, $reader );
+		$path = sys_get_temp_dir() . '/ran-release-manifest-' . bin2hex( random_bytes( 8 ) ) . '.zip';
+		try {
+			foreach ( array( 0100644, 0120777 ) as $mode ) {
+				$archive = new \ZipArchive();
+				self::assertTrue( $archive->open( $path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) );
+				self::assertTrue( $archive->addFromString( 'package/file.php', 'fixture' ) );
+				self::assertTrue( $archive->setExternalAttributesName( 'package/file.php', \ZipArchive::OPSYS_UNIX, $mode << 16 ) );
+				self::assertTrue( $archive->close() );
+				if ( 0100644 === $mode ) {
+					self::assertSame(
+						array(
+							'file.php' => array(
+								'sha256' => hash( 'sha256', 'fixture' ),
+								'size'   => 7,
+							),
+						),
+						$reader( $path, 'package' )
+					);
+				} else {
+					try {
+						$reader( $path, 'package' );
+						self::fail( 'A non-directory ZIP symlink must not be treated as a regular entry.' );
+					} catch ( \RuntimeException $error ) {
+						self::assertSame( 'Consumer ZIP contains a non-regular entry.', $error->getMessage() );
+					}
+				}
+			}
+		} finally {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove only the private native ZIP fixture created by this test.
+			unlink( $path );
+		}
+	}
+
 	private function proof( string $name ): string {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for repository contract assertions without requiring WordPress filesystem initialization.
 		return (string) file_get_contents( __DIR__ . '/Integration/' . $name );

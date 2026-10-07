@@ -1,14 +1,17 @@
 <?php
-// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
-$source_root          = getenv( 'RAN_WP_RELEASE_UPDATER_SOURCE_ROOT' );
-$marker_file          = getenv( 'RAN_WP_RELEASE_UPDATER_MARKER_FILE' );
-$marker_root          = is_string( $marker_file ) ? realpath( dirname( $marker_file ) ) : false;
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$source_root = getenv( 'RAN_WP_RELEASE_UPDATER_SOURCE_ROOT' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$marker_file = getenv( 'RAN_WP_RELEASE_UPDATER_MARKER_FILE' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$marker_root = is_string( $marker_file ) ? realpath( dirname( $marker_file ) ) : false;
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $expected_source_root = is_string( $marker_root ) ? $marker_root . '/site/wp-content/plugins/ran-wp-release-updater' : '';
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 if ( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK' !== getenv( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK' ) || ! is_string( $source_root ) || realpath( $source_root ) !== $expected_source_root || ! is_file( (string) $marker_file ) || is_link( (string) $marker_file ) || "RAN_WP_RELEASE_UPDATER_MIXED_BULK\n" !== file_get_contents( (string) $marker_file ) ) {
@@ -22,6 +25,7 @@ if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! in_array( $mode,
 	throw new RuntimeException( 'Invalid mixed-bulk scenario.' );
 }
 require_once $expected_source_root . '/bootstrap.php';
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(
 	array(
 		'php_version'       => PHP_VERSION,
@@ -32,6 +36,7 @@ $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(
 if ( true !== ( $activation['loaded'] ?? null ) ) {
 	throw new RuntimeException( 'The copied updater runtime could not be activated.' );
 }
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 foreach ( array( 'file.php', 'misc.php', 'plugin.php', 'template.php', 'class-wp-upgrader.php', 'class-plugin-upgrader.php', 'class-theme-upgrader.php', 'class-bulk-upgrader-skin.php', 'class-bulk-plugin-upgrader-skin.php', 'class-bulk-theme-upgrader-skin.php' ) as $file ) {
 	require_once ABSPATH . 'wp-admin/includes/' . $file;
 }
@@ -101,6 +106,7 @@ add_filter( 'filesystem_method', static fn (): string => 'direct' );
 remove_action( 'upgrader_process_complete', 'wp_version_check' );
 remove_action( 'upgrader_process_complete', 'wp_update_plugins' );
 remove_action( 'upgrader_process_complete', 'wp_update_themes' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $network_calls = 0;
 add_filter(
 	'pre_http_request',
@@ -109,23 +115,31 @@ add_filter(
 		return new WP_Error( 'mixed_bulk_network_forbidden', 'Network is forbidden in the mixed-bulk proof.' );
 	},
 	PHP_INT_MIN,
-	3
+	0
 );
-$ids                        = 'plugin' === $type ? array( 'managed-a/managed-a.php', 'ordinary/ordinary.php', 'managed-b/managed-b.php' ) : array( 'managed-a', 'ordinary', 'managed-b' );
-$archives                   = array(
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$ids = 'plugin' === $type ? array( 'managed-a/managed-a.php', 'ordinary/ordinary.php', 'managed-b/managed-b.php' ) : array( 'managed-a', 'ordinary', 'managed-b' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$archives = array(
 	'managed-a' => (string) getenv( 'RAN_WP_RELEASE_UPDATER_MANAGED_A_ARCHIVE' ),
 	'ordinary'  => (string) getenv( 'RAN_WP_RELEASE_UPDATER_ORDINARY_ARCHIVE' ),
 	'managed-b' => (string) getenv( 'RAN_WP_RELEASE_UPDATER_MANAGED_B_ARCHIVE' ),
 );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $expected_archive_manifests = array(
 	'managed-a' => ran_wp_release_updater_test_archive_file_manifest( $archives['managed-a'], 'managed-a' ),
 	'managed-b' => ran_wp_release_updater_test_archive_file_manifest( $archives['managed-b'], 'managed-b' ),
 );
-$before_owned_directories   = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR );
-$before_owned_directories   = $before_owned_directories ? $before_owned_directories : array();
-$managed_a                  = ran_wp_release_updater_test_build_mixed_bulk_target( $type, 'managed-a', 'Managed A', $archives['managed-a'] );
-$managed_b                  = ran_wp_release_updater_test_build_mixed_bulk_target( $type, 'managed-b', 'Managed B', $archives['managed-b'] );
-$observations               = array_fill_keys( $ids, array() );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$before_owned_directories = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$before_owned_directories = $before_owned_directories ? $before_owned_directories : array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$managed_a = ran_wp_release_updater_test_build_mixed_bulk_target( $type, 'managed-a', 'Managed A', $archives['managed-a'] );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$managed_b = ran_wp_release_updater_test_build_mixed_bulk_target( $type, 'managed-b', 'Managed B', $archives['managed-b'] );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$observations = array_fill_keys( $ids, array() );
 add_filter(
 	'upgrader_pre_download',
 	static function ( mixed $reply, string $package, mixed $upgrader, array $extra ) use ( $type, &$observations ): mixed {
@@ -141,12 +155,17 @@ add_filter(
 	4
 );
 ran_wp_release_updater_test_prime_mixed_bulk_transient( $type, $ids, $managed_a, $managed_b, $archives['ordinary'] );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $before_bytes = array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 foreach ( $ids as $identity ) {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$before_bytes[ $identity ] = ran_wp_release_updater_test_target_bytes( $type, $identity );
 }
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $active_before = ran_wp_release_updater_test_active_states( $type, $ids );
-$injected      = array(
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$injected = array(
 	'post_copy_seen'    => false,
 	'destination_bytes' => null,
 	'backup_present'    => false,
@@ -156,7 +175,7 @@ if ( 'failure' === $mode ) {
 		'upgrader_post_install',
 		static function ( mixed $response, array $extra, array $install ) use ( $type, $ids, &$injected ): mixed {
 			$key = 'plugin' === $type ? 'plugin' : 'theme';
-			if ( ( $extra[ $key ] ?? null ) !== $ids[0] || ! is_array( $install ) ) {
+			if ( ( $extra[ $key ] ?? null ) !== $ids[0] || ! is_array( $install ) ) { // @phpstan-ignore function.alreadyNarrowedType (Retain runtime evidence validation at the external WordPress or native-process boundary.)
 				return $response;
 			}
 
@@ -169,15 +188,24 @@ if ( 'failure' === $mode ) {
 		3
 	);
 }
-$upgrader     = 'plugin' === $type ? new Plugin_Upgrader( new Bulk_Plugin_Upgrader_Skin() ) : new Theme_Upgrader( new Bulk_Theme_Upgrader_Skin() );
-$raw_results  = $upgrader->bulk_upgrade( $ids, array( 'clear_update_cache' => false ) );
-$results      = array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$upgrader = 'plugin' === $type ? new Plugin_Upgrader( new Bulk_Plugin_Upgrader_Skin() ) : new Theme_Upgrader( new Bulk_Theme_Upgrader_Skin() );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$raw_results = $upgrader->bulk_upgrade( $ids, array( 'clear_update_cache' => false ) );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$results = array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $result_codes = array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 foreach ( $ids as $identity ) {
-	$one                       = is_array( $raw_results ) ? ( $raw_results[ $identity ] ?? false ) : false;
-	$results[ $identity ]      = false !== $one && ! is_wp_error( $one );
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+	$one = is_array( $raw_results ) ? ( $raw_results[ $identity ] ?? false ) : false;
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+	$results[ $identity ] = false !== $one && ! is_wp_error( $one );
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$result_codes[ $identity ] = is_wp_error( $one ) ? $one->get_error_code() : null;
 }
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $output_path = (string) getenv( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK_OUTPUT' );
 add_action(
 	'shutdown',
@@ -208,7 +236,7 @@ add_action(
 				'failure_code' => $target['updater']->status()['failure_code'],
 			);
 			$installed_manifest         = ran_wp_release_updater_test_target_file_manifest( $type, $target['identity'] );
-			$expected_manifest          = $expected_archive_manifests[ $slug ] ?? array();
+			$expected_manifest          = $expected_archive_manifests[ $slug ] ?? array(); // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
 			$manifest_evidence[ $slug ] = array(
 				'expected'    => $expected_manifest,
 				'installed'   => $installed_manifest,
@@ -217,9 +245,9 @@ add_action(
 		}
 		$tokens               = array( $managed_a['offer']['package'], $managed_b['offer']['package'] );
 		$observation_evidence = array(
-			'managed_a_exact_token'   => 1 === count( $observations[ $ids[0] ] ) && ( $observations[ $ids[0] ][0] ?? null ) === $tokens[0],
-			'ordinary_direct_archive' => 1 === count( $observations[ $ids[1] ] ) && ( $observations[ $ids[1] ][0] ?? null ) === $archives['ordinary'],
-			'managed_b_exact_token'   => 1 === count( $observations[ $ids[2] ] ) && ( $observations[ $ids[2] ][0] ?? null ) === $tokens[1],
+			'managed_a_exact_token'   => 1 === count( $observations[ $ids[0] ] ) && ( $observations[ $ids[0] ][0] ?? null ) === $tokens[0], // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
+			'ordinary_direct_archive' => 1 === count( $observations[ $ids[1] ] ) && ( $observations[ $ids[1] ][0] ?? null ) === $archives['ordinary'], // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
+			'managed_b_exact_token'   => 1 === count( $observations[ $ids[2] ] ) && ( $observations[ $ids[2] ][0] ?? null ) === $tokens[1], // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
 			'managed_tokens_distinct' => $tokens[0] !== $tokens[1],
 		);
 		$values               = $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'ran\\_wp\\_release\\_updater\\_target\\_v1\\_%' ORDER BY option_name" );
@@ -288,12 +316,12 @@ add_action(
 			'bytesAfter'          => $bytes_after,
 		);
 		$evidence['manifestEvidence'] = $manifest_evidence;
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		file_put_contents( $output_path, json_encode( $evidence, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
 	},
 	PHP_INT_MAX
 );
-/** @return array{identity:string,offer:array<string,mixed>,adapter:MixedBulkFixtureAdapter,updater:NativePackageUpdater} */
+/** @return array{identity:string,offer:array<string,mixed>,adapter:RAN_WP_RELEASE_UPDATER_Test_MixedBulkFixtureAdapter,updater:NativePackageUpdater} */
 // phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them.
 function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, string $slug, string $name, string $archive ): array {
 	global $wpdb;
@@ -393,7 +421,7 @@ function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, stri
 	}
 	$updater->register();
 	$offer = apply_filters(
-		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Select the native WordPress plugin/theme update hook for the controlled fixture URI.
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound, WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Select the native WordPress plugin/theme update hook for the controlled fixture URI. Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
 		( 'plugin' === $type ? 'update_plugins_' : 'update_themes_' ) . parse_url( $uri, PHP_URL_HOST ),
 		false,
 		array(
@@ -468,7 +496,7 @@ function ran_wp_release_updater_test_archive_file_manifest( string $archive, str
 	$manifest = array();
 	// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- ZipArchive exposes this native property name.
 	$entry_count = $zip->numFiles;
-	if ( ! is_int( $entry_count ) ) {
+	if ( ! is_int( $entry_count ) ) { // @phpstan-ignore function.alreadyNarrowedType (Retain runtime evidence validation at the external WordPress or native-process boundary.)
 		throw new RuntimeException( 'The fixture archive manifest could not be enumerated.' );
 	}
 	$root_prefix = $root . '/';
@@ -538,5 +566,3 @@ function ran_wp_release_updater_test_active_states( string $type, array $ids ): 
 function ran_wp_release_updater_test_target_header_version_from_bytes( string $type, string $bytes ): ?string {
 	return 1 === preg_match( '/^Version:\s*(.+)$/mi', $bytes, $matches ) ? trim( $matches [1] ) : null;
 }
-
-// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

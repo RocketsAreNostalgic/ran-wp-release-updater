@@ -51,7 +51,8 @@
     ],
     "analyze": [
       "phpstan analyse --configuration=phpstan.neon --no-progress --memory-limit=1G",
-      "phpstan analyse --configuration=phpstan-tools.neon --no-progress --memory-limit=1G"
+      "phpstan analyse --configuration=phpstan-tools.neon --no-progress --memory-limit=1G",
+      "php scripts/analyze-tests.php"
     ],
     "audit:composer": "composer audit --locked --no-interaction",
     "standards:fix": "phpcbf --standard=.phpcs.xml --report=summary",

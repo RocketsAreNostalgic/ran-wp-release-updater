@@ -1,5 +1,4 @@
 <?php
-// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 declare(strict_types = 1);
 /*
@@ -33,12 +32,14 @@ namespace {
 		$response = ran_wp_release_updater_test_native_measure_response( $url );
 		$body     = $response ['body'];
 		++$GLOBALS ['native_measure'] ['http_calls'];
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$GLOBALS ['native_measure'] ['body_bytes'] += strlen( $body );
 		if ( isset( $args ['filename'] ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for native discovery measurement fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $args ['filename'], $body );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 			chmod( $args ['filename'], 0600 );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS ['native_measure'] ['streamed_bytes'] += strlen( $body );
 		}
 		return array(
@@ -69,20 +70,24 @@ namespace {
 		if ( is_string( $path ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 			chmod( $path, 0600 );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS ['native_measure'] ['temporary'] [] = $path;
 		}
 		return $path;
 	}
 	function ran_wp_release_updater_test_native_measure_response( string $url ): array {
-		$u          = & $GLOBALS ['native_measure'];
+		$u = & $GLOBALS ['native_measure'];
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
 		$parts      = parse_url( $url );
 		$repository = (string) ( $u ['repository'] ?? 'repository' );
 		$prefix     = '/repos/owner/' . $repository;
 		$path       = $parts ['path'] ?? null;
 		if ( ! is_array( $parts ) || 'https' !== ( $parts ['scheme'] ?? null ) || 'api.github.com' !== ( $parts ['host'] ?? null ) || ! is_string( $path ) || ( $path !== $prefix && ! str_starts_with( $path, $prefix . '/' ) ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new \RuntimeException( 'Unexpected fixture request: ' . $url );
 		}
 		if ( $prefix . '/releases' === $path && isset( $parts ['query'] ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			return array( 'body' => json_encode( ran_wp_release_updater_test_native_measure_releases( $u ['scenario'] ) ) );
 		}
 		if ( 1 === preg_match( '~^' . preg_quote( $prefix, '~' ) . '/releases/assets/8$~D', $path ) ) {
@@ -90,15 +95,19 @@ namespace {
 			return array( 'body' => $u ['zip'] );
 		}
 		if ( 1 === preg_match( '~^' . preg_quote( $prefix, '~' ) . '/releases/([0-9]+)$~D', $path, $m ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			return array( 'body' => json_encode( ran_wp_release_updater_test_native_measure_release( (int) $m [1], $u ['changed'] && $u ['after_offer'], 'incompatible' === $u ['scenario'] ) ) );
 		}
 		if ( 1 === preg_match( '~^' . preg_quote( $prefix, '~' ) . '/commits/[A-Za-z0-9._/-]+$~D', $path ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			return array( 'body' => json_encode( array( 'sha' => $u ['changed'] && $u ['after_offer'] ? str_repeat( 'b', 40 ) : str_repeat( 'a', 40 ) ) ) );
 		}
 		if ( $prefix !== $path ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new \RuntimeException( 'Unexpected fixture endpoint: ' . $url );
 		}
 		$number = preg_match( '/-(\d+)$/', $repository, $match ) ? (int) $match [1] : 0;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		return array( 'body' => json_encode( array( 'id' => 99 + $number ) ) );
 	}
 	function ran_wp_release_updater_test_native_measure_releases( string $scenario ): array {
@@ -142,6 +151,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 	const NATIVE_MEASURE_COUNTS = array( 1, 5, 10, 20 );
 	function native_measure_assert( bool $condition, string $message ): void {
 		if ( ! $condition ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new \RuntimeException( $message );
 		}
 	}
@@ -153,6 +163,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for native discovery measurement fixtures without requiring WordPress filesystem initialization.
 			$manifest = json_decode( (string) file_get_contents( $file ), true, 512, JSON_THROW_ON_ERROR );
 		} catch ( \Throwable $error ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new \RuntimeException( 'Runtime manifest is unreadable: ' . $file, 0, $error );
 		}
 		$keys = array( 'package_revision', 'package_version', 'php_floor', 'runtime_file', 'runtime_protocol', 'wordpress_floor' );
@@ -207,9 +218,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 	/** One PHP request: N copied bootstraps, M queued registrar targets, then one activation. */
 	function native_measure_shared_request( array $roots, int $targets, string $scenario, bool $callback_control = false, string $target_type = 'plugin', bool $callback_revoked = false ): array {
 		native_measure_assert( array() !== $roots && count( $roots ) === count( array_unique( $roots ) ), 'Physical runtime roots are not distinct.' );
-		$runtime_protocol           = native_measure_current_runtime_protocol( (string) getenv( 'RAN_NATIVE_MEASURE_TRUSTED_ROOT' ), $roots );
-		$temp                       = getenv( 'RAN_NATIVE_MEASURE_TEMP' );
-		$temp                       = $temp ? $temp : sys_get_temp_dir();
+		$runtime_protocol = native_measure_current_runtime_protocol( (string) getenv( 'RAN_NATIVE_MEASURE_TRUSTED_ROOT' ), $roots );
+		$temp             = getenv( 'RAN_NATIVE_MEASURE_TEMP' );
+		$temp             = $temp ? $temp : sys_get_temp_dir();
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$GLOBALS ['native_measure'] = array(
 			'temp'             => $temp,
 			'scenario'         => $scenario,
@@ -331,10 +343,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 		$offers = array();
 		if ( 'registration' !== $scenario ) {
 			foreach ( $natives as $index => $item ) {
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 				$GLOBALS ['native_measure'] ['repository'] = $item ['fixture'] ['repository'];
-				$GLOBALS ['native_measure'] ['zip']        = $item ['fixture'] ['zip'];
-				$before_step                               = native_measure_counters();
-				$offer                                     = $item ['native']->filter_update(
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+				$GLOBALS ['native_measure'] ['zip'] = $item ['fixture'] ['zip'];
+				$before_step                        = native_measure_counters();
+				$offer                              = $item ['native']->filter_update(
 					false,
 					array(
 						'Version'   => '1.0.0',
@@ -361,10 +375,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 		}
 		if ( 'repeated' === $scenario ) {
 			foreach ( $natives as $index => $item ) {
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 				$GLOBALS ['native_measure'] ['repository'] = $item ['fixture'] ['repository'];
-				$GLOBALS ['native_measure'] ['zip']        = $item ['fixture'] ['zip'];
-				$before_step                               = native_measure_counters();
-				$again                                     = $item ['native']->filter_update(
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+				$GLOBALS ['native_measure'] ['zip'] = $item ['fixture'] ['zip'];
+				$before_step                        = native_measure_counters();
+				$again                              = $item ['native']->filter_update(
 					false,
 					array(
 						'Version'   => '1.0.0',
@@ -390,9 +406,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 		if ( 'refresh' === $scenario ) {
 			foreach ( $natives as $index => $item ) {
 				native_measure_assert( true === $item ['native']->refresh(), 'Native refresh failed.' );
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 				$GLOBALS ['native_measure'] ['repository'] = $item ['fixture'] ['repository'];
-				$GLOBALS ['native_measure'] ['zip']        = $item ['fixture'] ['zip'];
-				$before_step                               = native_measure_counters();
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+				$GLOBALS ['native_measure'] ['zip'] = $item ['fixture'] ['zip'];
+				$before_step                        = native_measure_counters();
 				native_measure_assert(
 					is_array(
 						$item ['native']->filter_update(
@@ -413,10 +431,14 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 		}
 		if ( 'install' === $scenario || 'changed' === $scenario ) {
 			foreach ( $natives as $index => $item ) {
-				$GLOBALS ['native_measure'] ['repository']  = $item ['fixture'] ['repository'];
-				$GLOBALS ['native_measure'] ['zip']         = $item ['fixture'] ['zip'];
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+				$GLOBALS ['native_measure'] ['repository'] = $item ['fixture'] ['repository'];
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+				$GLOBALS ['native_measure'] ['zip'] = $item ['fixture'] ['zip'];
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 				$GLOBALS ['native_measure'] ['after_offer'] = true;
 				if ( 'changed' === $scenario ) {
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 					$GLOBALS ['native_measure'] ['changed'] = true;
 				}
 				$before_step = native_measure_counters();
@@ -460,6 +482,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 		}
 		$after_cleanup = count( array_filter( array_unique( array_merge( $owned_paths, $temporary_paths ) ), 'is_file' ) );
 		$broker_state  = $broker->diagnostics();
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		native_measure_assert( count( $roots ) === $broker_state ['candidate_count'], 'Broker candidate count differs from physical copies: ' . json_encode( $broker_state ) );
 		native_measure_assert( count( $all ) === $targets && $targets === $broker_state ['logical_target_count'], 'Shared-request active native count differs from declarations.' );
 		native_measure_assert( $opens >= $GLOBALS ['native_measure'] ['acquisitions'], 'Validator opened fewer archives than acquisitions.' );
@@ -509,6 +532,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 	}
 	function native_measure_shared_worker( array $args ): void {
 		$roots = explode( '|', (string) getenv( 'RAN_NATIVE_MEASURE_ROOTS' ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		echo json_encode( native_measure_shared_request( $roots, (int) ( $args [2] ?? 1 ), $args [3] ?? 'cold', ( '--callback-control' === ( $args [4] ?? null ) ), $args [5] ?? 'plugin', ( '--callback-revoked' === ( $args [6] ?? null ) ) ), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
 	}
 	function native_measure_copy( string $from, string $to ): void {
@@ -566,11 +590,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 		fclose( $pipes [2] );
 		$exit = proc_close( $process );
 		if ( 0 !== $exit ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new \RuntimeException( 'Measurement subprocess failed (' . $exit . '): ' . trim( $stderr ) . "\nstdout: " . trim( $stdout ) );
 		}
 		try {
 			$decoded = json_decode( $stdout, true, 512, JSON_THROW_ON_ERROR );
 		} catch ( \Throwable $error ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new \RuntimeException( 'Measurement subprocess returned invalid JSON: ' . trim( $stderr ) . "\nstdout: " . trim( $stdout ), 0, $error );
 		}
 		native_measure_assert( is_array( $decoded ), 'Measurement subprocess did not return a row.' );
@@ -640,8 +666,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 		$out ['controls'] ['theme_1copy_1target'] = $theme_controls;
 		native_measure_assert( $out ['controls'] ['callback_returning_null_repeated_plugin'] ['credential_callback_calls'] > 0, 'Callback-returning-null control did not invoke its resolver.' );
 		native_measure_assert( 4 === $out ['controls'] ['callback_revoked_repeated_plugin'] ['credential_callback_calls'], 'Revoked callback control did not re-resolve before the second discovery.' );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write the measurement result as exact local JSON bytes after all scenarios have passed.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write the measurement result as exact local JSON bytes after all scenarios have passed. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		file_put_contents( $root . '/.workspaces/evidence/native-discovery-measure.json', json_encode( $out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		echo json_encode( $out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) . PHP_EOL;
 	}
 	if ( '--shared-worker' === ( $argv [1] ?? null ) ) {
@@ -650,5 +677,3 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 		native_measure_main();
 	}
 }
-
-// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

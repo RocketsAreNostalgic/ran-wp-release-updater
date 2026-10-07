@@ -185,6 +185,7 @@ final readonly class ProspectiveReleaseInspection {
 
 	/** @param array<string, mixed> $facts */
 	private static function fingerprint_facts( array $facts ): string {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		return 'v2:' . hash( 'sha256', json_encode( $facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
 	}
 
