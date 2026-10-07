@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\WordPress;
+namespace RAN\WPReleaseUpdater\V1\Tests\WordPress;
 
 require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 
@@ -11,7 +10,7 @@ use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
-use Tests\Support\FakeOptionDatabase;
+use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 
 final class BindingFenceCoordinatorTest extends TestCase {
 

@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Dependency;
+namespace RAN\WPReleaseUpdater\V1\Tests\Dependency;
 
 use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Dependency\ArchiveSafety;
@@ -86,15 +85,45 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the maintained harness annotations for a checker-only control; never execute the mutated fixture.
 		$source = file_get_contents( dirname( __DIR__ ) . '/Integration/wordpress-integration.php' );
 		self::assertIsString( $source );
-		$enable = '// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound';
-		self::assertStringContainsString( $enable, $source );
-		$source      = str_replace( $enable, '$unprefixed_probe = 1; function ownedProbe() {} class UnprefixedProbe {} const UNPREFIXED_PROBE = 1;' . "\n" . $enable, $source );
+		self::assertStringNotContainsString( 'phpcs:disable', $source );
+		$source     .= "\n" . '$unprefixed_probe = 1; function ownedProbe() {} class UnprefixedProbe {} const UNPREFIXED_PROBE = 1;';
 		$diagnostics = $this->profile_diagnostics( 'Integration/wordpress-integration.php', $source, true );
-		self::assertNotContains( 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound', $diagnostics );
+		self::assertContains( 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound', $diagnostics );
 		foreach ( array( 'NonPrefixedFunctionFound', 'NonPrefixedClassFound', 'NonPrefixedConstantFound' ) as $suffix ) {
 			self::assertContains( 'WordPress.NamingConventions.PrefixAllGlobals.' . $suffix, $diagnostics );
 		}
 		self::assertContains( 'WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid', $diagnostics );
+	}
+
+
+	public function test_script_variable_exemptions_do_not_hide_other_declarations_or_future_paths(): void {
+		$variable_code = 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound';
+		$probe         = '$unprefixed_probe = 1; function unowned_probe() {} class UnownedProbe {} const UNOWNED_PROBE = 1; $post = 1;';
+		foreach ( array( '../scripts/lint-php.php', '../scripts/sync-updater-support.php', '../scripts/Future.php', 'scripts/lint-php.php' ) as $path ) {
+			$source = '<?php ';
+			if ( in_array( $path, array( '../scripts/lint-php.php', '../scripts/sync-updater-support.php' ), true ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Inspect the actual standalone annotation without executing the script or mutated probe.
+				$source = file_get_contents( dirname( __DIR__, 2 ) . '/' . substr( $path, 3 ) );
+				self::assertIsString( $source );
+			}
+			$diagnostics = $this->profile_diagnostics( $path, $source . "\n" . $probe, true );
+			self::assertContains( 'WordPress.WP.GlobalVariablesOverride.Prohibited', $diagnostics, $path );
+			foreach ( array( 'NonPrefixedFunctionFound', 'NonPrefixedClassFound', 'NonPrefixedConstantFound' ) as $suffix ) {
+				self::assertContains( 'WordPress.NamingConventions.PrefixAllGlobals.' . $suffix, $diagnostics, $path );
+			}
+			self::assertContains( $variable_code, $diagnostics, $path );
+		}
+	}
+
+	public function test_inline_property_changes_can_hide_prefix_diagnostics(): void {
+		$code   = 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound';
+		$source = "<?php\nfunction rogue_function() {}\n";
+		self::assertContains( $code, $this->profile_diagnostics( '../scripts/FutureTool.php', $source, true ) );
+		foreach ( array( 'phpcs:set', 'PHPCS:SET', '@codingStandardsChangeSetting' ) as $directive ) {
+			$mutated = str_replace( '<?php', '<?php' . "\n// " . $directive . ' WordPress.NamingConventions.PrefixAllGlobals prefixes rogue', $source );
+			self::assertNotContains( $code, $this->profile_diagnostics( '../scripts/FutureTool.php', $mutated, true ), $directive );
+			self::assertContains( $code, $this->profile_diagnostics( '../scripts/FutureTool.php', str_replace( '<?php', '<?php function outside_function() {}', $mutated ), true ), $directive );
+		}
 	}
 
 	/** @return list<string> */

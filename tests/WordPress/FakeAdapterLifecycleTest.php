@@ -27,8 +27,8 @@ namespace {
 	}
 }
 
-// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture. Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\WordPress {
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture.
+namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 
 	require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 
@@ -40,7 +40,7 @@ namespace Tests\WordPress {
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 	use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
 	use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
-	use Tests\Support\FakeOptionDatabase;
+	use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 
 	/** Exercises updater seams only; Core backup, rollback, and activation remain out of scope. */
 	// phpcs:ignore Generic.Files.OneObjectStructurePerFile.MultipleFound -- Keep the conditional WordPress stub and its test class in the same self-contained fixture.
@@ -395,7 +395,7 @@ namespace Tests\WordPress {
 			return str_replace( "\n", $line_ending, "<?php\n/*\n{$name}{$suffix}\nVersion: {$version}{$suffix}\nUpdate URI: {$uri}{$suffix}\n*/" );
 		}
 
-		/** @return array<string,string> */
+		/** @return array<string,int|string> */
 		private function policy( string $target_type, string $uri ): array {
 			$header = 'plugin' === $target_type ? 'fake-release.php' : 'style.css';
 			return array(

@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Archive;
+namespace RAN\WPReleaseUpdater\V1\Tests\Archive;
 
 use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
@@ -373,9 +372,9 @@ final class PackageIdentityValidatorTest extends TestCase {
 		} catch ( \InvalidArgumentException ) {
 			self::addToAssertionCount( 1 ); }
 		try {
-			clone $validator;
+			clone $validator; // @phpstan-ignore expr.resultUnused (Deliberate private-clone denial; the expected Error is the observable result.)
 			self::fail( 'Validator clone unexpectedly succeeded.' );
-		} catch ( \Error ) {
+		} catch ( \Error ) { // @phpstan-ignore catch.neverThrown (The PHP engine throws Error for this inaccessible private clone; runtime test preserves that contract.)
 			self::addToAssertionCount( 1 ); }
 	}
 
@@ -619,7 +618,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 		);
 	}
 
-	/** @return array<string,string> */
+	/** @return array<string,int|string> */
 	private function policy( string $type, string $root, string $header, string $name, string $template = '' ): array {
 		return array(
 			'archive_root'               => $root,

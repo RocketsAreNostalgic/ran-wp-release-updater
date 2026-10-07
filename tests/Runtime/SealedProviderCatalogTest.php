@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Runtime;
+namespace RAN\WPReleaseUpdater\V1\Tests\Runtime;
 
 use PHPUnit\Framework\TestCase;
 
@@ -270,7 +269,7 @@ PHP;
 			'runtime_protocol' => 5,
 			'wordpress_floor'  => '6.5.0',
 		);
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		file_put_contents( $root . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );
 		return $root;
 	}
@@ -404,7 +403,7 @@ function add_action( string $hook, mixed $callback, int $priority, int $argument
 $GLOBALS['p0_2_hooks'] = array();
 $GLOBALS['p0_2_synthetic_release_calls'] = 0;
 $GLOBALS['p0_2_github_release_calls'] = 0;
-$GLOBALS['wpdb'] = new \Tests\Support\FakeOptionDatabase( 100 );
+$GLOBALS['wpdb'] = new \RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase( 100 );
 $GLOBALS['wp_version'] = '6.8.0';
 define( 'FS_METHOD', 'direct' );
 function get_filesystem_method(): string { return 'direct'; }

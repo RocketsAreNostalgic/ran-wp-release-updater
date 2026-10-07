@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Runtime;
+namespace RAN\WPReleaseUpdater\V1\Tests\Runtime;
 
 use PHPUnit\Framework\TestCase;
 
@@ -100,6 +99,7 @@ $registrar = require $data['bootstrap'];
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
 echo json_encode(array('state' => $broker->diagnostics()['state'], 'diagnostics' => $registrar->diagnostics()['diagnostics'], 'hooks' => false));
 PHP,
+			default => throw new \UnhandledMatchError(),
 			}
 		);
 
@@ -465,6 +465,7 @@ PHP
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents(
 			$root . '/runtime-copy.json',
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			json_encode(
 				array(
 					'package_revision' => hash( 'sha256', $payload ),

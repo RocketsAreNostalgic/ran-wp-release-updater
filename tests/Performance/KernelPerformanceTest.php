@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Performance;
+namespace RAN\WPReleaseUpdater\V1\Tests\Performance;
 
 require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 
@@ -13,7 +12,7 @@ use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
-use Tests\Support\FakeOptionDatabase;
+use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 
 /**
  * Local deterministic throughput budgets, not provider or network benchmarks.
@@ -60,39 +59,6 @@ final class KernelPerformanceTest extends TestCase {
 	private function cpu_nanoseconds(): int {
 		$usage = getrusage();
 		return ( (int) $usage['ru_utime.tv_sec'] + (int) $usage['ru_stime.tv_sec'] ) * 1_000_000_000 + ( (int) $usage['ru_utime.tv_usec'] + (int) $usage['ru_stime.tv_usec'] ) * 1000; }
-
-	private function descriptor( string $version, string $release ): IdentityDescriptor {
-		return IdentityDescriptor::create(
-			array(
-				'artifact_filename'          => 'package.zip',
-				'artifact_identity'          => 'asset:' . $release,
-				'artifact_sha256'            => str_repeat( 'a', 64 ),
-				'artifact_size'              => 1,
-				'assurance_facts'            => array(
-					'exact_artifact_identity'       => true,
-					'exact_commit_identity'         => true,
-					'exact_reacquisition_supported' => true,
-					'exact_release_identity'        => true,
-					'provenance_verified'           => true,
-					'publication_immutable'         => true,
-					'repository_identity_stable'    => true,
-					'trusted_digest_source'         => true,
-				),
-				'canonical_update_uri'       => 'https://updates.example.test/owner/package',
-				'channel'                    => 'stable',
-				'commit_identity'            => 'commit:' . $release,
-				'installed_package_identity' => 'package/package.php',
-				'prerelease'                 => false,
-				'provider_code'              => 'neutral',
-				'release_identity'           => $release,
-				'repository_identity'        => 'repo:1',
-				'repository_locator'         => 'owner/package',
-				'tag'                        => 'v' . $version,
-				'target_type'                => 'plugin',
-				'version'                    => $version,
-			)
-		);
-	}
 
 	/** @return array<string,mixed> */
 	private function binding_facts(): array {

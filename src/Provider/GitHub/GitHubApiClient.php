@@ -66,6 +66,7 @@ final class GitHubApiClient {
 			if ( null === $next_url ) {
 				throw new RuntimeException( 'The GitHub redirect is unsafe.' );
 			}
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
 			$next_host = strtolower( (string) parse_url( $next_url, PHP_URL_HOST ) );
 			if ( self::API_HOST !== $next_host ) {
 				$credentials_bound = false;
@@ -159,6 +160,7 @@ final class GitHubApiClient {
 		) {
 			return null;
 		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
 		$parts = parse_url( $url );
 		if (
 			! is_array( $parts )

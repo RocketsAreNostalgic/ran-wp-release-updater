@@ -34,3 +34,10 @@ provider responses, release ZIPs, temporary files, WordPress runtime state,
 Use ordinary issues for support and non-sensitive defects. Follow
 [SECURITY.md](SECURITY.md) for vulnerabilities; do not submit security details
 in an issue or pull request.
+
+Owned test namespaces use `RAN\WPReleaseUpdater\V1\Tests` with matching
+Composer development autoload and fixture references. They are checked by the
+ordinary prefix rule; an existing development namespace is not a foreign-contract
+exemption. Intentional unprefixed checker fixture bytes remain negative controls.
+New owned tests must use the compliant namespace without adding a namespace
+suppression; update connected loaders and references when moving existing tests.

@@ -1,35 +1,49 @@
 <?php
-// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 declare(strict_types=1);
 
 /* Executable public-consumer proof. run-prototype supplies a durable PHP temp directory. */
 // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
-$type     = $argv[1] ?? 'plugin';
+$type = $argv[1] ?? 'plugin';
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $scenario = $argv[2] ?? 'happy';
 if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! in_array( $scenario, array( 'happy', 'liveness', 'discard', 'fence-list', 'fence-inspect', 'fence-acquire' ), true ) ) {
 	throw new RuntimeException( 'Pass a supported package type and consumer scenario.' );
 }
-$fixture_repository    = 'acme/consumer';
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$fixture_repository = 'acme/consumer';
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $fixture_repository_id = '99';
-$fixture_release_id    = 7;
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$fixture_release_id = 7;
 if ( 'fence-list' === $scenario ) {
-	$fixture_repository    = 'acme/example-plugin';
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+	$fixture_repository = 'acme/example-plugin';
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$fixture_repository_id = '123456789';
 }
 if ( 'fence-inspect' === $scenario ) {
-	$fixture_repository    = 'acme/example-theme';
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+	$fixture_repository = 'acme/example-theme';
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$fixture_repository_id = '987654321';
-	$fixture_release_id    = 42;
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+	$fixture_release_id = 42;
 }
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $root = sys_get_temp_dir() . '/release-source-consumer-' . $type . '-' . bin2hex( random_bytes( 8 ) );
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 if ( ! is_dir( $root ) && ! mkdir( $root, 0700, true ) ) {
 	throw new RuntimeException( 'Could not create fixture root.' ); }
-$GLOBALS['rs_root']      = $root;
-$GLOBALS['rs_hooks']     = array();
-$GLOBALS['rs_requests']  = array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$GLOBALS['rs_root'] = $root;
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$GLOBALS['rs_hooks'] = array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$GLOBALS['rs_requests'] = array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $GLOBALS['rs_responses'] = array();
-$GLOBALS['rs_paths']     = array();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$GLOBALS['rs_paths'] = array();
 // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 $GLOBALS['wp_version'] = '6.8.0';
 // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
@@ -63,9 +77,11 @@ function WP_Filesystem(): bool {
 }
 // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress requires this positional stub signature; this consumer proof intentionally ignores these inputs. WordPress calls this global stub by its exact foreign function name.
 function add_action( string $hook, callable $callback, int $priority = 10, int $arguments = 1 ): void {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$GLOBALS['rs_hooks'][] = compact( 'hook', 'callback', 'priority' ); }
 // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress requires this positional stub signature; this consumer proof intentionally ignores these inputs. WordPress calls this global stub by its exact foreign function name.
 function add_filter( string $hook, callable $callback, int $priority = 10, int $arguments = 1 ): void {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$GLOBALS['rs_hooks'][] = compact( 'hook', 'callback', 'priority' ); }
 // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress requires this positional stub signature; this consumer proof intentionally ignores these inputs. WordPress calls this global stub by its exact foreign function name.
 function doing_action( string $hook ): bool {
@@ -79,10 +95,12 @@ function wp_tempnam( string $name ): string|false {
 	if ( is_string( $path ) ) {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 		chmod( $path, 0600 );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$GLOBALS['rs_paths'][] = $path;
 	} return $path; }
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name. @phpstan-ignore return.unusedType (The stub preserves the foreign WordPress HTTP return contract even when this scenario returns only an array.)
 function wp_safe_remote_get( string $url, array $args ): array|WP_Error {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$GLOBALS['rs_requests'][] = array(
 		'url'    => $url,
 		'stream' => (bool) ( $args['stream'] ?? false ),
@@ -107,13 +125,16 @@ function wp_remote_retrieve_body( array $response ): string {
 	return $response['body'] ?? ''; }
 function ran_wp_release_updater_test_rs_response( mixed $body, ?string $file = null ): array {
 	return array(
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		'body'     => json_encode( $body, JSON_THROW_ON_ERROR ),
 		'headers'  => array(),
 		'response' => array( 'code' => 200 ),
 		'file'     => $file,
 	); }
+/** @phpstan-assert true $condition */
 function ran_wp_release_updater_test_rs_assert( bool $condition, string $message ): void {
 	if ( ! $condition ) {
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 		throw new RuntimeException( $message ); } }
 function ran_wp_release_updater_test_rs_activate(): void {
 	foreach ( $GLOBALS['rs_hooks'] as $hook ) {
@@ -167,18 +188,22 @@ function ran_wp_release_updater_test_rs_copy_verified( string $source, string $d
 	ran_wp_release_updater_test_rs_assert( hash_equals( $facts['artifact_sha256'], (string) hash_file( 'sha256', $destination ) ), 'Prepared copy digest changed.' );
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $zip_path = $root . '/fixture.zip';
-$zip      = new ZipArchive();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$zip = new ZipArchive();
 ran_wp_release_updater_test_rs_assert( true === $zip->open( $zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE ), 'ZIP creation failed.' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $entry = 'plugin' === $type ? 'consumer/consumer.php' : 'consumer/style.css';
 $zip->addFromString( $entry, 'plugin' === $type ? "<?php\n/*\nPlugin Name: Consumer\nVersion: 1.2.3\nUpdate URI: https://github.com/{$fixture_repository}\nRequires at least: 6.5\nRequires PHP: 8.2\n*/" : "/*\nTheme Name: Consumer\nVersion: 1.2.3\nUpdate URI: https://github.com/{$fixture_repository}\nRequires at least: 6.5\nRequires PHP: 8.2\n*/" );
 $zip->close();
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 chmod( $zip_path, 0600 );
-// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization. Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $bytes = file_get_contents( $zip_path );
 ran_wp_release_updater_test_rs_assert( is_string( $bytes ), 'ZIP read failed.' );
-$release     = array(
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$release = array(
 	'id'         => $fixture_release_id,
 	'draft'      => false,
 	'prerelease' => false,
@@ -195,12 +220,17 @@ $release     = array(
 		),
 	),
 );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $queue_proof = static function () use ( $release, $bytes, $fixture_repository_id ): void {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$GLOBALS['rs_responses'] = array( ran_wp_release_updater_test_rs_response( array( 'id' => (int) $fixture_repository_id ) ), ran_wp_release_updater_test_rs_response( $release ), ran_wp_release_updater_test_rs_response( array( 'sha' => str_repeat( 'a', 40 ) ) ), ran_wp_release_updater_test_rs_response( array( 'id' => (int) $fixture_repository_id ) ), ran_wp_release_updater_test_rs_response( null, $bytes ), ran_wp_release_updater_test_rs_response( array( 'id' => (int) $fixture_repository_id ) ) );
 };
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $credentials = 0;
-$registrar   = require dirname( __DIR__, 2 ) . '/bootstrap.php';
-$source      = $registrar->releases(
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$registrar = require dirname( __DIR__, 2 ) . '/bootstrap.php';
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$source = $registrar->releases(
 	'github',
 	$type,
 	'acme/consumer',
@@ -221,8 +251,10 @@ ran_wp_release_updater_test_rs_assert(
 	) === $GLOBALS['rs_hooks'],
 	'Release source registered native hooks.'
 );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $broker_facts = $GLOBALS['ran_wp_release_updater_v1_broker']->diagnostics();
 ran_wp_release_updater_test_rs_assert( 0 === $broker_facts['submission_count'] && 0 === $broker_facts['logical_target_count'], 'Release source bound a native target.' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $before = $source->list();
 ran_wp_release_updater_test_rs_assert( 'runtime_not_ready' === $before['code'], 'Source did not fail before readiness.' );
 ran_wp_release_updater_test_rs_activate();
@@ -230,33 +262,42 @@ ran_wp_release_updater_test_rs_assert( 1 === count( $GLOBALS['rs_hooks'] ) && 'a
 if ( 'fence-list' !== $scenario ) {
 	ran_wp_release_updater_test_rs_assert( WP_Filesystem() && $GLOBALS['wp_filesystem'] instanceof WP_Filesystem_Direct, 'Fixture could not initialize direct filesystem state.' );
 }
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $fence = $argv[3] ?? null;
 if ( str_starts_with( $scenario, 'fence-' ) ) {
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Carry exact repository documentation-fence bytes through the escaped CLI argument; this is a controlled test payload.
 	ran_wp_release_updater_test_rs_assert( is_string( $fence ) && '' !== $fence && false !== base64_decode( $fence, true ), 'Fence source is required.' );
-	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Carry exact repository documentation-fence bytes through the escaped CLI argument; this is a controlled test payload.
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Carry exact repository documentation-fence bytes through the escaped CLI argument; this is a controlled test payload. Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$fence = base64_decode( $fence, true );
 	if ( 'fence-acquire' === $scenario ) {
 		$queue_proof();
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$inspection = $source->inspect( '7', 'v1.2.3' );
 		ran_wp_release_updater_test_rs_assert( $inspection['ok'], 'Fence prerequisite inspection failed.' );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$release_id = '7';
 		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
-		$tag                           = 'v1.2.3';
-		$fingerprint                   = $inspection['value']['fingerprint'];
+		$tag = 'v1.2.3';
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+		$fingerprint = $inspection['value']['fingerprint'];
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$application_storage_directory = $root;
 		$queue_proof();
 	} elseif ( 'fence-list' === $scenario ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$GLOBALS['rs_responses'] = array( ran_wp_release_updater_test_rs_response( array( $release ) ) ); } else {
 		$queue_proof(); }
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$fence_request_start = count( $GLOBALS['rs_requests'] );
 		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- Execute the repository documentation fence supplied by the parent test in this isolated CLI fixture, never a production request.
 		eval( $fence );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		foreach ( $GLOBALS['rs_hooks'] as $hook ) {
 			if ( 'init' === $hook['hook'] ) {
 				( $hook['callback'] )();
 			}
 		}
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$fence_delta = ran_wp_release_updater_test_rs_delta( $fence_request_start );
 		if ( 'fence-list' === $scenario ) {
 			ran_wp_release_updater_test_rs_assert(
@@ -292,6 +333,7 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- The following absence assertion observes cleanup; an already absent fixture must not emit a warning. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		@unlink( $root . '/fence-prepared.zip' );
 		ran_wp_release_updater_test_rs_assert( ! file_exists( $root . '/fence-prepared.zip' ), 'Fixture owner could not remove its scenario file.' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		echo json_encode(
 			array(
 				'type'     => $type,
@@ -302,30 +344,42 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 		) . PHP_EOL;
 	exit( 0 );
 }
-$list_start              = count( $GLOBALS['rs_requests'] );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$list_start = count( $GLOBALS['rs_requests'] );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $GLOBALS['rs_responses'] = array( ran_wp_release_updater_test_rs_response( array( $release ) ) );
-$list                    = $source->list();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$list = $source->list();
 ran_wp_release_updater_test_rs_assert( true === $list['ok'], 'Public list failed.' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $list_delta = ran_wp_release_updater_test_rs_delta( $list_start );
 ran_wp_release_updater_test_rs_assert_delta( 'list', $list_delta, 0 );
 $queue_proof();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $inspect_start = count( $GLOBALS['rs_requests'] );
-$inspection    = $source->inspect( '7', 'v1.2.3' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$inspection = $source->inspect( '7', 'v1.2.3' );
 ran_wp_release_updater_test_rs_assert( true === $inspection['ok'] && 'complete' === $inspection['cleanup_status'], 'Public inspect failed.' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $inspect_delta = ran_wp_release_updater_test_rs_delta( $inspect_start );
 ran_wp_release_updater_test_rs_assert_delta( 'inspect', $inspect_delta, 1 );
 $queue_proof();
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $acquire_start = count( $GLOBALS['rs_requests'] );
-$acquisition   = $source->acquire( '7', 'v1.2.3', $inspection['value']['fingerprint'] );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$acquisition = $source->acquire( '7', 'v1.2.3', $inspection['value']['fingerprint'] );
 ran_wp_release_updater_test_rs_assert( true === $acquisition['ok'] && 'retained' === $acquisition['cleanup_status'], 'Public acquire failed.' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $acquire_delta = ran_wp_release_updater_test_rs_delta( $acquire_start );
 ran_wp_release_updater_test_rs_assert_delta( 'acquire', $acquire_delta, 1 );
 ran_wp_release_updater_test_rs_assert( array() === $GLOBALS['rs_responses'], 'Mock queue was not drained.' );
 ran_wp_release_updater_test_rs_assert( 2 === count( $GLOBALS['rs_paths'] ), 'Inspection and acquisition must allocate exactly one artifact each.' );
 ran_wp_release_updater_test_rs_assert( ! file_exists( $GLOBALS['rs_paths'][0] ), 'Inspection artifact was not removed.' );
 ran_wp_release_updater_test_rs_assert( is_file( $GLOBALS['rs_paths'][1] ), 'Acquisition artifact was not retained.' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $artifact = $acquisition['value']['artifact'];
-$caller   = new DomainException( 'consumer callback' );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$caller = new DomainException( 'consumer callback' );
 try {
 	$artifact->inspect(
 		static function () use ( $caller ): never {
@@ -335,6 +389,7 @@ try {
 	throw new RuntimeException( 'Callback escaped.' );
 } catch ( DomainException $actual ) {
 	ran_wp_release_updater_test_rs_assert( $caller === $actual, 'Callback identity changed.' ); }
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $provisional = $root . '/prepared.zip';
 try {
 	if ( 'happy' === $scenario ) {
@@ -383,6 +438,7 @@ if ( 'happy' !== $scenario ) {
 	@unlink( $provisional ); }
 ran_wp_release_updater_test_rs_assert( 'happy' === $scenario ? is_file( $provisional ) : ! file_exists( $provisional ), 'Consumer provisional-copy retention changed.' );
 ran_wp_release_updater_test_rs_assert( 3 === $credentials, 'Resolver was not called once per operation.' );
+// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 echo json_encode(
 	array(
 		'type'                  => $type,
@@ -397,5 +453,3 @@ echo json_encode(
 	),
 	JSON_THROW_ON_ERROR
 ) . PHP_EOL;
-
-// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

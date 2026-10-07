@@ -1,10 +1,11 @@
 <?php
-// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- CLI fixture state is process-local or shared with its controlled callbacks; preserve observed globals and external fixture keys, not plugin runtime globals.
 
 declare(strict_types=1);
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $package = dirname( __DIR__, 2 );
-$root    = sys_get_temp_dir() . '/ran-release-updater-no-dev-' . bin2hex( random_bytes( 6 ) );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+$root = sys_get_temp_dir() . '/ran-release-updater-no-dev-' . bin2hex( random_bytes( 6 ) );
 
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 if ( ! mkdir( $root, 0700, true ) ) {
@@ -37,6 +38,7 @@ register_shutdown_function(
 	}
 );
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $manifest = array(
 	'require'      => array( 'ran/wp-release-updater' => 'dev-main' ),
 	'repositories' => array(
@@ -50,10 +52,10 @@ $manifest = array(
 		),
 	),
 );
-// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 file_put_contents( $root . '/composer.json', json_encode( $manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
 
-// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated no-dev consumer command with an argument vector and captured exit status.
+// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Run the isolated no-dev consumer command with an argument vector and captured exit status. Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $process = proc_open(
 	array( 'composer', 'update', '--no-dev', '--no-interaction', '--prefer-dist', '--no-progress' ),
 	array(
@@ -69,21 +71,26 @@ if ( ! is_resource( $process ) ) {
 }
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[0] );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $stdout = stream_get_contents( $pipes[1] );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $stderr = stream_get_contents( $pipes[2] );
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[1] );
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[2] );
 if ( 0 !== proc_close( $process ) ) {
+	// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 	throw new RuntimeException( 'No-dev consumer installation failed: ' . $stdout . $stderr );
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $installed = $root . '/vendor/ran/wp-release-updater';
 if ( is_link( $installed ) || ! is_file( $installed . '/bootstrap.php' ) || is_dir( $root . '/vendor/ran/updater-support' ) ) {
 	throw new RuntimeException( 'The no-dev consumer has an unexpected dependency layout.' );
 }
 
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $probe = <<<'PHP'
 <?php
 declare(strict_types=1);
@@ -104,7 +111,7 @@ echo json_encode(array('registrar' => is_object($registrar), 'file' => $archiveS
 PHP;
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 file_put_contents( $root . '/probe.php', $probe );
-// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated no-dev consumer command with an argument vector and captured exit status.
+// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Run the isolated no-dev consumer command with an argument vector and captured exit status. Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $process = proc_open(
 	array( PHP_BINARY, $root . '/probe.php', $installed ),
 	array(
@@ -119,15 +126,19 @@ if ( ! is_resource( $process ) ) {
 }
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[0] );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $stdout = stream_get_contents( $pipes[1] );
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $stderr = stream_get_contents( $pipes[2] );
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[1] );
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 fclose( $pipes[2] );
 if ( 0 !== proc_close( $process ) ) {
+	// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 	throw new RuntimeException( 'No-dev consumer bootstrap failed: ' . $stdout . $stderr );
 }
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $result = json_decode( $stdout, true, 512, JSON_THROW_ON_ERROR );
 if (
 	true !== ( $result['registrar'] ?? false )
@@ -139,9 +150,8 @@ if (
 	|| ! array_key_exists( 'rejected', $result )
 	|| null !== $result['rejected']
 ) {
+	// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 	throw new RuntimeException( 'No-dev consumer bootstrap did not load the packaged scoped helper: ' . $stdout );
 }
 
 echo "PASS no-dev Composer consumer bootstrap uses the packaged scoped helper\n";
-
-// phpcs:enable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound

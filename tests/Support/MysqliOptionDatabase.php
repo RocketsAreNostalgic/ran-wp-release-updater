@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Support;
+namespace RAN\WPReleaseUpdater\V1\Tests\Support;
 
 /** Minimal wpdb-compatible adapter for the isolated real-MySQL CAS proof. */
 final class MysqliOptionDatabase {
@@ -32,6 +31,7 @@ final class MysqliOptionDatabase {
 	public function get_var( string $query ): string|int|null {
 		$result = $this->mysqli->query( $query );
 		if ( false === $result ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new \RuntimeException( $this->mysqli->error );
 		}
 		$row = $result->fetch_row();

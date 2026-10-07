@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Archive;
+namespace RAN\WPReleaseUpdater\V1\Tests\Archive;
 
 use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
@@ -92,6 +91,7 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		$artifact = $this->artifact(
 			'original',
 			function () use ( &$live ): ?string {
+				/** @var bool $live Mutated by the reader callback after this closure is created. */
 				return $live ? null : 'runtime_revoked';
 			}
 		);
@@ -156,13 +156,13 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 	public function test_failed_clone_leaves_original_artifact_usable(): void {
 		$artifact = $this->artifact( 'original' );
 		try {
-			clone $artifact;
+			clone $artifact; // @phpstan-ignore expr.resultUnused (Deliberate private-clone denial; the expected Error is the observable result.)
 			self::fail( 'Cloning must be denied.' );
 		// phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- The expected artifact denial is followed by assertions that the original remains usable.
-		} catch ( \Error ) {
+		} catch ( \Error ) { // @phpstan-ignore catch.neverThrown (The PHP engine throws Error for this inaccessible private clone; runtime test preserves that contract.)
 		}
 
-		self::assertSame( 'ok', $artifact->inspect( static fn(): string => 'ok' ) );
+		self::assertSame( 'ok', $artifact->inspect( static fn(): string => 'ok' ) ); // @phpstan-ignore deadCode.unreachable (The expected private-clone Error is caught above; the original artifact must remain usable.)
 		self::assertTrue( $artifact->discard() );
 	}
 

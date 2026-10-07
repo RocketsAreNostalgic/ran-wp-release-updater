@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedNamespaceFound -- Existing Composer development namespace; this allowance does not apply to production declarations.
-namespace Tests\Contract;
+namespace RAN\WPReleaseUpdater\V1\Tests\Contract;
 
 require_once dirname( __DIR__, 2 ) . '/src/Contract/CanonicalUpdateUri.php';
 require_once dirname( __DIR__, 2 ) . '/src/Contract/IdentityDescriptor.php';
@@ -23,7 +22,7 @@ use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
-use Tests\Support\FakeOptionDatabase;
+use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 
 final class AcquisitionReceiptTest extends TestCase {
 
@@ -80,7 +79,7 @@ final class AcquisitionReceiptTest extends TestCase {
 				self::addToAssertionCount( 1 ); }
 		}
 		try {
-			AcquisitionReceipt::issue( array( 'archive_identity_verified' => false ), $state, $descriptor, $validator, $package, 10 );
+			AcquisitionReceipt::issue( array( 'archive_identity_verified' => false ), $state, $descriptor, $validator, $package, 10 ); // @phpstan-ignore argument.type, argument.type, argument.type, argument.type, argument.type, arguments.count (Deliberately malformed public call; this negative contract must raise TypeError.)
 			self::fail( 'Caller receipt flags were accepted.' );
 		} catch ( \TypeError ) {
 			self::addToAssertionCount( 1 ); }
@@ -131,6 +130,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$database->mutate_on_time_read(
 			1,
 			static function ( FakeOptionDatabase $database ) use ( $name, $successor ): void {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 				$database->force_option_value( $name, json_encode( $successor->to_array(), JSON_THROW_ON_ERROR ) );
 			}
 		);
@@ -167,7 +167,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$facts['artifact_sha256'] = hash_file( 'sha256', $path );
 		$facts['artifact_size']   = filesize( $path );
 		return IdentityDescriptor::create( $facts ); }
-	/** @return array<string,string> */
+	/** @return array<string,int|string> */
 	private function policy(): array {
 		return array(
 			'archive_root'               => 'x',
