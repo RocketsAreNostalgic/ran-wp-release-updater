@@ -14,7 +14,7 @@ $ran_wp_release_updater_analysis_status = ( static function (): int {
 	sort( $files );
 	$arguments = array_slice( $GLOBALS['argv'] ?? array(), 1 );
 	if ( array( '--list' ) === $arguments ) {
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Emit machine-readable CLI selection evidence without HTML escaping.
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Emit machine-readable CLI selection evidence without HTML escaping. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		echo json_encode( $files, JSON_THROW_ON_ERROR ) . "\n";
 		return 0;
 	}

@@ -130,6 +130,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		$database->mutate_on_time_read(
 			1,
 			static function ( FakeOptionDatabase $database ) use ( $name, $successor ): void {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 				$database->force_option_value( $name, json_encode( $successor->to_array(), JSON_THROW_ON_ERROR ) );
 			}
 		);

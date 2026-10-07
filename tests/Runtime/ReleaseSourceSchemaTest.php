@@ -109,7 +109,8 @@ final class ReleaseSourceSchemaTest extends TestCase {
 		$inspection    = ProspectiveReleaseInspection::create( $this->facts() )->to_array();
 		$short_version = $inspection;
 		unset( $short_version['fingerprint'] );
-		$short_version['version']     = '1.2';
+		$short_version['version'] = '1.2';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		$short_version['fingerprint'] = 'v2:' . hash( 'sha256', json_encode( $short_version, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
 		return array(
 			'package-version-short'         => array( 'inspect', $this->envelope( 'release_inspected', $short_version, 'complete' ) ),

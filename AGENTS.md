@@ -19,12 +19,18 @@ operations also use exact occurrence-local exceptions. Preserve their real
 identity/permission/stream semantics, process isolation and observed failure
 or best-effort teardown behavior; unrelated new calls remain checked.
 The test profile has no test-path exclusions. Owned free functions, classes and
-constants use the package prefix; the existing `Tests` dev namespace uses declaration-local namespace exceptions.
+constants use the package prefix; owned test namespaces use
+`RAN\WPReleaseUpdater\V1\Tests` without namespace exceptions.
 Foreign signatures and fixture syntax use exact local diagnostic annotations.
-Fourteen documented harness/shared-state files retain a file-wide allowance only
-for global-variable prefixing; variable snake_case and other naming stay checked.
-This also allows new unprefixed globals within those files: do not describe it as
-occurrence-local enforcement. See the named inventory in acceptance.
+The former fourteen harness/shared-state and two standalone-script global-variable
+spans are removed. Existing process/shared-state assignments retain exact
+occurrence-local prefix exceptions so their identities stay intact; unrelated
+new globals, functions, classes, constants and hooks remain checked. Native
+JSON, URL parsing, internal exception text, local metadata reads, SQL and opaque
+operation tokens also require exact diagnostic annotations, never severity-zero
+or whole-file rules. The existing coverage guards reject broad/case-variant
+suppressions, local rule exclusions, weakened severity and checker arguments,
+and exercise real diagnostics immediately outside retained annotations.
 The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded and is
 namespace-only parity checked against the locked upstream package. All 36
 shipped PHP files, including that generated copy, remain directly analysed at
