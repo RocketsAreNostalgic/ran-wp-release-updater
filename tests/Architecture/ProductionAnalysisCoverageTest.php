@@ -7,6 +7,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Architecture;
 use PHPStan\DependencyInjection\ContainerFactory;
 use PHPStan\File\FileExcluder;
 use PHPStan\File\FileHelper;
+use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\TestCase;
 use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
@@ -499,6 +500,56 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		self::assertSame( array( 'bin/echo-entrypoint', 'bin/ran-entrypoint', 'bin/uppercase-entrypoint', 'src/fixture.inc' ), array_values( array_diff( $this->maintained_files( $this->fixture ), $this->analyzed_files( $this->fixture, $config ) ) ) );
 	}
 
+	public function test_templates_cannot_hide_after_html_or_under_new_suffixes(): void {
+		$expected = array();
+		foreach ( array( 'src', 'scripts', 'tests' ) as $scope ) {
+			foreach ( array( 'phtml', 'tpl', 'invented', 'inc', 'html', 'htm', '' ) as $extension ) {
+				$path = $scope . '/template' . ( '' === $extension ? '' : '.' . $extension );
+				$this->write_fixture( $path, "\xEF\xBB\xBF<div>" . str_repeat( ' ', 300 ) . '</div><?= 1; ?><?PHP function ran_template_probe(): int { return "invalid"; }' );
+				$expected[] = $path;
+			}
+		}
+		$this->write_fixture( 'README.md', "Example:\n```php\n<?php echo 1;\n```" );
+		$this->write_fixture( 'entrypoint.md', '<?php echo 1;' );
+		$expected[] = 'entrypoint.md';
+		sort( $expected );
+		self::assertSame( $expected, $this->maintained_files( $this->fixture, array() ) );
+	}
+
+	public function test_effective_production_and_tool_ignores_are_rejected(): void {
+		foreach ( array( 'production', 'tools' ) as $profile ) {
+			$path = 'tools' === $profile ? 'scripts/Probe.php' : 'src/Probe.php';
+			$this->write_fixture( $path, '<?php function ran_ignore_probe(): int { return "invalid"; }' );
+			$config = $this->fixture_config();
+			if ( 'tools' === $profile ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Exercise the canonical tooling profile in the private fixture.
+				$source = file_get_contents( dirname( __DIR__, 2 ) . '/phpstan-tools.neon' );
+				self::assertIsString( $source );
+				$this->write_fixture( 'tools.neon', $source );
+				$config = $this->fixture . '/tools.neon';
+			}
+			$result = $this->analyze_fixture( $config );
+			self::assertSame( 1, $result['exit'] );
+			self::assertStringContainsString( 'return.type', $result['output'] );
+			foreach ( array( false, true ) as $imported ) {
+				$ignore = "parameters:\n\tignoreErrors:\n\t\t- identifier: return.type\n\t\t  path: " . $path . "\n";
+				$this->write_fixture( 'ignore.neon', $ignore );
+				$this->write_fixture( 'weakened.neon', "includes:\n\t- " . $config . "\n" . ( $imported ? "\t- ignore.neon\n" : $ignore ) );
+				$weakened = $this->fixture . '/weakened.neon';
+				$result   = $this->analyze_fixture( $weakened );
+				self::assertSame( 0, $result['exit'], $result['output'] );
+				$rejected = false;
+				try {
+					$this->analyzed_files( $this->fixture, $weakened );
+				} catch ( AssertionFailedError $error ) {
+					self::assertStringContainsString( 'Effective analysis ignores require explicit review.', $error->getMessage() );
+					$rejected = true;
+				}
+				self::assertTrue( $rejected, 'The effective coverage guard must reject a suppressed diagnostic.' );
+			}
+		}
+	}
+
 	public function test_effective_exclusions_cannot_hide_maintained_production(): void {
 		$this->write_fixture( 'bootstrap.php', '<?php' );
 		$this->write_fixture( 'src/Dependency/ArchiveSafety.php', '<?php' );
@@ -599,10 +650,12 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		if ( 'php' === strtolower( $file->getExtension() ) ) {
 			return true;
 		}
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read only a bounded header to account for extensionless PHP/shebang entrypoints without executing them.
-		$header = file_get_contents( $file->getPathname(), false, null, 0, 256 );
-		self::assertIsString( $header );
-		return 1 === preg_match( '/\\A(?:#![^\\r\\n]*\\r?\\n)?[ \\t\\r\\n]*<\\?(?:php(?:\\s|$)|=)/i', $header );
+		// Markdown contains documented PHP examples; all other suffixes may be executable templates.
+		$documentation = 'md' === strtolower( $file->getExtension() );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Inspect complete template bytes without execution; Markdown examples retain a bounded entrypoint check.
+		$source = $documentation ? file_get_contents( $file->getPathname(), false, null, 0, 256 ) : file_get_contents( $file->getPathname() );
+		self::assertIsString( $source );
+		return 1 === preg_match( $documentation ? '/\\A(?:\\xEF\\xBB\\xBF)?(?:#![^\\r\\n]*\\r?\\n)?[ \\t\\r\\n]*<\\?(?:php(?:\\s|$)|=)/i' : '/<\\?(?:php(?:\\s|$)|=)/i', $source );
 	}
 
 	/**
@@ -612,10 +665,8 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 	private function analyzed_files( string $root, string $config, int $level = 8, array $paths = array() ): array {
 		$container = ( new ContainerFactory( $root ) )->create( $this->fixture . '/.phpunit.cache/container', array( $config ), $paths );
 		self::assertSame( $level, $container->getParameter( 'level' ) );
-		if ( 5 === $level ) {
-			self::assertSame( array(), $container->getParameter( 'ignoreErrors' ) );
-			self::assertTrue( $container->getParameter( 'reportUnmatchedIgnoredErrors' ) );
-		}
+		self::assertSame( array(), $container->getParameter( 'ignoreErrors' ), 'Effective analysis ignores require explicit review.' );
+		self::assertTrue( $container->getParameter( 'reportUnmatchedIgnoredErrors' ) );
 
 		// Use the same effective finder, extensions and exclusions as PHPStan's command.
 		$files = $container->getService( 'fileFinderAnalyse' )->findFiles( array() === $paths ? $container->getParameter( 'paths' ) : $paths )->getFiles();

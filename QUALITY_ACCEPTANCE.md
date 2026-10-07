@@ -607,3 +607,17 @@ contract gap, not a demonstrated bypass of the whole canonical suite.
 
 The change affects only the existing guard and stale namespace guidance. It does
 not alter checker policy, maintained-file scope, runtime bytes or dependencies.
+
+## Effective analysis and executable templates (#109)
+
+The maintained-file guard inspects complete non-PHP file contents for PHP opening
+or short-echo tags, including HTML-prefixed templates and unknown suffixes. Only
+Markdown retains a bounded entrypoint check: README and other guidance contain
+inert PHP examples. Leading PHP entrypoints in Markdown are still detected. This is a
+discovery boundary for documentation, not a directory or declaration exemption.
+
+The effective `ignoreErrors` list must be empty in production and tooling as well
+as isolated test analysis. Regression controls exercise direct and imported
+suppression of a real `return.type` diagnostic and require the independent
+coverage guard to reject both. Existing exact inline contract exceptions remain
+unchanged. No runtime bytes, dependencies or analysis levels change.
