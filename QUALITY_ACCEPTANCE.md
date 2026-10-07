@@ -56,7 +56,7 @@ local product requirements, not shared-standard exemptions.
 | Prepared SQL identifier/CAS boundary | BindingFenceCoordinator validates the table identifier and prepares data values. Only the actual SQL parser false-positive occurrences are excepted; neighboring queries remain checked. MySQL CAS and setup-failure proofs remain required. |
 | Bounded base64 operation tokens | NativePackageUpdater uses URL-safe base64 for opaque operation tokens, not executable code. Only its encode/decode rules and test fixtures are excepted. |
 | Native `ZipArchive::$numFiles` | Two line-local property-name ignores cover three reads of the external extension property. Owned members remain enforced. |
-| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Owned free functions/classes/constants follow the package prefix and the existing Tests dev namespace has declaration-local exceptions. Existing shared-state/global-variable prefix allowances are occurrence-local; foreign signatures, synthetic syntax and native/process exceptions are diagnostic-local. No test-path exclusions remain. These retained boundaries do not exempt production. |
+| Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Owned free functions/classes/constants follow the package prefix and owned test namespaces use `RAN\WPReleaseUpdater\V1\Tests` without namespace exceptions. Existing shared-state/global-variable prefix allowances are occurrence-local; foreign signatures, synthetic syntax and native/process exceptions are diagnostic-local. No test-path exclusions remain. These retained boundaries do not exempt production. |
 
 Seven declaration-local PHPStan exceptions remain: RequestBroker's
 Reflection-invoked private validation seam; ReleaseSource's direct-filesystem
@@ -594,3 +594,16 @@ preserves package version, runtime protocol and every runtime capability. The
 generated dependency bytes and locked tooling remain unchanged. This candidate
 requires exact-head independent review and native CI; it does not authorize merge,
 release, consumer adoption or ecosystem-wide acceptance.
+
+
+## Required-rule guard correction
+
+The structural ruleset guard now checks the complete reviewed local rule
+inventory and rejects removal of each canonical declaration. The existing real
+checker proof already required the owned-method diagnostic from the canonical
+profile and demonstrated its disappearance when `RANOwnedMethods` was removed;
+that protection remains. This correction closes the narrower helper/mutation
+contract gap, not a demonstrated bypass of the whole canonical suite.
+
+The change affects only the existing guard and stale namespace guidance. It does
+not alter checker policy, maintained-file scope, runtime bytes or dependencies.

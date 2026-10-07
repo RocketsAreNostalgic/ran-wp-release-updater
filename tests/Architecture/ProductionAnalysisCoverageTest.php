@@ -17,6 +17,54 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 	/** Root-relative development/dependency/state boundaries; never production subdirectory names. */
 	private const NON_PRODUCTION_ROOTS = array( 'tests', 'scripts', 'vendor', 'node_modules', '.git', '.phpunit.cache', '.workspaces', 'coverage' );
 
+	/** Required local rule declarations; additions or removals require explicit review. */
+	private const REQUIRED_RULES = array(
+		'RANWordPressLibrary',
+		'RANOwnedMethods',
+		'WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid',
+		'WordPress.NamingConventions.ValidVariableName',
+		'WordPress.PHP.YodaConditions',
+		'WordPress.NamingConventions.PrefixAllGlobals',
+		'Generic.CodeAnalysis.UnusedFunctionParameter',
+		'Universal.NamingConventions.NoReservedKeywordParameterNames',
+		'WordPress.Security.EscapeOutput.ExceptionNotEscaped',
+		'WordPress.WP.AlternativeFunctions.json_encode_json_encode',
+		'WordPress.WP.AlternativeFunctions.parse_url_parse_url',
+		'WordPress.WP.AlternativeFunctions',
+		'WordPress.PHP.NoSilencedErrors',
+		'WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents',
+		'WordPress.DB.PreparedSQL.InterpolatedNotPrepared',
+		'WordPress.DB.PreparedSQL.NotPrepared',
+		'WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode',
+		'WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode',
+		'WordPress.NamingConventions.ValidFunctionName.FunctionNameInvalid',
+		'WordPress.PHP.DevelopmentFunctions.error_log_var_export',
+		'Universal.Operators.DisallowShortTernary.Found',
+		'WordPress.WP.GlobalVariablesOverride.Prohibited',
+		'WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec',
+		'WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open',
+		'WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec',
+		'WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_putenv',
+		'Universal.Files.SeparateFunctionsFromOO.Mixed',
+		'Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden',
+		'Universal.Namespaces.OneDeclarationPerFile.MultipleFound',
+		'Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden',
+		'Generic.Files.OneObjectStructurePerFile',
+		'Generic.Classes.DuplicateClassName.Found',
+		'Generic.CodeAnalysis.EmptyStatement.DetectedCatch',
+		'Generic.CodeAnalysis.ForLoopWithTestFunctionCall.NotAllowed',
+		'WordPress.NamingConventions.ValidHookName.UseUnderscores',
+		'WordPress.DB.RestrictedFunctions.mysql_mysqli_init',
+		'WordPress.DB.RestrictedFunctions.mysql_mysqli_real_connect',
+		'WordPress.DB.RestrictedFunctions.mysql_mysqli_report',
+		'WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize',
+		'WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize',
+		'Squiz.PHP.Eval.Discouraged',
+		'Generic.Strings.UnnecessaryStringConcat.Found',
+		'Squiz.Operators.IncrementDecrementUsage.NoBrackets',
+		'WordPress.Security.EscapeOutput.OutputNotEscaped',
+	);
+
 	private string $fixture;
 
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit lifecycle override.
@@ -114,7 +162,23 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		$xml = file_get_contents( $root . '/.phpcs.xml' );
 		self::assertIsString( $xml );
 		self::assertFalse( $this->has_weakened_standard( $xml ) );
-		self::assertTrue( $this->has_weakened_standard( str_replace( '<rule ref="RANWordPressLibrary"/>', '', $xml ) ) );
+		$profile = new \DOMDocument();
+		self::assertTrue( $profile->loadXML( $xml, LIBXML_NONET ) );
+		$rule_refs = array();
+		foreach ( $profile->getElementsByTagName( 'rule' ) as $rule ) {
+			$rule_refs[] = $rule->getAttribute( 'ref' );
+		}
+		foreach ( $rule_refs as $ref ) {
+			$mutant = new \DOMDocument();
+			self::assertTrue( $mutant->loadXML( $xml, LIBXML_NONET ) );
+			$xpath = new \DOMXPath( $mutant );
+			$rule  = $xpath->query( '/ruleset/rule[@ref="' . $ref . '"]' )->item( 0 );
+			self::assertInstanceOf( \DOMElement::class, $rule );
+			$mutant->documentElement->removeChild( $rule ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Native DOM document root for an isolated ruleset mutation.
+			$mutation = $mutant->saveXML();
+			self::assertIsString( $mutation );
+			self::assertTrue( $this->has_weakened_standard( $mutation ), $ref );
+		}
 		$source   = '<?php function ran_wp_release_updater_probe( string $message ): void { json_encode( array() ); parse_url( "https://example.test/" ); throw new RuntimeException( $message ); }';
 		$expected = array( 'WordPress.WP.AlternativeFunctions.json_encode_json_encode', 'WordPress.WP.AlternativeFunctions.parse_url_parse_url', 'WordPress.Security.EscapeOutput.ExceptionNotEscaped' );
 		$actual   = $this->inspect_standard( $source );
@@ -176,7 +240,15 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		$xml = new \DOMDocument();
 		self::assertTrue( $xml->loadXML( $source, LIBXML_NONET ) );
 		$xpath = new \DOMXPath( $xml );
-		if ( 1 !== $xpath->query( '/ruleset/rule[@ref="RANWordPressLibrary"]' )->length ) {
+		$rules = array();
+		foreach ( $xpath->query( '/ruleset/rule' ) as $rule ) {
+			self::assertInstanceOf( \DOMElement::class, $rule );
+			$rules[] = $rule->getAttribute( 'ref' );
+		}
+		$required_rules = self::REQUIRED_RULES;
+		sort( $rules );
+		sort( $required_rules );
+		if ( $required_rules !== $rules ) {
 			return true;
 		}
 		$roots = $xpath->query( '/ruleset/file' );

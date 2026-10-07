@@ -19,7 +19,8 @@ operations also use exact occurrence-local exceptions. Preserve their real
 identity/permission/stream semantics, process isolation and observed failure
 or best-effort teardown behavior; unrelated new calls remain checked.
 The test profile has no test-path exclusions. Owned free functions, classes and
-constants use the package prefix; the existing `Tests` dev namespace uses declaration-local namespace exceptions.
+constants use the package prefix; owned test namespaces use
+`RAN\WPReleaseUpdater\V1\Tests` without namespace exceptions.
 Foreign signatures and fixture syntax use exact local diagnostic annotations.
 The former fourteen harness/shared-state and two standalone-script global-variable
 spans are removed. Existing process/shared-state assignments retain exact
