@@ -404,6 +404,60 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		self::assertSame( array( 'tests/NewRoot/Nested/Second.php' ), array_values( array_diff( $expected, $this->analyzed_files( $this->fixture, $this->fixture . '/excluded.neon', 5, array( $this->fixture . '/tests' ) ) ) ) );
 	}
 
+	public function test_serial_and_parallel_runner_preserve_discovery_isolation_and_failures(): void {
+		$root = dirname( __DIR__, 2 );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Exercise the real runner in a private fixture without modifying repository sources.
+		$runner = file_get_contents( $root . '/scripts/analyze-tests.php' );
+		self::assertIsString( $runner );
+		$this->write_fixture( 'scripts/analyze-tests.php', $runner );
+		$this->write_fixture( 'vendor/autoload.php', '<?php require ' . var_export( $root . '/vendor/autoload.php', true ) . ';' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode a trusted local dependency path as fixture PHP source.
+		$this->write_fixture( 'vendor/bin/phpstan', '<?php require ' . var_export( $root . '/vendor/bin/phpstan', true ) . ';' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode the locked analyzer path without copying or executing test fixtures.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Preserve the real profile and its production-only symbol scan in the private fixture.
+		$config = file_get_contents( $root . '/phpstan-tests.neon' );
+		self::assertIsString( $config );
+		$this->write_fixture( 'phpstan-tests.neon', str_replace( 'vendor/szepeviktor/phpstan-wordpress/extension.neon', $root . '/vendor/szepeviktor/phpstan-wordpress/extension.neon', $config ) );
+		$this->write_fixture( 'src/Empty.php', '<?php' );
+		$this->write_fixture( 'tests/First.php', '<?php function ran_isolated_probe(): int { return 1; } echo ran_isolated_probe();' );
+		$this->write_fixture( 'tests/NewRoot/Second.php', '<?php function ran_isolated_probe(string $value): string { return $value; } echo ran_isolated_probe("valid");' );
+		$this->write_fixture( 'tests/NewRoot/Nested/Third.php', '<?php function ran_new_probe(): int { return "invalid"; }' );
+		$this->write_fixture( 'tests/YNew.php', '<?php function ran_split_probe(): int { return 1; }' );
+		$this->write_fixture( 'tests/ZLast.php', '<?php function ran_last_probe(): int { return "invalid"; }' );
+		$command = array( PHP_BINARY, $this->fixture . '/scripts/analyze-tests.php' );
+		foreach ( array( '1', '2', '4' ) as $workers ) {
+			$environment = array_merge( getenv(), array( 'PHPSTAN_TEST_PROCESSES' => $workers ) );
+			$result      = $this->run_command( $command, $this->fixture, $environment );
+			self::assertSame( 1, $result['exit'], $result['output'] );
+			self::assertStringContainsString( '5 isolated files; ' . $workers . ' processes.', $result['output'] );
+			self::assertStringContainsString( 'Third.php', $result['output'] );
+			self::assertStringContainsString( 'ZLast.php', $result['output'] );
+			self::assertStringContainsString( 'return.type', $result['output'] );
+			self::assertStringNotContainsString( 'arguments.count', $result['output'] );
+		}
+		$this->write_fixture( 'tests/NewRoot/Nested/Third.php', '<?php function ran_new_probe(): int { return 1; }' );
+		$this->write_fixture( 'tests/ZLast.php', '<?php function ran_last_probe(): int { return 1; }' );
+		foreach ( array(
+			'false' => '1',
+			'true'  => '4',
+		) as $github_actions => $workers ) {
+			$result = $this->run_command(
+				$command,
+				$this->fixture,
+				array_merge(
+					getenv(),
+					array(
+						'PHPSTAN_TEST_PROCESSES' => '',
+						'GITHUB_ACTIONS'         => $github_actions,
+					)
+				)
+			);
+			self::assertSame( 0, $result['exit'], $result['output'] );
+			self::assertStringContainsString( '5 isolated files; ' . $workers . ' processes.', $result['output'] );
+		}
+		$result = $this->run_command( $command, $this->fixture, array_merge( getenv(), array( 'PHPSTAN_TEST_PROCESSES' => '3' ) ) );
+		self::assertSame( 2, $result['exit'] );
+		self::assertStringContainsString( 'must be 1, 2 or 4', $result['output'] );
+	}
+
 	public function test_exact_negative_contract_annotations_do_not_hide_the_next_occurrence(): void {
 		$cases = array(
 			array( 'Contract/AcquisitionReceiptTest.php', 'argument.type', '<?php /** @param array<mixed> $d */ function ran_negative_probe(int $a, string $b, bool $c, array $d, object $e): void {}', 'ran_negative_probe(array(), array(), array(), 1, "wrong", 6);' ),
@@ -629,9 +683,10 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 
 	/**
 	 * @param list<string> $command Locked tool invocation.
+	 * @param array<string, string>|null $environment Child-only overrides with the inherited environment.
 	 * @return array{exit: int, output: string}
 	 */
-	private function run_command( array $command, string $directory ): array {
+	private function run_command( array $command, string $directory, ?array $environment = null ): array {
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Exercise the locked analyzer on disposable source bytes to prove reflection isolation, without loading fixture code in this process.
 		$process = proc_open(
 			$command,
@@ -640,7 +695,8 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 				2 => array( 'pipe', 'w' ),
 			),
 			$pipes,
-			$directory
+			$directory,
+			$environment
 		);
 		self::assertIsResource( $process );
 		$output = stream_get_contents( $pipes[1] ) . stream_get_contents( $pipes[2] );

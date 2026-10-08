@@ -52,6 +52,9 @@ Every maintained test PHP file now enters a separate level-5 invocation via
 `tests/`; new roots and split files need no profile-list update. Keep
 `phpstan-tests.neon` free of broad analysis paths: the runner supplies one file
 per invocation to prevent unrelated executable fixture symbols leaking in.
+CI overlaps up to four such invocations; local runs default to one.
+`PHPSTAN_TEST_PROCESSES=1|2|4` overrides the bound. Preserve separate processes,
+complete discovery, bounded resources and propagation of every analyzer failure.
 Production and tooling retain separate level-8 analysis. No maintained PHP
 file is exempt from direct analysis.
 

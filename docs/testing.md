@@ -51,6 +51,17 @@ three scripts at level 8, plus 58 test files at level 5. The small
 `scripts/analyze-tests.php` runner discovers the whole tests directory through
 PHPStan's file finder, then passes each file separately to the locked analyzer.
 `--list` exposes exactly that selection to the independent coverage guard.
+The runner defaults to one invocation locally and four when
+`GITHUB_ACTIONS=true`. Set `PHPSTAN_TEST_PROCESSES` to `1`, `2` or `4` to override
+that bound; other values fail the command. Each invocation retains its own
+symbol world and 1 GiB analyzer limit. PHPStan may create a child worker, so
+allow memory for the complete process tree. Output is buffered in private
+temporary streams and printed in file order after each bounded group completes.
+Every launched child is collected, and any analyzer failure fails the command.
+The normal summary reports the file count, process bound and elapsed time.
+This is concurrency, not a test-analysis result cache: file-list analysis stays
+uncached. `--list` output and automatic selection are unchanged.
+
 No file registry, baseline, test exclusions or ignored-error configuration is
 used. Nonstandard PHP entrypoints still fail the independent discovery comparison
 until explicitly included, just as for production.
