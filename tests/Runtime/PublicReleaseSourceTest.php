@@ -174,7 +174,10 @@ PHP
 		self::assertSame( 0, $result['filesystem_gate_calls'] );
 	}
 
-	/** @return array<string,mixed> */
+	/**
+	 * @return array<string,mixed>
+	 * @param array<string,mixed> $data
+	 */
 	private function probe( string $body, array $data = array() ): array {
 		$file              = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/release-source-' . bin2hex( random_bytes( 6 ) ) . '.php';
 		$filesystem_method = array_key_exists( 'filesystem_method', $data ) ? $data['filesystem_method'] : 'direct';

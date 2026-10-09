@@ -168,6 +168,10 @@ try {
 }
 // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 echo json_encode( $result, JSON_UNESCAPED_SLASHES ) . PHP_EOL;
+/**
+ * @param list<string> $command
+ * @param array<string,string> $env
+ */
 function ran_wp_release_updater_test_run( array $command, string $cwd, array $env = array(), string $stdin = '' ): void {
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
 	$p = proc_open(
@@ -224,6 +228,9 @@ function ran_wp_release_updater_test_connect( string $socket ): mysqli {
 	}
 	throw new RuntimeException( 'Could not connect to isolated MySQL.' );
 }
+/**
+ * @param list<string> $exclude
+ */
 function ran_wp_release_updater_test_copy_tree( string $source, string $destination, array $exclude ): void {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
 	mkdir( $destination, 0700, true );

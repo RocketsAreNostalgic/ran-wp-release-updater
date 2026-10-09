@@ -359,7 +359,10 @@ PHP;
 		return $root;
 	}
 
-	/** @param array<string,mixed> $data */
+	/**
+	 * @param array<string,mixed> $data
+	 * @return array<string,mixed>
+	 */
 	private function probe( string $body, array $data ): array {
 		$file = $this->root . '/probe-' . bin2hex( random_bytes( 4 ) ) . '.php';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test. Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.

@@ -252,6 +252,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 'update_completed', end( $diagnostics ) );
 		}
 
+		/**
+		 * @param array<string,mixed> $claim
+		 * @param array<string,mixed> $policy
+		 */
 		private function assert_staged_header_mismatch_does_not_create_destination( string $target_type, string $uri, string $version, IdentityDescriptor $descriptor, BindingRecord $binding, FakeOptionDatabase $database, BindingState $state, array $claim, PackageIdentityValidator $validator, array $policy, string $archive, string $destination_parent ): void {
 			$database->set_time( 121 );
 			$updater = $this->updater( $this->configuration( $target_type, $uri ), $binding, $database, $descriptor, $archive, $policy );
@@ -278,6 +282,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertDirectoryDoesNotExist( $destination_parent );
 		}
 
+		/**
+		 * @param array<string,mixed> $configuration
+		 * @param array<string,mixed> $policy
+		 */
 		private function updater( array $configuration, BindingRecord $binding, FakeOptionDatabase $database, IdentityDescriptor $descriptor, string $archive, array $policy ): ?NativePackageUpdater {
 			$adapter = new class( $descriptor, $archive ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter { public function __construct( private IdentityDescriptor $descriptor, private string $archive ) {} public function list_releases( array $conditional = array() ): array {
 					$facts = $this->descriptor->to_array();

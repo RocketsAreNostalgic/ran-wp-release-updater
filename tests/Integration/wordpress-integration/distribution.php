@@ -160,7 +160,10 @@ function ran_wp_release_updater_test_native_callbacks( string $hook ): array {
 	}
 	return $found;
 }
-/** @param list<object> $callbacks @return list<string> */
+/**
+ * @param list<object> $callbacks
+ * @return list<string>
+ */
 function ran_wp_release_updater_test_callback_origins( array $callbacks ): array {
 	return array_map( static fn( object $callback ): string => (string) ( new ReflectionClass( $callback ) )->getFileName(), $callbacks );
 }
@@ -173,6 +176,9 @@ function ran_wp_release_updater_test_origins_are_installed( array $callbacks, st
 	}
 	return array() !== $callbacks;
 }
+/**
+ * @return array<string,array{sha256:string,size:int}>
+ */
 function ran_wp_release_updater_test_archive_manifest( string $zip, string $root ): array {
 	$archive = new ZipArchive();
 	if ( true !== $archive->open( $zip ) ) {
@@ -214,6 +220,9 @@ function ran_wp_release_updater_test_archive_manifest( string $zip, string $root
 	return $manifest;
 }
 
+/**
+ * @return array<string,array{sha256:string|false,size:int|false}>
+ */
 function ran_wp_release_updater_test_directory_manifest( string $root ): array {
 	$manifest = array();
 	$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );

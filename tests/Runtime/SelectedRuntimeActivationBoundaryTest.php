@@ -420,7 +420,10 @@ PHP
 		self::assertFalse( $replacement['again'] );
 	}
 
-	/** @return array<string,mixed> */
+	/**
+	 * @return array<string,mixed>
+	 * @param array<string,string> $extra
+	 */
 	private function probe( string $body, array $extra = array() ): array {
 		$root = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/' . bin2hex( random_bytes( 6 ) );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.

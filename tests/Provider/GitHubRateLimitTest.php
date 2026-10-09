@@ -5,12 +5,18 @@ declare(strict_types=1);
 // phpcs:ignore Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden, Universal.Namespaces.DisallowDeclarationWithoutName.Forbidden -- Keep global WordPress stubs and namespaced test code in the same isolated fixture. WordPress stubs must be declared in the global namespace used by production calls.
 namespace {
 	if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
+		/**
+		 * @param array<string,mixed> $response
+		 */
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_remote_retrieve_response_code( array $response ): int|string {
 			return $response['response']['code'];
 		}
 	}
 	if ( ! function_exists( 'wp_remote_retrieve_header' ) ) {
+		/**
+		 * @param array<string,mixed> $response
+		 */
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_remote_retrieve_header( array $response, string $name ): mixed {
 			return $response['headers'][ strtolower( $name ) ] ?? null;
@@ -26,11 +32,17 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 
 	// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them.
 	final class GitHubRateLimitTest extends TestCase {
+		/**
+		 * @param array<string,string> $headers
+		 * @param array{limited:bool,remaining:?int,reset_at:?int,retry_after:int} $expected
+		 */
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'classification_provider' )]
 		public function test_rate_limit_classification_uses_only_git_hub_signals( int $status, array $headers, int $now, array $expected ): void {
 			self::assertSame( $expected, $this->rate_limit( $status, $headers, $now ) );
 		}
-		/** @return array<string,array{int,array<string,string>,int,array{limited:bool,remaining:?int,reset_at:?int,retry_after:int}}> */
+		/**
+		 * @return array<string,array{int,array<string,string>,int,array{limited:bool,remaining:?int,reset_at:?int,retry_after:int}}>
+		 */
 		public static function classification_provider(): array {
 			return array(
 				'429 without headers uses the bounded fallback' => array(
@@ -223,6 +235,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				),
 			);
 		}
+		/** @param array<string,string> $headers */
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'out_of_range_timing_provider' )]
 		public function test_out_of_range_timing_maps_to_operation_failed( array $headers ): void {
 			try {
@@ -249,7 +262,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				),
 			);
 		}
-		/** @param array<string,string> $headers @return array{limited:bool,remaining:?int,reset_at:?int,retry_after:int} */
+		/**
+		 * @param array<string,string> $headers
+		 * @return array{limited:bool,remaining:?int,reset_at:?int,retry_after:int}
+		 */
 		private function rate_limit( int $status, array $headers, int $now ): array {
 			$method = new \ReflectionMethod( GitHubReleaseService::class, 'rate_limit' );
 			return $method->invoke(

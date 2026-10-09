@@ -444,6 +444,11 @@ function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, stri
 function ran_wp_release_updater_test_target_install_path( string $type, string $identity ): string {
 	return 'plugin' === $type ? WP_PLUGIN_DIR . '/' . dirname( $identity ) : WP_CONTENT_DIR . '/themes/' . $identity;
 }
+/**
+ * @param list<string> $ids
+ * @param array<string,mixed> $managed_a
+ * @param array<string,mixed> $managed_b
+ */
 function ran_wp_release_updater_test_prime_mixed_bulk_transient( string $type, array $ids, array $managed_a, array $managed_b, string $ordinary_archive ): void {
 	$transient = (object) array(
 		'last_checked' => time(),
@@ -488,6 +493,9 @@ function ran_wp_release_updater_test_prime_mixed_bulk_transient( string $type, a
 function ran_wp_release_updater_test_target_path( string $type, string $identity ): string {
 	return 'plugin' === $type ? ran_wp_release_updater_test_target_install_path( $type, $identity ) . '/' . basename( $identity ) : ran_wp_release_updater_test_target_install_path( $type, $identity ) . '/style.css';
 }
+/**
+ * @return array<string,string>
+ */
 function ran_wp_release_updater_test_archive_file_manifest( string $archive, string $root ): array {
 	$zip = new \ZipArchive();
 	if ( true !== $zip->open( $archive ) ) {
@@ -522,6 +530,9 @@ function ran_wp_release_updater_test_archive_file_manifest( string $archive, str
 	ksort( $manifest );
 	return $manifest;
 }
+/**
+ * @return array<string,string>
+ */
 function ran_wp_release_updater_test_target_file_manifest( string $type, string $identity ): array {
 	$base = ran_wp_release_updater_test_target_install_path( $type, $identity );
 	if ( ! is_dir( $base ) ) {
@@ -556,6 +567,10 @@ function ran_wp_release_updater_test_target_bytes( string $type, string $identit
 function ran_wp_release_updater_test_target_version( string $type, string $identity ): ?string {
 	return ran_wp_release_updater_test_target_header_version_from_bytes( $type, ran_wp_release_updater_test_target_bytes( $type, $identity ) );
 }
+/**
+ * @param list<string> $ids
+ * @return array<string,bool>
+ */
 function ran_wp_release_updater_test_active_states( string $type, array $ids ): array {
 	$active = array();
 	foreach ( $ids as $identity ) {

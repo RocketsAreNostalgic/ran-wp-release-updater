@@ -502,6 +502,11 @@ try {
 // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 echo json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . PHP_EOL;
 
+/**
+ * @param list<string> $command
+ * @param array<string,string>|null $env
+ * @return array{code:int,stdout:string|false,stderr:string|false}
+ */
 function ran_wp_release_updater_test_run_command( array $command, string $cwd, ?array $env = null, bool $require_zero = true, string $stdin = '' ): array {
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
 	$process = proc_open(
@@ -612,6 +617,9 @@ function ran_wp_release_updater_test_connect( int $port, string $user, string $p
 	throw new RuntimeException( 'Could not connect to MySQL socket.' );
 }
 
+/**
+ * @param list<string> $exclude
+ */
 function ran_wp_release_updater_test_copy_tree( string $source, string $destination, array $exclude = array() ): void {
 	$source      = rtrim( $source, '/\\' );
 	$destination = rtrim( $destination, '/\\' );

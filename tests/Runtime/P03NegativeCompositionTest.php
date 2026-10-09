@@ -183,7 +183,10 @@ PHP,
 		return $file;
 	}
 
-	/** @param array<string,mixed> $data @return array<string,mixed> */
+	/**
+	 * @param array<string,mixed> $data
+	 * @return array<string,mixed>
+	 */
 	private function probe( string $body, array $data ): array {
 		$runtime           = $this->package_copy();
 		$probe             = $this->root . '/probe-' . bin2hex( random_bytes( 6 ) ) . '.php';

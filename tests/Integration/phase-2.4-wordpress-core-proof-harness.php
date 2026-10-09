@@ -308,6 +308,10 @@ function ran_wp_release_updater_test_build_target( string $type, string $identit
 	);
 }
 
+/**
+ * @param array<string,mixed> $target
+ * @return array<string,mixed>
+ */
 function ran_wp_release_updater_test_run_preoffer_failure_scenario( array $target, string $stage ): array {
 	$before   = ran_wp_release_updater_test_file_version( $target['type'], $target['identity'] );
 	$manifest = ran_wp_release_updater_test_fixture_manifest( $target['type'], $target['identity'] );
@@ -331,7 +335,10 @@ function ran_wp_release_updater_test_run_preoffer_failure_scenario( array $targe
 	);
 }
 
-/** @return array<string,mixed> */
+/**
+ * @return array<string,mixed>
+ * @param array<string,mixed> $target
+ */
 function ran_wp_release_updater_test_run_core_upgrade_scenario( array $target ): array {
 	$type     = $target['type'];
 	$identity = $target['identity'];
@@ -365,6 +372,10 @@ function ran_wp_release_updater_test_run_core_upgrade_scenario( array $target ):
 	);
 }
 
+/**
+ * @param array<string,mixed> $target
+ * @return array<string,mixed>
+ */
 function ran_wp_release_updater_test_run_core_upgrade_failure_scenario( array $target, string $failure_stage ): array {
 	$type           = $target['type'];
 	$identity       = $target['identity'];
@@ -424,7 +435,10 @@ function ran_wp_release_updater_test_run_core_upgrade_failure_scenario( array $t
 	);
 }
 
-/** @param array<string,mixed> $target @return array<string,mixed> */
+/**
+ * @param array<string,mixed> $target
+ * @return array<string,mixed>
+ */
 function ran_wp_release_updater_test_execute_core_upgrade( array $target ): array {
 	$type                          = $target['type'];
 	$identity                      = $target['identity'];
@@ -487,7 +501,11 @@ function ran_wp_release_updater_test_prime_core_offer( array $target ): object {
 	return (object) $offer;
 }
 
-/** @param array<string,mixed> $args @param array<string,mixed> $counts @return array<string,mixed>|WP_Error|null */
+/**
+ * @param array<string,mixed> $args
+ * @param array<string,mixed> $counts
+ * @return array<string,mixed>|WP_Error|null
+ */
 function ran_wp_release_updater_test_fixture_http_response( string $url, array $args, string $type, string $archive, array &$counts ): array|WP_Error|null {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
 	$parts = parse_url( $url );
@@ -686,7 +704,10 @@ function ran_wp_release_updater_test_rrmdir_recursive( string $path ): void {
 	@rmdir( $path );
 }
 
-/** @param array<string,mixed> $target @return array<string,mixed> */
+/**
+ * @param array<string,mixed> $target
+ * @return array<string,mixed>
+ */
 function ran_wp_release_updater_test_readback_options( array $target ): array {
 	$target_name    = $target['targetName'] ?? null;
 	$target_row     = is_string( $target_name ) ? ran_wp_release_updater_test_option_row( $target_name ) : null;

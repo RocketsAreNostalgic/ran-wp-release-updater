@@ -387,7 +387,10 @@ PHP;
 		return hash( 'sha256', $payload );
 	}
 
-	/** @param array<string,mixed> $data @return array<string,mixed> */
+	/**
+	 * @param array<string,mixed> $data
+	 * @return array<string,mixed>
+	 */
 	private function probe( string $body, array $data ): array {
 		$file   = $this->root . '/probe-' . bin2hex( random_bytes( 4 ) ) . '.php';
 		$prefix = <<<'PHP'

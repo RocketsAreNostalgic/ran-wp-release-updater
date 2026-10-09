@@ -225,6 +225,9 @@ function ran_wp_release_updater_test_create_isolated_root(): string {
 	return $root;
 }
 
+/**
+ * @param resource $server
+ */
 function ran_wp_release_updater_test_attest_server( $server, string $data ): mysqli {
 	$status = proc_get_status( $server );
 	if ( ! is_array( $status ) || ! $status['running'] ) { // @phpstan-ignore function.alreadyNarrowedType (Retain runtime evidence validation at the external WordPress or native-process boundary.)
@@ -291,7 +294,10 @@ function ran_wp_release_updater_test_assert_one_claim( array $results, string $l
 		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 		throw new RuntimeException( $label . ' did not have one owner and one binding_fence_lost non-owner.' );
 	} }
-/** @param list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> $results @return array{owner:string,result:string,state:array<string,mixed>|null,epoch:int} */
+/**
+ * @param list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> $results
+ * @return array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}
+ */
 function ran_wp_release_updater_test_claimed( array $results ): array {
 	foreach ( $results as $result ) {
 		if ( 'claimed' === $result['result'] ) {
@@ -315,7 +321,10 @@ function ran_wp_release_updater_test_target_name( BindingRecord $binding ): stri
 			'installed_package_identity' => $facts['installed_package_identity'],
 		)
 	); }
-/** @param array<string,mixed> $state @return array<string,mixed> */
+/**
+ * @param array<string,mixed> $state
+ * @return array<string,mixed>
+ */
 function ran_wp_release_updater_test_claim( array $state ): array {
 	return array(
 		'binding_generation' => $state['binding_generation'],
@@ -432,6 +441,9 @@ function ran_wp_release_updater_test_run( array $command, string $cwd ): void {
 		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 		throw new RuntimeException( 'MySQL initialization failed: ' . $stdout . $stderr );
 	} }
+/**
+ * @param resource $server
+ */
 function ran_wp_release_updater_test_stop_server( $server ): void {
 	proc_terminate( $server, 15 ); for ( $attempt = 0; $attempt < 100; ++$attempt ) {
 		$status = proc_get_status( $server );

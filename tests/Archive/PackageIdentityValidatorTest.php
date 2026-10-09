@@ -204,6 +204,10 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertNull( ( new PackageIdentityValidator() )->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ) );
 	}
 
+	/**
+	 * @param array<string,string> $entries
+	 * @param list<string> $links
+	 */
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'prospective_unsafe_archives' )]
 	public function test_prospective_inspection_rejects_unsafe_and_ambiguous_shapes(
 		array $entries,
@@ -411,6 +415,9 @@ final class PackageIdentityValidatorTest extends TestCase {
 		self::assertSame( 'archive_update_uri_mismatch', ( new PackageIdentityValidator() )->validate( $this->descriptor( $conflict, 'plugin', 'example-plugin/example-plugin.php' ), $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' ), $conflict )->code() );
 	}
 
+	/**
+	 * @param array<string,string> $entries
+	 */
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafe_archives' )]
 	public function test_rejects_unsafe_or_ambiguous_archive_shapes( array $entries, string $expected ): void {
 		$archive = $this->archive( $entries );
@@ -540,7 +547,11 @@ final class PackageIdentityValidatorTest extends TestCase {
 		);
 	}
 
-	/** @param array<string,string> $entries @param list<string> $links @param array<string,array{int,int}> $attributes */
+	/**
+	 * @param array<string,string> $entries
+	 * @param list<string> $links
+	 * @param array<string,array{int,int}> $attributes
+	 */
 	private function archive( array $entries, array $links = array(), array $attributes = array() ): string {
 		$path = tempnam( sys_get_temp_dir(), 'ran-archive-' );
 		self::assertIsString( $path );

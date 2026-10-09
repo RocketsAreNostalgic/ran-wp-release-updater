@@ -21,6 +21,10 @@ namespace {
 	}
 
 	if ( ! function_exists( 'wp_safe_remote_get' ) ) {
+		/**
+		 * @param array<string,mixed> $args
+		 * @return array<string,mixed>|WP_Error
+		 */
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_safe_remote_get( string $url, array $args ): array|WP_Error {
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -58,6 +62,9 @@ namespace {
 	}
 
 	if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
+		/**
+		 * @param array<string,mixed> $response
+		 */
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_remote_retrieve_response_code( array $response ): int|string {
 			return $response['response']['code'];
@@ -65,6 +72,9 @@ namespace {
 	}
 
 	if ( ! function_exists( 'wp_remote_retrieve_header' ) ) {
+		/**
+		 * @param array<string,mixed> $response
+		 */
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_remote_retrieve_header( array $response, string $name ): mixed {
 			return $response['headers'][ strtolower( $name ) ] ?? null;
@@ -72,6 +82,9 @@ namespace {
 	}
 
 	if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
+		/**
+		 * @param array<string,mixed> $response
+		 */
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function wp_remote_retrieve_body( array $response ): string {
 			return $response['body'] ?? '';
@@ -130,6 +143,9 @@ namespace RAN\WPReleaseUpdater\V1\Provider\GitHub {
 		return \chmod( $path, $permissions );
 	}
 
+	/**
+	 * @return array<int|string,int>|false
+	 */
 	function lstat( string $path ): array|false {
 		if ( ( $GLOBALS['ran_github_lstat_failure_at'] ?? 0 ) > 0 ) {
 			--$GLOBALS['ran_github_lstat_failure_at'];
@@ -2422,7 +2438,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			return $release;
 		}
 
-		/** @return array<string,mixed> */
+		/**
+		 * @return array<string,mixed>
+		 * @param array<string,mixed> $headers
+		 */
 		private function response(
 			int|string $code,
 			mixed $json,
