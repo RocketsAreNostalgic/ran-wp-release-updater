@@ -13,7 +13,7 @@ $handle = $GLOBALS['ran_network_handle'] ?? null;
 $duplicate_handle = $GLOBALS['ran_network_duplicate_handle'] ?? null;
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
-if ( ! is_object( $handle ) || ! is_object( $duplicate_handle ) || ! is_object( $broker ) ) {
+if ( ! is_object( $handle ) || ! is_callable( array( $handle, 'status' ) ) || ! is_object( $duplicate_handle ) || ! is_callable( array( $duplicate_handle, 'register' ) ) || ! is_object( $broker ) || ! is_callable( array( $broker, 'diagnostics' ) ) ) {
 	throw new RuntimeException( 'Network target did not boot with its duplicate declaration.' );
 }
 

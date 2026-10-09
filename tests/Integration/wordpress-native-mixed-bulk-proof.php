@@ -218,7 +218,7 @@ function ran_wp_release_updater_test_connect( string $socket ): mysqli {
 		$db = mysqli_init();
 		try {
 			// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_real_connect -- Connect only to the isolated fixture database; preserve its socket/port and server-attestation boundary.
-			if ( mysqli_real_connect( $db, null, 'root', '', null, 0, $socket ) ) {
+			if ( $db instanceof mysqli && mysqli_real_connect( $db, null, 'root', '', null, 0, $socket ) ) {
 				return $db;
 			}
 		// phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- An unavailable isolated server is expected during startup/teardown; preserve the bounded retry or cleanup path.

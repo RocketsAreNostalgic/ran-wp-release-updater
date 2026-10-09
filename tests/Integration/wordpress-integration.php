@@ -296,6 +296,9 @@ try {
 	// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 	foreach ( array_reverse( array_keys( $GLOBALS['processes'] ) ) as $id ) {
 		try {
+			if ( ! is_int( $id ) ) {
+				throw new RuntimeException( 'Owned process registry has an invalid identity.' );
+			}
 			ran_wp_release_updater_test_stop_process( $id );
 		} catch ( Throwable $error ) {
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -539,6 +542,9 @@ function ran_wp_release_updater_test_attest_database( int $server, string $socke
 			try {
 				// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_init -- The isolated proof owns a dedicated native MySQL connection before or outside WordPress database initialization.
 				$db = mysqli_init();
+				if ( ! $db instanceof mysqli ) {
+					throw new RuntimeException( 'Could not initialize MySQL attestation.' );
+				}
 				$db->real_connect( 'localhost', 'root', '', null, 0, $socket );
 			} catch ( mysqli_sql_exception ) {
 				if ( isset( $db ) ) { // @phpstan-ignore isset.variable (Finally cleanup must also handle an earlier exception before resource initialization.)
@@ -547,7 +553,10 @@ function ran_wp_release_updater_test_attest_database( int $server, string $socke
 				usleep( 50000 );
 				continue;
 			}
-			$row = $db->query( 'SELECT @@datadir AS d, @@pid_file AS p, @@skip_networking AS n' )->fetch_assoc();
+			$rows = $db->query( 'SELECT @@datadir AS d, @@pid_file AS p, @@skip_networking AS n' );
+			ran_wp_release_updater_test_require_fact( $rows instanceof mysqli_result, 'Owned MySQL attestation did not return rows.' );
+			$row = $rows->fetch_assoc();
+			ran_wp_release_updater_test_require_fact( is_array( $row ) && isset( $row['d'], $row['p'], $row['n'] ), 'Owned MySQL attestation omitted required evidence.' );
 			ran_wp_release_updater_test_require_fact(
 				realpath( (string) $row['d'] ) === realpath( $data )
 				&& realpath( (string) $row['p'] ) === realpath( $pid_file ) && 1 === (int) $row['n'],

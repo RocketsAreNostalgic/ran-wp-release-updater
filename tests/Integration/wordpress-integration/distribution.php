@@ -45,7 +45,7 @@ $plugin = $GLOBALS['ran_updater_plugin_handle'] ?? null;
 $theme = $GLOBALS['ran_updater_theme_handle'] ?? null;
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
-if ( ! is_object( $plugin ) || ! is_object( $theme ) || ! is_object( $broker ) ) {
+if ( ! is_object( $plugin ) || ! is_callable( array( $plugin, 'status' ) ) || ! is_object( $theme ) || ! is_callable( array( $theme, 'status' ) ) || ! is_object( $broker ) || ! is_callable( array( $broker, 'diagnostics' ) ) ) {
 	throw new RuntimeException( 'Installed consumer boot did not expose public handles.' );
 }
 

@@ -484,7 +484,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 					'type'   => $target_type,
 					'plugin' === $target_type ? 'plugin' : 'theme' => $item ['identity'],
 				);
-				$reply       = $item ['native']->filter_pre_download( false, $offers [ $index ] ['package'], null, $extra );
+				$offer       = $offers [ $index ];
+				native_measure_assert( is_array( $offer ) && is_string( $offer['package'] ?? null ), 'Installation preparation requires the discovered package.' );
+				$reply = $item ['native']->filter_pre_download( false, $offer['package'], null, $extra );
 				if ( 'install' === $scenario ) {
 					native_measure_assert( is_string( $reply ) && is_file( $reply ), 'Fresh installation preparation failed.' );
 				} else {

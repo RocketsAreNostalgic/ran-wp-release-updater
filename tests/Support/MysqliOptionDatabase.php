@@ -34,9 +34,19 @@ final class MysqliOptionDatabase {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new \RuntimeException( $this->mysqli->error );
 		}
+		if ( ! $result instanceof \mysqli_result ) {
+			throw new \RuntimeException( 'Expected a MySQL result set.' );
+		}
 		$row = $result->fetch_row();
 		$result->free();
-		return null === $row ? null : $row[0];
+		if ( false === $row ) {
+			throw new \RuntimeException( 'Could not fetch the MySQL row.' );
+		}
+		$value = null === $row ? null : ( $row[0] ?? null );
+		if ( null !== $value && ! is_string( $value ) && ! is_int( $value ) ) {
+			throw new \RuntimeException( 'Unexpected MySQL option scalar.' );
+		}
+		return $value;
 	}
 
 	public function query( string $query ): int {
@@ -45,7 +55,11 @@ final class MysqliOptionDatabase {
 			if ( false === $result ) {
 				throw new \RuntimeException( $this->mysqli->error );
 			}
-			return $this->mysqli->affected_rows;
+			$affected = $this->mysqli->affected_rows;
+			if ( ! is_int( $affected ) || $affected < 0 ) {
+				throw new \RuntimeException( 'MySQL affected-row count is unavailable or exceeds integer range.' );
+			}
+			return $affected;
 		} catch ( \mysqli_sql_exception $exception ) {
 			if ( 1062 === $exception->getCode() ) {
 				return 0;

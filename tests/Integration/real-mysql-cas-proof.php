@@ -85,9 +85,13 @@ try {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	list( $descriptor, $receipt ) = ran_wp_release_updater_test_mint_receipt( $root . '/receipt.zip', $winner_state );
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$target = ran_wp_release_updater_test_target_name( $binding );
+	$target                             = ran_wp_release_updater_test_target_name( $binding );
+	$ran_wp_release_updater_rows_result = $mysqli->query( 'SELECT option_name, autoload FROM options ORDER BY option_name' );
+	if ( ! $ran_wp_release_updater_rows_result instanceof mysqli_result ) {
+		throw new RuntimeException( 'MySQL option observation did not return rows.' );
+	}
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$rows = $mysqli->query( 'SELECT option_name, autoload FROM options ORDER BY option_name' )->fetch_all( MYSQLI_ASSOC );
+	$rows = $ran_wp_release_updater_rows_result->fetch_all( MYSQLI_ASSOC );
 	if ( 1 !== count( $rows ) || 'no' !== $rows[0]['autoload'] ) {
 		throw new RuntimeException( 'Option was not one non-autoload row.' );
 	}
@@ -171,7 +175,7 @@ function ran_wp_release_updater_test_workers( string $scenario, string $data ): 
 		: array( str_repeat( 'a', 64 ), str_repeat( 'b', 64 ) );
 	foreach ( $owners as $owner ) {
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Independent PHP workers must race against the same isolated MySQL server to prove CAS ownership.
-		$processes[]                               = proc_open(
+		$process     = proc_open(
 			array( PHP_BINARY, __FILE__, '--worker', $owner, $scenario, (string) $start_at ),
 			array(
 				0 => array( 'pipe', 'r' ),
@@ -181,13 +185,16 @@ function ran_wp_release_updater_test_workers( string $scenario, string $data ): 
 			$pipes,
 			$data
 		);
-		$processes[ array_key_last( $processes ) ] = array(
-			'process' => $processes[ array_key_last( $processes ) ],
+		$processes[] = array(
+			'process' => $process,
 			'pipes'   => $pipes,
 		);
 	}
 	$results = array();
 	foreach ( $processes as $entry ) {
+		if ( ! is_resource( $entry['process'] ) ) {
+			throw new RuntimeException( 'Could not start MySQL proof worker.' );
+		}
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 		fclose( $entry['pipes'][0] );
 		$out = stream_get_contents( $entry['pipes'][1] );
@@ -235,7 +242,10 @@ function ran_wp_release_updater_test_attest_server( $server, string $data ): mys
 	}
 	$mysqli = ran_wp_release_updater_test_connect();
 	try {
-		$result   = $mysqli->query( 'SELECT @@datadir AS datadir, @@skip_networking AS skip_networking' );
+		$result = $mysqli->query( 'SELECT @@datadir AS datadir, @@skip_networking AS skip_networking' );
+		if ( ! $result instanceof mysqli_result ) {
+			throw new RuntimeException( 'MySQL attestation query did not return rows.' );
+		}
 		$row      = $result->fetch_assoc();
 		$expected = realpath( $data );
 		$actual   = is_array( $row ) && isset( $row['datadir'] ) ? realpath( (string) $row['datadir'] ) : false;
@@ -260,7 +270,7 @@ function ran_wp_release_updater_test_connect(): mysqli {
 		// phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- An unavailable isolated server is expected during startup/teardown; preserve the bounded retry or cleanup path.
 		} catch ( mysqli_sql_exception ) {
 		}
-		if ( $connected ) {
+		if ( $connected && $mysqli instanceof mysqli ) {
 			return $mysqli;
 		}
 		if ( $mysqli instanceof mysqli ) {
@@ -296,11 +306,14 @@ function ran_wp_release_updater_test_assert_one_claim( array $results, string $l
 	} }
 /**
  * @param list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> $results
- * @return array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}
+ * @return array{owner:string,result:string,state:array<string,mixed>,epoch:int}
  */
 function ran_wp_release_updater_test_claimed( array $results ): array {
 	foreach ( $results as $result ) {
 		if ( 'claimed' === $result['result'] ) {
+			if ( null === $result['state'] ) {
+				throw new RuntimeException( 'Claim winner omitted its state.' );
+			}
 			return $result;
 		}
 	} throw new RuntimeException( 'Missing claim winner.' ); }

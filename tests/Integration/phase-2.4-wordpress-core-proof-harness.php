@@ -100,7 +100,7 @@ $marker_root = $marker_file ? realpath( dirname( $marker_file ) ) : false;
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $workspace_root = $marker_root ? realpath( dirname( $marker_root ) ) : false;
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
-if ( 'RAN_WP_RELEASE_UPDATER_PHASE24' !== $marker || ! $marker_file || ! is_file( $marker_file ) || is_link( $marker_file ) || file_get_contents( $marker_file ) !== $marker . "\n" || false === $marker_root || false === $workspace_root || ! str_ends_with( str_replace( '\\', '/', $workspace_root ), '/.workspaces/p0.4' ) || ! in_array( $mode, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $failure_stage, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $target_type, array( 'plugin', 'theme' ), true ) || ! is_string( $archive ) || ! is_file( $archive ) ) {
+if ( 'RAN_WP_RELEASE_UPDATER_PHASE24' !== $marker || ! $marker_file || ! is_file( $marker_file ) || is_link( $marker_file ) || file_get_contents( $marker_file ) !== $marker . "\n" || false === $marker_root || false === $workspace_root || ! str_ends_with( str_replace( '\\', '/', $workspace_root ), '/.workspaces/p0.4' ) || ! in_array( $mode, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $failure_stage, array( 'success', 'download', 'validation', 'install' ), true ) || ! in_array( $target_type, array( 'plugin', 'theme' ), true ) || ! is_string( $plugin_id ) || ! is_string( $theme_id ) || ! is_string( $manager_theme_id ) || ! is_string( $plugin_uri ) || ! is_string( $theme_uri ) || ! is_string( $output_path ) || ! is_string( $archive ) || ! is_file( $archive ) ) {
 	throw new RuntimeException( 'Guarded phase-2.4 harness missing required marker/env settings.' );
 }
 
@@ -646,7 +646,14 @@ function ran_wp_release_updater_test_file_version( string $type, string $identit
 
 function ran_wp_release_updater_test_fixture_bytes( string $type, string $identity ): ?int {
 	$path = 'plugin' === $type ? WP_PLUGIN_DIR . '/' . $identity : get_theme_root( $identity ) . '/' . $identity . '/style.css';
-	return is_file( $path ) ? filesize( $path ) : null;
+	if ( ! is_file( $path ) ) {
+		return null;
+	}
+	$size = filesize( $path );
+	if ( false === $size ) {
+		throw new RuntimeException( 'Could not read fixture file size.' );
+	}
+	return $size;
 }
 
 function ran_wp_release_updater_test_fixture_digest( string $type, string $identity ): ?string {
