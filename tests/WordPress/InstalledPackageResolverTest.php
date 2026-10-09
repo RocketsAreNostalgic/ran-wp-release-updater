@@ -127,6 +127,9 @@ final class InstalledPackageResolverTest extends TestCase {
 		$header = "<?php /* Plugin Name: caf\xc3\xa9 */ trailing\rVersion: 1.0.0\rUpdate URI: https://github.com/acme/example\r";
 		$result = PackageIdentityValidator::parse_header( $header . "\x00", 'plugin' );
 		self::assertSame( 'installed_header_verified', $result['code'] );
+		if ( ! isset( $result['headers'] ) ) {
+			self::fail( 'Verified header result omitted parsed headers.' );
+		}
 		self::assertSame( 'café', $result['headers']['Name'] );
 		self::assertSame( 'installed_header_ambiguous', PackageIdentityValidator::parse_header( $this->plugin_header() . "<?php /* Version: 1.0.0 */\n", 'plugin' )['code'] );
 		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parse_header( "<?php /* Plugin Name: Example */\n", 'plugin' )['code'] );

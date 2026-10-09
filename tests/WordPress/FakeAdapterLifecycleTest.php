@@ -162,6 +162,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$binding      = $this->binding( $target_type, $uri, $channel );
 			$database     = new FakeOptionDatabase( 100 );
 			$claim_result = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+			self::assertInstanceOf( BindingState::class, $claim_result['current'] );
 			self::assertSame( 'claimed', $claim_result['result'] );
 			$state              = $claim_result['current'];
 			$claim              = $this->claim( $state );
@@ -302,13 +303,17 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				return $this->descriptor;
 			} public function acquire( IdentityDescriptor $descriptor ): \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact {
 				$path = tempnam( sys_get_temp_dir(), 'ran-fake-adapter-' );
+				\PHPUnit\Framework\Assert::assertIsString( $path );
 				copy( $this->archive, $path );
 				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 				chmod( $path, 0600 );
 				$stat = lstat( $path );
+				\PHPUnit\Framework\Assert::assertIsArray( $stat );
+				$sha256 = hash_file( 'sha256', $path );
+				\PHPUnit\Framework\Assert::assertIsString( $sha256 );
 				return new \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact(
 					$path,
-					hash_file( 'sha256', $path ),
+					$sha256,
 					array(
 						'dev'   => $stat['dev'],
 						'ino'   => $stat['ino'],

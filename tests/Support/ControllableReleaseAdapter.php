@@ -74,9 +74,13 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 			throw new \RuntimeException( 'Could not stat fake artifact.' );
 		}
 		$this->acquired_paths[] = $artifact_path;
+		$sha256                 = hash_file( 'sha256', $artifact_path );
+		if ( ! is_string( $sha256 ) ) {
+			throw new \RuntimeException( 'Could not hash fake artifact.' );
+		}
 		return new TemporaryArtifact(
 			$artifact_path,
-			hash_file( 'sha256', $artifact_path ),
+			$sha256,
 			array(
 				'dev'   => $artifact_stat['dev'],
 				'ino'   => $artifact_stat['ino'],

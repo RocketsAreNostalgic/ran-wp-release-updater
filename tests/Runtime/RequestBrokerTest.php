@@ -45,6 +45,7 @@ final class RequestBrokerTest extends TestCase {
 			$source = str_replace( "'protocolVersion'", "'protocol_version'", $source );
 			$source = str_replace( "array( \$ran_wp_release_updater_broker, 'protocol_version' )", "array( \$ran_wp_release_updater_broker, 'protocolVersion' )", $source );
 			$source = preg_replace( '/(runtime_protocol|protocol_version)(\x27\s*=>\s*)5\b/', '$1${2}4', $source );
+			self::assertIsString( $source );
 			$source = str_replace( array( 'return 5;', '5 !==', '5 ===' ), array( 'return 4;', '4 !==', '4 ===' ), $source );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $legacy . '/' . $file, $source );

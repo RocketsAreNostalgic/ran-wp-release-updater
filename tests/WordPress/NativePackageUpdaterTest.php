@@ -119,6 +119,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$this->offer( $updater );
 			$information = $updater->filter_plugin_information( false, 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', 'plugin' . "\0" . 'package/package.php' ), 0, 24 ) ) );
 			self::assertIsObject( $information );
+			if ( ! isset( $information->version ) ) {
+				self::fail( 'Plugin information omitted its version.' );
+			}
 			self::assertSame( '2.0.0', $information->version );
 			self::assertSame( array( 1, 1, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 			self::assertSame( 'archive_identity_verified', $updater->status()['candidate_validation_code'] );

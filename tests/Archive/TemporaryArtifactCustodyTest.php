@@ -198,9 +198,11 @@ final class TemporaryArtifactCustodyTest extends TestCase {
 		$stat = lstat( $path );
 		self::assertIsArray( $stat );
 
+		$sha256 = hash_file( 'sha256', $path );
+		self::assertIsString( $sha256 );
 		return new TemporaryArtifact(
 			$path,
-			hash_file( 'sha256', $path ),
+			$sha256,
 			array(
 				'dev'   => (int) $stat['dev'],
 				'ino'   => (int) $stat['ino'],

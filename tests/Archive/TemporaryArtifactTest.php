@@ -21,7 +21,9 @@ final class TemporaryArtifactTest extends TestCase {
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 		@unlink( $this->path ); }
 	public function test_inspect_rejects_mutation(): void {
-		$artifact = new TemporaryArtifact( $this->path, hash_file( 'sha256', $this->path ), $this->identity() );
+		$sha256 = hash_file( 'sha256', $this->path );
+		self::assertIsString( $sha256 );
+		$artifact = new TemporaryArtifact( $this->path, $sha256, $this->identity() );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for archive custody and identity fixtures; WordPress helpers would alter the boundary under test.
 		file_put_contents( $this->path, 'changed' );
 		$this->expectException( \RuntimeException::class );

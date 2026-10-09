@@ -294,7 +294,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 
 			self::assertNotNull( $updater );
 			foreach ( array( BindingRecord::class, GitHubCredentialResolver::class, GitHubReleaseAdapter::class, '\\RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePackageUpdater' ) as $class ) {
-				self::assertSame( $root, dirname( ( new \ReflectionClass( $class ) )->getFileName(), str_contains( $class, 'Provider\\GitHub' ) ? 4 : 3 ), $class );
+				$class_file = ( new \ReflectionClass( $class ) )->getFileName();
+				self::assertIsString( $class_file );
+				self::assertSame( $root, dirname( $class_file, str_contains( $class, 'Provider\\GitHub' ) ? 4 : 3 ), $class );
 			}
 			self::assertSame( 0, $calls );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
@@ -322,6 +324,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$registrar             = require dirname( __DIR__, 2 ) . '/bootstrap.php';
 			$broker                = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
 			self::assertIsObject( $broker );
+			self::assertInstanceOf( \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker::class, $broker );
 			self::assertSame(
 				'runtime_active',
 				$broker->activate(
@@ -416,6 +419,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$registrar             = require dirname( __DIR__, 2 ) . '/bootstrap.php';
 			$broker                = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
 			self::assertIsObject( $broker );
+			self::assertInstanceOf( \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker::class, $broker );
 			self::assertSame(
 				'runtime_active',
 				$broker->activate(

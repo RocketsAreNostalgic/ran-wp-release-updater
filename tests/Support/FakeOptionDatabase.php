@@ -10,7 +10,7 @@ final class FakeOptionDatabase {
 	public string $options = 'wp_options';
 	/** @var array<string, array{option_value:string,autoload:string}> */
 	private array $rows = array();
-	/** @var array<string, array{sql:string,args:list<string>}> */
+	/** @var array<string, array{sql:string,args:array<int|string,mixed>}> */
 	private array $prepared = array();
 	/** @var array<string, int> */
 	private array $write_failures = array();
