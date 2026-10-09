@@ -40,6 +40,9 @@ final class IntegrationProofSecurityContractTest extends TestCase {
 	public function test_distribution_manifest_rejects_native_zip_symlink_attributes(): void {
 		$source = $this->proof( 'wordpress-integration/distribution.php' );
 		self::assertSame( 1, preg_match( '/function ran_wp_release_updater_test_archive_manifest\\(.*?^}/ms', $source, $matches ) );
+		if ( ! isset( $matches[0] ) ) {
+				self::fail( 'Required source capture is missing.' );
+		}
 		$function = str_replace( 'function ran_wp_release_updater_test_archive_manifest', 'static function', $matches[0] );
 		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- Execute only the exact repository-owned manifest helper in isolation, without WordPress bootstrap or fixture side effects.
 		$reader = eval( 'namespace { return ' . $function . '; }' );

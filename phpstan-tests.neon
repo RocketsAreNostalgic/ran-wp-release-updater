@@ -3,7 +3,7 @@ includes:
 
 parameters:
 	# Deliberately no paths: the runner supplies exactly one discovered test file.
-	level: 5
+	level: 8
 	treatPhpDocTypesAsCertain: false
 	# Fixtures mutate updater state through callbacks and global harness registries.
 	rememberPossiblyImpureFunctionValues: false

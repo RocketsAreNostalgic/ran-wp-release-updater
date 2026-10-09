@@ -98,6 +98,10 @@ function wp_tempnam( string $name ): string|false {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$GLOBALS['rs_paths'][] = $path;
 	} return $path; }
+/**
+ * @param array<string,mixed> $args
+ * @return array<string,mixed>|WP_Error
+ */
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name. @phpstan-ignore return.unusedType (The stub preserves the foreign WordPress HTTP return contract even when this scenario returns only an array.)
 function wp_safe_remote_get( string $url, array $args ): array|WP_Error {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -114,15 +118,27 @@ function wp_safe_remote_get( string $url, array $args ): array|WP_Error {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 		chmod( $args['filename'], 0600 );
 	} return $response; }
+/**
+ * @param array<string,mixed> $response
+ */
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 function wp_remote_retrieve_response_code( array $response ): int|string {
 	return $response['response']['code']; }
+/**
+ * @param array<string,mixed> $response
+ */
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 function wp_remote_retrieve_header( array $response, string $name ): mixed {
 	return $response['headers'][ strtolower( $name ) ] ?? null; }
+/**
+ * @param array<string,mixed> $response
+ */
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 function wp_remote_retrieve_body( array $response ): string {
 	return $response['body'] ?? ''; }
+/**
+ * @return array{response:array{code:int},headers:array<string,string>,body:string,file:?string}
+ */
 function ran_wp_release_updater_test_rs_response( mixed $body, ?string $file = null ): array {
 	return array(
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
@@ -148,9 +164,15 @@ function ran_wp_release_updater_test_rs_delta( int $start ): array {
 		'requests' => count( $requests ),
 		'zips'     => count( array_filter( $requests, static fn( array $request ): bool => $request['stream'] ) ),
 	); }
+/**
+ * @param array<string,mixed> $delta
+ */
 function ran_wp_release_updater_test_rs_assert_delta( string $operation, array $delta, int $zips ): void {
 	ran_wp_release_updater_test_rs_assert( 0 < $delta['requests'], $operation . ' made no HTTP requests.' );
 	ran_wp_release_updater_test_rs_assert( $zips === $delta['zips'], $operation . ' ZIP request count changed.' ); }
+/**
+ * @param array<string,mixed> $facts
+ */
 function ran_wp_release_updater_test_rs_copy_verified( string $source, string $destination, array $facts ): void {
 	$size  = $facts['artifact_size'] ?? null;
 	$limit = $facts['maximum_artifact_bytes'] ?? null;

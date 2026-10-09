@@ -223,7 +223,10 @@ final class GitHubResponseRoutingTest extends TestCase {
 			'tag_name'     => $tag,
 		);
 	}
-	/** @return array<string,mixed> */
+	/**
+	 * @return array<string,mixed>
+	 * @param array<string,mixed> $headers
+	 */
 	private function response( int $code, mixed $json, array $headers = array(), ?string $file = null ): array {
 		$response = array(
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.

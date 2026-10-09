@@ -71,7 +71,21 @@ final class AcquisitionReceiptTest extends TestCase {
 
 	public function test_public_ready_blocked_and_clone_packages_cannot_mint_and_flags_are_not_inputs(): void {
 		list( $validator, $descriptor, $state, $package ) = $this->ready();
-		foreach ( array( ValidatedPackage::ready( $package->to_array() ), ValidatedPackage::blocked( 'blocked' ), clone $package ) as $forged ) {
+		$snapshot = $package->to_array();
+		if ( ! is_string( $snapshot['archive_root'] ?? null )
+			|| ! is_string( $snapshot['header_file'] ?? null )
+			|| ! is_int( $snapshot['manifest_entry_count'] ?? null )
+			|| ! is_int( $snapshot['manifest_expanded_bytes'] ?? null )
+			|| ! is_string( $snapshot['manifest_hash'] ?? null )
+			|| ! is_string( $snapshot['metadata_name'] ?? null )
+			|| ! is_string( $snapshot['package_type'] ?? null )
+			|| ! is_string( $snapshot['descriptor_fingerprint'] ?? null )
+			|| ! is_string( $snapshot['sha256'] ?? null )
+			|| ! is_int( $snapshot['size'] ?? null )
+			|| ! is_string( $snapshot['update_uri'] ?? null ) ) {
+			self::fail( 'Verified archive snapshot omitted its typed identity fields.' );
+		}
+		foreach ( array( ValidatedPackage::ready( $snapshot ), ValidatedPackage::blocked( 'blocked' ), clone $package ) as $forged ) {
 			try {
 				AcquisitionReceipt::issue( $state, $descriptor, $validator, $forged, 10 );
 				self::fail( 'Forged package minted a receipt.' );
@@ -114,6 +128,7 @@ final class AcquisitionReceiptTest extends TestCase {
 		list( $validator, $descriptor, $prototype, $package ) = $this->ready();
 		$database = new FakeOptionDatabase( 10 );
 		$claimed  = BindingFenceCoordinator::claim_persistent_binding_state( $database, $prototype->binding(), str_repeat( 'a', 64 ), 10 );
+		self::assertInstanceOf( BindingState::class, $claimed['current'] );
 		self::assertSame( 'claimed', $claimed['result'] );
 		$state     = $claimed['current'];
 		$claim     = $this->claim( $state );

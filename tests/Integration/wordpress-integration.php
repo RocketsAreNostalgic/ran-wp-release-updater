@@ -296,6 +296,9 @@ try {
 	// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 	foreach ( array_reverse( array_keys( $GLOBALS['processes'] ) ) as $id ) {
 		try {
+			if ( ! is_int( $id ) ) {
+				throw new RuntimeException( 'Owned process registry has an invalid identity.' );
+			}
 			ran_wp_release_updater_test_stop_process( $id );
 		} catch ( Throwable $error ) {
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -332,6 +335,7 @@ try {
 }
 exit( 'passed' === $result['status'] ? 0 : 1 );
 
+/** @phpstan-assert true $condition */
 function ran_wp_release_updater_test_require_fact( bool $condition, string $message ): void {
 	if ( ! $condition ) {
 		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
@@ -407,6 +411,10 @@ function ran_wp_release_updater_test_redact( string $value ): string {
 	return str_replace( $redactions, '[redacted]', $value );
 }
 
+/**
+ * @param list<string> $command
+ * @param array<string,string> $extra
+ */
 function ran_wp_release_updater_test_start_process( array $command, string $cwd, string $label, array $extra = array(), string $stdin = '' ): int {
 	global $processes, $environment;
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
@@ -443,6 +451,9 @@ function ran_wp_release_updater_test_start_process( array $command, string $cwd,
 	return $id;
 }
 
+/**
+ * @return array<string,mixed>
+ */
 function ran_wp_release_updater_test_poll_process( int $id ): array {
 	global $processes;
 	$entry = &$processes[ $id ];
@@ -482,6 +493,10 @@ function ran_wp_release_updater_test_finish_process( int $id, int $timeout = 60 
 	return trim( $entry['out'] );
 }
 
+/**
+ * @param list<string> $command
+ * @param array<string,string> $extra
+ */
 function ran_wp_release_updater_test_command( array $command, string $cwd, string $label, array $extra = array(), string $stdin = '', int $timeout = 60 ): string {
 	return ran_wp_release_updater_test_finish_process( ran_wp_release_updater_test_start_process( $command, $cwd, $label, $extra, $stdin ), $timeout );
 }
@@ -527,6 +542,9 @@ function ran_wp_release_updater_test_attest_database( int $server, string $socke
 			try {
 				// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_init -- The isolated proof owns a dedicated native MySQL connection before or outside WordPress database initialization.
 				$db = mysqli_init();
+				if ( ! $db instanceof mysqli ) {
+					throw new RuntimeException( 'Could not initialize MySQL attestation.' );
+				}
 				$db->real_connect( 'localhost', 'root', '', null, 0, $socket );
 			} catch ( mysqli_sql_exception ) {
 				if ( isset( $db ) ) { // @phpstan-ignore isset.variable (Finally cleanup must also handle an earlier exception before resource initialization.)
@@ -535,7 +553,10 @@ function ran_wp_release_updater_test_attest_database( int $server, string $socke
 				usleep( 50000 );
 				continue;
 			}
-			$row = $db->query( 'SELECT @@datadir AS d, @@pid_file AS p, @@skip_networking AS n' )->fetch_assoc();
+			$rows = $db->query( 'SELECT @@datadir AS d, @@pid_file AS p, @@skip_networking AS n' );
+			ran_wp_release_updater_test_require_fact( $rows instanceof mysqli_result, 'Owned MySQL attestation did not return rows.' );
+			$row = $rows->fetch_assoc();
+			ran_wp_release_updater_test_require_fact( is_array( $row ) && isset( $row['d'], $row['p'], $row['n'] ), 'Owned MySQL attestation omitted required evidence.' );
 			ran_wp_release_updater_test_require_fact(
 				realpath( (string) $row['d'] ) === realpath( $data )
 				&& realpath( (string) $row['p'] ) === realpath( $pid_file ) && 1 === (int) $row['n'],
@@ -548,6 +569,9 @@ function ran_wp_release_updater_test_attest_database( int $server, string $socke
 	throw new RuntimeException( 'Timed out attesting the owned MySQL socket.' );
 }
 
+/**
+ * @return list<string>
+ */
 function ran_wp_release_updater_test_runtime_files( string $source ): array {
 	$files    = array( 'bootstrap.php', 'runtime.php' );
 	$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $source . '/src', FilesystemIterator::SKIP_DOTS ) );
@@ -561,6 +585,9 @@ function ran_wp_release_updater_test_runtime_files( string $source ): array {
 	return $files;
 }
 
+/**
+ * @return array<array-key,mixed>
+ */
 function ran_wp_release_updater_test_verify_runtime( string $source ): array {
 	$runtime = ran_wp_release_updater_test_read_json( $source . '/runtime-copy.json' );
 	$payload = '';
@@ -653,6 +680,9 @@ PHP
 	return $site;
 }
 
+/**
+ * @param list<string> $base
+ */
 function ran_wp_release_updater_test_install_wordpress( array $base, string $site, string $password, bool $network ): void {
 	$arguments = array(
 		'--path=' . $site,
@@ -689,6 +719,9 @@ function ran_wp_release_updater_test_install_wordpress( array $base, string $sit
 	}
 }
 
+/**
+ * @return array<string,string>
+ */
 function ran_wp_release_updater_test_consumer_archives( string $source, string $run ): array {
 	$archives = array();
 	foreach ( array( 'plugin', 'theme' ) as $type ) {
@@ -756,6 +789,10 @@ function ran_wp_release_updater_test_wait_for_output( int $process, string $path
 	ran_wp_release_updater_test_require_fact( ran_wp_release_updater_test_poll_process( $process )['running'], 'Main-site discovery must remain alive while the subsite runs.' );
 }
 
+/**
+ * @param array<array-key,mixed> $child
+ * @param array<array-key,mixed> $main
+ */
 function ran_wp_release_updater_test_assert_network( array $main, array $child ): void {
 	ran_wp_release_updater_test_require_fact(
 		is_int( $main['blog_id'] ?? null ) && is_int( $child['blog_id'] ?? null )
@@ -785,6 +822,9 @@ function ran_wp_release_updater_test_assert_network( array $main, array $child )
 	);
 }
 
+/**
+ * @return array<array-key,mixed>
+ */
 function ran_wp_release_updater_test_read_json( string $path ): array {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture without requiring WordPress filesystem initialization.
 	$record = json_decode( (string) file_get_contents( $path ), true, 128, JSON_THROW_ON_ERROR );

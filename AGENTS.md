@@ -47,7 +47,7 @@ Inline sniff-property overrides (`phpcs:set` and legacy
 `@codingStandardsChangeSetting`) are forbidden in maintained PHP comments.
 The existing coverage suite scans all maintained PHP for these directives,
 case-insensitively; fixture strings remain data.
-Every maintained test PHP file now enters a separate level-5 invocation via
+Every maintained test PHP file now enters a separate level-8 invocation via
 `scripts/analyze-tests.php`. Its recursive effective selection defaults to all
 `tests/`; new roots and split files need no profile-list update. Keep
 `phpstan-tests.neon` free of broad analysis paths: the runner supplies one file

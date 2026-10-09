@@ -85,9 +85,13 @@ final class RAN_WP_RELEASE_UPDATER_Test_MixedBulkFixtureAdapter implements Relea
 		if ( ! is_array( $stat ) ) {
 			throw new RuntimeException( 'The fixture artifact identity is unavailable.' );
 		}
+		$sha256 = hash_file( 'sha256', $path );
+		if ( ! is_string( $sha256 ) ) {
+			throw new RuntimeException( 'The fixture artifact digest is unavailable.' );
+		}
 		return new TemporaryArtifact(
 			$path,
-			hash_file( 'sha256', $path ),
+			$sha256,
 			array(
 				'dev'   => $stat['dev'],
 				'ino'   => $stat['ino'],
@@ -243,6 +247,9 @@ add_action(
 				'exact_match' => $expected_manifest === $installed_manifest,
 			);
 		}
+		if ( ! isset( $observations[ $ids[0] ], $observations[ $ids[1] ], $observations[ $ids[2] ] ) ) {
+			throw new RuntimeException( 'Mixed-bulk package observations are incomplete.' );
+		}
 		$tokens               = array( $managed_a['offer']['package'], $managed_b['offer']['package'] );
 		$observation_evidence = array(
 			'managed_a_exact_token'   => 1 === count( $observations[ $ids[0] ] ) && ( $observations[ $ids[0] ][0] ?? null ) === $tokens[0], // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
@@ -260,10 +267,13 @@ add_action(
 		foreach ( $ids as $identity ) {
 			$bytes_after[ $identity ] = ran_wp_release_updater_test_target_bytes( $type, $identity );
 		}
-		$backup_root                  = WP_CONTENT_DIR . '/upgrade-temp-backup/' . ( 'plugin' === $type ? 'plugins' : 'themes' );
-		$backups_absent               = ! is_dir( $backup_root . '/managed-a' ) && ! is_dir( $backup_root . '/ordinary' ) && ! is_dir( $backup_root . '/managed-b' );
-		$success                      = 'success' === $mode;
-		$expected_results             = $success ? array( true, true, true ) : array( false, true, true );
+		$backup_root      = WP_CONTENT_DIR . '/upgrade-temp-backup/' . ( 'plugin' === $type ? 'plugins' : 'themes' );
+		$backups_absent   = ! is_dir( $backup_root . '/managed-a' ) && ! is_dir( $backup_root . '/ordinary' ) && ! is_dir( $backup_root . '/managed-b' );
+		$success          = 'success' === $mode;
+		$expected_results = $success ? array( true, true, true ) : array( false, true, true );
+		if ( ! array_key_exists( $ids[0], $result_codes ) || ! array_key_exists( $ids[1], $result_codes ) || ! array_key_exists( $ids[2], $result_codes ) || ! isset( $before_bytes[ $ids[0] ], $bytes_after[ $ids[0] ] ) ) {
+			throw new RuntimeException( 'Mixed-bulk result or byte observations are incomplete.' );
+		}
 		$failure_exact                = ! $success && 'ran_wp_release_updater_unverified_install_result' === $result_codes[ $ids[0] ] && null === $result_codes[ $ids[1] ] && null === $result_codes[ $ids[2] ];
 		$manifest_exact               = $success ? ( $manifest_evidence['managed-a']['exact_match'] && $manifest_evidence['managed-b']['exact_match'] ) : $manifest_evidence['managed-b']['exact_match'];
 		$pass                         = array_keys( $results ) === $ids
@@ -444,6 +454,11 @@ function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, stri
 function ran_wp_release_updater_test_target_install_path( string $type, string $identity ): string {
 	return 'plugin' === $type ? WP_PLUGIN_DIR . '/' . dirname( $identity ) : WP_CONTENT_DIR . '/themes/' . $identity;
 }
+/**
+ * @param list<string> $ids
+ * @param array<string,mixed> $managed_a
+ * @param array<string,mixed> $managed_b
+ */
 function ran_wp_release_updater_test_prime_mixed_bulk_transient( string $type, array $ids, array $managed_a, array $managed_b, string $ordinary_archive ): void {
 	$transient = (object) array(
 		'last_checked' => time(),
@@ -488,6 +503,9 @@ function ran_wp_release_updater_test_prime_mixed_bulk_transient( string $type, a
 function ran_wp_release_updater_test_target_path( string $type, string $identity ): string {
 	return 'plugin' === $type ? ran_wp_release_updater_test_target_install_path( $type, $identity ) . '/' . basename( $identity ) : ran_wp_release_updater_test_target_install_path( $type, $identity ) . '/style.css';
 }
+/**
+ * @return array<string,string>
+ */
 function ran_wp_release_updater_test_archive_file_manifest( string $archive, string $root ): array {
 	$zip = new \ZipArchive();
 	if ( true !== $zip->open( $archive ) ) {
@@ -522,6 +540,9 @@ function ran_wp_release_updater_test_archive_file_manifest( string $archive, str
 	ksort( $manifest );
 	return $manifest;
 }
+/**
+ * @return array<string,string>
+ */
 function ran_wp_release_updater_test_target_file_manifest( string $type, string $identity ): array {
 	$base = ran_wp_release_updater_test_target_install_path( $type, $identity );
 	if ( ! is_dir( $base ) ) {
@@ -541,10 +562,11 @@ function ran_wp_release_updater_test_target_file_manifest( string $type, string 
 		if ( ! is_string( $relative ) || '' === $relative ) {
 			continue;
 		}
-		$manifest[ $relative ] = hash_file( 'sha256', $full_path );
-		if ( ! is_string( $manifest[ $relative ] ) ) {
+		$digest = hash_file( 'sha256', $full_path );
+		if ( ! is_string( $digest ) ) {
 			throw new RuntimeException( 'The fixture installed-manifest could not read every file.' );
 		}
+		$manifest[ $relative ] = $digest;
 	}
 	ksort( $manifest );
 	return $manifest;
@@ -556,6 +578,10 @@ function ran_wp_release_updater_test_target_bytes( string $type, string $identit
 function ran_wp_release_updater_test_target_version( string $type, string $identity ): ?string {
 	return ran_wp_release_updater_test_target_header_version_from_bytes( $type, ran_wp_release_updater_test_target_bytes( $type, $identity ) );
 }
+/**
+ * @param list<string> $ids
+ * @return array<string,bool>
+ */
 function ran_wp_release_updater_test_active_states( string $type, array $ids ): array {
 	$active = array();
 	foreach ( $ids as $identity ) {

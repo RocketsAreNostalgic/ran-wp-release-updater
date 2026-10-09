@@ -94,6 +94,7 @@ final class ReadmeExamplesTest extends TestCase {
 		self::assertDoesNotMatchRegularExpression( '/\\bProtocol\\s+\\d+\\b|ran\\/wp-github-release-updater|\\blegacy\\b/i', $readme );
 		self::assertDoesNotMatchRegularExpression( '/ran\\/wp-github-release-updater|\\blegacy\\b|adjacent worktree/i', $contributing );
 		foreach ( $guides as $guide ) {
+			self::assertIsString( $guide );
 			self::assertDoesNotMatchRegularExpression( '/\\bProtocol\\s+\\d+\\b|ran\\/wp-github-release-updater|adjacent worktree/i', $guide );
 		}
 		foreach ( array( 'integration', 'release-sources', 'architecture', 'testing' ) as $name ) {

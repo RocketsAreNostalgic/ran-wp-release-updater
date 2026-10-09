@@ -166,7 +166,10 @@ final class ReleaseSourceSchemaTest extends TestCase {
 		);
 	}
 
-	/** @return array<string,mixed> */
+	/**
+	 * @return array<string,mixed>
+	 * @param array<string,mixed> $result
+	 */
 	private function projection( string $operation, array $result ): array {
 		$root = dirname( __DIR__, 2 );
 		if ( ! is_dir( $root . '/.workspaces/p0.3/php-tmp' ) ) {

@@ -31,15 +31,19 @@ final class BindingFenceCoordinatorTest extends TestCase {
 		};
 		$binding  = $this->binding();
 		$claimed  = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $claimed['current'] );
 		self::assertSame( 'claimed', $claimed['result'] );
 		$verified = BindingFenceCoordinator::verify_persistent_binding_state( $database, $claimed['current'], $this->claim( $claimed['current'] ) );
+		self::assertInstanceOf( BindingState::class, $verified['current'] );
 		self::assertSame( 'verified', $verified['result'] );
 		self::assertSame( 100, $verified['now'] );
 		self::assertSame( $claimed['current']->to_array(), $verified['current']->to_array() );
 		$renewed = BindingFenceCoordinator::renew_persistent_binding_state( $database, $verified['current'], $this->claim( $verified['current'] ), 30 );
+		self::assertInstanceOf( BindingState::class, $renewed['current'] );
 		self::assertSame( 'renewed', $renewed['result'] );
 		self::assertSame( 130, $renewed['current']->lease_deadline() );
 		$released = BindingFenceCoordinator::release_persistent_binding_state( $database, $renewed['current'], $this->claim( $renewed['current'] ) );
+		self::assertInstanceOf( BindingState::class, $released['current'] );
 		self::assertSame( 'released', $released['result'] );
 		self::assertSame( 1, $released['current']->lease_deadline() );
 		self::assertCount( 1, $inner->rows() );
@@ -68,6 +72,7 @@ final class BindingFenceCoordinatorTest extends TestCase {
 		$database->seed_option( 'ran_wp_gh_op_v1_deadbeef', '{"hostile":true}', 'yes' );
 		$binding = $this->binding();
 		$claimed = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $claimed['current'] );
 		self::assertSame( 'claimed', $claimed['result'] );
 		self::assertSame( 120, $claimed['current']->lease_deadline() );
 		self::assertCount( 2, $database->rows() );
@@ -81,16 +86,19 @@ final class BindingFenceCoordinatorTest extends TestCase {
 		$database = new FakeOptionDatabase( 100 );
 		$old      = $this->binding();
 		$first    = BindingFenceCoordinator::claim_persistent_binding_state( $database, $old, str_repeat( 'a', 64 ), 20 );
-		$claim    = $this->claim( $first['current'] );
-		$next     = BindingRecord::create( array_merge( $this->facts(), array( 'provider_code' => 'gitlab' ) ) );
+		self::assertInstanceOf( BindingState::class, $first['current'] );
+		$claim = $this->claim( $first['current'] );
+		$next  = BindingRecord::create( array_merge( $this->facts(), array( 'provider_code' => 'gitlab' ) ) );
 		$database->set_time( 121 );
 		$replacement = BindingFenceCoordinator::claim_persistent_binding_state( $database, $next, str_repeat( 'b', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $replacement['current'] );
 		self::assertSame( 'claimed', $replacement['result'] );
 		self::assertSame( 2, $replacement['current']->binding_generation() );
 		self::assertSame( 2, $replacement['current']->fence_epoch() );
 		self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::verify_persistent_binding_state( $database, $first['current'], $claim )['result'] );
 		$database->set_time( 142 );
 		$restart = BindingFenceCoordinator::claim_persistent_binding_state( $database, $next, str_repeat( 'c', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $restart['current'] );
 		self::assertSame( 'claimed', $restart['result'] );
 		self::assertSame( $next->to_array(), $restart['current']->binding()->to_array() );
 		self::assertSame( 3, $restart['current']->binding_generation() );
@@ -136,6 +144,7 @@ final class BindingFenceCoordinatorTest extends TestCase {
 		$database = new FakeOptionDatabase( 100 );
 		$binding  = $this->binding();
 		$claimed  = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $claimed['current'] );
 		foreach ( array( array( 'network_id' => 2 ), array( 'target_type' => 'theme' ) ) as $difference ) {
 			$next = BindingRecord::create( array_merge( $this->facts(), $difference ) );
 			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $next, str_repeat( 'b', 64 ), 20 )['result'] );
@@ -146,7 +155,8 @@ final class BindingFenceCoordinatorTest extends TestCase {
 		$database = new FakeOptionDatabase( 100 );
 		$binding  = $this->binding();
 		$first    = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
-		$name     = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
+		self::assertInstanceOf( BindingState::class, $first['current'] );
+		$name = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
 			array(
 				'network_id'                 => 1,
 				'target_type'                => 'plugin',
@@ -163,9 +173,10 @@ final class BindingFenceCoordinatorTest extends TestCase {
 		self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'b', 64 ), 20 )['result'] );
 	}
 	public function test_claim_rejects_equivalent_values_with_an_unexpected_key_order(): void {
-		$database  = new FakeOptionDatabase( 100 );
-		$binding   = $this->binding();
-		$claimed   = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		$database = new FakeOptionDatabase( 100 );
+		$binding  = $this->binding();
+		$claimed  = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $claimed['current'] );
 		$claim     = $this->claim( $claimed['current'] );
 		$reordered = array(
 			'owner_token'        => $claim['owner_token'],
@@ -185,8 +196,9 @@ final class BindingFenceCoordinatorTest extends TestCase {
 			$database = new FakeOptionDatabase( 100 );
 			$old      = $this->binding();
 			$first    = BindingFenceCoordinator::claim_persistent_binding_state( $database, $old, str_repeat( 'a', 64 ), 20 );
-			$claim    = $this->claim( $first['current'] );
-			$next     = BindingRecord::create( array_merge( $this->facts(), array( $key => $value ) ) );
+			self::assertInstanceOf( BindingState::class, $first['current'] );
+			$claim = $this->claim( $first['current'] );
+			$next  = BindingRecord::create( array_merge( $this->facts(), array( $key => $value ) ) );
 			$database->set_time( 121 );
 			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $next, str_repeat( 'b', 64 ), 20 )['result'], $key );
 			self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::verify_persistent_binding_state( $database, $first['current'], $claim )['result'], $key );
@@ -196,8 +208,10 @@ final class BindingFenceCoordinatorTest extends TestCase {
 		$database = new FakeOptionDatabase( 100 );
 		$binding  = $this->binding();
 		$first    = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $first['current'] );
 		$database->set_time( 101 );
 		$renewed = BindingFenceCoordinator::renew_persistent_binding_state( $database, $first['current'], $this->claim( $first['current'] ), 1 );
+		self::assertInstanceOf( BindingState::class, $renewed['current'] );
 		self::assertSame( 'renewed', $renewed['result'] );
 		self::assertSame( 1, $renewed['current']->binding_generation() );
 		self::assertSame( 2, $renewed['current']->fence_epoch() );
@@ -210,7 +224,9 @@ final class BindingFenceCoordinatorTest extends TestCase {
 		$database = new FakeOptionDatabase( 100 );
 		$old      = $this->binding();
 		$first    = BindingFenceCoordinator::claim_persistent_binding_state( $database, $old, str_repeat( 'a', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $first['current'] );
 		$released = BindingFenceCoordinator::release_persistent_binding_state( $database, $first['current'], $this->claim( $first['current'] ) );
+		self::assertInstanceOf( BindingState::class, $released['current'] );
 		self::assertSame( 'released', $released['result'] );
 		self::assertSame( 1, $released['current']->lease_deadline() );
 		self::assertSame( 1, $released['current']->binding_generation() );
@@ -219,6 +235,7 @@ final class BindingFenceCoordinatorTest extends TestCase {
 		$database->set_time( 101 );
 		$next    = BindingRecord::create( array_merge( $this->facts(), array( 'provider_code' => 'gitlab' ) ) );
 		$claimed = BindingFenceCoordinator::claim_persistent_binding_state( $database, $next, str_repeat( 'b', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $claimed['current'] );
 		self::assertSame( 'claimed', $claimed['result'] );
 		self::assertSame( $next->to_array(), $claimed['current']->binding()->to_array() );
 		self::assertSame( 2, $claimed['current']->binding_generation() );
@@ -228,12 +245,14 @@ final class BindingFenceCoordinatorTest extends TestCase {
 		$database = new FakeOptionDatabase( 100 );
 		$binding  = $this->binding();
 		$first    = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
-		$claim    = $this->claim( $first['current'] );
+		self::assertInstanceOf( BindingState::class, $first['current'] );
+		$claim = $this->claim( $first['current'] );
 		$database->set_time( 121 );
 		self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::release_persistent_binding_state( $database, $first['current'], $claim )['result'] );
 		$database = new FakeOptionDatabase( 100 );
 		$first    = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
-		$name     = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
+		self::assertInstanceOf( BindingState::class, $first['current'] );
+		$name = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
 			array(
 				'network_id'                 => 1,
 				'target_type'                => 'plugin',

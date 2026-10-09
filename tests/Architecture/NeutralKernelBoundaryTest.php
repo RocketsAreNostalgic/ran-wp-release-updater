@@ -109,8 +109,10 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseService',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseAdapter',
 		) as $class ) {
-			$levels = str_starts_with( $class, 'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\' ) ? 4 : 3;
-			self::assertSame( $root, dirname( ( new \ReflectionClass( $class ) )->getFileName(), $levels ), $class );
+			$levels     = str_starts_with( $class, 'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\' ) ? 4 : 3;
+			$class_file = ( new \ReflectionClass( $class ) )->getFileName();
+			self::assertIsString( $class_file );
+			self::assertSame( $root, dirname( $class_file, $levels ), $class );
 		}
 	}
 

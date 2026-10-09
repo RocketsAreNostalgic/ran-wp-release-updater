@@ -172,10 +172,15 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		foreach ( $rule_refs as $ref ) {
 			$mutant = new \DOMDocument();
 			self::assertTrue( $mutant->loadXML( $xml, LIBXML_NONET ) );
-			$xpath = new \DOMXPath( $mutant );
-			$rule  = $xpath->query( '/ruleset/rule[@ref="' . $ref . '"]' )->item( 0 );
+			$xpath      = new \DOMXPath( $mutant );
+			$rule_nodes = $xpath->query( '/ruleset/rule[@ref="' . $ref . '"]' );
+			self::assertInstanceOf( \DOMNodeList::class, $rule_nodes );
+			$rule = $rule_nodes->item( 0 );
 			self::assertInstanceOf( \DOMElement::class, $rule );
-			$mutant->documentElement->removeChild( $rule ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Native DOM document root for an isolated ruleset mutation.
+			// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Native DOM document root for an isolated ruleset mutation.
+			$document_root = $mutant->documentElement;
+			self::assertInstanceOf( \DOMElement::class, $document_root );
+			$document_root->removeChild( $rule );
 			$mutation = $mutant->saveXML();
 			self::assertIsString( $mutation );
 			self::assertTrue( $this->has_weakened_standard( $mutation ), $ref );
@@ -240,9 +245,11 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 	private function has_weakened_standard( string $source ): bool {
 		$xml = new \DOMDocument();
 		self::assertTrue( $xml->loadXML( $source, LIBXML_NONET ) );
-		$xpath = new \DOMXPath( $xml );
-		$rules = array();
-		foreach ( $xpath->query( '/ruleset/rule' ) as $rule ) {
+		$xpath      = new \DOMXPath( $xml );
+		$rules      = array();
+		$rule_nodes = $xpath->query( '/ruleset/rule' );
+		self::assertInstanceOf( \DOMNodeList::class, $rule_nodes );
+		foreach ( $rule_nodes as $rule ) {
 			self::assertInstanceOf( \DOMElement::class, $rule );
 			$rules[] = $rule->getAttribute( 'ref' );
 		}
@@ -253,12 +260,20 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 			return true;
 		}
 		$roots = $xpath->query( '/ruleset/file' );
-		// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Read the native DOM text of the single broad checker root.
-		if ( 1 !== $roots->length || '.' !== trim( $roots->item( 0 )->textContent ) ) {
+		self::assertInstanceOf( \DOMNodeList::class, $roots );
+		if ( 1 !== $roots->length ) {
 			return true;
 		}
-		$excluded = array();
-		foreach ( $xpath->query( '/ruleset/exclude-pattern' ) as $node ) {
+		$root = $roots->item( 0 );
+		self::assertInstanceOf( \DOMElement::class, $root );
+		// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Read the native DOM text of the single broad checker root.
+		if ( '.' !== trim( $root->textContent ) ) {
+			return true;
+		}
+		$excluded        = array();
+		$exclusion_nodes = $xpath->query( '/ruleset/exclude-pattern' );
+		self::assertInstanceOf( \DOMNodeList::class, $exclusion_nodes );
+		foreach ( $exclusion_nodes as $node ) {
 			self::assertInstanceOf( \DOMElement::class, $node );
 			// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Compare native DOM text with the reviewed dependency/generated boundaries.
 			$excluded[] = $node->getAttribute( 'type' ) . ':' . trim( $node->textContent );
@@ -267,17 +282,24 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		if ( array( ':/.phpunit.cache/', ':/.workspaces/', ':/coverage/', ':/node_modules/', ':/vendor/', 'relative:^src/Dependency/ArchiveSafety\\.php$' ) !== $excluded ) {
 			return true;
 		}
-		if ( 0 !== $xpath->query( '//rule/exclude | //rule/exclude-pattern | //rule/include-pattern | //*[@phpcs-only or @phpcbf-only]' )->length ) {
+		$local_overrides = $xpath->query( '//rule/exclude | //rule/exclude-pattern | //rule/include-pattern | //*[@phpcs-only or @phpcbf-only]' );
+		self::assertInstanceOf( \DOMNodeList::class, $local_overrides );
+		if ( 0 !== $local_overrides->length ) {
 			return true;
 		}
-		foreach ( $xpath->query( '//severity' ) as $node ) {
+		$severity_nodes = $xpath->query( '//severity' );
+		self::assertInstanceOf( \DOMNodeList::class, $severity_nodes );
+		foreach ( $severity_nodes as $node ) {
+			self::assertInstanceOf( \DOMElement::class, $node );
 			// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM exposes this native property.
 			if ( ! preg_match( '/^[1-9][0-9]*$/D', trim( $node->textContent ) ) || 5 > (int) $node->textContent ) {
 				return true;
 			}
 		}
-		$configs = array();
-		foreach ( $xpath->query( '//config' ) as $node ) {
+		$configs      = array();
+		$config_nodes = $xpath->query( '//config' );
+		self::assertInstanceOf( \DOMNodeList::class, $config_nodes );
+		foreach ( $config_nodes as $node ) {
 			self::assertInstanceOf( \DOMElement::class, $node );
 			$configs[] = $node->getAttribute( 'name' ) . ':' . $node->getAttribute( 'value' );
 		}
@@ -285,8 +307,10 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		if ( array( 'minimum_wp_version:6.5', 'testVersion:8.2-' ) !== $configs ) {
 			return true;
 		}
-		$arguments = array();
-		foreach ( $xpath->query( '//arg' ) as $node ) {
+		$arguments      = array();
+		$argument_nodes = $xpath->query( '//arg' );
+		self::assertInstanceOf( \DOMNodeList::class, $argument_nodes );
+		foreach ( $argument_nodes as $node ) {
 			self::assertInstanceOf( \DOMElement::class, $node );
 			$arguments[] = $node->getAttribute( 'name' ) . ':' . $node->getAttribute( 'value' );
 		}
@@ -295,6 +319,7 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 			return true;
 		}
 		$properties = $xpath->query( '//property' );
+		self::assertInstanceOf( \DOMNodeList::class, $properties );
 		if ( 1 !== $properties->length ) {
 			return true;
 		}
@@ -358,7 +383,7 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 	public function test_every_maintained_test_is_selected_by_the_isolated_runner(): void {
 		$root     = dirname( __DIR__, 2 );
 		$expected = array_map( static fn ( string $file ): string => 'tests/' . $file, $this->maintained_files( $root . '/tests', array() ) );
-		self::assertSame( $expected, $this->analyzed_files( $root, $root . '/phpstan-tests.neon', 5, array( $root . '/tests' ) ) );
+		self::assertSame( $expected, $this->analyzed_files( $root, $root . '/phpstan-tests.neon', 8, array( $root . '/tests' ) ) );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Verify the canonical aggregate runs analysis, rather than only exposing the discovered file list.
 		$manifest = file_get_contents( $root . '/composer.json' );
 		self::assertIsString( $manifest );
@@ -383,7 +408,15 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		$this->write_fixture( 'tests/NewRoot/Nested/Second.php', '<?php add_filter("ran_test", static fn(): bool => true);' );
 		$this->write_fixture( 'tests.neon', $config );
 		$expected = array( 'tests/NewRoot/First.php', 'tests/NewRoot/Nested/Second.php' );
-		self::assertSame( $expected, $this->analyzed_files( $this->fixture, $this->fixture . '/tests.neon', 5, array( $this->fixture . '/tests' ) ) );
+		self::assertSame( $expected, $this->analyzed_files( $this->fixture, $this->fixture . '/tests.neon', 8, array( $this->fixture . '/tests' ) ) );
+		$this->write_fixture( 'level-seven.neon', str_replace( 'level: 8', 'level: 7', $config ) );
+		$rejected = false;
+		try {
+			$this->analyzed_files( $this->fixture, $this->fixture . '/level-seven.neon', 8, array( $this->fixture . '/tests' ) );
+		} catch ( AssertionFailedError $error ) {
+			$rejected = true;
+		}
+		self::assertTrue( $rejected, 'The effective test profile must reject a Level 7 downgrade.' );
 		foreach ( $expected as $file ) {
 			$result = $this->analyze_fixture( $this->fixture . '/tests.neon', array( $this->fixture . '/' . $file ) );
 			self::assertSame( 0, $result['exit'], $result['output'] );
@@ -401,7 +434,7 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		self::assertSame( 1, $result['exit'] );
 		self::assertStringContainsString( 'return.type', $result['output'] );
 		$this->write_fixture( 'excluded.neon', $config . "\texcludePaths:\n\t\tanalyseAndScan:\n\t\t\t- tests/NewRoot/Nested/*\n" );
-		self::assertSame( array( 'tests/NewRoot/Nested/Second.php' ), array_values( array_diff( $expected, $this->analyzed_files( $this->fixture, $this->fixture . '/excluded.neon', 5, array( $this->fixture . '/tests' ) ) ) ) );
+		self::assertSame( array( 'tests/NewRoot/Nested/Second.php' ), array_values( array_diff( $expected, $this->analyzed_files( $this->fixture, $this->fixture . '/excluded.neon', 8, array( $this->fixture . '/tests' ) ) ) ) );
 	}
 
 	public function test_serial_and_parallel_runner_preserve_discovery_isolation_and_failures(): void {
@@ -419,7 +452,7 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		$this->write_fixture( 'src/Empty.php', '<?php' );
 		$this->write_fixture( 'tests/First.php', '<?php function ran_isolated_probe(): int { return 1; } echo ran_isolated_probe();' );
 		$this->write_fixture( 'tests/NewRoot/Second.php', '<?php function ran_isolated_probe(string $value): string { return $value; } echo ran_isolated_probe("valid");' );
-		$this->write_fixture( 'tests/NewRoot/Nested/Third.php', '<?php function ran_new_probe(): int { return "invalid"; }' );
+		$this->write_fixture( 'tests/NewRoot/Nested/Third.php', '<?php function ran_nullable_probe(?DateTimeImmutable $value): int { return $value->getTimestamp(); } echo ran_nullable_probe(null);' );
 		$this->write_fixture( 'tests/YNew.php', '<?php function ran_split_probe(): int { return 1; }' );
 		$this->write_fixture( 'tests/ZLast.php', '<?php function ran_last_probe(): int { return "invalid"; }' );
 		$command = array( PHP_BINARY, $this->fixture . '/scripts/analyze-tests.php' );
@@ -430,6 +463,7 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 			self::assertStringContainsString( '5 isolated files; ' . $workers . ' processes.', $result['output'] );
 			self::assertStringContainsString( 'Third.php', $result['output'] );
 			self::assertStringContainsString( 'ZLast.php', $result['output'] );
+			self::assertStringContainsString( 'method.nonObject', $result['output'] );
 			self::assertStringContainsString( 'return.type', $result['output'] );
 			self::assertStringNotContainsString( 'arguments.count', $result['output'] );
 		}
@@ -470,6 +504,9 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 			$source = file_get_contents( dirname( __DIR__ ) . '/' . $file );
 			self::assertIsString( $source );
 			self::assertSame( 1, preg_match( '/\/\/ @phpstan-ignore ' . preg_quote( $identifier, '/' ) . '[^\r\n]*/', $source, $matches ) );
+			if ( ! isset( $matches[0] ) ) {
+				self::fail( 'Required source capture is missing.' );
+			}
 			$this->write_fixture( 'src/Probe.php', $prefix . "\n" . $statement . ' ' . $matches[0] . "\n" );
 			$config = $this->fixture_config();
 			$result = $this->analyze_fixture( $config );

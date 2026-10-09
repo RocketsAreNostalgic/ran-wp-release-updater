@@ -45,7 +45,7 @@ $plugin = $GLOBALS['ran_updater_plugin_handle'] ?? null;
 $theme = $GLOBALS['ran_updater_theme_handle'] ?? null;
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
-if ( ! is_object( $plugin ) || ! is_object( $theme ) || ! is_object( $broker ) ) {
+if ( ! is_object( $plugin ) || ! is_callable( array( $plugin, 'status' ) ) || ! is_object( $theme ) || ! is_callable( array( $theme, 'status' ) ) || ! is_object( $broker ) || ! is_callable( array( $broker, 'diagnostics' ) ) ) {
 	throw new RuntimeException( 'Installed consumer boot did not expose public handles.' );
 }
 
@@ -160,7 +160,10 @@ function ran_wp_release_updater_test_native_callbacks( string $hook ): array {
 	}
 	return $found;
 }
-/** @param list<object> $callbacks @return list<string> */
+/**
+ * @param list<object> $callbacks
+ * @return list<string>
+ */
 function ran_wp_release_updater_test_callback_origins( array $callbacks ): array {
 	return array_map( static fn( object $callback ): string => (string) ( new ReflectionClass( $callback ) )->getFileName(), $callbacks );
 }
@@ -173,6 +176,9 @@ function ran_wp_release_updater_test_origins_are_installed( array $callbacks, st
 	}
 	return array() !== $callbacks;
 }
+/**
+ * @return array<string,array{sha256:string,size:int}>
+ */
 function ran_wp_release_updater_test_archive_manifest( string $zip, string $root ): array {
 	$archive = new ZipArchive();
 	if ( true !== $archive->open( $zip ) ) {
@@ -214,6 +220,9 @@ function ran_wp_release_updater_test_archive_manifest( string $zip, string $root
 	return $manifest;
 }
 
+/**
+ * @return array<string,array{sha256:string|false,size:int|false}>
+ */
 function ran_wp_release_updater_test_directory_manifest( string $root ): array {
 	$manifest = array();
 	$iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ) );

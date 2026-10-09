@@ -149,7 +149,10 @@ final class WindowsPortabilityProofTest extends TestCase {
 		}
 	}
 
-	/** @param array<string,string> $data @return array{activation:array<string,mixed>,hooks:int,package:string,plugin:array<string,mixed>,theme:array<string,mixed>} */
+	/**
+	 * @param array<string,string> $data
+	 * @return array{activation:array<string,mixed>,hooks:int,package:string,plugin:array<string,mixed>,theme:array<string,mixed>}
+	 */
 	private function probe( array $data ): array {
 		$probe = $this->workspace . '/proof.php';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.

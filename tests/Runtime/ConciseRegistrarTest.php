@@ -439,8 +439,10 @@ PHP
 			self::assertSame( array( array( 'code' => $codes[ $index ] ) ), $row[3]['diagnostics'] ); }
 	}
 
-	/** @return array<string,mixed> */
-	/** @param array<string,mixed> $extra */
+	/**
+	 * @param array<string,mixed> $extra
+	 * @return array<string,mixed>
+	 */
 	private function probe( string $body, array $extra = array() ): array {
 		$file = $this->root . '/probe.php';
 		$data = array_merge(

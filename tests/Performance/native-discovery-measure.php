@@ -27,6 +27,10 @@ namespace {
 	function get_current_network_id(): int {
 		return 1;
 	}
+	/**
+	 * @param array<string,mixed> $args
+	 * @return array<string,mixed>
+	 */
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function wp_safe_remote_get( string $url, array $args ): array {
 		$response = ran_wp_release_updater_test_native_measure_response( $url );
@@ -48,14 +52,23 @@ namespace {
 			'response' => array( 'code' => 200 ),
 		);
 	}
+	/**
+	 * @param array<string,mixed> $r
+	 */
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function wp_remote_retrieve_response_code( array $r ): int {
 		return $r ['response'] ['code'];
 	}
+	/**
+	 * @param array<string,mixed> $r
+	 */
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function wp_remote_retrieve_header( array $r, string $name ): mixed {
 		return $r ['headers'] [ strtolower( $name ) ] ?? null;
 	}
+	/**
+	 * @param array<string,mixed> $r
+	 */
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 	function wp_remote_retrieve_body( array $r ): string {
 		return $r ['body'];
@@ -75,6 +88,9 @@ namespace {
 		}
 		return $path;
 	}
+	/**
+	 * @return array<string,mixed>
+	 */
 	function ran_wp_release_updater_test_native_measure_response( string $url ): array {
 		$u = & $GLOBALS ['native_measure'];
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
@@ -110,6 +126,9 @@ namespace {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		return array( 'body' => json_encode( array( 'id' => 99 + $number ) ) );
 	}
+	/**
+	 * @return list<array<string,mixed>>
+	 */
 	function ran_wp_release_updater_test_native_measure_releases( string $scenario ): array {
 		$n   = 'incompatible' === $scenario ? 8 : 1;
 		$all = array();
@@ -118,6 +137,9 @@ namespace {
 		}
 		return $all;
 	}
+	/**
+	 * @return array<string,mixed>
+	 */
 	function ran_wp_release_updater_test_native_measure_release( int $id, bool $changed = false, bool $incompatible = false ): array {
 		$v          = $incompatible ? '2.0.' . $id : ( 'no-newer' === $GLOBALS ['native_measure'] ['scenario'] ? '1.0.0' : '2.0.0' );
 		$repository = $GLOBALS ['native_measure'] ['repository'] ?? 'repository';
@@ -149,6 +171,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 	require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 	use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 	const NATIVE_MEASURE_COUNTS = array( 1, 5, 10, 20 );
+	/** @phpstan-assert true $condition */
 	function native_measure_assert( bool $condition, string $message ): void {
 		if ( ! $condition ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
@@ -171,6 +194,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 		native_measure_assert( is_string( $manifest ['package_revision'] ) && is_string( $manifest ['package_version'] ) && is_string( $manifest ['php_floor'] ) && 'runtime.php' === $manifest ['runtime_file'] && is_int( $manifest ['runtime_protocol'] ) && 0 < $manifest ['runtime_protocol'] && is_string( $manifest ['wordpress_floor'] ), 'Runtime manifest contains invalid values: ' . $file );
 		return $manifest;
 	}
+	/**
+	 * @param list<string> $roots
+	 */
 	function native_measure_current_runtime_protocol( string $trusted_root, array $roots ): int {
 		native_measure_assert( '' !== $trusted_root && is_dir( $trusted_root ), 'Trusted current runtime root is unavailable.' );
 		$trusted = native_measure_runtime_manifest( $trusted_root );
@@ -195,7 +221,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 		unlink( $path );
 		return is_string( $bytes ) ? $bytes : throw new \RuntimeException( 'ZIP read failed.' );
 	}
-	/** One PHP request: N copied bootstraps, M queued registrar targets, then one activation. */
+	/**
+	 * One PHP request: N copied bootstraps, M queued registrar targets, then one activation.
+	 * @param array<string,mixed> $before
+	 * @return array<string,mixed>
+	 */
 	function native_measure_delta( array $before ): array {
 		$now = $GLOBALS ['native_measure'];
 		return array(
@@ -206,6 +236,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 			'validation_archive_opens' => $now ['validation_opens'] - $before ['validation_opens'],
 		);
 	}
+	/**
+	 * @return array<string,mixed>
+	 */
 	function native_measure_counters(): array {
 		return array(
 			'http_calls'       => $GLOBALS ['native_measure'] ['http_calls'],
@@ -215,7 +248,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 			'validation_opens' => $GLOBALS ['native_measure'] ['validation_opens'],
 		);
 	}
-	/** One PHP request: N copied bootstraps, M queued registrar targets, then one activation. */
+	/**
+	 * One PHP request: N copied bootstraps, M queued registrar targets, then one activation.
+	 * @param list<string> $roots
+	 * @return array<string,mixed>
+	 */
 	function native_measure_shared_request( array $roots, int $targets, string $scenario, bool $callback_control = false, string $target_type = 'plugin', bool $callback_revoked = false ): array {
 		native_measure_assert( array() !== $roots && count( $roots ) === count( array_unique( $roots ) ), 'Physical runtime roots are not distinct.' );
 		$runtime_protocol = native_measure_current_runtime_protocol( (string) getenv( 'RAN_NATIVE_MEASURE_TRUSTED_ROOT' ), $roots );
@@ -447,7 +484,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 					'type'   => $target_type,
 					'plugin' === $target_type ? 'plugin' : 'theme' => $item ['identity'],
 				);
-				$reply       = $item ['native']->filter_pre_download( false, $offers [ $index ] ['package'], null, $extra );
+				$offer       = $offers [ $index ];
+				native_measure_assert( is_array( $offer ) && is_string( $offer['package'] ?? null ), 'Installation preparation requires the discovered package.' );
+				$reply = $item ['native']->filter_pre_download( false, $offer['package'], null, $extra );
 				if ( 'install' === $scenario ) {
 					native_measure_assert( is_string( $reply ) && is_file( $reply ), 'Fresh installation preparation failed.' );
 				} else {
@@ -530,6 +569,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 			'operation_steps'           => $steps,
 		);
 	}
+	/**
+	 * @param list<string> $args
+	 */
 	function native_measure_shared_worker( array $args ): void {
 		$roots = explode( '|', (string) getenv( 'RAN_NATIVE_MEASURE_ROOTS' ) );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
@@ -553,6 +595,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance {
 			}
 		}
 	}
+	/**
+	 * @param list<string> $roots
+	 * @return array<string,mixed>
+	 */
 	function native_measure_child( array $roots, string $scratch, int $targets, string $scenario, bool $callback_control = false, string $target_type = 'plugin', bool $callback_revoked = false ): array {
 		$command     = array( PHP_BINARY, '-d', 'sys_temp_dir=' . $scratch, __FILE__, '--shared-worker', (string) $targets, $scenario, $callback_control ? '--callback-control' : '--literal-null', $target_type, $callback_revoked ? '--callback-revoked' : '--callback-stable' );
 		$environment = array(

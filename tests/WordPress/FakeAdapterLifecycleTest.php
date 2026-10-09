@@ -162,6 +162,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$binding      = $this->binding( $target_type, $uri, $channel );
 			$database     = new FakeOptionDatabase( 100 );
 			$claim_result = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+			self::assertInstanceOf( BindingState::class, $claim_result['current'] );
 			self::assertSame( 'claimed', $claim_result['result'] );
 			$state              = $claim_result['current'];
 			$claim              = $this->claim( $state );
@@ -252,6 +253,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 'update_completed', end( $diagnostics ) );
 		}
 
+		/**
+		 * @param array<string,mixed> $claim
+		 * @param array<string,mixed> $policy
+		 */
 		private function assert_staged_header_mismatch_does_not_create_destination( string $target_type, string $uri, string $version, IdentityDescriptor $descriptor, BindingRecord $binding, FakeOptionDatabase $database, BindingState $state, array $claim, PackageIdentityValidator $validator, array $policy, string $archive, string $destination_parent ): void {
 			$database->set_time( 121 );
 			$updater = $this->updater( $this->configuration( $target_type, $uri ), $binding, $database, $descriptor, $archive, $policy );
@@ -278,6 +283,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertDirectoryDoesNotExist( $destination_parent );
 		}
 
+		/**
+		 * @param array<string,mixed> $configuration
+		 * @param array<string,mixed> $policy
+		 */
 		private function updater( array $configuration, BindingRecord $binding, FakeOptionDatabase $database, IdentityDescriptor $descriptor, string $archive, array $policy ): ?NativePackageUpdater {
 			$adapter = new class( $descriptor, $archive ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter { public function __construct( private IdentityDescriptor $descriptor, private string $archive ) {} public function list_releases( array $conditional = array() ): array {
 					$facts = $this->descriptor->to_array();
@@ -294,13 +303,17 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				return $this->descriptor;
 			} public function acquire( IdentityDescriptor $descriptor ): \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact {
 				$path = tempnam( sys_get_temp_dir(), 'ran-fake-adapter-' );
+				\PHPUnit\Framework\Assert::assertIsString( $path );
 				copy( $this->archive, $path );
 				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set real fixture permission bits for archive custody and permission-boundary checks.
 				chmod( $path, 0600 );
 				$stat = lstat( $path );
+				\PHPUnit\Framework\Assert::assertIsArray( $stat );
+				$sha256 = hash_file( 'sha256', $path );
+				\PHPUnit\Framework\Assert::assertIsString( $sha256 );
 				return new \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact(
 					$path,
-					hash_file( 'sha256', $path ),
+					$sha256,
 					array(
 						'dev'   => $stat['dev'],
 						'ino'   => $stat['ino'],

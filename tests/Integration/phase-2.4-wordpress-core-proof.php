@@ -475,7 +475,7 @@ try {
 			// phpcs:ignore WordPress.DB.RestrictedFunctions.mysql_mysqli_init, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- The isolated proof owns a dedicated native MySQL connection before or outside WordPress database initialization. Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$cleanup = mysqli_init();
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.DB.RestrictedFunctions.mysql_mysqli_real_connect -- The isolated server may already be unavailable; connection success gates best-effort database teardown. Connect only to the isolated fixture database; preserve its socket/port and server-attestation boundary.
-			if ( @mysqli_real_connect( $cleanup, '127.0.0.1', $db_user, $db_password, null, $port ) ) {
+			if ( $cleanup instanceof mysqli && @mysqli_real_connect( $cleanup, '127.0.0.1', $db_user, $db_password, null, $port ) ) {
 				$cleanup->query( 'DROP DATABASE IF EXISTS `' . $cleanup->real_escape_string( $db_name ) . '`' );
 				$cleanup->close();
 			}
@@ -502,6 +502,11 @@ try {
 // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 echo json_encode( $result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) . PHP_EOL;
 
+/**
+ * @param list<string> $command
+ * @param array<string,string>|null $env
+ * @return array{code:int,stdout:string,stderr:string}
+ */
 function ran_wp_release_updater_test_run_command( array $command, string $cwd, ?array $env = null, bool $require_zero = true, string $stdin = '' ): array {
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
 	$process = proc_open(
@@ -540,6 +545,9 @@ function ran_wp_release_updater_test_run_command( array $command, string $cwd, ?
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $pipes[2] );
 	$exit = proc_close( $process );
+	if ( ! is_string( $stdout ) || ! is_string( $stderr ) ) {
+		throw new RuntimeException( 'Could not read command output.' );
+	}
 	if ( $require_zero && 0 !== $exit ) {
 		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 		throw new RuntimeException( 'Command failed: ' . implode( ' ', $command ) . ' (' . $exit . ')' . substr( trim( $stdout . "\n" . $stderr ), 0, 8000 ) );
@@ -575,7 +583,10 @@ function ran_wp_release_updater_test_attest_server( mixed $server, int $port, st
 	}
 	$mysqli = ran_wp_release_updater_test_connect( $port, $user, $password );
 	try {
-		$result   = $mysqli->query( 'SELECT @@datadir AS datadir' );
+		$result = $mysqli->query( 'SELECT @@datadir AS datadir' );
+		if ( ! $result instanceof mysqli_result ) {
+			throw new RuntimeException( 'MySQL attestation query did not return rows.' );
+		}
 		$row      = $result->fetch_assoc();
 		$expected = realpath( $data_directory );
 		$actual   = is_array( $row ) && isset( $row['datadir'] ) ? realpath( (string) $row['datadir'] ) : false;
@@ -612,6 +623,9 @@ function ran_wp_release_updater_test_connect( int $port, string $user, string $p
 	throw new RuntimeException( 'Could not connect to MySQL socket.' );
 }
 
+/**
+ * @param list<string> $exclude
+ */
 function ran_wp_release_updater_test_copy_tree( string $source, string $destination, array $exclude = array() ): void {
 	$source      = rtrim( $source, '/\\' );
 	$destination = rtrim( $destination, '/\\' );

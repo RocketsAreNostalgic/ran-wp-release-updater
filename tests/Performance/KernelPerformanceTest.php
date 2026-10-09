@@ -24,6 +24,7 @@ final class KernelPerformanceTest extends TestCase {
 		$binding  = BindingRecord::create( $this->binding_facts() );
 		$database = new FakeOptionDatabase( 100 );
 		$claimed  = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 600 );
+		self::assertInstanceOf( BindingState::class, $claimed['current'] );
 		self::assertSame( 'claimed', $claimed['result'] );
 		$state = $claimed['current'];
 		$claim = $this->claim( $state );
@@ -58,6 +59,7 @@ final class KernelPerformanceTest extends TestCase {
 		); }
 	private function cpu_nanoseconds(): int {
 		$usage = getrusage();
+		self::assertIsArray( $usage );
 		return ( (int) $usage['ru_utime.tv_sec'] + (int) $usage['ru_stime.tv_sec'] ) * 1_000_000_000 + ( (int) $usage['ru_utime.tv_usec'] + (int) $usage['ru_stime.tv_usec'] ) * 1000; }
 
 	/** @return array<string,mixed> */
