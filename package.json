@@ -12,12 +12,12 @@
     "check": "pnpm audit && pnpm format:check && pnpm lint:js && pnpm test"
   },
   "engines": {
-    "node": ">=24.11.0 <25",
+    "node": ">=24.21.0 <25",
     "pnpm": ">=11 <12"
   },
   "packageManager": "pnpm@11.7.0",
   "volta": {
-    "node": "24.11.0"
+    "node": "24.21.0"
   },
   "devDependencies": {
     "@wordpress/eslint-plugin": "^25.10.0",
