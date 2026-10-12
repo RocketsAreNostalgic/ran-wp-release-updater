@@ -177,6 +177,8 @@ jobs:
           php -d "sys_temp_dir=$php_tmp" "$wp_cli" core download --version=${{ matrix.wordpress }} --skip-content --path="$wp_root"
           composer install --no-interaction --prefer-dist --no-progress
           export RAN_UPDATER_WP_ROOT="$wp_root"
+          php tests/Integration/wordpress-observation-dispatch.php started
+          php tests/Integration/wordpress-observation-dispatch.php completed
           export RAN_UPDATER_WP_CLI="$wp_cli"
           export RAN_UPDATER_MYSQLD_BIN="$mysqld_binary"
           export RAN_UPDATER_INTEGRATION_ROOT="$integration_root"

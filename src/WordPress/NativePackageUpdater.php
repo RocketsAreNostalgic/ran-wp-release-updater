@@ -153,14 +153,9 @@ final class NativePackageUpdater {
 		}
 		$check_id = null;
 		$reason   = 'unexpected_failure';
-		try {
-			return $this->checked_update( $update, $package_data, $reason, $check_id );
-		} catch ( \Throwable $failure ) {
-			$reason = 'unexpected_failure';
-			throw $failure;
-		} finally {
-			$this->complete_check_observation( $check_id, $reason );
-		}
+		$result   = $this->checked_update( $update, $package_data, $reason, $check_id );
+		$this->complete_check_observation( $check_id, $reason );
+		return $result;
 	}
 
 	/** @param array<string,mixed> $package_data */
@@ -310,12 +305,7 @@ final class NativePackageUpdater {
 	 * @param array<string,mixed> $payload
 	 */
 	private static function observe_check( string $stage, array $payload ): void {
-		try {
-			do_action( 'ran_wp_release_updater_check_' . $stage . '_v1', $payload );
-		} catch ( \Throwable ) {
-			// Optional observers cannot change native execution. Delivery is not guaranteed.
-			return;
-		}
+		do_action( 'ran_wp_release_updater_check_' . $stage . '_v1', $payload );
 	}
 
 	public function filter_plugin_information( mixed $result, string $action, mixed $arguments ): mixed {
@@ -884,9 +874,14 @@ final class NativePackageUpdater {
 				$reason                                    = 'candidate_invalid';
 				$this->status['candidate_validation_code'] = 'candidate_invalid';
 				return null; }
+			$relationship = ReleaseVersion::relationship( $candidate['version'], $installed );
+			if ( $rejected && in_array( $relationship, array( ReleaseVersion::RELATIONSHIP_SAME, ReleaseVersion::RELATIONSHIP_OLDER ), true ) ) {
+				// A later non-candidate cannot replace the facts for the retained rejection.
+				continue;
+			}
 			$this->status['candidate_tag']     = $candidate['tag'];
 			$this->status['candidate_version'] = $candidate['version'];
-			$this->status['relationship']      = ReleaseVersion::relationship( $candidate['version'], $installed );
+			$this->status['relationship']      = $relationship;
 			if ( ReleaseVersion::RELATIONSHIP_NEWER !== $this->status['relationship'] ) {
 				if ( ReleaseVersion::RELATIONSHIP_INVALID === $this->status['relationship'] ) {
 					$rejected = true;

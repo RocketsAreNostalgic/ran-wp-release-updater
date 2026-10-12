@@ -272,7 +272,11 @@ of being up to date or of lock contention. A successfully offered later candidat
 can establish availability despite an earlier rejected candidate.
 
 Observers must tolerate missing start or completion, unsupported older elected
-runtimes, and process termination. Listener exceptions do not change native
-execution, but an earlier throwing WordPress listener can prevent a later one
-receiving the same action. These are optional observations, not a guaranteed
-delivery system or a new installation authority.
+runtimes, and process termination. Listeners must not throw. Handle explicit
+reporting or storage failure return values normally; do not wrap WordPress calls
+in a catch-and-resume boundary. Unexpected listener exceptions propagate normally
+and abort native execution, leaving a started observation incomplete. The updater
+does not dispatch completion during exceptional unwind and cannot safely resume
+a WordPress dispatcher that did not finish its cleanup. This also applies to
+exceptions from nested WordPress hooks: do not catch those and resume dispatch. These are optional
+observations, not a guaranteed delivery system or a new installation authority.

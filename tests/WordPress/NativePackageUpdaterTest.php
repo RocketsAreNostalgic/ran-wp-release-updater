@@ -94,9 +94,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@rmdir( $this->temporary_directory );
 		}
-		public function test_observation_captures_actual_check_and_isolates_listener_failure(): void {
-			list( $updater, $adapter )                              = $this->subject();
-			$GLOBALS['ran_wp_release_updater_test_observer_throws'] = true;
+		public function test_observation_captures_actual_check(): void {
+			list( $updater, $adapter ) = $this->subject();
 			$this->offer( $updater );
 			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
 			self::assertCount( 2, $events );
@@ -111,6 +110,40 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$updater->refresh();
 			$updater->filter_update( false, array(), 'unrelated/unrelated.php', array() );
 			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_observations'] );
+		}
+
+		public function test_throwing_start_listener_aborts_before_provider_work(): void {
+			list( $updater, $adapter )                              = $this->subject();
+			$GLOBALS['ran_wp_release_updater_test_observer_throws'] = true;
+			try {
+				$this->offer( $updater );
+				self::fail( 'Listener exception must escape the native check.' );
+			} catch ( \RuntimeException $failure ) {
+				self::assertSame( 'Observer failed.', $failure->getMessage() );
+			}
+			self::assertSame( 0, $adapter->list_calls );
+			self::assertCount( 1, $GLOBALS['ran_wp_release_updater_test_observations'] );
+		}
+
+		public function test_unexpected_failure_after_start_does_not_dispatch_completion(): void {
+			list( $updater, $adapter, $database ) = $this->subject( native_discovery_reuse: true );
+			$failure                              = new \RuntimeException( 'Unexpected binding read failure.' );
+			$database->mutate_on_time_read(
+				1,
+				static function () use ( $failure ): void {
+					throw $failure;
+				}
+			);
+			try {
+				$this->offer( $updater );
+				self::fail( 'Unexpected failure must escape the native check.' );
+			} catch ( \RuntimeException $caught ) {
+				self::assertSame( $failure, $caught );
+			}
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			self::assertCount( 1, $events );
+			self::assertSame( 'ran_wp_release_updater_check_started_v1', $events[0][0] );
 		}
 
 		public function test_reused_discovery_emits_no_fresh_check(): void {
@@ -199,11 +232,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 0, $adapter->list_calls );
 		}
 
-		public function test_rejected_newer_candidate_is_not_reported_as_no_newer_candidate(): void {
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'later_non_candidates' )]
+		public function test_rejected_newer_candidate_is_not_reported_as_no_newer_candidate( string $version ): void {
 			list( $updater, $adapter, , $descriptor ) = $this->subject();
 			$candidate                                = $this->candidate( $descriptor );
 			$older                                    = $candidate;
-			$older['version']                         = '0.9.0';
+			$older['version']                         = $version;
 			$adapter->list_response                   = array(
 				'candidates'       => array( $candidate, $older ),
 				'search_exhausted' => false,
@@ -224,6 +258,17 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
 			self::assertSame( 'candidate_rejected', $events[1][1]['reason'] );
 			self::assertSame( 'rejected', $events[1][1]['status'] );
+			self::assertSame( '2.0.0', $events[1][1]['candidate_version'] );
+			self::assertSame( 'newer', $events[1][1]['relationship'] );
+			self::assertSame( 'candidate_inspection_failed', $events[1][1]['candidate_validation_code'] );
+		}
+
+		/** @return array<string,array{string}> */
+		public static function later_non_candidates(): array {
+			return array(
+				'older' => array( '0.9.0' ),
+				'same'  => array( '1.0.0' ),
+			);
 		}
 
 		public function test_state_construction_and_register_are_passive(): void {
@@ -656,6 +701,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertIsArray( $offer );
 			self::assertSame( array( 1, 2, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 			self::assertSame( 'release:3', $updater->status()['offered_release_identity'] );
+			$completion = $GLOBALS['ran_wp_release_updater_test_observations'][1][1];
+			self::assertSame( 'succeeded', $completion['status'] );
+			self::assertSame( 'update_available', $completion['reason'] );
+			self::assertSame( $second->to_array()['version'], $completion['candidate_version'] );
+			self::assertSame( 'newer', $completion['relationship'] );
+			self::assertSame( 'archive_identity_verified', $completion['candidate_validation_code'] );
 		}
 		/** @return array<string,array{ReleaseFailure}> */
 		public static function candidate_local_inspection_failures(): array {
