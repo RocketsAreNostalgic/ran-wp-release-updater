@@ -237,3 +237,46 @@ If you need verified release metadata or bytes without registering a native upda
 The updater verifies provider/package identity before handing controlled bytes to WordPress and verifies the installed package after Core completes. It does not sandbox other PHP already running as the WordPress filesystem user. Code with equivalent operating-system access can still mutate plugin/theme files outside this lifecycle.
 
 See [Architecture and package relationships](architecture.md) for the trust model and [SECURITY.md](../SECURITY.md) for vulnerability reporting.
+### Optional native-check observations
+
+The selected runtime emits `ran_wp_release_updater_check_started_v1` and
+`ran_wp_release_updater_check_completed_v1` WordPress actions around an admitted
+native update check. Start precedes remote discovery, after any reusable request
+snapshot is ruled out; local validation/policy/admission failures also emit a
+pair. Reusing an already verified request snapshot emits neither action. Each
+action receives one array. `refresh()` and information reads
+are not checks and emit neither action. These hooks do not change runtime selection, native eligibility, or the public
+handle status shape.
+
+The start array contains exactly `check_id`, `network_id`, `blog_id`,
+`target_type`, `installed_identity`, `provider_code`, `repository_identity`,
+`channel`, and `binding_hash`. The check ID is independent random 32-character
+lowercase hexadecimal correlation data, never a lease or download token.
+Installed identity is at most 255 bytes, provider code 32, repository identity
+191. Consumers must resolve and authorize their own registered target; a binding
+hash is correlation data, not authority.
+
+Completion contains exactly `check_id`, `status`, `reason`, `relationship`,
+`installed_version`, `candidate_version`, `offered_version`, and
+`candidate_validation_code`. Status is `succeeded`, `rejected`, `skipped`, or
+`failed`. Versions are nullable, validated and at most 64 bytes; unknown or
+oversized facts are omitted as null, never truncated. Validation codes are a
+finite safe subset of the native discovery codes. No credentials, URLs, remote
+messages, exception contents, or archive tokens are included.
+
+`update_available` means an eligible native offer was constructed. Only a
+complete valid listing can establish `no_candidates` or `no_newer_candidate`;
+unknown or rejected potentially newer candidates cannot establish either.
+Policy suppression and failed discovery admission are skipped checks, not proof
+of being up to date or of lock contention. A successfully offered later candidate
+can establish availability despite an earlier rejected candidate.
+
+Observers must tolerate missing start or completion, unsupported older elected
+runtimes, and process termination. Listeners must not throw. Handle explicit
+reporting or storage failure return values normally; do not wrap WordPress calls
+in a catch-and-resume boundary. Unexpected listener exceptions propagate normally
+and abort native execution, leaving a started observation incomplete. The updater
+does not dispatch completion during exceptional unwind and cannot safely resume
+a WordPress dispatcher that did not finish its cleanup. This also applies to
+exceptions from nested WordPress hooks: do not catch those and resume dispatch. These are optional
+observations, not a guaranteed delivery system or a new installation authority.

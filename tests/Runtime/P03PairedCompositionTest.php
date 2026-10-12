@@ -22,6 +22,9 @@ final class P03PairedCompositionTest extends TestCase {
 	public function test_concise_github_composition_matches_the_explicit_native_path( string $type ): void {
 		$result = $this->probe( $type );
 
+		self::assertCount( 4, $result['observations'] );
+		self::assertSame( 'update_available', $result['observations'][1][1]['reason'] );
+		self::assertSame( $type, $result['observations'][0][1]['target_type'] );
 		self::assertSame( $result['concise']['binding'], $result['explicit']['binding'] );
 		self::assertSame( $result['concise']['binding']['binding_hash'], $result['explicit']['binding']['binding_hash'] );
 		self::assertSame( $result['concise']['archive_policy'], $result['explicit']['archive_policy'] );
@@ -91,6 +94,8 @@ function add_action(string $hook, mixed $callback, int $priority, int $arguments
 	$GLOBALS['p03_paired_hooks'][] = array('hook' => $hook, 'callback' => $callback);
 }
 function get_filesystem_method(): string { return 'direct'; }
+function get_current_blog_id(): int { return 1; }
+function do_action(string $hook, mixed ...$arguments): void { $GLOBALS['p03_observations'][] = array($hook, $arguments[0]); }
 $GLOBALS['p03_paired_hooks'] = array();
 $GLOBALS['wpdb'] = new \RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase(100);
 $GLOBALS['wp_version'] = '6.8.0';
@@ -251,6 +256,7 @@ $receiptFacts = static function (object $native): array {
 	return (new ReflectionProperty($receipt, 'facts'))->getValue($receipt);
 };
 echo json_encode(array(
+	'observations' => $GLOBALS['p03_observations'],
 	'handle' => $handle->status(),
 	'public_status' => $publicStatus,
 	'provider_calls_before_status' => $providerCallsBeforeStatus,

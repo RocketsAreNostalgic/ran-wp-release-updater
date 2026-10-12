@@ -27,6 +27,8 @@ final class P04CompatibilityNetworkScaleTest extends TestCase {
 
 		$result = $this->probe(
 			<<<'PHP'
+function get_current_blog_id(): int { return 1; }
+function do_action(string $hook, mixed ...$arguments): void { $GLOBALS['p04_observations'][] = array($hook, $arguments[0]); }
 $registrars = array();
 foreach ( $data['copies'] as $copy ) {
 	$registrars[] = require $copy . '/bootstrap.php';
@@ -38,7 +40,13 @@ $second->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
 $activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 5, 'wordpress_version' => '7.0.4'));
 $selected = (new ReflectionProperty($broker, 'selected_root'))->getValue($broker);
+foreach ($GLOBALS['p04_hooks'] as $entry) {
+	if ('update_plugins_github.com' === $entry['hook']) {
+		($entry['callback'])(false, array('Version' => 'invalid'), 'compatible/main.php', array());
+	}
+}
 echo json_encode(array(
+	'observations' => $GLOBALS['p04_observations'],
 	'activation' => $activation, 'selected' => $selected,
 	'first' => $first->status(), 'second' => $second->status(),
 	'hooks' => count($GLOBALS['p04_hooks']),
@@ -51,6 +59,8 @@ PHP,
 			)
 		);
 
+		self::assertCount( 2, $result['observations'] );
+		self::assertSame( 'runtime_identity_invalid', $result['observations'][1][1]['reason'] );
 		self::assertTrue( $result['activation']['loaded'] );
 		self::assertSame( $first, $result['selected'] );
 		self::assertSame( 'target_active', $result['first']['code'] );
