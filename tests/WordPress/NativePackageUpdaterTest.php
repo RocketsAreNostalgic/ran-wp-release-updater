@@ -20,6 +20,21 @@ namespace {
 			$GLOBALS['ran_wp_release_updater_test_hooks'][] = array( 'action', $hook, $callback, $priority, $arguments );
 		}
 	}
+	if ( ! function_exists( 'get_current_blog_id' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress site identity seam.
+		function get_current_blog_id(): int {
+			return 1;
+		}
+	}
+	if ( ! function_exists( 'do_action' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress observation seam.
+		function do_action( string $hook, mixed ...$arguments ): void {
+			$GLOBALS['ran_wp_release_updater_test_observations'][] = array( $hook, $arguments[0] );
+			if ( true === ( $GLOBALS['ran_wp_release_updater_test_observer_throws'] ?? false ) ) {
+				throw new \RuntimeException( 'Observer failed.' );
+			}
+		}
+	}
 	if ( ! function_exists( 'get_filesystem_method' ) ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function get_filesystem_method(): string {
@@ -54,6 +69,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$this->temporary_directory = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/native-package-updater-' . bin2hex( random_bytes( 6 ) );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 			mkdir( $this->temporary_directory, 0700, true );
+			$GLOBALS['ran_wp_release_updater_test_observations']     = array();
+			$GLOBALS['ran_wp_release_updater_test_observer_throws']  = false;
 			$GLOBALS['ran_wp_release_updater_test_hooks']            = array();
 			$GLOBALS['ran_wp_release_updater_test_filter_callbacks'] = array();
 		}
@@ -77,6 +94,138 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@rmdir( $this->temporary_directory );
 		}
+		public function test_observation_captures_actual_check_and_isolates_listener_failure(): void {
+			list( $updater, $adapter )                              = $this->subject();
+			$GLOBALS['ran_wp_release_updater_test_observer_throws'] = true;
+			$this->offer( $updater );
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			self::assertCount( 2, $events );
+			self::assertSame( 'ran_wp_release_updater_check_started_v1', $events[0][0] );
+			self::assertSame( 'ran_wp_release_updater_check_completed_v1', $events[1][0] );
+			self::assertMatchesRegularExpression( '/^[a-f0-9]{32}$/', $events[0][1]['check_id'] );
+			self::assertSame( $events[0][1]['check_id'], $events[1][1]['check_id'] );
+			self::assertSame( 'succeeded', $events[1][1]['status'] );
+			self::assertSame( 'update_available', $events[1][1]['reason'] );
+			self::assertSame( 1, $adapter->list_calls );
+			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
+			$updater->refresh();
+			$updater->filter_update( false, array(), 'unrelated/unrelated.php', array() );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_observations'] );
+		}
+
+		public function test_reused_discovery_emits_no_fresh_check(): void {
+			list( $updater, $adapter ) = $this->subject( native_discovery_reuse: true );
+			$this->offer( $updater );
+			self::assertCount( 2, $GLOBALS['ran_wp_release_updater_test_observations'] );
+			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
+			$this->offer( $updater );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_observations'] );
+			self::assertSame( 1, $adapter->list_calls );
+			$updater->refresh();
+			$this->offer( $updater );
+			self::assertCount( 2, $GLOBALS['ran_wp_release_updater_test_observations'] );
+			self::assertSame( 2, $adapter->list_calls );
+		}
+
+		public function test_only_complete_listing_establishes_no_candidates(): void {
+			foreach ( array( false, true ) as $exhausted ) {
+				list( $updater, $adapter )                           = $this->subject();
+				$adapter->list_response                              = array(
+					'candidates'       => array(),
+					'search_exhausted' => $exhausted,
+					'not_modified'     => false,
+				);
+				$GLOBALS['ran_wp_release_updater_test_observations'] = array();
+				self::assertFalse(
+					$updater->filter_update(
+						false,
+						array(
+							'Version'   => '1.0.0',
+							'UpdateURI' => $this->uri(),
+						),
+						'package/package.php',
+						array()
+					)
+				);
+				$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+				self::assertSame( $exhausted ? 'release_list_failed' : 'no_candidates', $events[1][1]['reason'] );
+			}
+		}
+
+		public function test_complete_valid_older_listing_establishes_no_newer_candidate(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject();
+			$candidate                                = $this->candidate( $descriptor );
+			$candidate['version']                     = '0.9.0';
+			$adapter->list_response                   = array(
+				'candidates'       => array( $candidate ),
+				'search_exhausted' => false,
+				'not_modified'     => false,
+			);
+			self::assertFalse(
+				$updater->filter_update(
+					false,
+					array(
+						'Version'   => '1.0.0',
+						'UpdateURI' => $this->uri(),
+					),
+					'package/package.php',
+					array()
+				)
+			);
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			self::assertSame( 'no_newer_candidate', $events[1][1]['reason'] );
+			self::assertSame( 'succeeded', $events[1][1]['status'] );
+			self::assertSame( 0, $adapter->inspect_calls );
+		}
+
+		public function test_observation_drops_invalid_version_and_has_exact_safe_keys(): void {
+			list( $updater, $adapter ) = $this->subject();
+			self::assertFalse(
+				$updater->filter_update(
+					false,
+					array(
+						'Version'   => 'https://secret:credential@example.test',
+						'UpdateURI' => $this->uri(),
+					),
+					'package/package.php',
+					array()
+				)
+			);
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			self::assertSame( array( 'check_id', 'network_id', 'blog_id', 'target_type', 'installed_identity', 'provider_code', 'repository_identity', 'channel', 'binding_hash' ), array_keys( $events[0][1] ) );
+			self::assertSame( array( 'check_id', 'status', 'reason', 'relationship', 'installed_version', 'candidate_version', 'offered_version', 'candidate_validation_code' ), array_keys( $events[1][1] ) );
+			self::assertNull( $events[1][1]['installed_version'] );
+			self::assertSame( 'runtime_identity_invalid', $events[1][1]['reason'] );
+			self::assertSame( 0, $adapter->list_calls );
+		}
+
+		public function test_rejected_newer_candidate_is_not_reported_as_no_newer_candidate(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject();
+			$candidate                                = $this->candidate( $descriptor );
+			$older                                    = $candidate;
+			$older['version']                         = '0.9.0';
+			$adapter->list_response                   = array(
+				'candidates'       => array( $candidate, $older ),
+				'search_exhausted' => false,
+				'not_modified'     => false,
+			);
+			$adapter->inspect_outcomes[ $candidate['release_identity'] ] = new ReleaseFailure( 'release_unavailable' );
+			self::assertFalse(
+				$updater->filter_update(
+					false,
+					array(
+						'Version'   => '1.0.0',
+						'UpdateURI' => $this->uri(),
+					),
+					'package/package.php',
+					array()
+				)
+			);
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			self::assertSame( 'candidate_rejected', $events[1][1]['reason'] );
+			self::assertSame( 'rejected', $events[1][1]['status'] );
+		}
+
 		public function test_state_construction_and_register_are_passive(): void {
 			list( $updater, $adapter, $database ) = $this->subject();
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );

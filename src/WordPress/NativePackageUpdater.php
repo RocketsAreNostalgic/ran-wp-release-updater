@@ -151,6 +151,20 @@ final class NativePackageUpdater {
 		if ( ! hash_equals( $this->installed_identity, $package_identity ) || ! $this->live() ) {
 			return $update;
 		}
+		$check_id = null;
+		$reason   = 'unexpected_failure';
+		try {
+			return $this->checked_update( $update, $package_data, $reason, $check_id );
+		} catch ( \Throwable $failure ) {
+			$reason = 'unexpected_failure';
+			throw $failure;
+		} finally {
+			$this->complete_check_observation( $check_id, $reason );
+		}
+	}
+
+	/** @param array<string,mixed> $package_data */
+	private function checked_update( mixed $update, array $package_data, string &$reason, ?string &$check_id ): mixed {
 		$this->begin_operation();
 		$installed                         = is_string( $package_data['Version'] ?? null ) ? $package_data['Version'] : '';
 		$this->status                      = self::empty_status();
@@ -158,20 +172,42 @@ final class NativePackageUpdater {
 		$this->status['last_check']        = time();
 		$runtime_uri                       = is_string( $package_data['UpdateURI'] ?? null ) ? $package_data['UpdateURI'] : '';
 		if ( null === ReleaseVersion::normalize_header( $installed ) || ! $this->matches_runtime_uri( $runtime_uri ) ) {
+			$reason   = 'runtime_identity_invalid';
+			$check_id = $this->start_check_observation();
 			return $this->diagnose( 'runtime_package_identity_invalid', $update );
 		}
 		if ( in_array( $this->policy, array( 'disabled', 'forced-off' ), true ) ) {
+			$reason   = 'disabled' === $this->policy ? 'policy_disabled' : 'policy_forced_off';
+			$check_id = $this->start_check_observation();
 			return false;
 		}
-		if ( ! $this->direct_filesystem() || ! $this->claim_discovery() ) {
+		if ( ! $this->direct_filesystem() ) {
+			$reason   = 'filesystem_unavailable';
+			$check_id = $this->start_check_observation();
 			return $update;
 		}
-		$descriptor = $this->discover( $installed );
-		if ( ! $descriptor instanceof IdentityDescriptor || ! $this->manual_eligible( $descriptor ) ) {
+		if ( ! $this->claim_discovery() ) {
+			$reason   = 'discovery_not_admitted';
+			$check_id = $this->start_check_observation();
+			return $update;
+		}
+		$descriptor = $this->discover(
+			$installed,
+			$reason,
+			function () use ( &$check_id ): void {
+				$check_id = $this->start_check_observation();
+			}
+		);
+		if ( ! $descriptor instanceof IdentityDescriptor ) {
+			return $update;
+		}
+		if ( ! $this->manual_eligible( $descriptor ) ) {
+			$reason = 'candidate_not_eligible';
 			return $update;
 		}
 		$token = $this->token( $descriptor );
 		if ( null === $token ) {
+			$reason = 'offer_token_unavailable';
 			return $update;
 		}
 		$facts                                    = $descriptor->to_array();
@@ -193,7 +229,93 @@ final class NativePackageUpdater {
 		} else {
 			$offer['theme'] = $this->installed_identity;
 		}
+		$reason = 'update_available';
 		return $offer;
+	}
+
+	private function start_check_observation(): ?string {
+		$facts = $this->binding->to_array();
+		if ( ! function_exists( 'do_action' ) || ! function_exists( 'get_current_blog_id' ) ) {
+			return null;
+		}
+		foreach ( array(
+			'provider_code'              => 32,
+			'stable_repository_identity' => 191,
+			'installed_package_identity' => 255,
+		) as $key => $limit ) {
+			if ( ! is_string( $facts[ $key ] ) || strlen( $facts[ $key ] ) > $limit ) {
+				return null;
+			}
+		}
+		try {
+			$blog_id = get_current_blog_id();
+			if ( $blog_id < 1 ) {
+				return null;
+			}
+			$check_id = bin2hex( random_bytes( 16 ) );
+		} catch ( \Throwable ) {
+			return null;
+		}
+		self::observe_check(
+			'started',
+			array(
+				'check_id'            => $check_id,
+				'network_id'          => $facts['network_id'],
+				'blog_id'             => $blog_id,
+				'target_type'         => $this->target_type,
+				'installed_identity'  => $this->installed_identity,
+				'provider_code'       => $facts['provider_code'],
+				'repository_identity' => $facts['stable_repository_identity'],
+				'channel'             => $facts['release_channel'],
+				'binding_hash'        => $this->binding->binding_hash(),
+			)
+		);
+		return $check_id;
+	}
+
+	private function complete_check_observation( ?string $check_id, string $reason ): void {
+		if ( null === $check_id ) {
+			return;
+		}
+		$payload = array(
+			'check_id' => $check_id,
+			'status'   => 'failed',
+			'reason'   => $reason,
+		);
+		if ( in_array( $reason, array( 'update_available', 'no_candidates', 'no_newer_candidate' ), true ) ) {
+			$payload['status'] = 'succeeded';
+		} elseif ( in_array( $reason, array( 'candidate_rejected', 'candidate_not_eligible' ), true ) ) {
+			$payload['status'] = 'rejected';
+		} elseif ( in_array( $reason, array( 'policy_disabled', 'policy_forced_off', 'discovery_not_admitted' ), true ) ) {
+			$payload['status'] = 'skipped';
+		}
+		foreach ( array( 'relationship', 'installed_version', 'candidate_version', 'offered_version', 'candidate_validation_code' ) as $key ) {
+			$value           = $this->status[ $key ];
+			$payload[ $key ] = is_string( $value ) && strlen( $value ) <= 64 ? $value : null;
+		}
+		foreach ( array( 'installed_version', 'candidate_version', 'offered_version' ) as $key ) {
+			if ( is_string( $payload[ $key ] ) && null === ReleaseVersion::normalize_header( $payload[ $key ] ) ) {
+				$payload[ $key ] = null;
+			}
+		}
+		$validation_codes = array( 'release_list_failed', 'candidate_list_invalid', 'candidate_invalid', 'candidate_not_newer', 'candidate_inspection_failed', 'candidate_descriptor_mismatch', 'candidate_validation_failed', 'archive_identity_verified' );
+		if ( ! in_array( $payload['candidate_validation_code'], $validation_codes, true ) ) {
+			$payload['candidate_validation_code'] = null;
+		}
+		self::observe_check( 'completed', $payload );
+	}
+
+	/**
+	 * @param 'started'|'completed' $stage
+	 * @param array<string,mixed> $payload
+	 */
+	private static function observe_check( string $stage, array $payload ): void {
+		try {
+			do_action( 'ran_wp_release_updater_check_' . $stage . '_v1', $payload );
+		} catch ( \Throwable ) {
+			// Optional observers cannot change native execution. Delivery is not guaranteed.
+			return;
+		}
 	}
 
 	public function filter_plugin_information( mixed $result, string $action, mixed $arguments ): mixed {
@@ -718,8 +840,13 @@ final class NativePackageUpdater {
 		$this->schedule_finalization();
 		return true;
 	}
-	/** claimDiscovery() has established the current binding fence before discovery. */
-	private function discover( string $installed ): ?IdentityDescriptor {
+	/**
+	 * claim_discovery() has established the current binding fence before discovery.
+	 * @param (\Closure(): void)|null $on_discovery
+	 */
+	private function discover( string $installed, string &$reason = '', ?\Closure $on_discovery = null ): ?IdentityDescriptor {
+		$reason               = 'release_list_failed';
+		$rejected             = false;
 		$normalized_installed = ReleaseVersion::normalize_header( $installed );
 		if ( ! is_string( $normalized_installed ) ) {
 			return null;
@@ -728,6 +855,9 @@ final class NativePackageUpdater {
 		if ( $reused instanceof IdentityDescriptor ) {
 			return $reused;
 		}
+		if ( null !== $on_discovery ) {
+			$on_discovery();
+		}
 		$this->clear_discovery_snapshot();
 		$discovery_claim = $this->claim;
 		$discovery_epoch = $this->discovery_epoch;
@@ -735,42 +865,56 @@ final class NativePackageUpdater {
 			$listed     = $this->adapter->list_releases();
 			$candidates = $listed['candidates'] ?? null;
 		} catch ( \Throwable ) {
+			$reason                                    = 'release_list_failed';
 			$this->status['candidate_validation_code'] = 'release_list_failed';
 			return null;
 		}
 		$rate_limit = $listed['rate_limit'] ?? null;
 		if ( is_array( $rate_limit ) && true === ( $rate_limit['limited'] ?? null ) ) {
+			$reason                                    = 'release_list_failed';
 			$this->status['candidate_validation_code'] = 'release_list_failed';
 			return null;
 		}
 		if ( ! is_array( $candidates ) || count( $candidates ) > 8 ) {
+			$reason                                    = 'candidate_invalid';
 			$this->status['candidate_validation_code'] = 'candidate_list_invalid';
 			return null; }
 		foreach ( $candidates as $candidate ) {
 			if ( ! is_array( $candidate ) || ! is_string( $candidate['release_identity'] ?? null ) || ! is_string( $candidate['tag'] ?? null ) || ! is_string( $candidate['version'] ?? null ) ) {
+				$reason                                    = 'candidate_invalid';
 				$this->status['candidate_validation_code'] = 'candidate_invalid';
 				return null; }
 			$this->status['candidate_tag']     = $candidate['tag'];
 			$this->status['candidate_version'] = $candidate['version'];
 			$this->status['relationship']      = ReleaseVersion::relationship( $candidate['version'], $installed );
 			if ( ReleaseVersion::RELATIONSHIP_NEWER !== $this->status['relationship'] ) {
+				if ( ReleaseVersion::RELATIONSHIP_INVALID === $this->status['relationship'] ) {
+					$rejected = true;
+					$reason   = 'candidate_invalid';
+				}
 				$this->status['candidate_validation_code'] = 'candidate_not_newer';
 				continue; }
+			$rejected = true;
+			$reason   = 'candidate_rejected';
 			try {
 				$descriptor = $this->adapter->inspect( $candidate['release_identity'], $candidate['tag'] );
 				BindingRecord::assert_descriptor_binding( $descriptor, $this->binding );
 			} catch ( ReleaseFailure $failure ) {
+				$reason                                    = 'candidate_inspection_failed';
 				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
 				if ( self::can_reject_candidate( $failure ) ) {
+					$reason = 'candidate_rejected';
 					continue;
 				}
 				return null;
 			} catch ( \Throwable ) {
+				$reason                                    = 'candidate_inspection_failed';
 				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
 				return null;
 			}
 			$facts = $descriptor->to_array();
 			if ( ! hash_equals( $candidate['release_identity'], $facts['release_identity'] ) || ! hash_equals( $candidate['tag'], $facts['tag'] ) || 0 !== ReleaseVersion::compare( $candidate['version'], $facts['version'] ) ) {
+				$reason                                    = 'candidate_descriptor_mismatch';
 				$this->status['candidate_validation_code'] = 'candidate_descriptor_mismatch';
 				return null; }
 			$artifact = null;
@@ -778,15 +922,18 @@ final class NativePackageUpdater {
 				$artifact = $this->adapter->acquire( $descriptor );
 				$valid    = $artifact->inspect( fn( string $path ) => $this->validator->validate( $descriptor, $this->archive_policy, $path ) );
 			} catch ( ReleaseFailure $failure ) {
+				$reason                                    = 'candidate_validation_failed';
 				$this->status['candidate_validation_code'] = 'candidate_validation_failed';
 				if ( $artifact instanceof \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact && ! $artifact->discard() ) {
 					return null;
 				}
 				if ( self::can_reject_candidate( $failure ) ) {
+					$reason = 'candidate_rejected';
 					continue;
 				}
 				return null;
 			} catch ( \Throwable ) {
+				$reason                                    = 'candidate_validation_failed';
 				$this->status['candidate_validation_code'] = 'candidate_validation_failed';
 				if ( $artifact instanceof \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact ) {
 					$artifact->discard();
@@ -795,13 +942,16 @@ final class NativePackageUpdater {
 			}
 			$this->status['candidate_validation_code'] = $valid->code();
 			if ( ! $valid->is_valid() ) {
+				$reason = 'candidate_rejected';
 				if ( ! $artifact->discard() ) {
+					$reason                                    = 'candidate_validation_failed';
 					$this->status['candidate_validation_code'] = 'candidate_validation_failed';
 					return null;
 				}
 				continue;
 			}
 			if ( ! $artifact->discard() ) {
+				$reason                                    = 'candidate_validation_failed';
 				$this->status['candidate_validation_code'] = 'candidate_validation_failed';
 				return null;
 			}
@@ -815,6 +965,9 @@ final class NativePackageUpdater {
 				);
 			}
 			return $descriptor;
+		}
+		if ( ! $rejected && false === ( $listed['search_exhausted'] ?? null ) && false === ( $listed['not_modified'] ?? null ) ) {
+			$reason = array() === $candidates ? 'no_candidates' : 'no_newer_candidate';
 		}
 		return null;
 	}
