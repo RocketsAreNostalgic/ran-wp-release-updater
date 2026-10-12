@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.10](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.9...v1.0.0-beta.10) (2026-10-12)
+
+
+### Features
+
+* expose bounded observations for actual release checks ([#116](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/116)) ([0c23f20](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/0c23f201f4b292a6e7cc33589ffe89eb8ef5567b))
+
 ## [1.0.0-beta.9](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.8...v1.0.0-beta.9) (2026-09-27)
 
 
