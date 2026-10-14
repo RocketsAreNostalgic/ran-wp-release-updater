@@ -262,6 +262,11 @@ final class PackageIdentityValidator {
 		}
 	}
 
+	/** @internal Verify descriptor-bound bytes with a stable stat/hash/post-hash-stat observation. */
+	public function verify_archive_identity( IdentityDescriptor $descriptor, string $archive_path ): bool {
+		return null !== $this->archive_identity( $archive_path, $descriptor->to_array() );
+	}
+
 	/** @return array{descriptor_fingerprint:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,sha256:string,size:int,update_uri:string} */
 	public function consume_receipt_proof( ValidatedPackage $package, IdentityDescriptor $descriptor ): array {
 		if ( ! isset( $this->receipt_proofs[ $package ] ) ) {

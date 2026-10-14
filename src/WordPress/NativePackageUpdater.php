@@ -6,6 +6,7 @@ namespace RAN\WPReleaseUpdater\V1\WordPress;
 
 use InvalidArgumentException;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
+use RAN\WPReleaseUpdater\V1\Archive\ValidatedPackage;
 use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
@@ -428,8 +429,10 @@ final class NativePackageUpdater {
 			return $this->failure( 'binding_fence_lost' );
 		}
 		try {
-			$proof   = $this->validator->validate( $fresh, $this->archive_policy, $owned['path'] );
-			$receipt = AcquisitionReceipt::issue( $verified['current'], $fresh, $this->validator, $proof, $verified['now'] );
+			if ( ! $this->validator->verify_archive_identity( $fresh, $owned['path'] ) ) {
+				throw new InvalidArgumentException( 'The owned archive identity changed.' );
+			}
+			$receipt = AcquisitionReceipt::issue( $verified['current'], $fresh, $this->validator, $owned['proof'], $verified['now'] );
 		} catch ( \Throwable ) {
 			$this->archive_store->remove( $owned['path'], $owned['directory'] );
 			return $this->failure( 'acquisition_identity_invalid' );
@@ -524,7 +527,7 @@ final class NativePackageUpdater {
 		}
 
 		$this->state = $verified['current'];
-		if ( ! $this->pending_install->stage_manifest( $manifest ) ) {
+		if ( ! $this->pending_install->verify_staging() ) {
 			$this->clear_pending();
 			return $this->failure( 'staged_package_identity_invalid' );
 		}
@@ -646,15 +649,17 @@ final class NativePackageUpdater {
 				|| ( ! $this->pending_install->completion_observed() && ! $this->pending_install->multi_run() )
 				|| ! $archive_manifest_verified
 				|| ! is_string( $destination )
-				|| ! is_array( $this->pending_install->staged_manifest() )
+				|| ! $this->pending_install->staging_verified()
 				|| ! is_array( $manifest )
-				|| ! hash_equals( $this->manifest_builder->hash( $this->pending_install->staged_manifest() ), $this->manifest_builder->hash( $manifest ) )
 				|| ! $this->matches_staged_metadata( $destination )
 			) {
 				$this->diagnose( 'outcome_uncertain', null );
 				return;
 			}
 			$completed = BindingFenceCoordinator::complete_persistent_install( $this->wpdb, $this->state, $this->claim, $this->pending_install->receipt(), $this->descriptor );
+			if ( 'completed' === $completed['result'] ) {
+				$this->lease_held = false;
+			}
 			$this->diagnose( 'completed' === $completed['result'] ? 'update_completed' : 'outcome_uncertain', null );
 		} finally {
 			$this->clear_pending();
@@ -1038,12 +1043,14 @@ final class NativePackageUpdater {
 		} catch ( \Throwable ) {
 			return null; }
 	}
-	/** @return array{directory:string,path:string}|null */ private function validated_copy( string $path, IdentityDescriptor $descriptor ): ?array {
+	/** @return array{directory:string,path:string,proof:ValidatedPackage}|null */ private function validated_copy( string $path, IdentityDescriptor $descriptor ): ?array {
 		try {
 			$proof = $this->validator->validate( $descriptor, $this->archive_policy, $path );
 		} catch ( \Throwable ) {
 			return null;
-		} return $proof->is_valid() ? $this->archive_store->copy( $path, $descriptor ) : null; }
+		}
+		$copy = $proof->is_valid() ? $this->archive_store->copy( $path, $descriptor ) : null;
+		return null === $copy ? null : array_merge( $copy, array( 'proof' => $proof ) ); }
 	/** @return array<string,mixed> */ private function claim( BindingState $state ): array {
 		return array(
 			'binding_generation' => $state->binding_generation(),
