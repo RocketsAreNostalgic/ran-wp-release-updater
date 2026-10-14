@@ -23,6 +23,12 @@ register target
 
 Registration is deliberately passive: it does not resolve credentials, contact the provider, read an archive, or enter installation. Provider work starts when WordPress asks for update information.
 
+During acquisition, the updater reuses the source archive's validated identity
+after copying it into owned custody, with a fresh byte check after the binding
+fence. This avoids a second full ZIP scan without replacing the later staging
+and installed-package checks. Confirmed completion also avoids redundant lease
+release work; uncertain outcomes retain cleanup retries.
+
 WordPress Core remains responsible for update scheduling, the Plugins and Updates screens, filesystem access, temporary backups, extraction, installation, rollback, activation state, and Core cleanup. The library validates and fences the operation around those Core-owned steps.
 
 ## Registration timing
