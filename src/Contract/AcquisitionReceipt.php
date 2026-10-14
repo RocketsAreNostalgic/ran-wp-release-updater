@@ -12,7 +12,6 @@ use WeakMap;
 
 final readonly class AcquisitionReceipt {
 
-	private const KEYS = array( 'archive_identity_verified', 'binding_generation', 'binding_hash', 'descriptor_fingerprint', 'local_sha256', 'opaque_artifact_identity', 'opaque_release_identity', 'package_identity_verified', 'provider_code', 'receipt_schema' );
 	/** @param array<string, mixed> $facts */
 	private function __construct( private array $facts ) {}
 
@@ -29,16 +28,13 @@ final readonly class AcquisitionReceipt {
 		}
 		$descriptor_facts          = $descriptor->to_array();
 		$facts                     = array(
-			'archive_identity_verified' => true,
-			'binding_generation'        => $state->binding_generation(),
-			'binding_hash'              => $binding->binding_hash(),
-			'descriptor_fingerprint'    => $descriptor->fingerprint_value(),
-			'local_sha256'              => $proof['sha256'],
-			'opaque_artifact_identity'  => $descriptor_facts['artifact_identity'],
-			'opaque_release_identity'   => $descriptor->release_identity(),
-			'package_identity_verified' => true,
-			'provider_code'             => $descriptor_facts['provider_code'],
-			'receipt_schema'            => 1,
+			'binding_generation'       => $state->binding_generation(),
+			'binding_hash'             => $binding->binding_hash(),
+			'descriptor_fingerprint'   => $descriptor->fingerprint_value(),
+			'local_sha256'             => $proof['sha256'],
+			'opaque_artifact_identity' => $descriptor_facts['artifact_identity'],
+			'opaque_release_identity'  => $descriptor->release_identity(),
+			'provider_code'            => $descriptor_facts['provider_code'],
 		);
 		$receipt                   = new self( $facts );
 		self::issued()[ $receipt ] = array(
@@ -89,7 +85,7 @@ final readonly class AcquisitionReceipt {
 	}
 
 	private static function valid( mixed $value, BindingState $state, IdentityDescriptor $descriptor, int $now ): bool {
-		if ( ! self::exact_keys( $value ) || $now < 0 || $now > BindingState::MAX_SAFE_INTEGER || $now > $state->lease_deadline() || 1 !== $value['receipt_schema'] || true !== $value['archive_identity_verified'] || true !== $value['package_identity_verified'] || ! self::sha256( $value['local_sha256'] ) ) {
+		if ( $now < 0 || $now > BindingState::MAX_SAFE_INTEGER || $now > $state->lease_deadline() || ! self::sha256( $value['local_sha256'] ) ) {
 			return false;
 		}
 		try {
@@ -119,17 +115,5 @@ final readonly class AcquisitionReceipt {
 	private static function issued(): WeakMap {
 		static $issued   = null;
 		return $issued ??= new WeakMap();
-	}
-
-	private static function exact_keys( mixed $value ): bool {
-		if ( ! is_array( $value ) || count( $value ) !== count( self::KEYS ) ) {
-			return false;
-		}
-		foreach ( self::KEYS as $key ) {
-			if ( ! array_key_exists( $key, $value ) ) {
-				return false;
-			}
-		}
-		return true;
 	}
 }

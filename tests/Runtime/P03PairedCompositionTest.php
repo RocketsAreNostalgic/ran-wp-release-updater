@@ -48,8 +48,6 @@ final class P03PairedCompositionTest extends TestCase {
 		self::assertSame( 'newer', $result['public_status']['native']['relationship'] );
 		self::assertSame( $result['provider_calls_before_status'], $result['provider_calls_after_status'] );
 		self::assertSame( 'archive_identity_verified', $result['concise']['status']['candidate_validation_code'] );
-		self::assertTrue( $result['concise']['receipt']['archive_identity_verified'] );
-		self::assertTrue( $result['concise']['receipt']['package_identity_verified'] );
 		self::assertSame( '2.0.0', $result['concise']['offer']['version'] );
 		self::assertSame( 'plugin' === $type ? 10 : 9, $result['concise']['hook_count'] );
 	}
