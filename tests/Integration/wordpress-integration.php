@@ -195,7 +195,8 @@ try {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$result['scenarios']['distribution']['duration_ms'] = (int) ( ( hrtime( true ) - $started ) / 1000000 );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Preserve the existing integration report identity for this additional tested scenario.
-		$result['scenarios']['native_mixed_bulk'] = ran_wp_release_updater_test_installed_mixed_bulk( $source, $wordpress, $run, $database, $socket, $wp_command, $password );
+		$result['scenarios']['native_mixed_bulk'] = array();
+		ran_wp_release_updater_test_installed_mixed_bulk( $source, $wordpress, $run, $database, $socket, $wp_command, $password, $result['scenarios']['native_mixed_bulk'] );
 	}
 	if ( 'all' === $scenario || 'multisite' === $scenario ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -838,15 +839,14 @@ function ran_wp_release_updater_test_read_json( string $path ): array {
  * Reuse the native bulk oracle within the already attested installed-test environment.
  *
  * @param list<string> $wp_command
- * @return array<string,array<array-key,mixed>>
+ * @param array<string,array<array-key,mixed>> $proofs
  */
-function ran_wp_release_updater_test_installed_mixed_bulk( string $source, string $wordpress, string $run, mysqli $database, string $socket, array $wp_command, string $password ): array {
+function ran_wp_release_updater_test_installed_mixed_bulk( string $source, string $wordpress, string $run, mysqli $database, string $socket, array $wp_command, string $password, array &$proofs ): void {
 	global $runtime;
 	$factory = require __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php';
 	if ( ! $factory instanceof Closure ) {
 		throw new RuntimeException( 'Invalid mixed-bulk fixture factory.' );
 	}
-	$proofs = array();
 	foreach ( array( array( 'plugin', 'success' ), array( 'theme', 'success' ), array( 'plugin', 'failure' ), array( 'theme', 'failure' ) ) as $scenario ) {
 		[ $type, $mode ] = $scenario;
 		$base            = ran_wp_release_updater_test_make_directory( $run . '/mixed-' . $type . '-' . $mode );
@@ -880,9 +880,8 @@ function ran_wp_release_updater_test_installed_mixed_bulk( string $source, strin
 				'RAN_WP_RELEASE_UPDATER_MANAGED_B_ARCHIVE' => $archives['managed-b'],
 			)
 		);
-		$proof = ran_wp_release_updater_test_read_json( $output );
-		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ) && ( $proof['candidate_revision'] ?? null ) === $runtime['package_revision'], 'Installed native mixed-bulk assertions or candidate identity failed.' );
+		$proof                         = ran_wp_release_updater_test_read_json( $output );
 		$proofs[ $type . '-' . $mode ] = $proof;
+		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ) && ( $proof['candidate_revision'] ?? null ) === $runtime['package_revision'], 'Installed native mixed-bulk ' . $type . '-' . $mode . ' assertions or candidate identity failed.' );
 	}
-	return $proofs;
 }
