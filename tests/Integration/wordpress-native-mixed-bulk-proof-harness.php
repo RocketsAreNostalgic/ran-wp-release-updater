@@ -497,7 +497,7 @@ function ran_wp_release_updater_test_prime_mixed_bulk_transient( string $type, a
 		'version'      => '2.0.0',
 		'package'      => $ordinary_archive,
 		'url'          => 'https://mixed-bulk.invalid/ordinary/repository',
-		'requires'     => '6.8',
+		'requires'     => '6.5',
 		'requires_php' => '8.2',
 	) : array(
 		'theme'        => $ids [1],
@@ -505,7 +505,7 @@ function ran_wp_release_updater_test_prime_mixed_bulk_transient( string $type, a
 		'version'      => '2.0.0',
 		'package'      => $ordinary_archive,
 		'url'          => 'https://mixed-bulk.invalid/ordinary/repository',
-		'requires'     => '6.8',
+		'requires'     => '6.5',
 		'requires_php' => '8.2',
 	);
 	set_site_transient( 'plugin' === $type ? 'update_plugins' : 'update_themes', $transient, 60 );
