@@ -105,7 +105,6 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePackageUpdater',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubCredentialResolver',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\ProspectiveReleaseInspection',
-			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\ProspectiveReleaseArtifact',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseService',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubReleaseAdapter',
 		) as $class ) {
@@ -123,7 +122,6 @@ final class NeutralKernelBoundaryTest extends TestCase {
 		self::assertFileExists( $provider . '/GitHubReleaseService.php' );
 		self::assertFileExists( $provider . '/GitHubReleaseAdapter.php' );
 		self::assertFileExists( $provider . '/ProspectiveReleaseInspection.php' );
-		self::assertFileExists( $provider . '/ProspectiveReleaseArtifact.php' );
 		self::assertFileDoesNotExist( $provider . '/GitHubTemporaryArtifact.php' );
 		self::assertFileExists( $root . '/src/Archive/TemporaryArtifact.php' );
 		$fixture_entries = glob( $root . '/src/{Archive,Contract,Runtime,WordPress}/*.php', GLOB_BRACE );

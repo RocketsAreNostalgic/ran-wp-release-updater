@@ -428,30 +428,6 @@ final class GitHubReleaseService {
 		return $inspection;
 	}
 
-	public function acquire_prospective(
-		ProspectiveReleaseInspection $inspection,
-		string $expected_fingerprint
-	): ProspectiveReleaseArtifact {
-		$this->assert_prospective_input( $inspection, $expected_fingerprint );
-		list($fresh, $artifact) = $this->prospective_proof(
-			$inspection->release_identity(),
-			$inspection->tag(),
-			$this->resolve_credentials(),
-			true
-		);
-		if (
-			! $artifact instanceof TemporaryArtifact
-			|| ! hash_equals( $expected_fingerprint, $fresh->fingerprint_value() )
-			|| ! hash_equals( $inspection->fingerprint_value(), $fresh->fingerprint_value() )
-		) {
-			if ( $artifact instanceof TemporaryArtifact ) {
-				$artifact->discard();
-			}
-			throw new RuntimeException( 'The prospective GitHub release changed before acquisition.' );
-		}
-		return new ProspectiveReleaseArtifact( $fresh, $artifact );
-	}
-
 	/** @return array{ProspectiveReleaseInspection,?TemporaryArtifact} */
 	private function prospective_proof(
 		string $release_identity,
@@ -644,21 +620,6 @@ final class GitHubReleaseService {
 			'target_type'          => $this->binding['target_type'],
 			'version'              => $version,
 		);
-	}
-
-	private function assert_prospective_input(
-		ProspectiveReleaseInspection $inspection,
-		string $expected_fingerprint
-	): void {
-		$facts = $inspection->to_array();
-		if (
-			1 !== preg_match( '/\Av2:[a-f0-9]{64}\z/D', $expected_fingerprint )
-			|| ! hash_equals( $inspection->fingerprint_value(), $expected_fingerprint )
-			|| ! $this->matches_configuration( $facts )
-		) {
-			throw new InvalidArgumentException( 'The prospective GitHub release acquisition is invalid.' );
-		}
-		$this->inspect_input( $inspection->release_identity(), $inspection->tag() );
 	}
 
 	/** @param array<string, mixed> $facts */
