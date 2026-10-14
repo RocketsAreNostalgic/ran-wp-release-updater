@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.11](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.10...v1.0.0-beta.11) (2026-10-14)
+
+
+### Performance
+
+* **native:** publish verified archive and completion reuse ([#127](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/127)) ([a1a0a3c](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/a1a0a3cb87f8180cc8e2a2791e6dedbbe3177c3f))
+
 ## [1.0.0-beta.10](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.9...v1.0.0-beta.10) (2026-10-12)
 
 
