@@ -1,6 +1,11 @@
 <?php
 
 declare( strict_types = 1 );
+
+$ran_wp_release_updater_test_fixture_factory = require __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php';
+if ( ! $ran_wp_release_updater_test_fixture_factory instanceof Closure ) {
+	throw new RuntimeException( 'Invalid mixed-bulk fixture factory.' );
+}
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $root = realpath( __DIR__ . '/../../' );
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -89,6 +94,10 @@ try {
 		mkdir( $site . '/wp-content/' . $dir, 0700, true );
 	}
 	ran_wp_release_updater_test_copy_tree( $root, $site . '/wp-content/plugins/ran-wp-release-updater', array( 'tests', '.git', '.github', 'vendor', 'node_modules' ) );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create the owned site's early runtime loader directory.
+	mkdir( $site . '/wp-content/mu-plugins', 0700 );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Load the copied candidate before WordPress's normal activation boundary.
+	file_put_contents( $site . '/wp-content/mu-plugins/mixed-bulk-runtime.php', "<?php\nrequire_once WP_PLUGIN_DIR . '/ran-wp-release-updater/bootstrap.php';\n" );
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 	file_put_contents( $site . '/wp-config.php', ran_wp_release_updater_test_config( $db_name, $socket ) );
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -109,7 +118,10 @@ try {
 		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 		[ $type, $mode ] = $scenario;
 		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
-		$targets = ran_wp_release_updater_test_create_fixtures( $site, $type );
+		$targets = $ran_wp_release_updater_test_fixture_factory( $site, $type );
+		if ( ! is_array( $targets ) || ! is_string( $targets['managed-a'] ?? null ) || ! is_string( $targets['ordinary'] ?? null ) || ! is_string( $targets['managed-b'] ?? null ) ) {
+			throw new RuntimeException( 'Invalid mixed-bulk archive paths.' );
+		}
 		ran_wp_release_updater_test_run( array( $php, $wp, '--path=' . $site, 'eval', "global \$wpdb; \$wpdb->query( \"DELETE FROM {\$wpdb->options} WHERE option_name LIKE 'ran\\\\_wp\\\\_release\\\\_updater\\\\_target\\\\_v1\\\\_%'\" );" ), $site, $env );
 		if ( 'plugin' === $type ) {
 			ran_wp_release_updater_test_run( array( $php, $wp, '--path=' . $site, 'plugin', 'activate', 'managed-a' ), $site, $env );
@@ -253,78 +265,6 @@ function ran_wp_release_updater_test_copy_tree( string $source, string $destinat
 			throw new RuntimeException( 'Copy failed.' );
 		}
 	}
-}
-/** @return array<string,string> */
-function ran_wp_release_updater_test_create_fixtures( string $site, string $type ): array {
-	$targets  = array(
-		'managed-a' => array( 'Managed A', 'https://mixed-bulk.invalid/managed-a/repository' ),
-		'ordinary'  => array( 'Ordinary', 'https://mixed-bulk.invalid/ordinary/repository' ),
-		'managed-b' => array( 'Managed B', 'https://mixed-bulk.invalid/managed-b/repository' ),
-	);
-	$archives = array();
-	foreach ( $targets as $slug => $target ) {
-		[ $name, $uri ] = $target;
-		if ( 'plugin' === $type ) {
-			ran_wp_release_updater_test_fixture_plugin( $site, $slug, $name, $uri, '1.0.0' );
-		} else {
-			ran_wp_release_updater_test_fixture_theme( $site, $slug, $name, $uri, '1.0.0' );
-		}
-		$archives[ $slug ] = ran_wp_release_updater_test_fixture_archive( $site, $slug, $name, $uri, $type );
-	}
-	return $archives;
-}
-function ran_wp_release_updater_test_fixture_plugin( string $site, string $slug, string $name, string $uri, string $version ): void {
-	$dir = $site . '/wp-content/plugins/' . $slug;
-	if ( ! is_dir( $dir ) ) {
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
-		mkdir( $dir, 0700, true );
-	}
-	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
-	file_put_contents(
-		$dir . '/' . $slug . '.php',
-		"<?php\n/*\nPlugin Name: {$name}\nVersion: {$version}\nUpdate URI: {$uri}\nRequires PHP: 8.2\nRequires at least: 6.8\n*/\n// {$slug}-v{$version}\n"
-	);
-}
-function ran_wp_release_updater_test_fixture_theme( string $site, string $slug, string $name, string $uri, string $version ): void {
-	$dir = $site . '/wp-content/themes/' . $slug;
-	if ( ! is_dir( $dir ) ) {
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for the disposable integration fixture with the specified permissions.
-		mkdir( $dir, 0700, true );
-	}
-	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
-	file_put_contents(
-		$dir . '/style.css',
-		"/*\nTheme Name: {$name}\nVersion: {$version}\nUpdate URI: {$uri}\nRequires PHP: 8.2\nRequires at least: 6.8\n*/\n"
-	);
-	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
-	file_put_contents(
-		$dir . '/index.php',
-		"<?php // {$slug}-v{$version}\n"
-	);
-}
-function ran_wp_release_updater_test_fixture_archive( string $site, string $slug, string $name, string $uri, string $type ): string {
-	$path = $site . '/wp-content/uploads/' . $type . '-' . $slug . '-2.0.0.zip';
-	$zip  = new ZipArchive();
-	if ( true !== $zip->open( $path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
-		throw new RuntimeException( 'Archive create failed.' );
-	}
-	if ( 'plugin' === $type ) {
-		$zip->addFromString(
-			$slug . '/' . $slug . '.php',
-			"<?php\n/*\nPlugin Name: {$name}\nVersion: 2.0.0\nUpdate URI: {$uri}\nRequires PHP: 8.2\nRequires at least: 6.8\n*/\n// {$slug}-v2\n"
-		);
-	} else {
-		$zip->addFromString(
-			$slug . '/style.css',
-			"/*\nTheme Name: {$name}\nVersion: 2.0.0\nUpdate URI: {$uri}\nRequires PHP: 8.2\nRequires at least: 6.8\n*/\n"
-		);
-		$zip->addFromString(
-			$slug . '/index.php',
-			"<?php // {$slug}-v2\n"
-		);
-	}
-	$zip->close();
-	return $path;
 }
 function ran_wp_release_updater_test_config( string $db, string $socket ): string {
 	return "<?php\ndefine('DB_NAME', '{$db}'); define('DB_USER', 'root'); define('DB_PASSWORD', ''); define('DB_HOST', 'localhost:{$socket}'); define('DB_CHARSET','utf8'); define('DB_COLLATE','');\ndefine('AUTH_KEY','x'); define('SECURE_AUTH_KEY','x'); define('LOGGED_IN_KEY','x'); define('NONCE_KEY','x'); define('AUTH_SALT','x'); define('SECURE_AUTH_SALT','x'); define('LOGGED_IN_SALT','x'); define('NONCE_SALT','x');\n\$table_prefix='wp_'; define('FS_METHOD','direct'); define('WP_DEBUG',false); require_once __DIR__ . '/wp-settings.php';\n";

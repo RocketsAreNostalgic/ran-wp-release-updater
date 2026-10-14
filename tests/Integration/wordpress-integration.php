@@ -49,7 +49,7 @@ try {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$suite_bytes = '';
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php' ) as $file ) {
+	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$suite_bytes .= basename( $file ) . "\0" . hash_file( 'sha256', $file ) . "\n";
 	}
@@ -194,6 +194,8 @@ try {
 		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ), 'Installed distribution assertions failed.' );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$result['scenarios']['distribution']['duration_ms'] = (int) ( ( hrtime( true ) - $started ) / 1000000 );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Preserve the existing integration report identity for this additional tested scenario.
+		$result['scenarios']['native_mixed_bulk'] = ran_wp_release_updater_test_installed_mixed_bulk( $source, $wordpress, $run, $database, $socket, $wp_command, $password );
 	}
 	if ( 'all' === $scenario || 'multisite' === $scenario ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -830,4 +832,57 @@ function ran_wp_release_updater_test_read_json( string $path ): array {
 	$record = json_decode( (string) file_get_contents( $path ), true, 128, JSON_THROW_ON_ERROR );
 	ran_wp_release_updater_test_require_fact( is_array( $record ), 'Expected a JSON evidence object.' );
 	return $record;
+}
+
+/**
+ * Reuse the native bulk oracle within the already attested installed-test environment.
+ *
+ * @param list<string> $wp_command
+ * @return array<string,array<array-key,mixed>>
+ */
+function ran_wp_release_updater_test_installed_mixed_bulk( string $source, string $wordpress, string $run, mysqli $database, string $socket, array $wp_command, string $password ): array {
+	global $runtime;
+	$factory = require __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php';
+	if ( ! $factory instanceof Closure ) {
+		throw new RuntimeException( 'Invalid mixed-bulk fixture factory.' );
+	}
+	$proofs = array();
+	foreach ( array( array( 'plugin', 'success' ), array( 'theme', 'success' ), array( 'plugin', 'failure' ), array( 'theme', 'failure' ) ) as $scenario ) {
+		[ $type, $mode ] = $scenario;
+		$base            = ran_wp_release_updater_test_make_directory( $run . '/mixed-' . $type . '-' . $mode );
+		$marker_file     = $base . '/RAN_WP_RELEASE_UPDATER_MIXED_BULK.marker';
+		ran_wp_release_updater_test_write_file( $marker_file, "RAN_WP_RELEASE_UPDATER_MIXED_BULK\n" );
+		$site = ran_wp_release_updater_test_create_site( $wordpress, $base . '/site', $database, $socket );
+		ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, false );
+		$copied_root = $site . '/wp-content/plugins/ran-wp-release-updater';
+		ran_wp_release_updater_test_copy_runtime( $source, $copied_root );
+		ran_wp_release_updater_test_write_file( $site . '/wp-content/mu-plugins/mixed-bulk-runtime.php', "<?php\nrequire_once WP_PLUGIN_DIR . '/ran-wp-release-updater/bootstrap.php';\n" );
+		$archives = $factory( $site, $type );
+		if ( ! is_array( $archives ) || ! is_string( $archives['managed-a'] ?? null ) || ! is_string( $archives['ordinary'] ?? null ) || ! is_string( $archives['managed-b'] ?? null ) ) {
+			throw new RuntimeException( 'Invalid mixed-bulk archive paths.' );
+		}
+		$arguments = array_merge( $wp_command, array( '--path=' . $site ) );
+		ran_wp_release_updater_test_command( array_merge( $arguments, array( $type, 'activate', 'managed-a' ) ), $site, 'mixed-bulk-activate-' . $type . '-' . $mode );
+		$output = $base . '/evidence.json';
+		ran_wp_release_updater_test_command(
+			array_merge( $arguments, array( 'eval-file', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php' ) ),
+			$site,
+			'mixed-bulk-' . $type . '-' . $mode,
+			array(
+				'RAN_WP_RELEASE_UPDATER_MIXED_BULK'        => 'RAN_WP_RELEASE_UPDATER_MIXED_BULK',
+				'RAN_WP_RELEASE_UPDATER_MARKER_FILE'       => $marker_file,
+				'RAN_WP_RELEASE_UPDATER_SOURCE_ROOT'       => $copied_root,
+				'RAN_WP_RELEASE_UPDATER_MIXED_BULK_OUTPUT' => $output,
+				'RAN_WP_RELEASE_UPDATER_BULK_TYPE'         => $type,
+				'RAN_WP_RELEASE_UPDATER_BULK_MODE'         => $mode,
+				'RAN_WP_RELEASE_UPDATER_MANAGED_A_ARCHIVE' => $archives['managed-a'],
+				'RAN_WP_RELEASE_UPDATER_ORDINARY_ARCHIVE'  => $archives['ordinary'],
+				'RAN_WP_RELEASE_UPDATER_MANAGED_B_ARCHIVE' => $archives['managed-b'],
+			)
+		);
+		$proof = ran_wp_release_updater_test_read_json( $output );
+		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ) && ( $proof['candidate_revision'] ?? null ) === $runtime['package_revision'], 'Installed native mixed-bulk assertions or candidate identity failed.' );
+		$proofs[ $type . '-' . $mode ] = $proof;
+	}
+	return $proofs;
 }

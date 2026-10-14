@@ -25,15 +25,17 @@ if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! in_array( $mode,
 	throw new RuntimeException( 'Invalid mixed-bulk scenario.' );
 }
 require_once $expected_source_root . '/bootstrap.php';
+// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the copied runtime manifest as exact test evidence.
+$ran_wp_release_updater_test_runtime_manifest = json_decode( (string) file_get_contents( $expected_source_root . '/runtime-copy.json' ), true, 64, JSON_THROW_ON_ERROR );
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(
 	array(
 		'php_version'       => PHP_VERSION,
-		'runtime_protocol'  => 1,
+		'runtime_protocol'  => 5,
 		'wordpress_version' => $GLOBALS['wp_version'],
 	)
 );
-if ( true !== ( $activation['loaded'] ?? null ) ) {
+if ( true !== ( $activation['loaded'] ?? null ) || 'runtime_active' !== ( $activation['code'] ?? null ) ) {
 	throw new RuntimeException( 'The copied updater runtime could not be activated.' );
 }
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -213,7 +215,7 @@ foreach ( $ids as $identity ) {
 $output_path = (string) getenv( 'RAN_WP_RELEASE_UPDATER_MIXED_BULK_OUTPUT' );
 add_action(
 	'shutdown',
-	static function () use ( $output_path, $type, $mode, $ids, $results, $result_codes, $active_before, $before_bytes, $injected, $observations, $archives, $expected_archive_manifests, $managed_a, $managed_b, $before_owned_directories, &$network_calls ): void {
+	static function () use ( $output_path, $type, $mode, $ids, $results, $result_codes, $active_before, $before_bytes, $injected, $observations, $archives, $expected_archive_manifests, $managed_a, $managed_b, $before_owned_directories, &$network_calls, $ran_wp_release_updater_test_runtime_manifest, $expected_source_root ): void {
 		global $wpdb;
 		$after_owned_directories = glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_ONLYDIR );
 		$after_owned_directories = $after_owned_directories ? $after_owned_directories : array();
@@ -274,9 +276,11 @@ add_action(
 		if ( ! array_key_exists( $ids[0], $result_codes ) || ! array_key_exists( $ids[1], $result_codes ) || ! array_key_exists( $ids[2], $result_codes ) || ! isset( $before_bytes[ $ids[0] ], $bytes_after[ $ids[0] ] ) ) {
 			throw new RuntimeException( 'Mixed-bulk result or byte observations are incomplete.' );
 		}
-		$failure_exact                = ! $success && 'ran_wp_release_updater_unverified_install_result' === $result_codes[ $ids[0] ] && null === $result_codes[ $ids[1] ] && null === $result_codes[ $ids[2] ];
-		$manifest_exact               = $success ? ( $manifest_evidence['managed-a']['exact_match'] && $manifest_evidence['managed-b']['exact_match'] ) : $manifest_evidence['managed-b']['exact_match'];
-		$pass                         = array_keys( $results ) === $ids
+		$failure_exact                      = ! $success && 'ran_wp_release_updater_unverified_install_result' === $result_codes[ $ids[0] ] && null === $result_codes[ $ids[1] ] && null === $result_codes[ $ids[2] ];
+		$manifest_exact                     = $success ? ( $manifest_evidence['managed-a']['exact_match'] && $manifest_evidence['managed-b']['exact_match'] ) : $manifest_evidence['managed-b']['exact_match'];
+		$ran_wp_release_updater_test_origin = ( new ReflectionClass( NativePackageUpdater::class ) )->getFileName();
+		$pass                               = $expected_source_root . '/src/WordPress/NativePackageUpdater.php' === $ran_wp_release_updater_test_origin
+			&& array_keys( $results ) === $ids
 			&& array_values( $results ) === $expected_results
 			&& ! in_array( false, $observation_evidence, true )
 			&& $manifest_exact
@@ -307,8 +311,10 @@ add_action(
 					&& 'unverified_install_result' === $updater_evidence['managed-a']['failure_code']
 					&& in_array( 'update_completed', $updater_evidence['managed-b']['diagnostics'], true )
 			);
-		$evidence                     = array(
+		$evidence                           = array(
 			'pass'                => $pass,
+			'candidate_revision'  => $ran_wp_release_updater_test_runtime_manifest['package_revision'] ?? null,
+			'native_origin'       => $ran_wp_release_updater_test_origin,
 			'type'                => $type,
 			'mode'                => $mode,
 			'results'             => $results,
@@ -325,7 +331,7 @@ add_action(
 			'newOwnedDirectories' => $new_owned_directories,
 			'bytesAfter'          => $bytes_after,
 		);
-		$evidence['manifestEvidence'] = $manifest_evidence;
+		$evidence['manifestEvidence']       = $manifest_evidence;
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 		file_put_contents( $output_path, json_encode( $evidence, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR ) );
 	},
@@ -376,14 +382,14 @@ function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, stri
 			'installed_package_identity'   => $identity,
 			'maximum_artifact_bytes'       => 52_428_800,
 			'network_id'                   => 1,
-			'php_runtime_version'          => '8.2',
+			'php_runtime_version'          => PHP_VERSION,
 			'provider_code'                => 'fixture',
 			'release_channel'              => 'stable',
 			'stable_repository_identity'   => $repository_identity,
 			'target_type'                  => $type,
 			'theme_template'               => '',
 			'update_policy'                => 'manual',
-			'wordpress_runtime_version'    => '6.8',
+			'wordpress_runtime_version'    => $GLOBALS['wp_version'],
 		)
 	);
 	$adapter             = new RAN_WP_RELEASE_UPDATER_Test_MixedBulkFixtureAdapter( $descriptor, $archive );
@@ -393,7 +399,7 @@ function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, stri
 		'Name'        => $name,
 		'PluginURI'   => $uri,
 		'RequiresPHP' => '8.2',
-		'RequiresWP'  => '6.8',
+		'RequiresWP'  => '6.5',
 		'UpdateURI'   => $uri,
 		'Version'     => '1.0.0',
 	);
@@ -416,14 +422,14 @@ function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, stri
 			'maximum_artifact_bytes'     => 52_428_800,
 			'metadata_name'              => $name,
 			'offer_update_uri'           => $uri,
-			'php_runtime_version'        => '8.2',
+			'php_runtime_version'        => PHP_VERSION,
 			'provider_code'              => 'fixture',
 			'repository_identity'        => $repository_identity,
 			'repository_locator'         => $locator,
 			'staged_package_update_uri'  => $uri,
 			'target_type'                => $type,
 			'theme_template'             => '',
-			'wordpress_runtime_version'  => '6.8',
+			'wordpress_runtime_version'  => $GLOBALS['wp_version'],
 		)
 	);
 	if ( ! $updater instanceof NativePackageUpdater ) {

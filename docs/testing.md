@@ -46,8 +46,8 @@ test independently discovers all script PHP, including nested `scripts/tests`,
 compares effective selection, asserts level 8, detects an excluded nested script,
 and proves a new script's incorrect return fails actual analysis.
 
-Direct analysis covers all 97 maintained PHP files: 36 production files and
-three scripts at level 8, plus 58 test files at level 8. The small
+Current direct analysis covers all 99 maintained PHP files: 36 production files and
+three scripts at level 8, plus 60 test files at level 8. The small
 `scripts/analyze-tests.php` runner discovers the whole tests directory through
 PHPStan's file finder, then passes each file separately to the locked analyzer.
 `--list` exposes exactly that selection to the independent coverage guard.
@@ -188,10 +188,13 @@ Run:
 composer test:wordpress-integration
 ```
 
-The suite verifies two maintained guarantees in a disposable WordPress installation:
+The suite verifies three maintained guarantees in a disposable WordPress installation:
 
 1. the updater operates from its installed distribution rather than only from the repository checkout;
-2. the same target observed from the main site and a subsite shares one network-scoped operation fence.
+2. the same target observed from the main site and a subsite shares one network-scoped operation fence;
+3. real plugin/theme mixed bulk upgrades keep per-item package custody, installed bytes, rollback, active state, lease release and temporary-file cleanup separate for two managed targets and one ordinary target.
+
+The distribution scenario runs the existing mixed-bulk oracle for plugin/theme success and injected post-copy failure using the same attested MySQL process and marker-owned disposable WordPress sites. Its evidence records the copied candidate revision and native class origin. The standalone `test:wordpress-bulk` entrypoint retains its stricter Local environment guards; neither entrypoint grants providers a new public composition seam.
 
 The suite is intentionally separate from `composer check` because it needs a real WordPress source tree and local MySQL process.
 
