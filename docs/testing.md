@@ -35,7 +35,7 @@ splitting, a production `src/tests` directory, an intentionally incomplete path
 list and an explicitly excluded generated production file. A bounded header check
 also detects extensionless PHP/shebang entrypoints: a new unselected entrypoint
 fails coverage until its analysis boundary is deliberately accounted for. Existing production
-coverage remains 36/36; this prevents future omissions rather than correcting a
+coverage remains 35/35; this prevents future omissions rather than correcting a
 current uncovered production file.
 
 `composer analyze` also runs `phpstan-tools.neon` at level 8 over the entire
@@ -46,8 +46,8 @@ test independently discovers all script PHP, including nested `scripts/tests`,
 compares effective selection, asserts level 8, detects an excluded nested script,
 and proves a new script's incorrect return fails actual analysis.
 
-Direct analysis covers all 97 maintained PHP files: 36 production files and
-three scripts at level 8, plus 58 test files at level 8. The small
+Current direct analysis covers all 98 maintained PHP files: 35 production files and
+three scripts at level 8, plus 60 test files at level 8. The small
 `scripts/analyze-tests.php` runner discovers the whole tests directory through
 PHPStan's file finder, then passes each file separately to the locked analyzer.
 `--list` exposes exactly that selection to the independent coverage guard.
@@ -87,7 +87,7 @@ analysis; unmatched identifiers fail. Controls reuse actual annotations and
 prove the immediately following occurrence remains diagnosed. See
 QUALITY_ACCEPTANCE.md for dispositions requiring candidate review.
 
-All 36 maintained production PHP files (`bootstrap.php`, `runtime.php` and
+All 35 maintained production PHP files (`bootstrap.php`, `runtime.php` and
 production PHP under `src/`) now have direct level-8 roots. Issue #60 records the historical
 source acceptance; this coverage count does not certify later exception changes.
 
@@ -188,10 +188,13 @@ Run:
 composer test:wordpress-integration
 ```
 
-The suite verifies two maintained guarantees in a disposable WordPress installation:
+The suite verifies three maintained guarantees in a disposable WordPress installation:
 
 1. the updater operates from its installed distribution rather than only from the repository checkout;
-2. the same target observed from the main site and a subsite shares one network-scoped operation fence.
+2. the same target observed from the main site and a subsite shares one network-scoped operation fence;
+3. real plugin/theme mixed bulk upgrades keep per-item package custody, installed bytes, rollback, active state, lease release and temporary-file cleanup separate for two managed targets and one ordinary target.
+
+The distribution scenario runs the existing mixed-bulk oracle for plugin/theme success and injected post-copy failure using the same attested MySQL process and marker-owned disposable WordPress sites. Its evidence records the copied candidate revision and native class origin. The standalone `test:wordpress-bulk` entrypoint retains its stricter Local environment guards; neither entrypoint grants providers a new public composition seam.
 
 The suite is intentionally separate from `composer check` because it needs a real WordPress source tree and local MySQL process.
 

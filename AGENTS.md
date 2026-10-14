@@ -32,7 +32,7 @@ or whole-file rules. The existing coverage guards reject broad/case-variant
 suppressions, local rule exclusions, weakened severity and checker arguments,
 and exercise real diagnostics immediately outside retained annotations.
 The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded and is
-namespace-only parity checked against the locked upstream package. All 36
+namespace-only parity checked against the locked upstream package. All 35
 shipped PHP files, including that generated copy, remain directly analysed at
 PHPStan level 8.
 Analysis defaults to the repository root, including new root/nested PHP and the

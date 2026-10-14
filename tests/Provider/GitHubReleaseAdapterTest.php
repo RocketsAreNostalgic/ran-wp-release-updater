@@ -179,7 +179,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 	use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter;
 	use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseReadUnavailable;
 	use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService;
-	use RAN\WPReleaseUpdater\V1\Provider\GitHub\ProspectiveReleaseArtifact;
 	use RAN\WPReleaseUpdater\V1\Provider\GitHub\ProspectiveReleaseInspection;
 	use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 	use RuntimeException;
@@ -1825,235 +1824,238 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			}
 		}
 
-		public function test_prospective_acquisition_repeats_proof_and_transfers_exact_custody(): void {
+		/** @return list<array{string}> */
+		public static function prospective_package_type_provider(): array {
+			return array( array( 'plugin' ), array( 'theme' ) );
+		}
+
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'prospective_package_type_provider' )]
+		public function test_prospective_acquisition_repeats_proof_and_retains_public_custody( string $package_type ): void {
 			$calls   = 0;
-			$archive = $this->prospective_archive(
-				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
-				. "Update URI: https://github.com/owner/repository\n"
-				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
+			$token   = 'inspection-token';
+			$header  = ( 'plugin' === $package_type ? 'Plugin Name: Repository' : 'Theme Name: Repository' )
+				. "\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n";
+			$archive = 'plugin' === $package_type
+				? $this->prospective_archive( "<?php\n/*\n" . $header . '*/' )
+				: $this->prospective_theme_archive( $header );
+			$source  = $this->prospective_source(
+				static function () use ( &$calls, &$token ): string {
+					++$calls;
+					return $token;
+				},
+				$package_type
 			);
-			$service = $this->service(
-				$this->binding(),
-				new GitHubCredentialResolver(
-					static function () use ( &$calls ): string {
-						++$calls;
-						return 'private-token';
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			$inspection                      = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertSame( 'release_inspected', $inspection['code'] );
+			self::assertSame( 'complete', $inspection['cleanup_status'] );
+			$this->assert_all_temporary_paths_absent();
+			$inspected_path = $GLOBALS['ran_github_temp_paths'][0];
+			$token          = 'acquisition-token';
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			$owned                           = $this->prospective_operation( $source, 'acquire', array( '7', 'v1.2.3', $inspection['value']['fingerprint'] ) );
+			self::assertTrue( $owned['ok'] );
+			self::assertSame( 'release_acquired', $owned['code'] );
+			self::assertSame( 'retained', $owned['cleanup_status'] );
+			self::assertSame( $inspection['value'], $owned['value']['inspection'] );
+			self::assertSame( 2, $calls );
+			self::assertCount( 12, $GLOBALS['ran_github_requests'] );
+			foreach ( $GLOBALS['ran_github_requests'] as $index => $request ) {
+				self::assertSame( 'Bearer ' . ( $index < 6 ? 'inspection-token' : 'acquisition-token' ), $request[1]['headers']['Authorization'] );
+			}
+			$artifact = $owned['value']['artifact'];
+			$path     = $artifact->inspect( static fn ( string $path ): string => $path );
+			self::assertNotSame( $inspected_path, $path );
+			self::assertSame(
+				$archive,
+				$artifact->inspect(
+					static function ( string $path ): string {
+                    // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes inside the public artifact custody callback.
+						$bytes = file_get_contents( $path );
+						self::assertIsString( $bytes );
+						return $bytes;
 					}
 				)
 			);
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
-			$persisted                       = ProspectiveReleaseInspection::rehydrate( $inspection->to_array() );
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-
-			$owned = $service->acquire_prospective( $persisted, expected_fingerprint: $persisted->fingerprint_value() );
-
-			self::assertInstanceOf( ProspectiveReleaseArtifact::class, $owned );
-			self::assertSame( $persisted->to_array(), $owned->inspection()->to_array() );
-			self::assertSame( 2, $calls );
-			self::assertCount( 12, $GLOBALS['ran_github_requests'] );
-			$artifact = $owned->claim_temporary_artifact();
-			try {
-				$owned->claim_temporary_artifact();
-				self::fail( 'A second custody claim was accepted.' );
-			} catch ( \RuntimeException $failure ) {
-				self::assertSame( 'The prospective GitHub release artifact is unavailable.', $failure->getMessage() );
-			}
-			$path = $artifact->inspect( static fn ( string $path ): string => $path );
-			self::assertFileExists( $path );
-			unset( $owned );
+			unset( $source, $owned );
 			self::assertFileExists( $path );
 			self::assertTrue( $artifact->discard() );
-			self::assertFileDoesNotExist( $path );
-		}
-
-		public function test_prospective_acquisition_rejects_wrong_fingerprint_before_credential_or_http(): void {
-			$archive = $this->prospective_archive(
-				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
-				. "Update URI: https://github.com/owner/repository\n"
-				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
-			);
-			$service = $this->service( $this->binding() );
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
-			$requests                        = count( $GLOBALS['ran_github_requests'] );
-			$calls                           = 0;
-			$service                         = $this->service(
-				$this->binding(),
-				new GitHubCredentialResolver(
-					static function () use ( &$calls ): string {
-						++$calls;
-						return 'private-token'; }
-				)
-			);
-
+			self::assertTrue( $artifact->discard() );
 			try {
-				$service->acquire_prospective( $inspection, 'v1:' . str_repeat( '0', 64 ) );
-				self::fail( 'A stale fingerprint must fail before provider work.' );
-			} catch ( \InvalidArgumentException ) {
-				self::addToAssertionCount( 1 );
+				$artifact->inspect( static fn ( string $path ): string => $path );
+				self::fail( 'A discarded public artifact was accepted.' );
+			} catch ( RuntimeException $failure ) {
+				self::assertSame( 1001, $failure->getCode() );
 			}
-			self::assertSame( 0, $calls );
-			self::assertCount( $requests, $GLOBALS['ran_github_requests'] );
 			$this->assert_all_temporary_paths_absent();
 		}
 
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		public function test_prospective_acquisition_rejects_malformed_fingerprint_before_credential_or_http(): void {
+			$calls    = 0;
+			$source   = $this->prospective_source(
+				static function () use ( &$calls ): string {
+					++$calls;
+					return 'private-token';
+				}
+			);
+			$rejected = $this->prospective_operation( $source, 'acquire', array( '7', 'v1.2.3', 'v1:' . str_repeat( '0', 64 ) ) );
+			self::assertFalse( $rejected['ok'] );
+			self::assertSame( 'invalid_release', $rejected['code'] );
+			self::assertSame( 'not_applicable', $rejected['cleanup_status'] );
+			self::assertSame( 0, $calls );
+			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
+			self::assertSame( array(), $GLOBALS['ran_github_temp_paths'] );
+		}
+
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
 		public function test_prospective_acquisition_discards_a_changed_archive_proof(): void {
 			$calls   = 0;
 			$header  = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
-			. "Update URI: https://github.com/owner/repository\n"
-			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/";
+				. "Update URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
 			$initial = $this->prospective_archive( $header );
 			$changed = $this->prospective_archive( $header, array( 'repository/payload.php' => '<?php return true;' ) );
-			$service = $this->service(
-				$this->binding(),
-				new GitHubCredentialResolver(
-					static function () use ( &$calls ): string {
-						++$calls;
-						return 'private-token'; }
-				)
+			$source  = $this->prospective_source(
+				static function () use ( &$calls ): string {
+					++$calls;
+					return 'private-token';
+				}
 			);
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $initial );
-			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$inspection                      = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertTrue( $inspection['ok'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $changed );
-
-			try {
-				$service->acquire_prospective( $inspection, $inspection->fingerprint_value() );
-				self::fail( 'Changed archive facts must reject reacquisition.' );
-			} catch ( RuntimeException $exception ) {
-				self::assertStringContainsString( 'changed before acquisition', $exception->getMessage() );
-			}
+			$rejected                        = $this->prospective_operation( $source, 'acquire', array( '7', 'v1.2.3', $inspection['value']['fingerprint'] ) );
+			self::assertFalse( $rejected['ok'] );
+			self::assertSame( 'release_changed', $rejected['code'] );
+			self::assertSame( 'complete', $rejected['cleanup_status'] );
+			self::assertNull( $rejected['value'] );
 			self::assertSame( 2, $calls );
 			$this->assert_all_temporary_paths_absent();
 		}
 
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
 		public function test_prospective_acquisition_discards_changed_release_facts(): void {
-			$archive = $this->prospective_archive(
-				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
-				. "Update URI: https://github.com/owner/repository\n"
-				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
-			);
-			$service = $this->service( $this->binding() );
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$archive = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+			$source  = $this->prospective_source();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
-			$responses                       = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-			$responses[2]                    = $this->response( 200, array( 'sha' => str_repeat( 'b', 40 ) ) );
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$inspection                      = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertTrue( $inspection['ok'] );
+			$responses    = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			$responses[2] = $this->response( 200, array( 'sha' => str_repeat( 'b', 40 ) ) );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = $responses;
-
-			try {
-				$service->acquire_prospective( $inspection, $inspection->fingerprint_value() );
-				self::fail( 'Changed release facts must reject reacquisition.' );
-			} catch ( RuntimeException $exception ) {
-				self::assertStringContainsString( 'changed before acquisition', $exception->getMessage() );
-			}
+			$rejected                        = $this->prospective_operation( $source, 'acquire', array( '7', 'v1.2.3', $inspection['value']['fingerprint'] ) );
+			self::assertFalse( $rejected['ok'] );
+			self::assertSame( 'release_changed', $rejected['code'] );
+			self::assertSame( 'complete', $rejected['cleanup_status'] );
+			self::assertNull( $rejected['value'] );
 			$this->assert_all_temporary_paths_absent();
 		}
 
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
 		public function test_prospective_acquisition_discards_a_changed_hostile_archive(): void {
-			$header  = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
-			. "Update URI: https://github.com/owner/repository\n"
-			. "Requires PHP: 8.2\nRequires at least: 6.8\n*/";
+			$header  = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
 			$initial = $this->prospective_archive( $header );
-			$hostile = $this->prospective_archive(
-				$header,
-				array( 'repository/other.php' => str_replace( 'Repository', 'Other', $header ) )
-			);
-			$service = $this->service( $this->binding() );
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$hostile = $this->prospective_archive( $header, array( 'repository/other.php' => str_replace( 'Repository', 'Other', $header ) ) );
+			$source  = $this->prospective_source();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $initial );
-			$inspection                      = $service->inspect_prospective( '7', 'v1.2.3' );
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$inspection                      = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertTrue( $inspection['ok'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $hostile );
-
-			try {
-				$service->acquire_prospective( $inspection, $inspection->fingerprint_value() );
-				self::fail( 'A hostile changed archive must reject reacquisition.' );
-			} catch ( ReleaseFailure $exception ) {
-				self::assertSame( 'package_incompatible', $exception->release_code );
-			}
+			$rejected                        = $this->prospective_operation( $source, 'acquire', array( '7', 'v1.2.3', $inspection['value']['fingerprint'] ) );
+			self::assertFalse( $rejected['ok'] );
+			self::assertSame( 'package_incompatible', $rejected['code'] );
+			self::assertSame( 'complete', $rejected['cleanup_status'] );
+			self::assertNull( $rejected['value'] );
 			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function test_prospective_inspection_fingerprint_rejects_changed_runtime_and_package_facts(): void {
-			$archive = $this->prospective_archive(
-				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
-				. "Update URI: https://github.com/owner/repository\n"
-				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
-			);
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		public function test_prospective_inspection_fingerprint_binds_runtime_package_and_public_reacquisition(): void {
+			$archive = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+			$source  = $this->prospective_source();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-			$inspection                      = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
-			$facts                           = $inspection->to_array();
+			$inspection                      = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertTrue( $inspection['ok'] );
+			$facts = $inspection['value'];
 			unset( $facts['fingerprint'] );
 			$changed_runtime = ProspectiveReleaseInspection::create( array_replace( $facts, array( 'php_runtime_version' => '8.3' ) ) );
 			$changed_root    = ProspectiveReleaseInspection::create( array_replace( $facts, array( 'package_root' => 'renamed' ) ) );
-
-			self::assertNotSame( $inspection->fingerprint_value(), $changed_runtime->fingerprint_value() );
-			self::assertNotSame( $inspection->fingerprint_value(), $changed_root->fingerprint_value() );
-			$tampered              = $inspection->to_array();
-			$tampered['main_file'] = 'other.php';
-			$this->expectException( \InvalidArgumentException::class );
-			ProspectiveReleaseInspection::rehydrate( $tampered );
+			self::assertNotSame( $inspection['value']['fingerprint'], $changed_runtime->fingerprint_value() );
+			self::assertNotSame( $inspection['value']['fingerprint'], $changed_root->fingerprint_value() );
+			$changed_main = ProspectiveReleaseInspection::create( array_replace( $facts, array( 'main_file' => 'other.php' ) ) );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			$rejected                        = $this->prospective_operation( $source, 'acquire', array( '7', 'v1.2.3', $changed_main->fingerprint_value() ) );
+			self::assertFalse( $rejected['ok'] );
+			self::assertSame( 'release_changed', $rejected['code'] );
+			self::assertSame( 'complete', $rejected['cleanup_status'] );
+			self::assertCount( 12, $GLOBALS['ran_github_requests'] );
+			$this->assert_all_temporary_paths_absent();
 		}
 
-		public function test_prospective_inspection_uses_exact_keys_and_defensive_accessors(): void {
-			$archive = $this->prospective_archive(
-				"<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
-				. "Update URI: https://github.com/owner/repository\n"
-				. "Requires PHP: 8.2\nRequires at least: 6.8\n*/"
-			);
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		public function test_prospective_inspection_uses_exact_keys_and_immutable_public_facts(): void {
+			$archive = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
+			$source  = $this->prospective_source();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-			$inspection                      = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2.3' );
-			self::assertSame( '7', $inspection->release_identity() );
-			self::assertSame( 'v1.2.3', $inspection->tag() );
-			$copy                     = $inspection->to_array();
-			$copy['release_identity'] = 'changed';
-			self::assertSame( '7', $inspection->release_identity() );
-
-			$facts = $inspection->to_array();
+			$inspection                      = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertTrue( $inspection['ok'] );
+			$facts = $inspection['value'];
 			unset( $facts['fingerprint'] );
+			$model = ProspectiveReleaseInspection::create( $facts );
+			self::assertSame( '7', $model->to_array()['release_identity'] );
+			self::assertSame( 'v1.2.3', $model->to_array()['tag'] );
+			$copy                     = $model->to_array();
+			$copy['release_identity'] = 'changed';
+			self::assertSame( '7', $model->to_array()['release_identity'] );
 			try {
 				ProspectiveReleaseInspection::create( array_merge( $facts, array( 'unexpected' => true ) ) );
 				self::fail( 'Unknown prospective facts must fail closed.' );
 			} catch ( \InvalidArgumentException ) {
 				self::addToAssertionCount( 1 );
 			}
-			$opaque  = ProspectiveReleaseInspection::create(
-				array_replace( $facts, array( 'release_identity' => 'release:opaque' ) )
+			$calls          = 0;
+			$private_source = $this->prospective_source(
+				static function () use ( &$calls ): string {
+					++$calls;
+					return 'private-token';
+				}
 			);
-			$calls   = 0;
-			$service = $this->service(
-				$this->binding(),
-				new GitHubCredentialResolver(
-					static function () use ( &$calls ): string {
-						++$calls;
-						return 'private-token'; }
-				)
-			);
-			try {
-				$service->acquire_prospective( $opaque, $opaque->fingerprint_value() );
-				self::fail( 'Provider-private numeric validation must reject opaque GitHub IDs.' );
-			} catch ( \InvalidArgumentException ) {
-				self::addToAssertionCount( 1 );
-			}
+			$requests       = count( $GLOBALS['ran_github_requests'] );
+			$rejected       = $this->prospective_operation( $private_source, 'acquire', array( 'release:opaque', 'v1.2.3', $inspection['value']['fingerprint'] ) );
+			self::assertSame( 'invalid_release', $rejected['code'] );
 			self::assertSame( 0, $calls );
+			self::assertCount( $requests, $GLOBALS['ran_github_requests'] );
+			$this->assert_all_temporary_paths_absent();
 		}
-
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafe_redirect_provider' )]
 		public function test_unsafe_expired_and_excess_redirects_fail_closed( string $location ): void {
 			$adapter = new GitHubReleaseAdapter( $this->binding() );
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3' );
 			$descriptor                      = $adapter->inspect( '7' );
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 302, null, array( 'location' => $location ) ),
@@ -2299,6 +2301,42 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			return new GitHubReleaseService( $this->service_configuration( $binding ), $credentials, liveness_guard: null );
 		}
 
+		private function prospective_source( ?callable $credentials = null, string $package_type = 'plugin' ): object {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the WordPress version consumed by the isolated public runtime fixture.
+			$GLOBALS['wp_version'] = '6.8.0';
+			$registrar             = require dirname( __DIR__, 2 ) . '/bootstrap.php';
+			$source                = $registrar->releases( 'github', $package_type, 'owner/repository', '99', 'stable', $credentials );
+			$broker                = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
+			self::assertInstanceOf( \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker::class, $broker );
+			if ( 'active' !== $broker->diagnostics()['state'] ) {
+				self::assertSame(
+					'runtime_active',
+					$broker->activate(
+						array(
+							'php_version'       => PHP_VERSION,
+							'runtime_protocol'  => 5,
+							'wordpress_version' => '6.8.0',
+						)
+					)['code']
+				);
+			}
+			return $source;
+		}
+		/**
+		 * @param list<mixed> $arguments
+		 * @return array<array-key,mixed>
+		 */
+		private function prospective_operation( object $source, string $operation, array $arguments ): array {
+			$callback = array( $source, $operation );
+			if ( ! is_callable( $callback ) ) {
+				throw new RuntimeException( 'The public release source operation is unavailable.' );
+			}
+			$result = \Closure::fromCallable( $callback )( ...$arguments );
+			if ( ! is_array( $result ) ) {
+				throw new RuntimeException( 'The public release source result is invalid.' );
+			}
+			return $result;
+		}
 		private function public_service(): GitHubReleaseService {
 			return new GitHubReleaseService(
 				$this->service_configuration( $this->binding() ),

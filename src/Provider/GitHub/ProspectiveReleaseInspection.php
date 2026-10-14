@@ -80,21 +80,6 @@ final readonly class ProspectiveReleaseInspection {
 		return new self( $canonical, self::fingerprint_facts( $canonical ) );
 	}
 
-	public static function rehydrate( mixed $value ): self {
-		if ( ! self::exact_keys( $value, self::KEYS ) || ! is_string( $value['fingerprint'] ) ) {
-			throw new InvalidArgumentException( 'The prospective GitHub release inspection is invalid.' );
-		}
-		$facts = array();
-		foreach ( self::FACT_KEYS as $key ) {
-			$facts[ $key ] = $value[ $key ];
-		}
-		$inspection = self::create( $facts );
-		if ( ! hash_equals( $inspection->fingerprint, $value['fingerprint'] ) ) {
-			throw new InvalidArgumentException( 'The prospective GitHub release fingerprint is invalid.' );
-		}
-		return $inspection;
-	}
-
 	/** @return array<string, mixed> */
 	public function to_array(): array {
 		$facts                = $this->facts;
@@ -104,14 +89,6 @@ final readonly class ProspectiveReleaseInspection {
 
 	public function fingerprint_value(): string {
 		return $this->fingerprint;
-	}
-
-	public function release_identity(): string {
-		return $this->facts['release_identity'];
-	}
-
-	public function tag(): string {
-		return $this->facts['tag'];
 	}
 
 	/** @param array<string, mixed> $value */

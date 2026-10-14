@@ -9,10 +9,9 @@ use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
 /** Constrains the mutable state of one admitted native install operation. */
 final class PendingInstallState {
 
-	private bool $active              = false;
-	private bool $extraction_admitted = false;
-	/** @var array<string,array{sha256:string,size:int}>|null */
-	private ?array $staged_manifest    = null;
+	private bool $active               = false;
+	private bool $extraction_admitted  = false;
+	private bool $staging_verified     = false;
 	private ?string $archive           = null;
 	private ?string $archive_directory = null;
 	/** @var array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null */
@@ -37,7 +36,7 @@ final class PendingInstallState {
 	public function clear(): void {
 		$this->active                  = false;
 		$this->extraction_admitted     = false;
-		$this->staged_manifest         = null;
+		$this->staging_verified        = false;
 		$this->archive                 = null;
 		$this->archive_directory       = null;
 		$this->archive_identity        = null;
@@ -69,9 +68,8 @@ final class PendingInstallState {
 		return $this->completion_observed; }
 	public function multi_run(): bool {
 		return $this->multi_run; }
-	/** @return array<string,array{sha256:string,size:int}>|null */
-	public function staged_manifest(): ?array {
-		return $this->staged_manifest; }
+	public function staging_verified(): bool {
+		return $this->staging_verified; }
 
 	public function admit_extraction(): bool {
 		if ( ! $this->active || null === $this->archive || null === $this->archive_identity || null === $this->receipt ) {
@@ -81,12 +79,11 @@ final class PendingInstallState {
 		return true;
 	}
 
-	/** @param array<string,array{sha256:string,size:int}> $manifest */
-	public function stage_manifest( array $manifest ): bool {
+	public function verify_staging(): bool {
 		if ( ! $this->active || ! $this->extraction_admitted ) {
 			return false;
 		}
-		$this->staged_manifest = $manifest;
+		$this->staging_verified = true;
 		return true;
 	}
 

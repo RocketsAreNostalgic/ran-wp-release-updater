@@ -1351,6 +1351,238 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array(), $database->rows() );
 			self::assertContains( 'unverified_pre_download_result', $updater->diagnostics() );
 		}
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'theme_staging_cases' )]
+		public function test_theme_source_proof_and_staging_marker_complete_the_actual_native_lifecycle( bool $stage_verified ): void {
+			$archive = $this->archive();
+			$zip     = new \ZipArchive();
+			self::assertTrue( $zip->open( $archive, \ZipArchive::OVERWRITE ) );
+			$contents = "/*\nTheme Name: Package\nVersion: 2.0.0\nUpdate URI: {$this->uri()}\n*/";
+			self::assertTrue( $zip->addFromString( 'package/style.css', $contents ) );
+			$zip->close();
+			$facts = $this->descriptor( $archive )->to_array();
+			unset( $facts['fingerprint'] );
+			$facts['target_type']                = 'theme';
+			$facts['installed_package_identity'] = 'package';
+			$descriptor                          = IdentityDescriptor::create( $facts );
+			$binding_facts                       = $this->binding( 'manual' )->to_array();
+			unset( $binding_facts['binding_hash'] );
+			$binding_facts['target_type']                = 'theme';
+			$binding_facts['installed_package_identity'] = 'package';
+			$binding                                     = BindingRecord::create( $binding_facts );
+			$configuration                               = $this->config( 'manual' );
+			$configuration['target_type']                = 'theme';
+			$configuration['installed_package_identity'] = 'package';
+			$policy                                      = $this->policy();
+			$policy['target_type']                       = 'theme';
+			$policy['installed_package_identity']        = 'package';
+			$policy['header_file']                       = 'style.css';
+			$opened                                      = 0;
+			$validator                                   = new PackageIdentityValidator(
+				static function ( string $path ) use ( &$opened ): void {
+					unset( $path );
+					++$opened;
+				}
+			);
+			$adapter                                     = new ControllableReleaseAdapter( $descriptor, $archive, $this->temporary_directory );
+			$updater                                     = NativePackageUpdater::from_configuration( $configuration, $binding, $adapter, new FakeOptionDatabase( 100 ), $policy, $validator );
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
+			$offer = $updater->filter_update(
+				false,
+				array(
+					'Version'   => '1.0.0',
+					'UpdateURI' => $this->uri(),
+				),
+				'package',
+				array()
+			);
+			self::assertIsArray( $offer );
+			$extra = array(
+				'theme'  => 'package',
+				'action' => 'update',
+				'type'   => 'theme',
+			);
+			$owned = $updater->filter_pre_download( false, $offer['package'], null, $extra );
+			self::assertIsString( $owned );
+			self::assertNull( $updater->filter_pre_unzip_file( null, $owned, '/tmp', array(), 0.0 ) );
+			$stage = $this->temporary_directory . '/package';
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create the real staged theme directory for installed-tree verification with native permissions.
+			self::assertTrue( mkdir( $stage, 0700 ) );
+			$this->paths[] = $stage;
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Install the exact validated theme fixture bytes; no WordPress filesystem abstraction applies.
+			file_put_contents( $stage . '/style.css', $contents );
+			self::assertTrue( $updater->filter_pre_install( true, $extra ) );
+			if ( $stage_verified ) {
+				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', null, $extra ) );
+			}
+			$updater->capture_install_package_result( array( 'destination' => $stage ), $extra );
+			$updater->observe_completion(
+				null,
+				array(
+					'type'   => 'theme',
+					'action' => 'update',
+					'themes' => array( 'package' ),
+				)
+			);
+			$updater->finalize_pending_install();
+			self::assertContains( $stage_verified ? 'update_completed' : 'outcome_uncertain', $updater->diagnostics() );
+			self::assertSame( $stage_verified, in_array( 'update_completed', $updater->diagnostics(), true ) );
+			self::assertSame( 2, $opened );
+			self::assertFileDoesNotExist( $owned );
+		}
+		/** @return array<string,array{bool}> */
+		public static function theme_staging_cases(): array {
+			return array(
+				'verified stage' => array( true ),
+				'omitted stage'  => array( false ),
+			);
+		}
+		public function test_rediscovered_same_release_cannot_replace_an_admitted_receipt_authority(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject();
+			$this->prepare_install( $updater );
+			$facts = $descriptor->to_array();
+			unset( $facts['fingerprint'] );
+			$facts['commit_identity']    = 'commit:changed';
+			$adapter->inspect_descriptor = IdentityDescriptor::create( $facts );
+			$this->offer( $updater );
+			$pending = ( new \ReflectionProperty( $updater, 'pending_install' ) )->getValue( $updater );
+			self::assertInstanceOf( \RAN\WPReleaseUpdater\V1\WordPress\PendingInstallState::class, $pending );
+			self::assertTrue( $pending->staging_verified() );
+			$updater->finalize_pending_install();
+			self::assertContains( 'outcome_uncertain', $updater->diagnostics() );
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
+		}
+		public function test_successful_cas_with_changed_readback_preserves_successor_and_uncertain_cleanup(): void {
+			list( $updater, , $database, , $binding ) = $this->subject();
+			$this->prepare_install( $updater );
+			$name = array_key_first( $database->rows() );
+			self::assertIsString( $name );
+			$successor = null;
+			$database->mutate_on_read(
+				$name,
+				7,
+				static function () use ( $database, $binding, &$successor ): void {
+					$claim = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'b', 64 ), 3600 );
+					self::assertSame( 'claimed', $claim['result'] );
+					$successor = $claim['current'];
+				}
+			);
+			$updater->finalize_pending_install();
+			self::assertContains( 'outcome_uncertain', $updater->diagnostics() );
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
+			self::assertInstanceOf( BindingState::class, $successor );
+			self::assertSame( str_repeat( 'b', 64 ), $successor->owner_token() );
+			self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'c', 64 ), 1 )['result'] );
+		}
+		public function test_confirmed_release_does_not_visit_the_redundant_cleanup_time_failure(): void {
+			list( $updater, , $database ) = $this->subject();
+			$this->prepare_install( $updater );
+			$database->mutate_on_time_read(
+				4,
+				static function (): void {
+					throw new \RuntimeException( 'redundant cleanup time read' );
+				}
+			);
+			$updater->finalize_pending_install();
+			self::assertContains( 'update_completed', $updater->diagnostics() );
+			self::assertFalse( ( new \ReflectionProperty( $updater, 'lease_held' ) )->getValue( $updater ) );
+			$this->expectException( \RuntimeException::class );
+			$database->get_var( 'SELECT UNIX_TIMESTAMP()' );
+		}
+		public function test_fresh_install_reuses_one_source_scan_after_the_persistent_fence(): void {
+			$opened          = array();
+			$validator       = new PackageIdentityValidator(
+				static function ( string $path ) use ( &$opened ): void {
+					$opened[] = $path;
+				}
+			);
+			list( $updater ) = $this->subject( 'manual', null, 'stable', false, null, false, $validator );
+			$this->complete( $updater );
+			self::assertCount( 2, $opened, 'Discovery and fresh acquisition each scan once; no third owned-copy ZIP scan.' );
+		}
+		public function test_owned_bytes_changed_during_the_persistent_fence_cannot_mint_receipt(): void {
+			list( $updater, , $database ) = $this->subject();
+			$offer                        = $this->offer( $updater );
+			$before                       = glob( sys_get_temp_dir() . '/ran-wp-release-updater-*', GLOB_ONLYDIR );
+			$name                         = array_key_first( $database->rows() );
+			self::assertIsString( $name );
+			$changed = null;
+			$database->mutate_on_read(
+				$name,
+				4,
+				static function () use ( $before, &$changed ): void {
+					$now     = glob( sys_get_temp_dir() . '/ran-wp-release-updater-*', GLOB_ONLYDIR );
+					$created = array_values( array_diff( false === $now ? array() : $now, false === $before ? array() : $before ) );
+					self::assertCount( 1, $created );
+					$changed = $created[0] . '/package.zip';
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- The owner changes real fixture permissions before replacing bytes to exercise the post-fence custody guard.
+					self::assertTrue( chmod( $changed, 0600 ) );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Replace exact owned fixture bytes after its earlier identity observation; no WordPress abstraction preserves this race.
+					self::assertSame( 7, file_put_contents( $changed, 'changed' ) );
+				}
+			);
+			$result = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertContains( 'acquisition_identity_invalid', $updater->diagnostics() );
+			self::assertIsString( $changed );
+			self::assertFileDoesNotExist( $changed );
+		}
+		public function test_new_pending_install_without_staging_cannot_reuse_the_old_marker(): void {
+			list( $updater ) = $this->subject();
+			$prepared        = $this->prepare_install( $updater );
+			$offer           = $this->offer( $updater );
+			$owned           = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $owned );
+			self::assertNull( $updater->filter_pre_unzip_file( null, $owned, '/tmp', array(), 0.0 ) );
+			$updater->capture_install_package_result( array( 'destination' => $prepared['stage'] ), $this->extra() );
+			$updater->observe_completion(
+				null,
+				array(
+					'action'  => 'update',
+					'type'    => 'plugin',
+					'plugins' => array( 'package/package.php' ),
+				)
+			);
+			$updater->finalize_pending_install();
+			self::assertContains( 'outcome_uncertain', $updater->diagnostics() );
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
+			self::assertFileDoesNotExist( $owned );
+		}
+		public function test_failed_repeated_staging_clears_the_verified_marker(): void {
+			list( $updater ) = $this->subject();
+			$prepared        = $this->prepare_install( $updater );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Alter the exact staged fixture after its first verification to exercise repeated-callback refusal.
+			file_put_contents( $prepared['stage'] . '/package.php', 'changed' );
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_source_selection( $prepared['stage'], '/tmp', null, $this->extra() ) );
+			$updater->finalize_pending_install();
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
+		}
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'completion_release_cases' )]
+		public function test_only_confirmed_release_suppresses_the_cleanup_retry( bool $fail_first, int $expected_reads, int $expected_writes, string $code ): void {
+			list( $updater, , $database ) = $this->subject();
+			$this->prepare_install( $updater );
+			$name = array_key_first( $database->rows() );
+			self::assertIsString( $name );
+			if ( $fail_first ) {
+				$database->fail_next_write( $name );
+			}
+			$before_reads  = count( $database->read_option_names() );
+			$before_writes = count( $database->prepared_sql() );
+			$updater->finalize_pending_install();
+			self::assertSame( $expected_reads, count( $database->read_option_names() ) - $before_reads );
+			$sql = array_slice( $database->prepared_sql(), $before_writes );
+			self::assertCount( $expected_writes, array_filter( $sql, static fn( string $query ): bool => str_starts_with( $query, 'UPDATE ' ) ) );
+			self::assertContains( $code, $updater->diagnostics() );
+			$binding = ( new \ReflectionProperty( $updater, 'binding' ) )->getValue( $updater );
+			self::assertInstanceOf( BindingRecord::class, $binding );
+			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'e', 64 ), 1 )['result'] );
+		}
+		/** @return array<string,array{bool,int,int,string}> */
+		public static function completion_release_cases(): array {
+			return array(
+				'confirmed'        => array( false, 8, 1, 'update_completed' ),
+				'failed first CAS' => array( true, 9, 2, 'outcome_uncertain' ),
+			);
+		}
 		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
 		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null ): array {
 			$archive_path = $this->archive();
@@ -1376,7 +1608,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertIsArray( $offer );
 			return $offer;
 		}
-		private function complete( NativePackageUpdater $updater ): void {
+		/** @return array{archive:string,stage:string} */
+		private function prepare_install( NativePackageUpdater $updater ): array {
 			$offer         = $this->offer( $updater );
 			$owned_archive = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 			self::assertIsString( $owned_archive );
@@ -1395,6 +1628,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					'plugins' => array( 'package/package.php' ),
 				)
 			);
+			return array(
+				'archive' => $owned_archive,
+				'stage'   => $staged_package,
+			);
+		}
+		private function complete( NativePackageUpdater $updater ): void {
+			$this->prepare_install( $updater );
 			$updater->finalize_pending_install();
 			self::assertContains( 'update_completed', $updater->diagnostics() );
 			self::assertNull( $updater->status()['failure_code'] );
