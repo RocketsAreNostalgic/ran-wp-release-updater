@@ -24,6 +24,79 @@ final class PackageIdentityValidatorTest extends TestCase {
 		parent::tearDown();
 	}
 
+	public function test_owned_identity_gate_rejects_replacement_during_hashing(): void {
+		$archive    = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
+		$descriptor = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );
+		self::assertTrue( ( new PackageIdentityValidator() )->verify_archive_identity( $descriptor, $archive ) );
+		$script = tempnam( sys_get_temp_dir(), 'ran-owned-hash-race-' );
+		self::assertIsString( $script );
+		$this->archives[] = $script;
+		$this->archives[] = $archive . '.before-race';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Encode exact fixture facts for an isolated process; WordPress JSON filters must not alter descriptor bytes.
+		$encoded          = json_encode(
+			array(
+				'archive'    => $archive,
+				'descriptor' => $descriptor->to_array(),
+				'bootstrap'  => dirname( __DIR__ ) . '/bootstrap.php',
+			),
+			JSON_THROW_ON_ERROR
+		);
+		$fixture          = <<<'PHP'
+<?php
+namespace RAN\WPReleaseUpdater\V1\Archive {
+    function hash_file(string $algorithm, string $filename, bool $binary = false): string|false {
+        if ($filename === $GLOBALS['ran_owned_race_path'] && !$GLOBALS['ran_owned_race_fired']) {
+            $GLOBALS['ran_owned_race_fired'] = true;
+            $stat = lstat($filename);
+            $bytes = file_get_contents($filename);
+            rename($filename, $filename . '.before-race');
+            file_put_contents($filename, $bytes);
+            chmod($filename, $stat['mode'] & 0777);
+        }
+        return \hash_file($algorithm, $filename, $binary);
+    }
+}
+namespace {
+    $ran_owned_facts = json_decode(file_get_contents($argv[1]), true, 64, JSON_THROW_ON_ERROR);
+    require $ran_owned_facts['bootstrap'];
+    $GLOBALS['ran_owned_race_path'] = $ran_owned_facts['archive'];
+    $GLOBALS['ran_owned_race_fired'] = false;
+    $ran_owned_before = lstat($ran_owned_facts['archive']);
+    $ran_owned_accepted = (new \RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator())->verify_archive_identity(
+        \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor::rehydrate($ran_owned_facts['descriptor']),
+        $ran_owned_facts['archive']
+    );
+    clearstatcache(true, $ran_owned_facts['archive']);
+    $ran_owned_after = lstat($ran_owned_facts['archive']);
+    echo json_encode([
+        'accepted' => $ran_owned_accepted,
+        'race_fired' => $GLOBALS['ran_owned_race_fired'],
+        'changed_inode' => $ran_owned_before['ino'] !== $ran_owned_after['ino'],
+        'same_mode' => $ran_owned_before['mode'] === $ran_owned_after['mode'],
+        'same_bytes' => hash_file('sha256', $ran_owned_facts['archive']) === $ran_owned_facts['descriptor']['artifact_sha256']
+    ], JSON_THROW_ON_ERROR);
+}
+PHP;
+		$facts_file       = $script . '.json';
+		$this->archives[] = $facts_file;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact isolated fixture bytes; no production source is replaced or loaded into this PHPUnit symbol world.
+		file_put_contents( $script, $fixture );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact descriptor input bytes for the native hash race subprocess.
+		file_put_contents( $facts_file, $encoded );
+		$output = array();
+		$status = 0;
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- A separate native PHP process isolates the namespaced hash_file test seam from production and other test symbol worlds.
+		exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $script ) . ' ' . escapeshellarg( $facts_file ), $output, $status );
+		self::assertSame( 0, $status, implode( "\n", $output ) );
+		$result = json_decode( implode( "\n", $output ), true, 64, JSON_THROW_ON_ERROR );
+		self::assertIsArray( $result );
+		self::assertFalse( $result['accepted'] );
+		self::assertTrue( $result['race_fired'] );
+		self::assertTrue( $result['changed_inode'] );
+		self::assertTrue( $result['same_mode'] );
+		self::assertTrue( $result['same_bytes'] );
+	}
+
 	public function test_accepts_an_exact_plugin_and_theme_without_extraction(): void {
 		$plugin    = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$theme     = $this->archive( array( 'example-theme/style.css' => $this->header( 'Theme Name', 'Example Theme' ) ) );

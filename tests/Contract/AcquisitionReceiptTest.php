@@ -160,6 +160,49 @@ final class AcquisitionReceiptTest extends TestCase {
 		}
 	}
 
+	public function test_copied_or_unissued_receipts_cannot_copy_issuance_authority(): void {
+		list( $validator, $descriptor, $state, $package ) = $this->ready();
+		$receipt = AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, 10 );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize, WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- Round-trip only this issued fixture with an exact allowed class to prove serialization cannot copy WeakMap issuance.
+		$copy   = unserialize( serialize( $receipt ), array( 'allowed_classes' => array( AcquisitionReceipt::class ) ) );
+		$forged = ( new \ReflectionClass( AcquisitionReceipt::class ) )->newInstanceWithoutConstructor();
+		foreach ( array( clone $receipt, $copy, $forged ) as $unissued ) {
+			try {
+				AcquisitionReceipt::assert_fresh( $unissued, $state, $descriptor, 10 );
+				self::fail( 'Unissued receipt asserted freshness.' );
+			} catch ( InvalidArgumentException ) {
+				self::addToAssertionCount( 1 );
+			}
+			try {
+				AcquisitionReceipt::accept_fresh( $unissued, $state, $descriptor, 10 );
+				self::fail( 'Unissued receipt completed an operation.' );
+			} catch ( InvalidArgumentException ) {
+				self::addToAssertionCount( 1 );
+			}
+		}
+		self::assertSame( $receipt, AcquisitionReceipt::accept_fresh( $receipt, $state, $descriptor, 10 ) );
+	}
+
+	public function test_issued_facts_stay_readonly_and_assertions_do_not_consume_receipt(): void {
+		list( $validator, $descriptor, $state, $package ) = $this->ready();
+		$receipt = AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, 10 );
+		try {
+			( new \ReflectionProperty( $receipt, 'facts' ) )->setValue( $receipt, array() );
+			self::fail( 'Issued receipt facts changed.' );
+		} catch ( \Error $error ) {
+			self::assertStringContainsString( 'readonly', $error->getMessage() );
+		}
+		self::assertSame( $receipt, AcquisitionReceipt::assert_fresh( $receipt, $state, $descriptor, 10 ) );
+		self::assertSame( $receipt, AcquisitionReceipt::assert_fresh( $receipt, $state, $descriptor, 20 ) );
+		self::assertSame( $receipt, AcquisitionReceipt::accept_fresh( $receipt, $state, $descriptor, 20 ) );
+		try {
+			AcquisitionReceipt::assert_fresh( $receipt, $state, $descriptor, 20 );
+			self::fail( 'Consumed receipt asserted freshness.' );
+		} catch ( InvalidArgumentException ) {
+			self::addToAssertionCount( 1 );
+		}
+	}
+
 	/** @return array{PackageIdentityValidator,IdentityDescriptor,BindingState,ValidatedPackage} */
 	private function ready(): array {
 		$path       = $this->archive();
