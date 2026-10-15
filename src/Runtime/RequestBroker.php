@@ -38,12 +38,12 @@ final class RequestBroker {
 	private ?string $terminal_code = null;
 	private RuntimeCopySelector $runtime_copy_selector;
 
-	public function __construct( private bool $activation_boundary_missed = false, private ?SelectedRuntimeState $selected_runtime_state = null ) {
+	public function __construct( private bool $activation_boundary_missed = false, private ?SelectedRuntimeState $selected_runtime_state = null, private bool $requires_bootstrap_provenance = false ) {
 		$this->runtime_copy_selector = new RuntimeCopySelector();
 	}
 
 	public function protocol_version(): int {
-		return 5;
+		return 6;
 	}
 
 	/** Register a physical runtime-copy.json without loading its runtime. */
@@ -372,7 +372,7 @@ final class RequestBroker {
 	public function diagnostics(): array {
 		$this->protocol_live();
 		return array(
-			'protocol_version'     => 5,
+			'protocol_version'     => 6,
 			'state'                => $this->state,
 			'activation_attempted' => $this->activation_attempted,
 			'candidate_count'      => count( $this->candidates ),
@@ -387,7 +387,8 @@ final class RequestBroker {
 			return true;
 		}
 		$conflict = null !== $this->selected_runtime_state
-			&& ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this;
+			&& ( ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this
+				|| ( $this->requires_bootstrap_provenance && ( $GLOBALS['ran_wp_release_updater_v1_broker_provenance']['broker'] ?? null ) !== $this ) );
 		if ( $conflict && 'protocol_conflict_inactive' !== $this->terminal_code ) {
 			$this->disable( 'protocol_conflict_inactive' );
 		}

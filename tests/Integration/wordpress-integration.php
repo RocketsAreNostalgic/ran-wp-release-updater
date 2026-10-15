@@ -598,7 +598,7 @@ function ran_wp_release_updater_test_verify_runtime( string $source ): array {
 		$payload .= $file . "\0" . hash_file( 'sha256', $source . '/' . $file ) . "\n";
 	}
 	ran_wp_release_updater_test_require_fact(
-		5 === ( $runtime['runtime_protocol'] ?? null )
+		6 === ( $runtime['runtime_protocol'] ?? null )
 		&& hash( 'sha256', $payload ) === ( $runtime['package_revision'] ?? null ),
 		'Runtime manifest does not match the Protocol 4 source bytes.'
 	);

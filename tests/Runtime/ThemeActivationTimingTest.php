@@ -136,7 +136,7 @@ PHP
 					'package_version'  => '0.1.0-beta.2',
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 5,
+					'runtime_protocol' => 6,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR

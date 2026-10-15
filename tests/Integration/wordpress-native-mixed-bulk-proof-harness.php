@@ -31,7 +31,7 @@ $ran_wp_release_updater_test_runtime_manifest = json_decode( (string) file_get_c
 $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(
 	array(
 		'php_version'       => PHP_VERSION,
-		'runtime_protocol'  => 5,
+		'runtime_protocol'  => 6,
 		'wordpress_version' => $GLOBALS['wp_version'],
 	)
 );

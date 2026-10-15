@@ -241,6 +241,9 @@ final class RequestProtocolValidator {
 			'update_policy',
 			'credential_resolver',
 			'maximum_artifact_bytes',
+			'operation_guard',
+			'native_mutation_begin',
+			'native_mutation_complete',
 		);
 		if (
 			! self::exact_keys( $value, $keys )
@@ -286,12 +289,19 @@ final class RequestProtocolValidator {
 		if ( ! is_int( $value['maximum_artifact_bytes'] ) || 0 >= $value['maximum_artifact_bytes'] ) {
 			return 'maximum_artifact_bytes_invalid';
 		}
+		if ( ( null !== $value['operation_guard'] && ! is_callable( $value['operation_guard'] ) )
+			|| ( null === $value['operation_guard'] ) !== ( null === $value['native_mutation_begin'] )
+			|| ( null === $value['operation_guard'] ) !== ( null === $value['native_mutation_complete'] )
+			|| ( null !== $value['native_mutation_begin'] && ! is_callable( $value['native_mutation_begin'] ) )
+			|| ( null !== $value['native_mutation_complete'] && ! is_callable( $value['native_mutation_complete'] ) ) ) {
+			return 'declaration_invalid';
+		}
 		return null === $value['credential_resolver'] || is_callable( $value['credential_resolver'] ) ? null : 'credential_resolver_invalid';
 	}
 
 	/** @param array<string,mixed> $value */
 	public static function release_declaration_code( array $value ): ?string {
-		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes' );
+		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard' );
 		if ( ! self::exact_keys( $value, $keys ) || ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true ) ) {
 			return 'invalid_configuration';
 		}
@@ -302,6 +312,9 @@ final class RequestProtocolValidator {
 			return 'invalid_configuration';
 		}
 		if ( ! in_array( $value['channel'], array( 'stable', 'prerelease' ), true ) || ! is_int( $value['maximum_artifact_bytes'] ) || 0 >= $value['maximum_artifact_bytes'] ) {
+			return 'invalid_configuration';
+		}
+		if ( null !== $value['operation_guard'] && ! is_callable( $value['operation_guard'] ) ) {
 			return 'invalid_configuration';
 		}
 		return null === $value['credential_resolver'] || is_callable( $value['credential_resolver'] ) ? null : 'invalid_configuration';
