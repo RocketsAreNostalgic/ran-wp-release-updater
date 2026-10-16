@@ -621,3 +621,15 @@ as isolated test analysis. Regression controls exercise direct and imported
 suppression of a real `return.type` diagnostic and require the independent
 coverage guard to reject both. Existing exact inline contract exceptions remain
 unchanged. No runtime bytes, dependencies or analysis levels change.
+
+
+### Replacement runtime candidate
+
+Runtime protocol 6 adds closed operation/native callback declarations. This is a
+hard family boundary, not a legacy adapter. Prior behavior refused an incompatible
+new registrar but could leave the first broker operational. Replacement safety
+requires both runtime families to stop: a new bootstrap invalidates only an
+incompatible broker with verified package provenance; a new broker also latches
+loss of its bootstrap provenance, including removal by a protocol-5 bootstrap.
+Unverified foreign brokers remain untouched. Both physical load orders must be
+qualified with the final tuple. No merge/release or manual acceptance is implied.

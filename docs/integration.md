@@ -286,3 +286,52 @@ does not dispatch completion during exceptional unwind and cannot safely resume
 a WordPress dispatcher that did not finish its cleanup. This also applies to
 exceptions from nested WordPress hooks: do not catch those and resume dispatch. These are optional
 observations, not a guaranteed delivery system or a new installation authority.
+
+
+## Host-bound provider replacement
+
+A host that can replace its GitHub implementation must bind the registrar before
+creating any source or native target:
+
+Call `$registrar->with_operation_guard($operation_allowed)` and then
+`->with_native_mutation_callbacks($begin, $complete)` on the returned registrar.
+
+Both methods clone the registrar. Reuse that bound instance and the same callable
+identities; different callbacks are different native declarations. Unguarded
+standalone registration retains its existing behavior. A guarded plugin/theme
+requires both native callbacks; a prospective `releases()` source needs only the
+operation guard. The guard returns exactly `true` for current authority; false,
+non-boolean results and exceptions refuse. Hosts must bind it to the request's
+exact selected implementation and generation, including anonymous operations.
+This does not grant credentials or override source, capability or recovery rules.
+
+The current runtime generation carries these callbacks through the closed declaration and selected
+runtime. Copies using incompatible runtime generations refuse each other in either load
+order; there is no downgrade that drops a guard. Deploy the qualified family of
+physical copies together.
+
+`begin(string $target_type, string $installed_identity): string` runs after final
+staged-byte/receipt validation in source selection, immediately before WordPress
+may change the destination. It must atomically acquire the host's exact native
+lock, revalidate selection/admission and durably record uncertainty, returning an
+opaque owner tag of 1–191 non-whitespace, non-control bytes. An invalid result or
+exception refuses mutation. If the callback wrote its durable marker and then
+threw, the host retains that marker for protected recovery; the updater cannot
+invent an owner or infer rollback.
+
+`complete(string $owner_tag, string $target_type, string $installed_identity,
+string $outcome): void` runs at most once after private finalization and archive
+cleanup. `verified_success` requires the existing installed manifest/header,
+one-use receipt and durable binding completion proofs plus removed private
+archive/directory. Every unverified result is `uncertain`. Completion uses the
+captured owner even when provider availability disappears; refresh cannot discard
+that pending lifecycle. A completion exception is reported as uncertain without a
+success diagnostic or retry. The host clears its marker only on exact verified
+completion or separately protected recovery. Process termination may prevent the
+callback entirely, so elapsed time and shutdown events cannot clear the marker.
+No additional persistent recovery journal is owned by this library.
+
+Prospective inspection already exposes path-free `artifact_identity`,
+`artifact_sha256`, `artifact_size` and `commit_identity`. They describe the freshly
+verified candidate; inspection is not installation authority and exact install
+must freshly reacquire and revalidate it.

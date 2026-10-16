@@ -61,12 +61,15 @@ final class GitHubReleaseService {
 	private GitHubArtifactStore $artifact_store;
 	/** @var null|callable():?string */
 	private $liveness_guard;
+	/** @var null|callable():bool */
+	private $operation_guard;
 
 	/** @param array<string, mixed> $configuration */
 	public function __construct(
 		array $configuration,
 		?GitHubCredentialResolver $credentials = null,
-		?callable $liveness_guard = null
+		?callable $liveness_guard = null,
+		?callable $operation_guard = null
 	) {
 		if (
 			! self::exact_keys( $configuration, self::CONFIGURATION_KEYS )
@@ -89,15 +92,16 @@ final class GitHubReleaseService {
 			throw new InvalidArgumentException( 'The GitHub release configuration is invalid.' );
 		}
 
-		$this->binding        = self::ordered( $configuration, self::CONFIGURATION_KEYS );
-		$this->credentials    = $credentials ?? new GitHubCredentialResolver();
-		$this->liveness_guard = $liveness_guard;
-		$this->client         = new GitHubApiClient(
+		$this->binding         = self::ordered( $configuration, self::CONFIGURATION_KEYS );
+		$this->credentials     = $credentials ?? new GitHubCredentialResolver();
+		$this->liveness_guard  = $liveness_guard;
+		$this->operation_guard = $operation_guard;
+		$this->client          = new GitHubApiClient(
 			function (): void {
 				$this->assert_live();
 			}
 		);
-		$this->artifact_store = new GitHubArtifactStore();
+		$this->artifact_store  = new GitHubArtifactStore();
 	}
 
 	/**
@@ -105,7 +109,7 @@ final class GitHubReleaseService {
 	 * @param array<string, mixed> $declaration
 	 */
 	public static function from_release_declaration( array $declaration, SelectedRuntimeState $state ): object {
-		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes' );
+		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard' );
 		if ( ! self::exact_keys( $declaration, $keys ) || 'github' !== $declaration['provider_code'] ) {
 			throw new InvalidArgumentException( 'The release declaration is invalid.' );
 		}
@@ -125,7 +129,8 @@ final class GitHubReleaseService {
 				'wordpress_runtime_version'    => $wordpress,
 			),
 			new GitHubCredentialResolver( $declaration['credential_resolver'] ),
-			static fn (): ?string => $state->release_readiness_code()
+			static fn (): ?string => $state->release_readiness_code(),
+			$declaration['operation_guard']
 		);
 	}
 
@@ -741,6 +746,13 @@ final class GitHubReleaseService {
 	}
 
 	private function assert_live(): void {
+		try {
+			if ( null !== $this->operation_guard && true !== ( $this->operation_guard )() ) {
+				throw new \RuntimeException( 'Provider operation is unavailable.' );
+			}
+		} catch ( \Throwable ) {
+			throw new ReleaseFailure( 'runtime_unavailable' );
+		}
 		if ( null === $this->liveness_guard ) {
 			return;
 		}

@@ -108,7 +108,7 @@ final class SealedProviderCatalogTest extends TestCase {
 			$result = $this->probe(
 				<<<'PHP'
 $registrars = array(); foreach ($data['copies'] as $copy) $registrars[] = require $copy . '/bootstrap.php';
-$broker = $GLOBALS['ran_wp_release_updater_v1_broker']; $broker->activate(array('php_version'=>PHP_VERSION,'runtime_protocol'=>5,'wordpress_version'=>'6.8.0'));
+$broker = $GLOBALS['ran_wp_release_updater_v1_broker']; $broker->activate(array('php_version'=>PHP_VERSION,'runtime_protocol'=>6,'wordpress_version'=>'6.8.0'));
 $source = $registrars[0]->releases('synthetic', 'plugin', 'acme/source', 'opaque_repository_id');
 $list = $source->list();
 echo json_encode(array('list'=>$list,'synthetic_calls'=>$GLOBALS['p0_2_synthetic_release_calls'] ?? 0,'github_calls'=>$GLOBALS['p0_2_github_release_calls'] ?? 0));
@@ -153,7 +153,7 @@ $github->register();
 $conflict->register();
 $synthetic->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$activation = $broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 5, 'wordpress_version' => '6.8.0' ) );
+$activation = $broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 6, 'wordpress_version' => '6.8.0' ) );
 $before = $broker->diagnostics();
 foreach ( $GLOBALS['p0_2_hooks'] as $hook ) {
 	if ( 'update_plugins_synthetic.invalid' === $hook['hook'] ) {
@@ -196,7 +196,7 @@ $before = $registrar->plugin(
 );
 $before->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 5, 'wordpress_version' => '6.8.0' ) );
+$broker->activate( array( 'php_version' => PHP_VERSION, 'runtime_protocol' => 6, 'wordpress_version' => '6.8.0' ) );
 if ( $data['cutoff'] ) {
 	foreach ( $GLOBALS['p0_2_hooks'] as $hook ) {
 		if ( 'upgrader_package_options' === $hook['hook'] ) {
@@ -266,7 +266,7 @@ PHP;
 			'package_version'  => $version,
 			'php_floor'        => '8.2.0',
 			'runtime_file'     => 'runtime.php',
-			'runtime_protocol' => 5,
+			'runtime_protocol' => 6,
 			'wordpress_floor'  => '6.5.0',
 		);
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test. Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.

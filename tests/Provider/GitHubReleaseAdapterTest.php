@@ -250,7 +250,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$broker->activate(
 					array(
 						'php_version'       => '8.2.0',
-						'runtime_protocol'  => 5,
+						'runtime_protocol'  => 6,
 						'wordpress_version' => '6.8.0',
 					)
 				)
@@ -329,7 +329,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$broker->activate(
 					array(
 						'php_version'       => PHP_VERSION,
-						'runtime_protocol'  => 5,
+						'runtime_protocol'  => 6,
 						'wordpress_version' => '6.8.0',
 					)
 				)['code']
@@ -424,7 +424,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$broker->activate(
 					array(
 						'php_version'       => PHP_VERSION,
-						'runtime_protocol'  => 5,
+						'runtime_protocol'  => 6,
 						'wordpress_version' => '6.8.0',
 					)
 				)['code']
@@ -553,6 +553,58 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$this->assert_all_temporary_paths_absent();
 		}
 
+		public function test_operation_guard_refuses_anonymous_and_credentialed_access_before_io(): void {
+			foreach ( array(
+				static fn () => false,
+				static fn () => 1,
+				static function (): bool {
+									throw new \RuntimeException( 'Unavailable.' ); },
+			) as $guard ) {
+				$calls   = 0;
+				$service = new GitHubReleaseService(
+					$this->service_configuration( $this->binding() ),
+					new GitHubCredentialResolver(
+						static function () use ( &$calls ): string {
+							++$calls;
+							return 'fixture-token';
+						}
+					),
+					operation_guard: $guard
+				);
+				try {
+					$service->list();
+					self::fail( 'Guard must refuse.' );
+				} catch ( ReleaseFailure $failure ) {
+					self::assertSame( 'runtime_unavailable', $failure->release_code );
+				}
+				self::assertSame( 0, $calls );
+			}
+			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
+		}
+
+		public function test_operation_guard_refuses_anonymous_response_after_http_callback(): void {
+			$available = true;
+			$service   = new GitHubReleaseService(
+				$this->service_configuration( $this->binding() ),
+				operation_guard: static function () use ( &$available ): bool {
+					return $available;
+				}
+			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Existing isolated transport fixture uses this exact request callback identity.
+			$GLOBALS['ran_github_request_callback'] = static function () use ( &$available ): void {
+				$available = false;
+			};
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Existing isolated transport fixture uses this exact response queue identity.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
+			try {
+				$service->list();
+				self::fail( 'Changed guard must refuse.' );
+			} catch ( ReleaseFailure $failure ) {
+				self::assertSame( 'runtime_unavailable', $failure->release_code );
+			}
+			self::assertCount( 1, $GLOBALS['ran_github_requests'] );
+		}
+
 		public function test_public_service_stops_after_liveness_changes_during_credential_resolution(): void {
 			$calls   = 0;
 			$service = new GitHubReleaseService(
@@ -590,6 +642,31 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
 			try {
 				$service->list();
+				self::fail( 'A revoked runtime must stop after the current HTTP return.' );
+			} catch ( ReleaseFailure $failure ) {
+				self::assertSame( 'runtime_unavailable', $failure->release_code );
+			}
+			self::assertCount( 1, $GLOBALS['ran_github_requests'] );
+		}
+
+		public function test_native_adapter_stops_after_runtime_revocation_even_when_host_guard_allows(): void {
+			$revoked = false;
+			$service = new GitHubReleaseAdapter(
+				$this->binding(),
+				null,
+				static fn(): bool => true,
+				static function () use ( &$revoked ): ?string {
+					/** @var bool $revoked Mutated by the HTTP callback after this closure is created. */
+					return $revoked ? 'runtime_unavailable' : null; }
+			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_request_callback'] = static function () use ( &$revoked ): void {
+				$revoked = true;
+			};
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
+			try {
+				$service->list_releases();
 				self::fail( 'A revoked runtime must stop after the current HTTP return.' );
 			} catch ( ReleaseFailure $failure ) {
 				self::assertSame( 'runtime_unavailable', $failure->release_code );
@@ -2314,7 +2391,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					$broker->activate(
 						array(
 							'php_version'       => PHP_VERSION,
-							'runtime_protocol'  => 5,
+							'runtime_protocol'  => 6,
 							'wordpress_version' => '6.8.0',
 						)
 					)['code']

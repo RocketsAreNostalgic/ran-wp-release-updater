@@ -47,7 +47,7 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['package_version'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['php_floor'] )
 			|| 'runtime.php' !== $copy['runtime_file']
-			|| 5 !== $copy['runtime_protocol']
+			|| ! in_array( $copy['runtime_protocol'], array( 5, 6 ), true )
 			|| ! is_string( $copy['wordpress_floor'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['wordpress_floor'] )
 		) {
@@ -207,7 +207,7 @@ if ( null === $ran_wp_release_updater_broker && $ran_wp_release_updater_can_crea
 		}
 	}
 	$ran_wp_release_updater_selected_state = new SelectedRuntimeState();
-	$ran_wp_release_updater_broker         = new RequestBroker( $ran_wp_release_updater_boundary_missed, $ran_wp_release_updater_selected_state );
+	$ran_wp_release_updater_broker         = new RequestBroker( $ran_wp_release_updater_boundary_missed, $ran_wp_release_updater_selected_state, true );
 	$ran_wp_release_updater_selected_state->bind( $ran_wp_release_updater_broker );
 	$ran_wp_release_updater_broker_class_origin['broker'] = $ran_wp_release_updater_broker;
 	$GLOBALS['ran_wp_release_updater_v1_broker']          = $ran_wp_release_updater_broker;
@@ -232,7 +232,7 @@ $ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_br
 	&& is_callable( array( $ran_wp_release_updater_broker, 'diagnostics' ) );
 if ( $ran_wp_release_updater_broker_compatible ) {
 	try {
-		$ran_wp_release_updater_broker_compatible = 5 === $ran_wp_release_updater_broker->protocol_version();
+		$ran_wp_release_updater_broker_compatible = 6 === $ran_wp_release_updater_broker->protocol_version();
 	} catch ( Throwable ) {
 		$ran_wp_release_updater_broker_compatible = false;
 	}
@@ -241,6 +241,11 @@ if ( $ran_wp_release_updater_broker_compatible ) {
 if ( $ran_wp_release_updater_broker_compatible ) {
 	$GLOBALS['ran_wp_release_updater_v1_broker_provenance'] = $ran_wp_release_updater_broker_provenance;
 } else {
+	// A verified incompatible family copy must not leave the older broker operational.
+	if ( is_array( $ran_wp_release_updater_broker_provenance )
+		&& is_array( $ran_wp_release_updater_package_origin( $ran_wp_release_updater_broker_provenance['root'], $ran_wp_release_updater_broker_provenance['source'] ) ) ) {
+		unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
+	}
 	unset( $GLOBALS['ran_wp_release_updater_v1_broker_provenance'] );
 }
 
@@ -250,7 +255,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		private array $diagnostics = array( array( 'code' => 'protocol_conflict_inactive' ) );
 
 		public function protocol_version(): int {
-			return 5;
+			return 6;
 		}
 
 		public function register_candidate( string $copy_file ): bool {
@@ -275,7 +280,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		/** @return array<string,mixed> */
 		public function diagnostics(): array {
 			return array(
-				'protocol_version'     => 5,
+				'protocol_version'     => 6,
 				'state'                => 'conflict',
 				'activation_attempted' => false,
 				'candidate_count'      => 0,
@@ -355,6 +360,22 @@ if ( $ran_wp_release_updater_broker_compatible ) {
 }
 
 return new class( $ran_wp_release_updater_broker ) {
+	private ?Closure $operation_guard          = null;
+	private ?Closure $native_mutation_begin    = null;
+	private ?Closure $native_mutation_complete = null;
+
+	public function with_operation_guard( callable $guard ): object {
+		$registrar                  = clone $this;
+		$registrar->operation_guard = Closure::fromCallable( $guard );
+		return $registrar;
+	}
+
+	public function with_native_mutation_callbacks( callable $begin, callable $complete ): object {
+		$registrar                           = clone $this;
+		$registrar->native_mutation_begin    = Closure::fromCallable( $begin );
+		$registrar->native_mutation_complete = Closure::fromCallable( $complete );
+		return $registrar;
+	}
 	public function __construct( private object $broker ) {
 	}
 
@@ -375,6 +396,7 @@ return new class( $ran_wp_release_updater_broker ) {
 			'channel'                => $channel,
 			'credential_resolver'    => $credentials,
 			'maximum_artifact_bytes' => $maximum_artifact_bytes,
+			'operation_guard'        => $this->operation_guard,
 		);
 		return new class( $this->broker, $declaration ) {
 			private ?object $selected = null;
@@ -751,15 +773,18 @@ return new class( $ran_wp_release_updater_broker ) {
 
 	private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes ): object {
 		$declaration = array(
-			'target_type'            => $type,
-			'installed_file'         => $file,
-			'provider_code'          => $provider,
-			'repository_locator'     => $repository,
-			'repository_identity'    => $repository_id,
-			'channel'                => $channel,
-			'update_policy'          => $policy,
-			'credential_resolver'    => $credentials,
-			'maximum_artifact_bytes' => $maximum_artifact_bytes,
+			'target_type'              => $type,
+			'installed_file'           => $file,
+			'provider_code'            => $provider,
+			'repository_locator'       => $repository,
+			'repository_identity'      => $repository_id,
+			'channel'                  => $channel,
+			'update_policy'            => $policy,
+			'credential_resolver'      => $credentials,
+			'maximum_artifact_bytes'   => $maximum_artifact_bytes,
+			'operation_guard'          => $this->operation_guard,
+			'native_mutation_begin'    => $this->native_mutation_begin,
+			'native_mutation_complete' => $this->native_mutation_complete,
 		);
 		return new class( $this->broker, $declaration ) {
 			private int $submission_id = 0;

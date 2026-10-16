@@ -137,6 +137,9 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				null,
 				$selected_runtime_state,
 				null === $declaration['credential_resolver'],
+				$declaration['operation_guard'],
+				$declaration['native_mutation_begin'],
+				$declaration['native_mutation_complete'],
 			),
 			'code'   => 'target_composition_failed',
 		);
@@ -154,14 +157,17 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		array $archive_policy,
 		?PackageIdentityValidator $validator = null,
 		?SelectedRuntimeState $selected_runtime_state = null,
-		bool $native_discovery_reuse = false
+		bool $native_discovery_reuse = false,
+		?callable $operation_guard = null,
+		?callable $native_mutation_begin = null,
+		?callable $native_mutation_complete = null
 	): ?NativePackageUpdater {
 		try {
-			$adapter = new self( $binding, $credentials );
+			$adapter = new self( $binding, $credentials, $operation_guard, null === $selected_runtime_state ? null : static fn(): ?string => $selected_runtime_state->liveness_code() );
 		} catch ( InvalidArgumentException ) {
 			return null;
 		}
-		$updater = NativePackageUpdater::from_configuration( $configuration, $binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse );
+		$updater = NativePackageUpdater::from_configuration( $configuration, $binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse, operation_guard: $operation_guard, native_mutation_begin: $native_mutation_begin, native_mutation_complete: $native_mutation_complete );
 		if ( $updater instanceof NativePackageUpdater ) {
 			$updater->register();
 		}
@@ -170,7 +176,9 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 
 	public function __construct(
 		private BindingRecord $binding_record,
-		?GitHubCredentialResolver $credentials = null
+		?GitHubCredentialResolver $credentials = null,
+		?callable $operation_guard = null,
+		?callable $liveness_guard = null
 	) {
 		$facts = $binding_record->to_array();
 		if ( 'github' !== $facts['provider_code'] ) {
@@ -187,7 +195,9 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				'target_type'                  => $facts['target_type'],
 				'wordpress_runtime_version'    => $facts['wordpress_runtime_version'],
 			),
-			$credentials
+			$credentials,
+			liveness_guard: $liveness_guard,
+			operation_guard: $operation_guard
 		);
 	}
 

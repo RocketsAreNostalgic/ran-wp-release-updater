@@ -1583,14 +1583,127 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				'failed first CAS' => array( true, 9, 2, 'outcome_uncertain' ),
 			);
 		}
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'invalid_native_owners' )]
+		public function test_begin_refusal_never_authorizes_mutation_or_completion( string $scenario ): void {
+			$completed       = 0;
+			list( $updater ) = $this->subject(
+				operation_guard: static fn (): bool => true,
+				native_mutation_begin: static function () use ( $scenario ): mixed {
+					return match ( $scenario ) {
+						'throw' => throw new \RuntimeException( 'Begin failed.' ), 'empty' => '', default => false }; },
+				native_mutation_complete: static function () use ( &$completed ): void {
+					++$completed; }
+			);
+			$offer           = $this->offer( $updater );
+			$archive         = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $archive );
+			self::assertNull( $updater->filter_pre_unzip_file( null, $archive, '/tmp', array(), 0.0 ) );
+			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_source_selection( $this->staged(), '/tmp', null, $this->extra() ) );
+			$updater->finalize_pending_install();
+			self::assertSame( 0, $completed );
+			self::assertFileDoesNotExist( $archive );
+		}
+		/** @return list<array{string}> */
+		public static function invalid_native_owners(): array {
+			return array( array( 'throw' ), array( 'empty' ), array( 'nonstring' ) ); }
+
+		public function test_captured_native_completion_survives_provider_loss_and_refresh(): void {
+			$available       = true;
+			$events          = array();
+			list( $updater ) = $this->subject(
+				operation_guard: static function () use ( &$available ): bool {
+					return $available; },
+				native_mutation_begin: static function ( string $type, string $identity ) use ( &$events ): string {
+					$events[] = array( 'begin', $type, $identity );
+					return 'owner'; },
+				native_mutation_complete: static function ( string $owner, string $type, string $identity, string $outcome ) use ( &$events ): void {
+					$events[] = array( $owner, $type, $identity, $outcome ); }
+			);
+			$prepared        = $this->prepare_install( $updater );
+			self::assertCount( 1, $events );
+			$available = false;
+			self::assertFalse( $updater->refresh() );
+			$updater->capture_install_package_result( array( 'destination' => $prepared['stage'] ), $this->extra() );
+			$updater->finalize_pending_install();
+			$updater->finalize_pending_install();
+			self::assertSame( array( array( 'begin', 'plugin', 'package/package.php' ), array( 'owner', 'plugin', 'package/package.php', 'verified_success' ) ), $events );
+			self::assertFileDoesNotExist( $prepared['archive'] );
+			self::assertDirectoryDoesNotExist( dirname( $prepared['archive'] ) );
+		}
+
+		public function test_native_completion_failure_never_reports_success(): void {
+			$calls           = 0;
+			list( $updater ) = $this->subject(
+				operation_guard: static fn (): bool => true,
+				native_mutation_begin: static fn (): string => 'owner',
+				native_mutation_complete: static function () use ( &$calls ): void {
+					++$calls;
+					throw new \RuntimeException( 'Marker retained.' ); }
+			);
+			$prepared        = $this->prepare_install( $updater );
+			$updater->finalize_pending_install();
+			$updater->finalize_pending_install();
+			self::assertSame( 1, $calls );
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
+			self::assertSame( 'outcome_uncertain', $updater->status()['failure_code'] );
+			self::assertFileDoesNotExist( $prepared['archive'] );
+		}
+
+		public function test_failed_native_result_defers_uncertain_callback_until_finalization(): void {
+			$outcomes        = array();
+			list( $updater ) = $this->subject(
+				operation_guard: static fn (): bool => true,
+				native_mutation_begin: static fn (): string => 'owner',
+				native_mutation_complete: static function ( string $owner, string $type, string $identity, string $outcome ) use ( &$outcomes ): void {
+					$outcomes[] = array( $owner, $type, $identity, $outcome ); }
+			);
+			$prepared        = $this->prepare_install( $updater );
+			$updater->capture_install_package_result( false, $this->extra() );
+			self::assertSame( array(), $outcomes );
+			$updater->finalize_pending_install();
+			self::assertSame( array( array( 'owner', 'plugin', 'package/package.php', 'uncertain' ) ), $outcomes );
+			self::assertFileDoesNotExist( $prepared['archive'] );
+		}
+
+		public function test_verified_install_with_failed_private_cleanup_reports_uncertain(): void {
+			$outcomes        = array();
+			list( $updater ) = $this->subject(
+				operation_guard: static fn (): bool => true,
+				native_mutation_begin: static fn (): string => 'owner',
+				native_mutation_complete: static function ( string $owner, string $type, string $identity, string $outcome ) use ( &$outcomes ): void {
+					$outcomes[] = array( $owner, $type, $identity, $outcome ); }
+			);
+			$prepared        = $this->prepare_install( $updater );
+			$directory       = dirname( $prepared['archive'] );
+			$this->paths[]   = $directory;
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- A foreign leftover in the owned fixture directory prevents verified cleanup.
+			file_put_contents( $directory . '/leftover', 'fixture' );
+			$updater->finalize_pending_install();
+			self::assertSame( array( array( 'owner', 'plugin', 'package/package.php', 'uncertain' ) ), $outcomes );
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
+		}
+
+		public function test_unavailable_guard_rejects_preexisting_offer_before_provider_io(): void {
+			list( $updater, $adapter ) = $this->subject(
+				operation_guard: static fn (): bool => false,
+				native_mutation_begin: static fn (): string => 'owner',
+				native_mutation_complete: static function (): void {}
+			);
+			self::assertFalse( $updater->filter_update( array( 'package' => 'cached' ), array(), 'package/package.php', array() ) );
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_pre_download( false, 'cached', null, $this->extra() ) );
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_source_selection( '/prepared', '/tmp', null, $this->extra() ) );
+			self::assertSame( 0, $adapter->list_calls + $adapter->inspect_calls + $adapter->acquire_calls );
+		}
+
 		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
-		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null ): array {
+		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null ): array {
 			$archive_path = $this->archive();
 			$descriptor   = $this->descriptor( $archive_path, $channel, $prerelease );
 			$binding      = $this->binding( $mode, $channel );
 			$adapter      = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
 			$database   ??= new FakeOptionDatabase( 100 );
-			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse );
+			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			return array( $updater, $adapter, $database, $descriptor, $binding );
 		}

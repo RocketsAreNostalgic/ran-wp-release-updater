@@ -48,6 +48,14 @@ final class NativePackageUpdater {
 	private OwnedArchiveStore $archive_store;
 	private StagedPackageManifest $manifest_builder;
 	private PendingInstallState $pending_install;
+	private ?\Closure $operation_guard;
+	private ?\Closure $native_mutation_begin;
+	private ?\Closure $native_mutation_complete;
+	private ?string $native_owner  = null;
+	private bool $native_beginning = false;
+	private bool $finalizing       = false;
+	private string $native_outcome = 'uncertain';
+
 
 	/**
 	 * @param array<string,string> $headers
@@ -65,11 +73,17 @@ final class NativePackageUpdater {
 		private array $archive_policy,
 		private PackageIdentityValidator $validator,
 		private ?SelectedRuntimeState $selected_runtime_state = null,
-		private bool $native_discovery_reuse = false
+		private bool $native_discovery_reuse = false,
+		?callable $operation_guard = null,
+		?callable $native_mutation_begin = null,
+		?callable $native_mutation_complete = null
 	) {
-		$this->archive_store    = new OwnedArchiveStore();
-		$this->manifest_builder = new StagedPackageManifest();
-		$this->pending_install  = new PendingInstallState();
+		$this->archive_store            = new OwnedArchiveStore();
+		$this->manifest_builder         = new StagedPackageManifest();
+		$this->pending_install          = new PendingInstallState();
+		$this->operation_guard          = null === $operation_guard ? null : \Closure::fromCallable( $operation_guard );
+		$this->native_mutation_begin    = null === $native_mutation_begin ? null : \Closure::fromCallable( $native_mutation_begin );
+		$this->native_mutation_complete = null === $native_mutation_complete ? null : \Closure::fromCallable( $native_mutation_complete );
 	}
 
 	/**
@@ -84,8 +98,14 @@ final class NativePackageUpdater {
 		array $archive_policy,
 		?PackageIdentityValidator $validator = null,
 		?SelectedRuntimeState $selected_runtime_state = null,
-		bool $native_discovery_reuse = false
+		bool $native_discovery_reuse = false,
+		?callable $operation_guard = null,
+		?callable $native_mutation_begin = null,
+		?callable $native_mutation_complete = null
 	): ?self {
+		if ( ( null === $operation_guard ) !== ( null === $native_mutation_begin ) || ( null === $operation_guard ) !== ( null === $native_mutation_complete ) ) {
+			return null;
+		}
 		$binding_facts = $binding->to_array();
 		if (
 			! self::valid_configuration( $configuration, $binding )
@@ -112,7 +132,10 @@ final class NativePackageUpdater {
 			$archive_policy,
 			$validator ?? new PackageIdentityValidator(),
 			$selected_runtime_state,
-			$native_discovery_reuse
+			$native_discovery_reuse,
+			$operation_guard,
+			$native_mutation_begin,
+			$native_mutation_complete
 		);
 	}
 
@@ -149,14 +172,17 @@ final class NativePackageUpdater {
 	 */
 	public function filter_update( mixed $update, array $package_data, string $package_identity, array $locales ): mixed {
 		unset( $locales );
-		if ( ! hash_equals( $this->installed_identity, $package_identity ) || ! $this->live() ) {
+		if ( ! hash_equals( $this->installed_identity, $package_identity ) ) {
 			return $update;
+		}
+		if ( ! $this->live() ) {
+			return null === $this->operation_guard ? $update : false;
 		}
 		$check_id = null;
 		$reason   = 'unexpected_failure';
 		$result   = $this->checked_update( $update, $package_data, $reason, $check_id );
 		$this->complete_check_observation( $check_id, $reason );
-		return $result;
+		return null !== $this->operation_guard && ! $this->live() ? false : $result;
 	}
 
 	/** @param array<string,mixed> $package_data */
@@ -336,16 +362,19 @@ final class NativePackageUpdater {
 			'description' => $this->headers['Description'],
 			'changelog'   => '',
 		);
-		return $info;
+		return $this->live() ? $info : false;
 	}
 
 	public function filter_auto_update( ?bool $update, mixed $item ): ?bool {
-		if ( ! is_object( $item ) || ! $this->matches_item_identity( $item ) || ! $this->live() ) {
+		if ( ! is_object( $item ) || ! $this->matches_item_identity( $item ) ) {
 			return $update;
+		}
+		if ( ! $this->live() ) {
+			return null === $this->operation_guard ? $update : false;
 		}
 		$this->begin_operation();
 		$descriptor = $this->parse_token( is_string( $item->package ?? null ) ? $item->package : '' );
-		return $this->direct_filesystem() && $descriptor instanceof IdentityDescriptor && $this->newer_than_installed( $descriptor ) && $this->automatic_eligible( $descriptor );
+		return $this->direct_filesystem() && $descriptor instanceof IdentityDescriptor && $this->newer_than_installed( $descriptor ) && $this->automatic_eligible( $descriptor ) && $this->live();
 	}
 
 	public function capture_package_options( mixed $options ): mixed {
@@ -364,8 +393,11 @@ final class NativePackageUpdater {
 	/** @param array<string,mixed> $hook_extra */
 	public function filter_pre_download( mixed $reply, string $package, mixed $upgrader, array $hook_extra ): mixed {
 		unset( $upgrader );
-		if ( ! $this->live() || ! $this->matches_target_identity( $hook_extra ) ) {
+		if ( ! $this->matches_target_identity( $hook_extra ) ) {
 			return $reply;
+		}
+		if ( $this->native_beginning || null !== $this->native_owner || ! $this->live() ) {
+			return null === $this->operation_guard ? $reply : $this->failure( 'runtime_liveness_lost' );
 		}
 		$this->clear_discovery_snapshot();
 		if ( ! $this->matches_operation( $hook_extra ) ) {
@@ -393,7 +425,7 @@ final class NativePackageUpdater {
 		} catch ( \Throwable ) {
 			return $this->failure( 'acquisition_failed' );
 		}
-		if ( ! $this->newer_than_installed( $fresh ) ) {
+		if ( ! $this->live() || ! $this->newer_than_installed( $fresh ) ) {
 			return $this->failure( 'unverified_pre_download' );
 		}
 		if ( ! hash_equals( $token->fingerprint_value(), $fresh->fingerprint_value() ) ) {
@@ -409,10 +441,23 @@ final class NativePackageUpdater {
 		}
 		$this->state = $renewed['current'];
 		$this->claim = $this->claim( $this->state );
+		$owned       = null;
+		$artifact    = null;
 		try {
 			$artifact = $this->adapter->acquire( $fresh );
-			$owned    = $artifact->inspect( fn( string $path ): ?array => $this->validated_copy( $path, $fresh ) );
+			$artifact->inspect(
+				function ( string $path ) use ( $fresh, &$owned ): void {
+					$owned = $this->validated_copy( $path, $fresh );
+				}
+			);
+			if ( ! $artifact->discard() ) {
+				throw new \RuntimeException( 'Acquisition cleanup failed.' );
+			}
 		} catch ( \Throwable ) {
+			if ( is_array( $owned ) ) {
+				$this->archive_store->remove( $owned['path'], $owned['directory'] );
+			}
+			$artifact?->discard();
 			return $this->failure( 'acquisition_failed' );
 		}
 		if ( ! is_array( $owned ) ) {
@@ -424,7 +469,7 @@ final class NativePackageUpdater {
 			return $this->failure( 'acquisition_identity_invalid' );
 		}
 		$verified = $this->verify_current();
-		if ( null === $verified ) {
+		if ( null === $verified || ! $this->live() ) {
 			$this->archive_store->remove( $owned['path'], $owned['directory'] );
 			return $this->failure( 'binding_fence_lost' );
 		}
@@ -472,7 +517,7 @@ final class NativePackageUpdater {
 			return $this->failure( 'archive_changed_before_extraction' );
 		}
 		$this->state = $verified['current'];
-		if ( ! $this->pending_install->admit_extraction() ) {
+		if ( ! $this->live() || ! $this->pending_install->admit_extraction() ) {
 			$this->clear_pending();
 			return $this->failure( 'archive_changed_before_extraction' );
 		}
@@ -486,7 +531,7 @@ final class NativePackageUpdater {
 			return $source;
 		}
 		if ( ! $this->live() ) {
-			if ( ! $this->pending_install->active() ) {
+			if ( null === $this->operation_guard && ! $this->pending_install->active() ) {
 				return $source;
 			}
 			$this->clear_pending();
@@ -531,6 +576,10 @@ final class NativePackageUpdater {
 			$this->clear_pending();
 			return $this->failure( 'staged_package_identity_invalid' );
 		}
+		if ( ! $this->live() || ! $this->begin_native_mutation() ) {
+			$this->clear_pending();
+			return $this->failure( 'runtime_liveness_lost' );
+		}
 		return $source;
 	}
 	/** @param array<string,mixed> $hook_extra */
@@ -539,7 +588,7 @@ final class NativePackageUpdater {
 			return $response;
 		}
 		if ( ! $this->live() ) {
-			if ( ! $this->pending_install->active() ) {
+			if ( null === $this->operation_guard && ! $this->pending_install->active() ) {
 				return $response;
 			}
 			$this->clear_pending();
@@ -565,6 +614,10 @@ final class NativePackageUpdater {
 			return $this->failure( 'unverified_pre_install' );
 		}
 		$this->state = $verified['current'];
+		if ( ! $this->live() ) {
+			$this->clear_pending();
+			return $this->failure( 'runtime_liveness_lost' );
+		}
 		return $response;
 	}
 	/** @param array<string,mixed> $hook_extra */
@@ -572,12 +625,15 @@ final class NativePackageUpdater {
 		if ( ! $this->matches_operation( $hook_extra ) ) {
 			return $result;
 		}
-		if ( ! $this->live() ) {
+		if ( null === $this->native_owner && ! $this->live() ) {
 			if ( ! $this->pending_install->active() ) {
 				return $result;
 			}
 			$this->clear_pending();
 			return $this->failure( 'runtime_liveness_lost' );
+		}
+		if ( null !== $this->native_owner && ( $result instanceof \WP_Error || false === $result ) ) {
+			$this->pending_install->capture_install_result( $result );
 		}
 		if ( ! $this->pending_install->active() || $result instanceof \WP_Error || false === $result ) {
 			$this->clear_pending();
@@ -593,22 +649,28 @@ final class NativePackageUpdater {
 	/** @param array<string,mixed> $hook_extra */
 	public function observe_completion( mixed $upgrader, array $hook_extra ): void {
 		unset( $upgrader );
-		if ( $this->live() && $this->matches_completion( $hook_extra ) ) {
+		if ( ( null !== $this->native_owner || $this->live() ) && $this->matches_completion( $hook_extra ) ) {
 			$this->clear_discovery_snapshot();
 			$this->pending_install->observe_completion();
 		}
 	}
 	/** Finalization is deliberately after Core rollback and backup cleanup. */
 	public function finalize_pending_install(): void {
-		if ( ! $this->live() ) {
+		if ( $this->finalizing ) {
+			return;
+		}
+		$this->finalizing = true;
+		if ( null === $this->native_owner && ! $this->live() ) {
 			if ( $this->pending_install->active() ) {
 				$this->diagnose( 'runtime_liveness_lost', null );
 			}
 			$this->clear_pending();
+			$this->finalizing = false;
 			return;
 		}
 		if ( ! $this->pending_install->active() ) {
 			$this->clear_pending();
+			$this->finalizing = false;
 			return;
 		}
 
@@ -658,11 +720,15 @@ final class NativePackageUpdater {
 			}
 			$completed = BindingFenceCoordinator::complete_persistent_install( $this->wpdb, $this->state, $this->claim, $this->pending_install->receipt(), $this->descriptor );
 			if ( 'completed' === $completed['result'] ) {
-				$this->lease_held = false;
+				$this->lease_held     = false;
+				$this->native_outcome = 'verified_success';
 			}
-			$this->diagnose( 'completed' === $completed['result'] ? 'update_completed' : 'outcome_uncertain', null );
+			if ( null === $this->native_owner ) {
+				$this->diagnose( 'completed' === $completed['result'] ? 'update_completed' : 'outcome_uncertain', null );
+			}
 		} finally {
 			$this->clear_pending();
+			$this->finalizing = false;
 		}
 	}
 	/** @return list<string> */ public function diagnostics(): array {
@@ -670,6 +736,9 @@ final class NativePackageUpdater {
 	/** @return array{candidate_header_version:string|null,candidate_tag:string|null,candidate_validation_code:string|null,candidate_version:string|null,failure_code:string|null,installed_version:string|null,last_check:int|null,offered_release_identity:string|null,offered_version:string|null,relationship:string|null} */ public function status(): array {
 		return $this->status; }
 	public function refresh(): bool {
+		if ( $this->native_beginning || null !== $this->native_owner ) {
+			return false;
+		}
 		if ( ! $this->live() ) {
 			$this->clear_pending();
 			return false;
@@ -683,11 +752,43 @@ final class NativePackageUpdater {
 	}
 
 	private function live(): bool {
-		$live = ! $this->selected_runtime_state instanceof SelectedRuntimeState || $this->selected_runtime_state->broker_is_live();
+		$live = ( ! $this->selected_runtime_state instanceof SelectedRuntimeState || $this->selected_runtime_state->broker_is_live() ) && $this->operation_allowed();
 		if ( ! $live ) {
 			$this->clear_discovery_snapshot();
 		}
 		return $live;
+	}
+
+	/** @phpstan-impure Host authority must be read afresh. */
+	private function operation_allowed(): bool {
+		try {
+			return null === $this->operation_guard || true === ( $this->operation_guard )();
+		} catch ( \Throwable ) {
+			return false;
+		}
+	}
+
+	private function begin_native_mutation(): bool {
+		if ( null === $this->native_mutation_begin ) {
+			return true;
+		}
+		if ( $this->native_beginning || null !== $this->native_owner ) {
+			return false;
+		}
+		$this->native_beginning = true;
+		$receipt                = $this->pending_install->receipt();
+		try {
+			$owner = ( $this->native_mutation_begin )( $this->target_type, $this->installed_identity );
+			if ( ! is_string( $owner ) || 1 !== preg_match( '/\A[^\x00-\x20\x7f]{1,191}\z/D', $owner ) ) {
+				return false;
+			}
+			$this->native_owner = $owner;
+			return $this->pending_install->staging_verified() && $receipt === $this->pending_install->receipt() && null !== $this->verify_current();
+		} catch ( \Throwable ) {
+			return false;
+		} finally {
+			$this->native_beginning = false;
+		}
 	}
 
 	private function begin_operation(): void {
@@ -964,7 +1065,7 @@ final class NativePackageUpdater {
 					'installed'  => $normalized_installed,
 				);
 			}
-			return $descriptor;
+			return $this->live() ? $descriptor : null;
 		}
 		if ( ! $rejected && false === ( $listed['search_exhausted'] ?? null ) && false === ( $listed['not_modified'] ?? null ) ) {
 			$reason = array() === $candidates ? 'no_candidates' : 'no_newer_candidate';
@@ -976,7 +1077,7 @@ final class NativePackageUpdater {
 			&& in_array( $failure->cleanup_status, array( 'not_applicable', 'complete' ), true );
 	}
 	private function reusable_discovery( string $installed ): ?IdentityDescriptor {
-		if ( ! $this->native_discovery_reuse || ! is_array( $this->discovery_snapshot ) || ! is_array( $this->claim ) || $this->discovery_snapshot['installed'] !== $installed || $this->discovery_snapshot['claim'] !== $this->claim ) {
+		if ( ! $this->live() || ! $this->native_discovery_reuse || ! is_array( $this->discovery_snapshot ) || ! is_array( $this->claim ) || $this->discovery_snapshot['installed'] !== $installed || $this->discovery_snapshot['claim'] !== $this->claim ) {
 			return null;
 		}
 		$descriptor                                = $this->discovery_snapshot['descriptor'];
@@ -1067,6 +1168,12 @@ final class NativePackageUpdater {
 			'now'     => $verified['now'],
 		) : null; }
 	private function clear_pending( bool $release = true ): void {
+		if ( $this->native_beginning || ( null !== $this->native_owner && ! $this->finalizing ) ) {
+			return;
+		}
+		$owner     = $this->native_owner;
+		$archive   = $this->pending_install->archive();
+		$directory = $this->pending_install->archive_directory();
 		$this->clear_discovery_snapshot();
 		$this->archive_store->remove( $this->pending_install->archive(), $this->pending_install->archive_directory() );
 		$this->pending_install->clear();
@@ -1077,6 +1184,19 @@ final class NativePackageUpdater {
 			$this->state      = null;
 			$this->claim      = null;
 			$this->lease_held = false;
+		}
+		if ( null !== $owner && null !== $this->native_mutation_complete ) {
+			$this->native_owner = null;
+			clearstatcache();
+			$clean                = is_string( $archive ) && is_string( $directory ) && ! file_exists( $archive ) && ! is_link( $archive ) && ! file_exists( $directory ) && ! is_link( $directory );
+			$outcome              = $clean ? $this->native_outcome : 'uncertain';
+			$this->native_outcome = 'uncertain';
+			try {
+				( $this->native_mutation_complete )( $owner, $this->target_type, $this->installed_identity, $outcome );
+			} catch ( \Throwable ) {
+				$outcome = 'uncertain';
+			}
+			$this->diagnose( 'verified_success' === $outcome ? 'update_completed' : 'outcome_uncertain', null );
 		}
 	}
 	private function diagnose( string $code, mixed $return_value ): mixed {
