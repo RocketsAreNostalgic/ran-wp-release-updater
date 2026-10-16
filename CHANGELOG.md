@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.12](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.11...v1.0.0-beta.12) (2026-10-16)
+
+
+### Features
+
+* fence release operations and retain native mutation ownership ([#130](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/130)) ([58fa422](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/58fa422ca89201b12a577f9dcb9d0ef1f18122e1))
+
 ## [1.0.0-beta.11](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.10...v1.0.0-beta.11) (2026-10-14)
 
 
