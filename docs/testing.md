@@ -46,8 +46,8 @@ test independently discovers all script PHP, including nested `scripts/tests`,
 compares effective selection, asserts level 8, detects an excluded nested script,
 and proves a new script's incorrect return fails actual analysis.
 
-Current direct analysis covers all 98 maintained PHP files: 35 production files and
-three scripts at level 8, plus 60 test files at level 8. The small
+Current direct analysis covers all 100 maintained PHP files: 35 production files and
+three scripts at level 8, plus 62 test files at level 8. The small
 `scripts/analyze-tests.php` runner discovers the whole tests directory through
 PHPStan's file finder, then passes each file separately to the locked analyzer.
 `--list` exposes exactly that selection to the independent coverage guard.
@@ -226,6 +226,34 @@ composer test:wordpress-integration
 If the normal repository workspace makes MySQL's Unix socket path too long, use a separately authorized short directory for `RAN_UPDATER_SOCKET_ROOT`.
 
 Missing prerequisites and failed scenarios are failures, not skipped passes.
+
+### Automatic example qualification
+
+`composer test:wordpress-automatic-example` is a separate qualification lane for
+the pinned `ran-wp-release-updater-example` checkout. Set
+`RAN_UPDATER_EXAMPLE_ROOT` to that exact checkout before running it. The fixture
+builds three independent no-dev plugin ZIPs (0.1.0, 0.2.0 and 0.3.0) against the
+candidate updater path, installs 0.1.0 through WordPress Core, and performs
+separate fresh WordPress requests for 0.1.0→0.2.0, 0.2.0→0.3.0 and the 0.3.0
+no-op. Each request dispatches the real `wp_maybe_auto_update` action; it does
+not construct an update offer or call an updater subclass.
+
+Live HTTP is deliberately not contacted. A `pre_http_request` fixture admits
+the provider's exact GitHub API requests, returns release/repository/commit
+evidence shaped as GitHub responses, and streams the independently built ZIP at
+the asset HTTP boundary. It also returns Core's otherwise-empty WordPress.org
+plugin-check response and the nonce-bound local loopback response used by
+Core's post-update fatal-error check. The disposable checkout is necessarily
+inside a Git worktree, so the fixture records and narrowly overrides only
+Core's VCS-check result for this marked test root. The proof checks installed
+file manifests, active state, the installed runtime origin and revision,
+archive-download counts and the enclosing disposable-process cleanup. It proves
+this controlled provider and Core boundary, not a live GitHub or WordPress.org
+HTTP exchange, publication, hosting, or end-user cron delivery.
+
+CI runs the example lane only at its declared floor pair (PHP 8.4 with
+WordPress 7.0) and current pair (PHP 8.5 with WordPress 7.1). Those two rows do
+not expand or replace the package's PHP 8.2 / WordPress 6.5 and 7.1 matrix.
 
 ## Other focused suites
 

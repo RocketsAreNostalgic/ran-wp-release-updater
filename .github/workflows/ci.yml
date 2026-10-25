@@ -194,6 +194,83 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  wordpress-automatic-example:
+    name: Automatic example PHP ${{ matrix.php }} / WordPress ${{ matrix.wordpress }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.4'
+            wordpress: '7.0'
+          - php: '8.5'
+            wordpress: '7.1'
+    steps:
+      - name: Check out exact updater candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Check out pinned automatic example
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: RocketsAreNostalgic/ran-wp-release-updater-example
+          ref: 5f6ffad474d82bdc3e2e4fb4f01c956ef610656e
+          path: .workspaces/ran-wp-release-updater-example
+          persist-credentials: false
+
+      - name: Set up PHP and WP-CLI
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          extensions: zip, mysqli
+          tools: composer:v2, wp-cli:2.12.0
+
+      - name: Prove automatic example through Core cron
+        shell: bash
+        run: |
+          set -euo pipefail
+          wp_cli="$(command -v wp)"
+          system_mysqld="$(command -v mysqld)"
+          integration_root="$GITHUB_WORKSPACE/.workspaces/automatic-example-integration"
+          socket_root="$GITHUB_WORKSPACE/.workspaces/automatic-example-sock"
+          php_tmp="$integration_root/php-tmp"
+          wp_cache="$integration_root/wp-cli-cache"
+          wp_root="$GITHUB_WORKSPACE/.workspaces/automatic-example-wordpress-${{ matrix.wordpress }}"
+          mysql_tools="$GITHUB_WORKSPACE/.workspaces/automatic-example-tools"
+          mysqld_binary="$mysql_tools/mysqld"
+          php_ini="$integration_root/php-ini"
+          mkdir -p "$integration_root" "$socket_root" "$php_tmp" "$wp_cache" "$mysql_tools" "$php_ini"
+          chmod 700 "$integration_root" "$socket_root" "$php_tmp" "$wp_cache" "$mysql_tools" "$php_ini"
+          printf 'sys_temp_dir = "%s"\n' "$php_tmp" > "$php_ini/99-ran-updater-automatic-example.ini"
+          php_scan_dir="$(php --ini | sed -n 's/^Scan for additional .ini files in: //p')"
+          export PHP_INI_SCAN_DIR="$php_ini:$php_scan_dir"
+          export WP_CLI_CACHE_DIR="$wp_cache"
+          export TMPDIR="$php_tmp" TMP="$php_tmp" TEMP="$php_tmp"
+          cp "$system_mysqld" "$mysqld_binary"
+          cmp "$system_mysqld" "$mysqld_binary"
+          php -d "sys_temp_dir=$php_tmp" "$wp_cli" core download --version=${{ matrix.wordpress }} --skip-content --path="$wp_root"
+          composer install --no-interaction --prefer-dist --no-progress
+          export RAN_UPDATER_WP_CLI="$wp_cli"
+          export RAN_UPDATER_MYSQLD_BIN="$mysqld_binary"
+          export RAN_UPDATER_WP_ROOT="$wp_root"
+          export RAN_UPDATER_INTEGRATION_ROOT="$integration_root"
+          export RAN_UPDATER_SOCKET_ROOT="$socket_root"
+          export RAN_UPDATER_EXAMPLE_ROOT="$GITHUB_WORKSPACE/.workspaces/ran-wp-release-updater-example"
+          composer test:wordpress-automatic-example
+
+      - name: Upload redacted automatic-example result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wordpress-automatic-example-${{ matrix.php }}-${{ matrix.wordpress }}
+          path: ${{ github.workspace }}/.workspaces/automatic-example-integration/ran-wp-release-updater-result-*.json
+          if-no-files-found: ignore
+          retention-days: 7
+
   quality:
     if: ${{ always() }}
     needs:
@@ -202,6 +279,7 @@ jobs:
       - mysql-cas
       - windows-portability
       - wordpress-installed-integration
+      - wordpress-automatic-example
     runs-on: ubuntu-24.04
     steps:
       - name: Require all quality lanes
@@ -211,11 +289,13 @@ jobs:
           MYSQL_CAS_RESULT: ${{ needs.mysql-cas.result }}
           WINDOWS_RESULT: ${{ needs.windows-portability.result }}
           WORDPRESS_RESULT: ${{ needs.wordpress-installed-integration.result }}
+          AUTOMATIC_EXAMPLE_RESULT: ${{ needs.wordpress-automatic-example.result }}
         run: |
-          printf 'baseline=%s\njavascript=%s\nmysql-cas=%s\nwindows=%s\nwordpress=%s\n' \
-            "$BASELINE_RESULT" "$JAVASCRIPT_RESULT" "$MYSQL_CAS_RESULT" "$WINDOWS_RESULT" "$WORDPRESS_RESULT"
+          printf 'baseline=%s\njavascript=%s\nmysql-cas=%s\nwindows=%s\nwordpress=%s\nautomatic-example=%s\n' \
+            "$BASELINE_RESULT" "$JAVASCRIPT_RESULT" "$MYSQL_CAS_RESULT" "$WINDOWS_RESULT" "$WORDPRESS_RESULT" "$AUTOMATIC_EXAMPLE_RESULT"
           test "$BASELINE_RESULT" = success
           test "$JAVASCRIPT_RESULT" = success
           test "$MYSQL_CAS_RESULT" = success
           test "$WINDOWS_RESULT" = success
           test "$WORDPRESS_RESULT" = success
+          test "$AUTOMATIC_EXAMPLE_RESULT" = success
