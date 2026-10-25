@@ -8,6 +8,22 @@ namespace {
 			public function __construct( public string $code, public string $message ) {}
 		}
 	}
+	if ( ! class_exists( 'Theme_Upgrader_Skin' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound, Generic.Classes.DuplicateClassName.Found, Generic.Files.OneObjectStructurePerFile.MultipleFound -- This stub occupies the exact Core skin identity required by the bounded compatibility bridge.
+		class Theme_Upgrader_Skin {
+			public mixed $result = null;
+		}
+	}
+	if ( ! class_exists( 'Theme_Upgrader' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound, Generic.Classes.DuplicateClassName.Found, Generic.Files.OneObjectStructurePerFile.MultipleFound -- This stub occupies the exact Core upgrader identity required by the bounded compatibility bridge.
+		class Theme_Upgrader {
+			public mixed $result = null;
+			public Theme_Upgrader_Skin $skin;
+			public function __construct() {
+				$this->skin = new Theme_Upgrader_Skin();
+			}
+		}
+	}
 	if ( ! function_exists( 'add_filter' ) ) {
 		// phpcs:ignore Universal.Files.SeparateFunctionsFromOO.Mixed, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- The self-contained fixture combines foreign functions/classes with the test harness that exercises them. WordPress calls this global stub by its exact foreign function name.
 		function add_filter( string $hook, mixed $callback, int $priority, int $arguments ): void {
@@ -33,6 +49,12 @@ namespace {
 			if ( true === ( $GLOBALS['ran_wp_release_updater_test_observer_throws'] ?? false ) ) {
 				throw new \RuntimeException( 'Observer failed.' );
 			}
+		}
+	}
+	if ( ! function_exists( 'doing_action' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the exact Core automatic-update action gate.
+		function doing_action( string $hook ): bool {
+			return ( $GLOBALS['ran_wp_release_updater_test_doing_action'] ?? null ) === $hook;
 		}
 	}
 	if ( ! function_exists( 'get_filesystem_method' ) ) {
@@ -73,6 +95,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$GLOBALS['ran_wp_release_updater_test_observer_throws']  = false;
 			$GLOBALS['ran_wp_release_updater_test_hooks']            = array();
 			$GLOBALS['ran_wp_release_updater_test_filter_callbacks'] = array();
+			$GLOBALS['ran_wp_release_updater_test_doing_action']     = null;
 		}
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function tearDown(): void {
@@ -1352,7 +1375,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertContains( 'unverified_pre_download_result', $updater->diagnostics() );
 		}
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'theme_staging_cases' )]
-		public function test_theme_source_proof_and_staging_marker_complete_the_actual_native_lifecycle( bool $stage_verified ): void {
+		public function test_theme_source_proof_and_staging_marker_complete_the_actual_native_lifecycle( bool $stage_verified, string $mode, bool $automatic_action, bool $replace_skin, bool $failed_result, string $restore_case ): void {
 			$archive = $this->archive();
 			$zip     = new \ZipArchive();
 			self::assertTrue( $zip->open( $archive, \ZipArchive::OVERWRITE ) );
@@ -1364,12 +1387,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$facts['target_type']                = 'theme';
 			$facts['installed_package_identity'] = 'package';
 			$descriptor                          = IdentityDescriptor::create( $facts );
-			$binding_facts                       = $this->binding( 'manual' )->to_array();
+			$binding_facts                       = $this->binding( $mode )->to_array();
 			unset( $binding_facts['binding_hash'] );
 			$binding_facts['target_type']                = 'theme';
 			$binding_facts['installed_package_identity'] = 'package';
 			$binding                                     = BindingRecord::create( $binding_facts );
-			$configuration                               = $this->config( 'manual' );
+			$configuration                               = $this->config( $mode );
 			$configuration['target_type']                = 'theme';
 			$configuration['installed_package_identity'] = 'package';
 			$policy                                      = $this->policy();
@@ -1384,8 +1407,22 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				}
 			);
 			$adapter                                     = new ControllableReleaseAdapter( $descriptor, $archive, $this->temporary_directory );
-			$updater                                     = NativePackageUpdater::from_configuration( $configuration, $binding, $adapter, new FakeOptionDatabase( 100 ), $policy, $validator );
+			$updater                                     = NativePackageUpdater::from_configuration(
+				$configuration,
+				$binding,
+				$adapter,
+				new FakeOptionDatabase( 100 ),
+				$policy,
+				$validator,
+				null,
+				false,
+				static fn (): bool => true,
+				static fn (): string => 'owner',
+				static function (): void {}
+			);
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
+			$updater->register();
+			self::assertCount( 9, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$offer = $updater->filter_update(
 				false,
 				array(
@@ -1412,9 +1449,74 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			file_put_contents( $stage . '/style.css', $contents );
 			self::assertTrue( $updater->filter_pre_install( true, $extra ) );
 			if ( $stage_verified ) {
-				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', null, $extra ) );
+				$stock = new \Theme_Upgrader();
+				$GLOBALS['ran_wp_release_updater_test_doing_action'] = $automatic_action ? 'wp_maybe_auto_update' : null;
+				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', $stock, $extra ) );
+				self::assertCount( 10, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+				if ( $failed_result ) {
+					$original      = new \WP_Error( 'post_copy_failed', 'Post-copy failure.' );
+					$stock->result = $original;
+					if ( $replace_skin ) {
+						$stock->skin = new class() extends \Theme_Upgrader_Skin {};
+					}
+					$outgoing = $updater->capture_install_package_result( $original, $extra );
+					self::assertInstanceOf( \WP_Error::class, $outgoing );
+					self::assertNotSame( $original, $outgoing );
+					$bridged = ! $automatic_action && ! $replace_skin;
+					self::assertSame( $bridged ? array() : $original, $stock->result );
+					self::assertSame( $bridged ? 11 : 10, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
+					if ( $bridged ) {
+						self::assertSame(
+							array( 'action', 'upgrader_process_complete', array( $updater, 'restore_theme_error_result' ), PHP_INT_MIN, 2 ),
+							$GLOBALS['ran_wp_release_updater_test_hooks'][10]
+						);
+					}
+					$stock->skin->result = $outgoing;
+					if ( 'wrong_upgrader' === $restore_case ) {
+						$updater->restore_theme_error_result(
+							new \Theme_Upgrader(),
+							array(
+								'type'   => 'theme',
+								'action' => 'update',
+								'themes' => array( 'package' ),
+							)
+						);
+						self::assertSame( array(), $stock->result );
+					}
+					if ( 'changed_result' === $restore_case ) {
+						$stock->result = 'foreign-result';
+					}
+					if ( 'changed_skin_error' === $restore_case ) {
+						$stock->skin->result = new \WP_Error( 'foreign', 'Foreign error.' );
+					}
+					$updater->restore_theme_error_result(
+						$stock,
+						array(
+							'type'   => 'theme',
+							'action' => 'update',
+							'themes' => array( 'package' ),
+						)
+					);
+					self::assertSame( 'changed_result' === $restore_case ? 'foreign-result' : ( $bridged && 'changed_skin_error' !== $restore_case ? $original : ( $bridged ? array() : $original ) ), $stock->result );
+					if ( 'second_completion' === $restore_case ) {
+						$stock->result = 'foreign-result';
+						$updater->restore_theme_error_result(
+							$stock,
+							array(
+								'type'   => 'theme',
+								'action' => 'update',
+								'themes' => array( 'package' ),
+							)
+						);
+						self::assertSame( 'foreign-result', $stock->result );
+					}
+				} else {
+					$updater->capture_install_package_result( array( 'destination' => $stage ), $extra );
+				}
+				$GLOBALS['ran_wp_release_updater_test_doing_action'] = null;
+			} else {
+				$updater->capture_install_package_result( array( 'destination' => $stage ), $extra );
 			}
-			$updater->capture_install_package_result( array( 'destination' => $stage ), $extra );
 			$updater->observe_completion(
 				null,
 				array(
@@ -1424,17 +1526,45 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				)
 			);
 			$updater->finalize_pending_install();
-			self::assertContains( $stage_verified ? 'update_completed' : 'outcome_uncertain', $updater->diagnostics() );
-			self::assertSame( $stage_verified, in_array( 'update_completed', $updater->diagnostics(), true ) );
+			self::assertContains( $stage_verified && ! $failed_result ? 'update_completed' : 'outcome_uncertain', $updater->diagnostics() );
+			self::assertSame( $stage_verified && ! $failed_result, in_array( 'update_completed', $updater->diagnostics(), true ) );
 			self::assertSame( 2, $opened );
 			self::assertFileDoesNotExist( $owned );
 		}
-		/** @return array<string,array{bool}> */
+		/** @return array<string,array{bool,string,bool,bool,bool,string}> */
 		public static function theme_staging_cases(): array {
 			return array(
-				'verified stage' => array( true ),
-				'omitted stage'  => array( false ),
+				'genuine theme success'              => array( true, 'manual', false, false, false, 'none' ),
+				'manual target manual request'       => array( true, 'manual', false, false, true, 'none' ),
+				'automatic target manual request'    => array( true, 'automatic', false, false, true, 'none' ),
+				'automatic target automatic request' => array( true, 'automatic', true, false, true, 'none' ),
+				'skin changed after admission'       => array( true, 'manual', false, true, true, 'none' ),
+				'wrong upgrader completion'          => array( true, 'manual', false, false, true, 'wrong_upgrader' ),
+				'changed result refuses restoration' => array( true, 'manual', false, false, true, 'changed_result' ),
+				'changed skin error refuses restore' => array( true, 'manual', false, false, true, 'changed_skin_error' ),
+				'second completion is disarmed'      => array( true, 'manual', false, false, true, 'second_completion' ),
+				'omitted stage'                      => array( false, 'manual', false, false, false, 'none' ),
 			);
+		}
+		public function test_theme_error_bridge_admission_excludes_automatic_and_nonstock_upgraders_or_skins(): void {
+			list( $updater ) = $this->subject();
+			( new \ReflectionProperty( $updater, 'target_type' ) )->setValue( $updater, 'theme' );
+			( new \ReflectionProperty( $updater, 'native_owner' ) )->setValue( $updater, 'owner' );
+			$admit = new \ReflectionMethod( $updater, 'admit_theme_error_bridge' );
+			$held  = new \ReflectionProperty( $updater, 'theme_error_upgrader' );
+			$extra = array( 'action' => 'update' );
+
+			$GLOBALS['ran_wp_release_updater_test_doing_action'] = 'wp_maybe_auto_update';
+			$admit->invoke( $updater, new \Theme_Upgrader(), $extra );
+			self::assertNull( $held->getValue( $updater ) );
+			$GLOBALS['ran_wp_release_updater_test_doing_action'] = null;
+
+			$admit->invoke( $updater, new class() extends \Theme_Upgrader {}, $extra );
+			self::assertNull( $held->getValue( $updater ) );
+			$nonstock_skin       = new \Theme_Upgrader();
+			$nonstock_skin->skin = new class() extends \Theme_Upgrader_Skin {};
+			$admit->invoke( $updater, $nonstock_skin, $extra );
+			self::assertNull( $held->getValue( $updater ) );
 		}
 		public function test_rediscovered_same_release_cannot_replace_an_admitted_receipt_authority(): void {
 			list( $updater, $adapter, , $descriptor ) = $this->subject();
