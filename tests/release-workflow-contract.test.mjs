@@ -73,6 +73,10 @@ test('candidate dispatch runs the normal input-free read-only CI', () => {
 });
 
 test('automatic example qualification is pinned and required by Quality', () => {
+	const automaticJob = ci.match(
+		/^  wordpress-automatic-example:[\s\S]*?(?=^  quality:)/m
+	)?.[0];
+	assert.ok(automaticJob, 'Automatic example job is missing.');
 	assert.match(
 		ci,
 		/^  wordpress-automatic-example:\n    name: Automatic example PHP \$\{\{ matrix\.php \}\} \/ WordPress \$\{\{ matrix\.wordpress \}\}$/m
@@ -95,4 +99,12 @@ test('automatic example qualification is pinned and required by Quality', () => 
 		ci,
 		/^          test "\$AUTOMATIC_EXAMPLE_RESULT" = success$/m
 	);
+	assert.match(
+		automaticJob,
+		/^          export PHP_INI_SCAN_DIR="\$\{PHP_INI_SCAN_DIR:-\}:\$php_ini"$/m
+	);
+	assert.doesNotMatch(automaticJob, /php_scan_dir=/);
+	assert.match(automaticJob, /^          php -m \| grep -Fx Phar$/m);
+	assert.match(automaticJob, /^          php -m \| grep -Fx zip$/m);
+	assert.match(automaticJob, /^          php -m \| grep -Fx mysqli$/m);
 });

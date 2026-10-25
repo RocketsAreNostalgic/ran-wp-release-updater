@@ -246,10 +246,12 @@ jobs:
           mkdir -p "$integration_root" "$socket_root" "$php_tmp" "$wp_cache" "$mysql_tools" "$php_ini"
           chmod 700 "$integration_root" "$socket_root" "$php_tmp" "$wp_cache" "$mysql_tools" "$php_ini"
           printf 'sys_temp_dir = "%s"\n' "$php_tmp" > "$php_ini/99-ran-updater-automatic-example.ini"
-          php_scan_dir="$(php --ini | sed -n 's/^Scan for additional .ini files in: //p')"
-          export PHP_INI_SCAN_DIR="$php_ini:$php_scan_dir"
+          export PHP_INI_SCAN_DIR="${PHP_INI_SCAN_DIR:-}:$php_ini"
           export WP_CLI_CACHE_DIR="$wp_cache"
           export TMPDIR="$php_tmp" TMP="$php_tmp" TEMP="$php_tmp"
+          php -m | grep -Fx Phar
+          php -m | grep -Fx zip
+          php -m | grep -Fx mysqli
           cp "$system_mysqld" "$mysqld_binary"
           cmp "$system_mysqld" "$mysqld_binary"
           php -d "sys_temp_dir=$php_tmp" "$wp_cli" core download --version=${{ matrix.wordpress }} --skip-content --path="$wp_root"
