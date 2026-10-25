@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.13](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.12...v1.0.0-beta.13) (2026-10-25)
+
+
+### Bug Fixes
+
+* preserve failures on the stock theme update screen ([#132](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/132)) ([9bd34f4](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/9bd34f41f2316685c61cbecbb53b0b04ec223109))
+
 ## [1.0.0-beta.12](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.11...v1.0.0-beta.12) (2026-10-16)
 
 
