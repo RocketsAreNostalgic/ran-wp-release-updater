@@ -51,10 +51,13 @@ final class NativePackageUpdater {
 	private ?\Closure $operation_guard;
 	private ?\Closure $native_mutation_begin;
 	private ?\Closure $native_mutation_complete;
-	private ?string $native_owner  = null;
-	private bool $native_beginning = false;
-	private bool $finalizing       = false;
-	private string $native_outcome = 'uncertain';
+	private ?string $native_owner                  = null;
+	private bool $native_beginning                 = false;
+	private bool $finalizing                       = false;
+	private string $native_outcome                 = 'uncertain';
+	private ?\Theme_Upgrader $theme_error_upgrader = null;
+	private ?\WP_Error $theme_error_original       = null;
+	private ?\WP_Error $theme_error_outgoing       = null;
 
 
 	/**
@@ -526,7 +529,7 @@ final class NativePackageUpdater {
 
 	/** @param array<string,mixed> $hook_extra */
 	public function filter_source_selection( mixed $source, string $remote_source, mixed $upgrader, array $hook_extra ): mixed {
-		unset( $remote_source, $upgrader );
+		unset( $remote_source );
 		if ( ! $this->matches_operation( $hook_extra ) ) {
 			return $source;
 		}
@@ -580,6 +583,7 @@ final class NativePackageUpdater {
 			$this->clear_pending();
 			return $this->failure( 'runtime_liveness_lost' );
 		}
+		$this->admit_theme_error_bridge( $upgrader, $hook_extra );
 		return $source;
 	}
 	/** @param array<string,mixed> $hook_extra */
@@ -636,6 +640,19 @@ final class NativePackageUpdater {
 			$this->pending_install->capture_install_result( $result );
 		}
 		if ( ! $this->pending_install->active() || $result instanceof \WP_Error || false === $result ) {
+			if ( $result instanceof \WP_Error ) {
+				$outgoing = $this->failure( 'unverified_install_result' );
+				$upgrader = $this->theme_error_upgrader;
+				if ( $outgoing instanceof \WP_Error && $upgrader instanceof \Theme_Upgrader && $this->can_bridge_theme_error( $result ) ) {
+					$this->theme_error_original = $result;
+					$this->theme_error_outgoing = $outgoing;
+					add_action( 'upgrader_process_complete', array( $this, 'restore_theme_error_result' ), PHP_INT_MIN, 2 );
+					$upgrader->result = array();
+					return $outgoing;
+				}
+				$this->clear_pending();
+				return $outgoing;
+			}
 			$this->clear_pending();
 			return $this->failure( 'unverified_install_result' );
 		}
@@ -646,6 +663,23 @@ final class NativePackageUpdater {
 		return $result;
 	}
 
+	/** @param array<string,mixed> $hook_extra */
+	public function restore_theme_error_result( mixed $upgrader, array $hook_extra ): void {
+		if ( ! $upgrader instanceof \Theme_Upgrader || $upgrader !== $this->theme_error_upgrader || ! $this->matches_completion( $hook_extra ) ) {
+			return;
+		}
+		if (
+			$this->theme_error_original instanceof \WP_Error
+			&& $this->theme_error_outgoing instanceof \WP_Error
+			&& $upgrader->skin instanceof \Theme_Upgrader_Skin
+			&& \Theme_Upgrader_Skin::class === get_class( $upgrader->skin )
+			&& array() === $upgrader->result
+			&& $upgrader->skin->result === $this->theme_error_outgoing
+		) {
+			$upgrader->result = $this->theme_error_original;
+		}
+		$this->disarm_theme_error_bridge();
+	}
 	/** @param array<string,mixed> $hook_extra */
 	public function observe_completion( mixed $upgrader, array $hook_extra ): void {
 		unset( $upgrader );
@@ -1167,6 +1201,51 @@ final class NativePackageUpdater {
 			'current' => $verified['current'],
 			'now'     => $verified['now'],
 		) : null; }
+	/**
+	 * Related to https://core.trac.wordpress.org/ticket/27365, which concerns
+	 * updater error returns rather than this Theme_Upgrader result-array read.
+	 * Before editing this area again, check the supported Core versions for an
+	 * upstream fix and remove this guard once that fix is qualified.
+	 *
+	 * @param array<string,mixed> $hook_extra
+	 */
+	private function admit_theme_error_bridge( mixed $upgrader, array $hook_extra ): void {
+		if (
+			! $upgrader instanceof \Theme_Upgrader
+			|| \Theme_Upgrader::class !== get_class( $upgrader )
+			|| ! $upgrader->skin instanceof \Theme_Upgrader_Skin
+			|| \Theme_Upgrader_Skin::class !== get_class( $upgrader->skin )
+			|| null === $this->native_owner
+			|| 'theme' !== $this->target_type
+			|| $this->pending_install->multi_run()
+			|| 'update' !== ( $hook_extra['action'] ?? null )
+			|| ! function_exists( 'doing_action' )
+			|| doing_action( 'wp_maybe_auto_update' )
+			|| null !== $this->theme_error_upgrader
+		) {
+			return;
+		}
+		$this->theme_error_upgrader = $upgrader;
+	}
+	private function can_bridge_theme_error( \WP_Error $result ): bool {
+		$upgrader = $this->theme_error_upgrader;
+		return $upgrader instanceof \Theme_Upgrader
+			&& null !== $this->native_owner
+			&& $this->pending_install->active()
+			&& ! $this->pending_install->multi_run()
+			&& $upgrader->skin instanceof \Theme_Upgrader_Skin
+			&& \Theme_Upgrader_Skin::class === get_class( $upgrader->skin )
+			&& function_exists( 'doing_action' )
+			&& ! doing_action( 'wp_maybe_auto_update' )
+			&& null === $this->theme_error_original
+			&& null === $this->theme_error_outgoing
+			&& $upgrader->result === $result;
+	}
+	private function disarm_theme_error_bridge(): void {
+		$this->theme_error_upgrader = null;
+		$this->theme_error_original = null;
+		$this->theme_error_outgoing = null;
+	}
 	private function clear_pending( bool $release = true ): void {
 		if ( $this->native_beginning || ( null !== $this->native_owner && ! $this->finalizing ) ) {
 			return;
@@ -1175,6 +1254,7 @@ final class NativePackageUpdater {
 		$archive   = $this->pending_install->archive();
 		$directory = $this->pending_install->archive_directory();
 		$this->clear_discovery_snapshot();
+		$this->disarm_theme_error_bridge();
 		$this->archive_store->remove( $this->pending_install->archive(), $this->pending_install->archive_directory() );
 		$this->pending_install->clear();
 		if ( $release && $this->lease_held && $this->state instanceof BindingState ) {

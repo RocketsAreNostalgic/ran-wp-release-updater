@@ -192,6 +192,8 @@ The current public support boundary includes several deliberate constraints:
 - the library does not own product scheduling, inventory/admin UI, multisite network policy or an application cache;
 - the updater cannot sandbox arbitrary PHP/processes with equivalent filesystem/database authority.
 
+For one admitted, manual, non-bulk theme update, a request-local compatibility guard may temporarily expose an empty `Theme_Upgrader::$result` after an installation `WP_Error`, so stock Core can render its error screen without indexing that error as an array. The original result is restored at the first matching completion callback only when Core's skin still holds the exact outgoing generic updater error. This does not turn the failed installation into success: the updater retains the actual failure and its final outcome remains uncertain. The brief empty result is visible to `update_theme_complete_actions`; automatic, bulk, plugin, custom-upgrader, and custom-skin flows are excluded.
+
 The repository test suite also has explicit boundaries; for example, its installed-WordPress proof does not depend on live GitHub or a Booster checkout. See [Testing and verification](docs/testing.md) before treating the library's CI as a substitute for product-level end-to-end testing.
 
 ## Development
