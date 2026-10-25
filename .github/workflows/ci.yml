@@ -236,7 +236,7 @@ jobs:
           wp_cli="$(command -v wp)"
           system_mysqld="$(command -v mysqld)"
           integration_root="$GITHUB_WORKSPACE/.workspaces/automatic-example-integration"
-          socket_root="$GITHUB_WORKSPACE/.workspaces/automatic-example-sock"
+          socket_root="$GITHUB_WORKSPACE/.workspaces/sock"
           php_tmp="$integration_root/php-tmp"
           wp_cache="$integration_root/wp-cli-cache"
           wp_root="$GITHUB_WORKSPACE/.workspaces/automatic-example-wordpress-${{ matrix.wordpress }}"
