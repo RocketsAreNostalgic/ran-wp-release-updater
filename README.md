@@ -29,7 +29,7 @@ If the package is not already available through a Composer registry configured f
 ```sh
 composer config repositories.ran-wp-release-updater vcs \
   https://github.com/RocketsAreNostalgic/ran-wp-release-updater.git
-composer require ran/wp-release-updater:^0.1@beta
+composer require ran/wp-release-updater:^1.0@beta
 ```
 
 The package deliberately has no production Composer autoload mapping. Your plugin/theme owns its Composer repository declaration, lock file and production bundle. The ZIP you distribute must include this dependency under `vendor`; production WordPress sites should not need Composer to update your package.
