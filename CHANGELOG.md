@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.14](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.13...v1.0.0-beta.14) (2026-10-26)
+
+
+### Bug Fixes
+
+* **github:** bound release commit lookup with SHA-only responses ([#141](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/141)) ([03f9028](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/03f9028f0c38102bb87f82b1c4d14cca0f322478))
+
 ## [1.0.0-beta.13](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.12...v1.0.0-beta.13) (2026-10-25)
 
 
