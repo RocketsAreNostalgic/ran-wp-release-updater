@@ -383,7 +383,7 @@ final class GitHubReleaseService {
 				$this->binding['maximum_artifact_bytes'],
 				$path
 			);
-			$this->require_asset_success( $response );
+			$this->require_release_success( $response );
 			$identity = $this->artifact_store->identity( $path );
 			if (
 				null === $identity
@@ -579,20 +579,15 @@ final class GitHubReleaseService {
 			throw new ReleaseFailure( 'package_incompatible' );
 		}
 
-		$asset           = $this->zip_asset( $release['assets'] ?? null );
-		$commit          = $this->json_success(
-			$this->client->request(
-				$this->repository_api_url() . '/commits/' . rawurlencode( $tag ),
-				$token,
-				array(),
-				self::COMMIT_RESPONSE_LIMIT
-			),
-			self::COMMIT_RESPONSE_LIMIT,
-			'commit'
+		$asset    = $this->zip_asset( $release['assets'] ?? null );
+		$response = $this->client->request(
+			$this->repository_api_url() . '/commits/' . rawurlencode( $tag ),
+			$token,
+			array( 'Accept' => 'application/vnd.github.sha' ),
+			self::COMMIT_RESPONSE_LIMIT
 		);
-		$commit_identity = is_string( $commit['sha'] ?? null )
-			? strtolower( $commit['sha'] )
-			: '';
+		$this->require_release_success( $response );
+		$commit_identity = strtolower( GitHubApiClient::response_body( $response, self::COMMIT_RESPONSE_LIMIT ) );
 		if ( 1 !== preg_match( '/\A[a-f0-9]{40}\z/D', $commit_identity ) ) {
 			throw new ReleaseFailure( 'operation_failed' );
 		}
@@ -815,7 +810,7 @@ final class GitHubReleaseService {
 	}
 
 	/** @param array<string,mixed> $response */
-	private function require_asset_success( array $response ): void {
+	private function require_release_success( array $response ): void {
 		$rate_limit = self::rate_limit( $response );
 		if ( $rate_limit['limited'] ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.

@@ -105,7 +105,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 	}
 	public function test_installed_response_acceptance_and_partial_asset_cleanup(): void {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-		$GLOBALS['ran_github_responses'] = array( $this->response( 201, array( 'id' => 99 ) ), $this->response( 201, $this->release( 7, 'v1.2.3' ) ), $this->response( 201, array( 'sha' => str_repeat( 'a', 40 ) ) ) );
+		$GLOBALS['ran_github_responses'] = array( $this->response( 201, array( 'id' => 99 ) ), $this->response( 201, $this->release( 7, 'v1.2.3' ) ), array_replace( $this->response( 201, null ), array( 'body' => str_repeat( 'a', 40 ) ) ) );
 		self::assertInstanceOf( IdentityDescriptor::class, $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' ) );
 		self::assertCount( 3, $GLOBALS['ran_github_requests'] );
 
@@ -185,7 +185,7 @@ final class GitHubResponseRoutingTest extends TestCase {
 	}
 	private function descriptor(): IdentityDescriptor {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-		$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 200, $this->release( 7, 'v1.2.3' ) ), $this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ) );
+		$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 200, $this->release( 7, 'v1.2.3' ) ), array_replace( $this->response( 200, null ), array( 'body' => str_repeat( 'a', 40 ) ) ) );
 		return $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' );
 	}
 	private function service(): GitHubReleaseService {

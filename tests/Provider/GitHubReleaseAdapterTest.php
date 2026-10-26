@@ -440,7 +440,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
-				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
+				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 404, null ),
 			);
@@ -463,7 +463,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $release ),
-				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
+				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), $invalid ),
 				$this->response( 200, array( 'id' => 99 ) ),
@@ -521,7 +521,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
-				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
+				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 429, null, array( 'retry-after' => '30' ) ),
 			);
@@ -539,7 +539,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
-				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
+				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), 'invalid bytes' ),
 			);
@@ -1299,10 +1299,77 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertTrue( $facts['assurance_facts']['publication_immutable'] );
 			self::assertTrue( $facts['assurance_facts']['provenance_verified'] );
 			self::assertCount( 3, $GLOBALS['ran_github_requests'] );
+			self::assertSame( 'application/vnd.github.sha', $GLOBALS['ran_github_requests'][2][1]['headers']['Accept'] );
+			self::assertSame( 16385, $GLOBALS['ran_github_requests'][2][1]['limit_response_size'] );
 			self::assertSame(
 				'https://api.github.com/repos/owner/repository',
 				$GLOBALS['ran_github_requests'][0][0]
 			);
+		}
+
+		public function test_commit_lookup_avoids_large_json_response(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3', false, true );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_request_callback'] = static function ( string $url, array $args ): void {
+				if ( str_contains( $url, '/commits/' ) ) {
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+					$GLOBALS['ran_github_responses'][0]['body'] = 'application/vnd.github.sha' === ( $args['headers']['Accept'] ?? null )
+						? str_repeat( 'a', 40 )
+						: '{"sha":"' . str_repeat( 'a', 40 ) . '","details":"' . str_repeat( 'x', 17000 ) . '"}';
+				}
+			};
+			$facts                                  = ( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7' )->to_array();
+			self::assertSame( str_repeat( 'a', 40 ), $facts['commit_identity'] );
+			self::assertCount( 3, $GLOBALS['ran_github_requests'] );
+		}
+
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'invalid_sha_response_provider' )]
+		public function test_commit_sha_response_rejects_invalid_bytes( string $body ): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3', false, true );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'][2] = $this->raw_response( 200, $body );
+			try {
+				( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7' );
+				self::fail( 'Invalid SHA response must fail.' );
+			} catch ( ReleaseFailure $exception ) {
+				self::assertSame( 'operation_failed', $exception->release_code );
+			}
+		}
+
+		/** @return iterable<string,array{string}> */
+		public static function invalid_sha_response_provider(): iterable {
+			yield 'empty' => array( '' );
+			yield 'short' => array( str_repeat( 'a', 39 ) );
+			yield 'non-hex' => array( str_repeat( 'z', 40 ) );
+			yield 'oversized' => array( str_repeat( 'a', 16385 ) );
+			yield 'extra byte' => array( str_repeat( 'a', 41 ) );
+			yield 'json' => array( '{"sha":"' . str_repeat( 'a', 40 ) . '"}' );
+		}
+
+		/** @param array<string,string> $headers */
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'commit_failure_provider' )]
+		public function test_commit_response_preserves_status_mapping( int $status, string $failure, array $headers, ?int $retry ): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3', false, true );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'][2] = $this->response( $status, array( 'message' => str_repeat( 'Error details ', 10 ) ), $headers );
+			try {
+				( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7' );
+				self::fail( 'Failed commit response must fail inspection.' );
+			} catch ( ReleaseFailure $exception ) {
+				self::assertSame( $failure, $exception->release_code );
+				self::assertSame( $retry, $exception->retry_after );
+			}
+		}
+
+		/** @return iterable<string,array{int,string,array<string,string>,?int}> */
+		public static function commit_failure_provider(): iterable {
+			yield 'unauthorized' => array( 401, 'repository_access_unavailable', array(), null );
+			yield 'forbidden' => array( 403, 'repository_access_unavailable', array(), null );
+			yield 'missing' => array( 404, 'release_unavailable', array(), null );
+			yield 'rate limited' => array( 429, 'rate_limited', array( 'retry-after' => '30' ), 30 );
 		}
 
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'installed_inspection_failure_provider' )]
@@ -1504,7 +1571,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $release ),
-				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
+				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
 			);
 
 			$facts = ( new GitHubReleaseAdapter( $this->binding() ) )->inspect( '7' )->to_array();
@@ -1521,7 +1588,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => $identity ) ),
 				$this->response( 200, $release ),
-				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
+				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
 			);
 
 			$facts = ( new GitHubReleaseAdapter(
@@ -1542,7 +1609,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $release ),
-				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
+				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
 			);
 			self::assertSame( $limit, ( new GitHubReleaseAdapter( $this->binding( maximum_artifact_bytes: $limit ) ) )->inspect( '7' )->to_array()['artifact_size'] );
 		}
@@ -1560,7 +1627,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, $repository ),
 				$this->response( 200, $release ),
-				$this->response( 200, $commit ),
+				$this->raw_response( 200, $commit['sha'] ),
 			);
 
 			try {
@@ -2029,7 +2096,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$inspection                      = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
 			self::assertTrue( $inspection['ok'] );
 			$responses    = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-			$responses[2] = $this->response( 200, array( 'sha' => str_repeat( 'b', 40 ) ) );
+			$responses[2] = $this->raw_response( 200, str_repeat( 'b', 40 ) );
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
 			$GLOBALS['ran_github_responses'] = $responses;
 			$rejected                        = $this->prospective_operation( $source, 'acquire', array( '7', 'v1.2.3', $inspection['value']['fingerprint'] ) );
@@ -2427,7 +2494,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			return array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
-				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
+				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), 'invalid bytes' ),
 			);
@@ -2467,7 +2534,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 						$immutable
 					)
 				),
-				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
+				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
 			);
 		}
 
@@ -2483,7 +2550,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			return array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $release ),
-				$this->response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) ),
+				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), $archive ),
 				$this->response( 200, array( 'id' => 99 ) ),
@@ -2555,6 +2622,15 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				),
 			);
 			return $release;
+		}
+
+		/** @return array<string,mixed> */
+		private function raw_response( int $code, string $body ): array {
+			return array(
+				'body'     => $body,
+				'headers'  => array(),
+				'response' => array( 'code' => $code ),
+			);
 		}
 
 		/**
