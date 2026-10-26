@@ -85,7 +85,9 @@ add_filter(
 			return ran_wp_release_updater_test_automatic_http_response( $ran_wp_release_updater_test_automatic_http_release );
 		}
 		if ( $ran_wp_release_updater_test_automatic_http_api . '/commits/' . rawurlencode( $ran_wp_release_updater_test_automatic_http_tag ) === $url ) {
-			return ran_wp_release_updater_test_automatic_http_response( array( 'sha' => $ran_wp_release_updater_test_automatic_http_commit ) );
+			$response         = ran_wp_release_updater_test_automatic_http_response( null );
+			$response['body'] = $ran_wp_release_updater_test_automatic_http_commit;
+			return $response;
 		}
 		if ( $ran_wp_release_updater_test_automatic_http_api . '/releases/assets/' . $ran_wp_release_updater_test_automatic_http_asset_id === $url && true === ( $args['stream'] ?? false ) && is_string( $args['filename'] ?? null ) && '' !== $args['filename'] ) {
 			if ( ! copy( $ran_wp_release_updater_test_automatic_http_archive, $args['filename'] ) ) {

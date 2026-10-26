@@ -115,8 +115,7 @@ namespace {
 			return array( 'body' => json_encode( ran_wp_release_updater_test_native_measure_release( (int) $m [1], $u ['changed'] && $u ['after_offer'], 'incompatible' === $u ['scenario'] ) ) );
 		}
 		if ( 1 === preg_match( '~^' . preg_quote( $prefix, '~' ) . '/commits/[A-Za-z0-9._/-]+$~D', $path ) ) {
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
-			return array( 'body' => json_encode( array( 'sha' => $u ['changed'] && $u ['after_offer'] ? str_repeat( 'b', 40 ) : str_repeat( 'a', 40 ) ) ) );
+			return array( 'body' => $u ['changed'] && $u ['after_offer'] ? str_repeat( 'b', 40 ) : str_repeat( 'a', 40 ) );
 		}
 		if ( $prefix !== $path ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.

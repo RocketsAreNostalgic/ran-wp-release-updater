@@ -574,7 +574,9 @@ function ran_wp_release_updater_test_fixture_http_response( string $url, array $
 		return ran_wp_release_updater_test_github_response( 200, $release_body );
 	}
 	if ( $commit === $url ) {
-		return ran_wp_release_updater_test_github_response( 200, array( 'sha' => str_repeat( 'a', 40 ) ) );
+		$response         = ran_wp_release_updater_test_github_response( 200, null );
+		$response['body'] = str_repeat( 'a', 40 );
+		return $response;
 	}
 	if ( $asset === $url && true === ( $args['stream'] ?? false ) && is_string( $args['filename'] ?? null ) && '' !== $args['filename'] ) {
 		if ( 'download' === getenv( 'RAN_WP_RELEASE_UPDATER_FAILURE_STAGE' ) ) {
