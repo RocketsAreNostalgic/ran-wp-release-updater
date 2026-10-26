@@ -65,6 +65,7 @@
     "test:unit": "phpunit --configuration phpunit.xml --fail-on-deprecation --fail-on-phpunit-deprecation",
     "test:no-dev-consumer": "php tests/Integration/no-dev-consumer.php",
     "test:wordpress-integration": "@php tests/Integration/wordpress-integration.php",
+    "test:wordpress-automatic-example": "@php tests/Integration/wordpress-integration.php --scenario=automatic-example",
     "test:wordpress-bulk": "php tests/Integration/wordpress-native-mixed-bulk-proof.php",
     "validate:strict": "composer validate --strict --no-check-publish",
     "sync:updater-support": "php scripts/sync-updater-support.php",

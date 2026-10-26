@@ -25,12 +25,12 @@ try {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$scenario = 'all';
 	if ( ! isset( $argv ) ) {
-		throw new RuntimeException( 'Use --scenario=all|distribution|multisite.' );
+		throw new RuntimeException( 'Use --scenario=all|automatic-example|distribution|multisite.' );
 	}
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	foreach ( array_slice( $argv, 1 ) as $argument ) {
-		if ( ! preg_match( '/\A--scenario=(all|distribution|multisite)\z/', $argument, $match ) ) {
-			throw new RuntimeException( 'Use --scenario=all|distribution|multisite.' );
+		if ( ! preg_match( '/\A--scenario=(all|automatic-example|distribution|multisite)\z/', $argument, $match ) ) {
+			throw new RuntimeException( 'Use --scenario=all|automatic-example|distribution|multisite.' );
 		}
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$scenario = $match[1];
@@ -49,7 +49,7 @@ try {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$suite_bytes = '';
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
+	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/automatic-example.php', __DIR__ . '/wordpress-integration/automatic-example-http.php', __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$suite_bytes .= basename( $file ) . "\0" . hash_file( 'sha256', $file ) . "\n";
 	}
@@ -197,6 +197,11 @@ try {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Preserve the existing integration report identity for this additional tested scenario.
 		$result['scenarios']['native_mixed_bulk'] = array();
 		ran_wp_release_updater_test_installed_mixed_bulk( $source, $wordpress, $run, $database, $socket, $wp_command, $password, $result['scenarios']['native_mixed_bulk'] );
+	}
+	if ( 'automatic-example' === $scenario ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI integration state retains the existing report identity.
+		$result['scenarios']['automatic_example'] = array();
+		ran_wp_release_updater_test_automatic_example( $source, $wordpress, $run, $database, $socket, $wp_command, $password, $result['scenarios']['automatic_example'] );
 	}
 	if ( 'all' === $scenario || 'multisite' === $scenario ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -678,6 +683,12 @@ add_filter('pre_http_request', static function ($pre, $args, $url) {
 	}
 	return new WP_Error('integration_http_blocked', 'Integration fixture: outbound HTTP disabled.');
 }, PHP_INT_MAX, 3);
+if ('1' === getenv('RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP')) {
+	$fixture = getenv('RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP_FIXTURE');
+	if (is_string($fixture) && is_file($fixture)) {
+		require_once $fixture;
+	}
+}
 PHP
 	);
 	return $site;
@@ -833,6 +844,105 @@ function ran_wp_release_updater_test_read_json( string $path ): array {
 	$record = json_decode( (string) file_get_contents( $path ), true, 128, JSON_THROW_ON_ERROR );
 	ran_wp_release_updater_test_require_fact( is_array( $record ), 'Expected a JSON evidence object.' );
 	return $record;
+}
+
+/**
+ * Proves an independently bundled consumer through Core's scheduled automatic-update action.
+ *
+ * @param list<string> $wp_command
+ * @param array<string,mixed> $proof
+ */
+function ran_wp_release_updater_test_automatic_example( string $source, string $wordpress, string $run, mysqli $database, string $socket, array $wp_command, string $password, array &$proof ): void {
+	$example = ran_wp_release_updater_test_input_directory( 'RAN_UPDATER_EXAMPLE_ROOT', false );
+	$builder = $example . '/scripts/build-plugin-zip.py';
+	ran_wp_release_updater_test_require_fact( is_file( $builder ), 'Example plugin build script is unavailable.' );
+	$started  = hrtime( true );
+	$archives = array();
+	foreach ( array( '0.1.0', '0.2.0', '0.3.0' ) as $version ) {
+		$directory = ran_wp_release_updater_test_make_directory( $run . '/automatic-example-' . $version );
+		ran_wp_release_updater_test_command(
+			array( 'python3', $builder, '--version', $version, '--output-dir', $directory, '--updater-path', $source ),
+			$example,
+			'automatic-example-build-' . $version
+		);
+		$archive = $directory . '/ran-wp-release-updater-example-' . $version . '.zip';
+		ran_wp_release_updater_test_require_fact( is_file( $archive ) && 0 < filesize( $archive ), 'Example build did not create its exact ZIP.' );
+		$archives[ $version ] = $archive;
+	}
+	$site = ran_wp_release_updater_test_create_site( $wordpress, $run . '/automatic-example-site', $database, $socket );
+	ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, false );
+	$arguments = array_merge( $wp_command, array( '--path=' . $site ) );
+	ran_wp_release_updater_test_command( array_merge( $arguments, array( 'plugin', 'install', $archives['0.1.0'], '--activate' ) ), $site, 'automatic-example-install' );
+	$observer = __DIR__ . '/wordpress-integration/automatic-example.php';
+	$requests = array();
+	foreach ( array( array( '0.2.0', true ), array( '0.3.0', true ), array( '0.3.0', false ) ) as $step ) {
+		list( $version, $expect_install ) = $step;
+		$output                           = $run . '/automatic-example-' . $version . '-' . ( $expect_install ? 'update' : 'noop' ) . '-scheduled.json';
+		$http_log                         = $run . '/automatic-example-' . $version . '-' . ( $expect_install ? 'update' : 'noop' ) . '-http.json';
+		ran_wp_release_updater_test_command(
+			array_merge( $arguments, array( 'eval-file', $observer ) ),
+			$site,
+			'automatic-example-' . $version,
+			array(
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_ARCHIVE' => $archives[ $version ],
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_OUTPUT'  => $output,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_VERSION' => $version,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_MODE'    => 'schedule',
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_SOURCE'  => $source,
+			)
+		);
+		$request             = ran_wp_release_updater_test_read_json( $output );
+		$proof['requests'][] = $request;
+		ran_wp_release_updater_test_require_fact( true === ( $request['pass'] ?? null ), 'Automatic example scheduling assertions failed.' );
+		$requests[] = $request;
+		ran_wp_release_updater_test_command(
+			array_merge( $arguments, array( 'cron', 'event', 'run', 'wp_maybe_auto_update', '--due-now' ) ),
+			$site,
+			'automatic-example-cron-' . $version,
+			array(
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_ARCHIVE'  => $archives[ $version ],
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP'     => '1',
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP_FIXTURE' => __DIR__ . '/wordpress-integration/automatic-example-http.php',
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP_LOG' => $http_log,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_VERSION'  => $version,
+			)
+		);
+		$http                = ran_wp_release_updater_test_read_json( $http_log );
+		$proof['requests'][] = $http;
+		$requests[]          = $http;
+		ran_wp_release_updater_test_require_fact( true === ( $http['doing_cron'] ?? null ), 'Automatic example did not execute in WordPress cron.' );
+		ran_wp_release_updater_test_require_fact( true === ( $http['hook'] ?? null ), 'Automatic example did not dispatch the wp_maybe_auto_update hook.' );
+		ran_wp_release_updater_test_require_fact(
+			$expect_install
+				? 1 === ( $http['complete_plugin']['result_count'] ?? null ) && 1 === ( $http['complete_plugin']['success_count'] ?? null )
+				: 0 === ( $http['complete_plugin']['result_count'] ?? null ) && 0 === ( $http['complete_plugin']['success_count'] ?? null ),
+			'Automatic example completion result differed from the native cron request.'
+		);
+		ran_wp_release_updater_test_require_fact( $expect_install ? 0 < ( $http['writes'] ?? 0 ) : 0 === ( $http['writes'] ?? null ), 'Automatic example archive-write result differed from the native cron request.' );
+		$observed = $run . '/automatic-example-' . $version . '-' . ( $expect_install ? 'after-update' : 'after-noop' ) . '.json';
+		ran_wp_release_updater_test_command(
+			array_merge( $arguments, array( 'eval-file', $observer ) ),
+			$site,
+			'automatic-example-observe-' . $version,
+			array(
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_ARCHIVE' => $archives[ $version ],
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_MODE'    => 'observe',
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_OUTPUT'  => $observed,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_VERSION' => $version,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_SOURCE'  => $source,
+			)
+		);
+		$observation         = ran_wp_release_updater_test_read_json( $observed );
+		$proof['requests'][] = $observation;
+		ran_wp_release_updater_test_require_fact( true === ( $observation['pass'] ?? null ) && false === ( $observation['installed'] ?? null ), 'Automatic example did not remain correct after process shutdown.' );
+		$requests[] = $observation;
+	}
+	$proof = array(
+		'archives'    => array_map( static fn( string $archive ): string => (string) hash_file( 'sha256', $archive ), $archives ),
+		'requests'    => $requests,
+		'pass'        => true,
+		'duration_ms' => (int) ( ( hrtime( true ) - $started ) / 1000000 ),
+	);
 }
 
 /**
