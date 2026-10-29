@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.15](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.14...v1.0.0-beta.15) (2026-10-29)
+
+
+### Features
+
+* admit native update descriptors through host policy ([#143](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/143)) ([2c5c262](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/2c5c262e1626a420f4d238c261256febc3266630))
+
 ## [1.0.0-beta.14](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.13...v1.0.0-beta.14) (2026-10-26)
 
 
