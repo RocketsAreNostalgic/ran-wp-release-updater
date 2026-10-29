@@ -118,7 +118,7 @@ return new class(
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 			|| ! is_callable( array( $this->broker, 'protocol_version' ) )
 			|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-			|| 6 !== $this->broker->protocol_version()
+			|| 7 !== $this->broker->protocol_version()
 		) {
 			return false;
 		}
@@ -218,7 +218,7 @@ return new class(
 					|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 					|| ! is_callable( array( $this->broker, 'protocol_version' ) )
 					|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-					|| 6 !== $this->broker->protocol_version()
+					|| 7 !== $this->broker->protocol_version()
 				) {
 					return false;
 				}
@@ -343,7 +343,7 @@ return new class(
 	 * @param array<string,mixed> $next
 	 */
 	private function same_declaration( array $first, array $next ): bool {
-		foreach ( array( 'target_type', 'provider_code', 'repository_locator', 'repository_identity', 'channel', 'update_policy', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard', 'native_mutation_begin', 'native_mutation_complete' ) as $fact ) {
+		foreach ( array( 'target_type', 'provider_code', 'repository_locator', 'repository_identity', 'channel', 'update_policy', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard', 'native_mutation_begin', 'native_mutation_complete', 'descriptor_admission' ) as $fact ) {
 			if ( $first[ $fact ] !== $next[ $fact ] ) {
 				return false;
 			}

@@ -625,7 +625,11 @@ unchanged. No runtime bytes, dependencies or analysis levels change.
 
 ### Replacement runtime candidate
 
-Runtime protocol 6 adds closed operation/native callback declarations. This is a
+Runtime protocol 7 adds a closed nullable `descriptor_admission` declaration
+alongside operation/native callbacks. A configured callable receives the verified
+immutable `IdentityDescriptor`; only literal `true` admits it, and false,
+non-bool results or throws fail closed. The registrar exposes it through
+`with_descriptor_admission(callable): object`. This is a
 hard family boundary, not a legacy adapter. Prior behavior refused an incompatible
 new registrar but could leave the first broker operational. Replacement safety
 requires both runtime families to stop: a new bootstrap invalidates only an

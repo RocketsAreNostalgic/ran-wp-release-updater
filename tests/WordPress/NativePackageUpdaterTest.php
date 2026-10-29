@@ -183,6 +183,102 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 2, $adapter->list_calls );
 		}
 
+		public function test_descriptor_admission_rejects_fresh_and_reused_offers_without_acquisition(): void {
+			$admit                     = true;
+			list( $updater, $adapter ) = $this->subject(
+				native_discovery_reuse: true,
+				descriptor_admission: static function ( IdentityDescriptor $descriptor ) use ( &$admit ): bool {
+					unset( $descriptor );
+					return $admit;
+				}
+			);
+			$offer                     = $this->offer( $updater );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			$admit = false;
+			self::assertFalse(
+				$updater->filter_update(
+					array( 'package' => $offer['package'] ),
+					array(
+						'Version'   => '1.0.0',
+						'UpdateURI' => $this->uri(),
+					),
+					'package/package.php',
+					array()
+				)
+			);
+			self::assertSame( array( 2, 2, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			self::assertSame( 'candidate_admission_rejected', $updater->status()['candidate_validation_code'] );
+		}
+
+		public function test_descriptor_admission_removes_unprovable_or_rejected_cached_offer(): void {
+			$admit           = true;
+			list( $updater ) = $this->subject(
+				descriptor_admission: static function ( IdentityDescriptor $descriptor ) use ( &$admit ): bool {
+					unset( $descriptor );
+					return $admit;
+				}
+			);
+			$offer           = $this->offer( $updater );
+			$transient       = (object) array( 'response' => array( 'package/package.php' => (object) array( 'package' => $offer['package'] ) ) );
+			$unprovable      = (object) array( 'response' => array( 'package/package.php' => (object) array( 'package' => 'https://example.test/archive.zip' ) ) );
+			self::assertSame( $unprovable, $updater->filter_cached_update( $unprovable ) );
+			self::assertArrayNotHasKey( 'package/package.php', $unprovable->response );
+			$admit = false;
+			self::assertSame( $transient, $updater->filter_cached_update( $transient ) );
+			self::assertArrayNotHasKey( 'package/package.php', $transient->response );
+		}
+
+		public function test_descriptor_admission_requires_literal_true_and_fails_closed_on_throw(): void {
+			foreach ( array( false, 'true', new \RuntimeException( 'Rejected.' ) ) as $outcome ) {
+				list( $updater, $adapter ) = $this->subject(
+					descriptor_admission: static function ( IdentityDescriptor $descriptor ) use ( $outcome ): mixed {
+						unset( $descriptor );
+						if ( $outcome instanceof \RuntimeException ) {
+							throw $outcome;
+						}
+						return $outcome;
+					}
+				);
+				self::assertFalse(
+					$updater->filter_update(
+						array( 'package' => 'stale' ),
+						array(
+							'Version'   => '1.0.0',
+							'UpdateURI' => $this->uri(),
+						),
+						'package/package.php',
+						array()
+					)
+				);
+				self::assertSame( array( 1, 1, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			}
+		}
+
+		public function test_descriptor_admission_flip_after_acquisition_blocks_native_mutation(): void {
+			$admit           = true;
+			$begins          = 0;
+			list( $updater ) = $this->subject(
+				descriptor_admission: static function ( IdentityDescriptor $descriptor ) use ( &$admit ): bool {
+					unset( $descriptor );
+					return $admit;
+				},
+				operation_guard: static fn (): bool => true,
+				native_mutation_begin: static function () use ( &$begins ): string {
+					++$begins;
+					return 'owner';
+				},
+				native_mutation_complete: static function (): void {}
+			);
+			$offer           = $this->offer( $updater );
+			$archive         = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $archive );
+			self::assertNull( $updater->filter_pre_unzip_file( null, $archive, '/tmp', array(), 0.0 ) );
+			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
+			$admit = false;
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_source_selection( $this->staged(), '/tmp', null, $this->extra() ) );
+			self::assertSame( 0, $begins );
+		}
+
 		public function test_only_complete_listing_establishes_no_candidates(): void {
 			foreach ( array( false, true ) as $exhausted ) {
 				list( $updater, $adapter )                           = $this->subject();
@@ -1827,13 +1923,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		}
 
 		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
-		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null ): array {
+		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null ): array {
 			$archive_path = $this->archive();
 			$descriptor   = $this->descriptor( $archive_path, $channel, $prerelease );
 			$binding      = $this->binding( $mode, $channel );
 			$adapter      = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
 			$database   ??= new FakeOptionDatabase( 100 );
-			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete );
+			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete, $descriptor_admission );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			return array( $updater, $adapter, $database, $descriptor, $binding );
 		}

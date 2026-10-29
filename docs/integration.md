@@ -305,6 +305,17 @@ non-boolean results and exceptions refuse. Hosts must bind it to the request's
 exact selected implementation and generation, including anonymous operations.
 This does not grant credentials or override source, capability or recovery rules.
 
+For host-specific candidate policy, call `->with_descriptor_admission($admit)`
+on the registrar before declaring a plugin or theme. The callback receives an
+`IdentityDescriptor` and must return exactly `true` to admit it; any other result
+or exception rejects it. It is called again at subsequent update boundaries,
+including cached offers, acquisition, staging, and final verification. Without a
+callback, descriptor admission imposes no additional host policy.
+
+The current runtime carries this callback in every target declaration, including
+an explicit null when no callback is configured. Copies of this generation cannot
+share a request broker with older protocol copies.
+
 The current runtime generation carries these callbacks through the closed declaration and selected
 runtime. Copies using incompatible runtime generations refuse each other in either load
 order; there is no downgrade that drops a guard. Deploy the qualified family of

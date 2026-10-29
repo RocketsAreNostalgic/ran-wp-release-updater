@@ -51,6 +51,7 @@ final class NativePackageUpdater {
 	private ?\Closure $operation_guard;
 	private ?\Closure $native_mutation_begin;
 	private ?\Closure $native_mutation_complete;
+	private ?\Closure $descriptor_admission;
 	private ?string $native_owner                  = null;
 	private bool $native_beginning                 = false;
 	private bool $finalizing                       = false;
@@ -79,7 +80,8 @@ final class NativePackageUpdater {
 		private bool $native_discovery_reuse = false,
 		?callable $operation_guard = null,
 		?callable $native_mutation_begin = null,
-		?callable $native_mutation_complete = null
+		?callable $native_mutation_complete = null,
+		?callable $descriptor_admission = null
 	) {
 		$this->archive_store            = new OwnedArchiveStore();
 		$this->manifest_builder         = new StagedPackageManifest();
@@ -87,6 +89,7 @@ final class NativePackageUpdater {
 		$this->operation_guard          = null === $operation_guard ? null : \Closure::fromCallable( $operation_guard );
 		$this->native_mutation_begin    = null === $native_mutation_begin ? null : \Closure::fromCallable( $native_mutation_begin );
 		$this->native_mutation_complete = null === $native_mutation_complete ? null : \Closure::fromCallable( $native_mutation_complete );
+		$this->descriptor_admission     = null === $descriptor_admission ? null : \Closure::fromCallable( $descriptor_admission );
 	}
 
 	/**
@@ -104,7 +107,8 @@ final class NativePackageUpdater {
 		bool $native_discovery_reuse = false,
 		?callable $operation_guard = null,
 		?callable $native_mutation_begin = null,
-		?callable $native_mutation_complete = null
+		?callable $native_mutation_complete = null,
+		?callable $descriptor_admission = null
 	): ?self {
 		if ( ( null === $operation_guard ) !== ( null === $native_mutation_begin ) || ( null === $operation_guard ) !== ( null === $native_mutation_complete ) ) {
 			return null;
@@ -138,7 +142,8 @@ final class NativePackageUpdater {
 			$native_discovery_reuse,
 			$operation_guard,
 			$native_mutation_begin,
-			$native_mutation_complete
+			$native_mutation_complete,
+			$descriptor_admission
 		);
 	}
 
@@ -154,6 +159,9 @@ final class NativePackageUpdater {
 		}
 
 		add_filter( ( 'plugin' === $this->target_type ? 'update_plugins_' : 'update_themes_' ) . $host, array( $this, 'filter_update' ), 10, 4 );
+		if ( null !== $this->descriptor_admission ) {
+			add_filter( 'site_transient_update_' . ( 'plugin' === $this->target_type ? 'plugins' : 'themes' ), array( $this, 'filter_cached_update' ), 10, 1 );
+		}
 		if ( 'plugin' === $this->target_type ) {
 			add_filter( 'plugins_api', array( $this, 'filter_plugin_information' ), 10, 3 );
 		}
@@ -166,6 +174,19 @@ final class NativePackageUpdater {
 		add_filter( 'upgrader_install_package_result', array( $this, 'capture_install_package_result' ), PHP_INT_MAX, 2 );
 		add_action( 'upgrader_process_complete', array( $this, 'observe_completion' ), 10, 2 );
 		$this->registered = true;
+	}
+
+	public function filter_cached_update( mixed $transient ): mixed {
+		if ( null === $this->descriptor_admission || ! is_object( $transient ) || ! is_array( $transient->response ?? null ) || ! array_key_exists( $this->installed_identity, $transient->response ) ) {
+			return $transient;
+		}
+		$entry      = $transient->response[ $this->installed_identity ];
+		$package    = is_object( $entry ) ? ( $entry->package ?? null ) : ( is_array( $entry ) ? ( $entry['package'] ?? null ) : null );
+		$descriptor = is_string( $package ) && str_starts_with( $package, 'ran-wp-release-updater:v1:' ) ? $this->parse_token( $package ) : null;
+		if ( ! $descriptor instanceof IdentityDescriptor || ! $this->live() || ! $this->descriptor_admitted( $descriptor ) || ! $this->newer_than_installed( $descriptor ) ) {
+			unset( $transient->response[ $this->installed_identity ] );
+		}
+		return $transient;
 	}
 
 	/**
@@ -224,7 +245,7 @@ final class NativePackageUpdater {
 			}
 		);
 		if ( ! $descriptor instanceof IdentityDescriptor ) {
-			return $update;
+			return 'candidate_admission_rejected' === $this->status['candidate_validation_code'] ? false : $update;
 		}
 		if ( ! $this->manual_eligible( $descriptor ) ) {
 			$reason = 'candidate_not_eligible';
@@ -377,7 +398,7 @@ final class NativePackageUpdater {
 		}
 		$this->begin_operation();
 		$descriptor = $this->parse_token( is_string( $item->package ?? null ) ? $item->package : '' );
-		return $this->direct_filesystem() && $descriptor instanceof IdentityDescriptor && $this->newer_than_installed( $descriptor ) && $this->automatic_eligible( $descriptor ) && $this->live();
+		return $this->direct_filesystem() && $descriptor instanceof IdentityDescriptor && $this->descriptor_admitted( $descriptor ) && $this->newer_than_installed( $descriptor ) && $this->automatic_eligible( $descriptor ) && $this->live();
 	}
 
 	public function capture_package_options( mixed $options ): mixed {
@@ -416,7 +437,7 @@ final class NativePackageUpdater {
 		}
 		$this->clear_pending( false );
 		$token = $this->parse_token( $package );
-		if ( ! $this->direct_filesystem() || ! $token instanceof IdentityDescriptor || ! $this->newer_than_installed( $token ) || ! $this->manual_eligible( $token ) ) {
+		if ( ! $this->direct_filesystem() || ! $token instanceof IdentityDescriptor || ! $this->descriptor_admitted( $token ) || ! $this->newer_than_installed( $token ) || ! $this->manual_eligible( $token ) ) {
 			return $this->failure( 'unverified_pre_download' );
 		}
 		if ( ! $this->claim_discovery() ) {
@@ -428,7 +449,7 @@ final class NativePackageUpdater {
 		} catch ( \Throwable ) {
 			return $this->failure( 'acquisition_failed' );
 		}
-		if ( ! $this->live() || ! $this->newer_than_installed( $fresh ) ) {
+		if ( ! $this->live() || ! $this->descriptor_admitted( $fresh ) || ! $this->newer_than_installed( $fresh ) ) {
 			return $this->failure( 'unverified_pre_download' );
 		}
 		if ( ! hash_equals( $token->fingerprint_value(), $fresh->fingerprint_value() ) ) {
@@ -506,6 +527,7 @@ final class NativePackageUpdater {
 			! $this->direct_filesystem()
 			|| null === $verified
 			|| ! $this->descriptor instanceof IdentityDescriptor
+			|| ! $this->descriptor_admitted( $this->descriptor )
 			|| ! is_array( $this->pending_install->archive_identity() )
 			|| ! $this->archive_store->same_identity( $file, $this->descriptor, $this->pending_install->archive_identity() )
 			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
@@ -551,6 +573,7 @@ final class NativePackageUpdater {
 			|| ! $this->pending_install->extraction_admitted()
 			|| null === $verified
 			|| ! $this->descriptor instanceof IdentityDescriptor
+			|| ! $this->descriptor_admitted( $this->descriptor )
 			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
 			|| ! is_string( $source )
 			|| ! is_array( $manifest )
@@ -579,7 +602,7 @@ final class NativePackageUpdater {
 			$this->clear_pending();
 			return $this->failure( 'staged_package_identity_invalid' );
 		}
-		if ( ! $this->live() || ! $this->begin_native_mutation() ) {
+		if ( ! $this->live() || ! $this->descriptor_admitted( $this->descriptor ) || ! $this->begin_native_mutation() ) {
 			$this->clear_pending();
 			return $this->failure( 'runtime_liveness_lost' );
 		}
@@ -605,6 +628,7 @@ final class NativePackageUpdater {
 			|| ! $this->pending_install->extraction_admitted()
 			|| null === $verified
 			|| ! $this->descriptor instanceof IdentityDescriptor
+			|| ! $this->descriptor_admitted( $this->descriptor )
 			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
 			|| $response instanceof \WP_Error
 		) {
@@ -711,6 +735,10 @@ final class NativePackageUpdater {
 		try {
 			if ( ! $this->descriptor instanceof IdentityDescriptor ) {
 				$this->diagnose( 'outcome_uncertain', null );
+				return;
+			}
+			if ( ! $this->descriptor_admitted( $this->descriptor ) ) {
+				$this->diagnose( 'descriptor_admission_rejected', null );
 				return;
 			}
 			$destination               = is_array( $this->pending_install->install_result() ) && is_string( $this->pending_install->install_result()['destination'] ?? null )
@@ -871,6 +899,13 @@ final class NativePackageUpdater {
 				return false;
 			}
 		} return true; }
+	private function descriptor_admitted( IdentityDescriptor $descriptor ): bool {
+		try {
+			return null === $this->descriptor_admission || true === ( $this->descriptor_admission )( $descriptor );
+		} catch ( \Throwable ) {
+			return false;
+		}
+	}
 	private function automatic_eligible( IdentityDescriptor $descriptor ): bool {
 		$facts = $descriptor->to_array()['assurance_facts'];
 		return 'automatic' === $this->policy && $this->manual_eligible( $descriptor ) && true === $facts['publication_immutable'] && true === $facts['provenance_verified']; }
@@ -1047,6 +1082,11 @@ final class NativePackageUpdater {
 				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
 				return null;
 			}
+			if ( ! $this->descriptor_admitted( $descriptor ) ) {
+				$reason                                    = 'candidate_rejected';
+				$this->status['candidate_validation_code'] = 'candidate_admission_rejected';
+				continue;
+			}
 			$facts = $descriptor->to_array();
 			if ( ! hash_equals( $candidate['release_identity'], $facts['release_identity'] ) || ! hash_equals( $candidate['tag'], $facts['tag'] ) || 0 !== ReleaseVersion::compare( $candidate['version'], $facts['version'] ) ) {
 				$reason                                    = 'candidate_descriptor_mismatch';
@@ -1114,7 +1154,13 @@ final class NativePackageUpdater {
 		if ( ! $this->live() || ! $this->native_discovery_reuse || ! is_array( $this->discovery_snapshot ) || ! is_array( $this->claim ) || $this->discovery_snapshot['installed'] !== $installed || $this->discovery_snapshot['claim'] !== $this->claim ) {
 			return null;
 		}
-		$descriptor                                = $this->discovery_snapshot['descriptor'];
+		$descriptor = $this->discovery_snapshot['descriptor'];
+		if ( ! $this->descriptor_admitted( $descriptor ) ) {
+			$this->clear_discovery_snapshot();
+			$this->descriptor                          = null;
+			$this->status['candidate_validation_code'] = 'candidate_admission_rejected';
+			return null;
+		}
 		$facts                                     = $descriptor->to_array();
 		$this->status['candidate_tag']             = $facts['tag'];
 		$this->status['candidate_version']         = $facts['version'];

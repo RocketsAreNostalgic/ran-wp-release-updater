@@ -47,7 +47,7 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['package_version'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['php_floor'] )
 			|| 'runtime.php' !== $copy['runtime_file']
-			|| ! in_array( $copy['runtime_protocol'], array( 5, 6 ), true )
+			|| ! in_array( $copy['runtime_protocol'], array( 5, 6, 7 ), true )
 			|| ! is_string( $copy['wordpress_floor'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['wordpress_floor'] )
 		) {
@@ -232,7 +232,7 @@ $ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_br
 	&& is_callable( array( $ran_wp_release_updater_broker, 'diagnostics' ) );
 if ( $ran_wp_release_updater_broker_compatible ) {
 	try {
-		$ran_wp_release_updater_broker_compatible = 6 === $ran_wp_release_updater_broker->protocol_version();
+		$ran_wp_release_updater_broker_compatible = 7 === $ran_wp_release_updater_broker->protocol_version();
 	} catch ( Throwable ) {
 		$ran_wp_release_updater_broker_compatible = false;
 	}
@@ -255,7 +255,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		private array $diagnostics = array( array( 'code' => 'protocol_conflict_inactive' ) );
 
 		public function protocol_version(): int {
-			return 6;
+			return 7;
 		}
 
 		public function register_candidate( string $copy_file ): bool {
@@ -280,7 +280,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		/** @return array<string,mixed> */
 		public function diagnostics(): array {
 			return array(
-				'protocol_version'     => 6,
+				'protocol_version'     => 7,
 				'state'                => 'conflict',
 				'activation_attempted' => false,
 				'candidate_count'      => 0,
@@ -363,6 +363,7 @@ return new class( $ran_wp_release_updater_broker ) {
 	private ?Closure $operation_guard          = null;
 	private ?Closure $native_mutation_begin    = null;
 	private ?Closure $native_mutation_complete = null;
+	private ?Closure $descriptor_admission     = null;
 
 	public function with_operation_guard( callable $guard ): object {
 		$registrar                  = clone $this;
@@ -374,6 +375,12 @@ return new class( $ran_wp_release_updater_broker ) {
 		$registrar                           = clone $this;
 		$registrar->native_mutation_begin    = Closure::fromCallable( $begin );
 		$registrar->native_mutation_complete = Closure::fromCallable( $complete );
+		return $registrar;
+	}
+
+	public function with_descriptor_admission( callable $descriptor_admission ): object {
+		$registrar                       = clone $this;
+		$registrar->descriptor_admission = Closure::fromCallable( $descriptor_admission );
 		return $registrar;
 	}
 	public function __construct( private object $broker ) {
@@ -785,6 +792,7 @@ return new class( $ran_wp_release_updater_broker ) {
 			'operation_guard'          => $this->operation_guard,
 			'native_mutation_begin'    => $this->native_mutation_begin,
 			'native_mutation_complete' => $this->native_mutation_complete,
+			'descriptor_admission'     => $this->descriptor_admission,
 		);
 		return new class( $this->broker, $declaration ) {
 			private int $submission_id = 0;

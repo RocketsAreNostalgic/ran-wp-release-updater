@@ -38,7 +38,7 @@ echo json_encode(array('protocol' => $broker->protocol_version(), 'state' => $re
 PHP
 		);
 
-		self::assertSame( 6, $result['protocol'] );
+		self::assertSame( 7, $result['protocol'] );
 		self::assertSame( 'active', $result['state'] );
 		self::assertSame( 1, $result['candidates'] );
 	}
@@ -313,7 +313,7 @@ PHP
 		);
 
 		self::assertTrue( $result['unchanged'] );
-		self::assertSame( 6, $result['protocol'] );
+		self::assertSame( 7, $result['protocol'] );
 		self::assertSame( 'conflict', $result['state'] );
 		self::assertSame( 'protocol_conflict_inactive', $result['code'] );
 		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['diagnostics'] );
@@ -475,7 +475,7 @@ PHP
 					'package_version'  => $version,
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 6,
+					'runtime_protocol' => 7,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR

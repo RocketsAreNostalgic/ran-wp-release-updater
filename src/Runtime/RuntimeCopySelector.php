@@ -45,7 +45,7 @@ final class RuntimeCopySelector {
 			|| ! is_string( $facts['package_version'] )
 			|| ! is_string( $facts['php_floor'] )
 			|| 'runtime.php' !== $facts['runtime_file']
-			|| 6 !== $facts['runtime_protocol']
+			|| 7 !== $facts['runtime_protocol']
 			|| ! is_string( $facts['wordpress_floor'] )
 		) {
 			throw new RuntimeException( 'Invalid runtime copy.' );
@@ -71,7 +71,7 @@ final class RuntimeCopySelector {
 	public function valid_environment( array $environment ): bool {
 		if (
 			! $this->exact_keys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
-			|| 6 !== $environment['runtime_protocol']
+			|| ! in_array( $environment['runtime_protocol'], array( 6, 7 ), true )
 			|| ! is_string( $environment['php_version'] )
 			|| ! is_string( $environment['wordpress_version'] )
 		) {
