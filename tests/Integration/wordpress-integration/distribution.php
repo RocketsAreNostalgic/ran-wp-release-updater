@@ -112,7 +112,7 @@ $proof = array(
 		&& ran_wp_release_updater_test_archive_manifest( $theme_zip, 'ran-neutral-theme' ) === ran_wp_release_updater_test_directory_manifest( get_theme_root() . '/ran-neutral-theme' )
 		&& is_plugin_active( 'ran-neutral-plugin/ran-neutral-plugin.php' ) && 'ran-neutral-theme' === get_stylesheet()
 		&& 2 === ( $diagnostics['candidate_count'] ?? null ) && 2 === ( $diagnostics['logical_target_count'] ?? null )
-		&& 6 === ( $diagnostics['protocol_version'] ?? null )
+		&& 7 === ( $diagnostics['protocol_version'] ?? null )
 		&& array(
 			'plugin' => 0,
 			'theme'  => 0,

@@ -305,6 +305,52 @@ non-boolean results and exceptions refuse. Hosts must bind it to the request's
 exact selected implementation and generation, including anonymous operations.
 This does not grant credentials or override source, capability or recovery rules.
 
+For host-specific candidate policy, call `->with_descriptor_admission($admit)`
+on the registrar before declaring a plugin or theme. The callback receives an
+`IdentityDescriptor` and must return exactly `true` to admit it; any other result
+or exception rejects it. It is called again at subsequent update boundaries,
+including cached offers, acquisition, staging, and final verification. Without a
+callback, descriptor admission imposes no additional host policy.
+
+### Optional standalone-plugin admission
+
+A standalone plugin may bind its own narrow host policy without depending on
+Booster or another coordinating plugin. Bind the callback on the public
+registrar before declaring the target, and return literal `true` only for a
+candidate the plugin currently accepts:
+
+```php
+$registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';
+
+$release_updater = $registrar
+	->with_descriptor_admission(
+		static function ( \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor $descriptor ): bool {
+			$facts = $descriptor->to_array();
+			return true === version_compare( $facts['version'], '2.0.0', '<' );
+		}
+	)
+	->plugin(
+		provider: 'github',
+		plugin_file: __FILE__,
+		repository: 'acme/example-plugin',
+		repository_id: '123456789',
+		update_policy: 'manual'
+	);
+
+$release_updater->register();
+```
+
+The callback is deliberately repeated at discovery, cached-offer reuse,
+acquisition, staging, and final verification. Treat every non-`true` result
+and exception as a refusal; do not cache an earlier acceptance as authority for
+a later native update. This is an optional host policy, not a Booster
+dependency, and it cannot make an inactive plugin update or satisfy an
+unreleased updater/runtime requirement.
+
+The current runtime carries this callback in every target declaration, including
+an explicit null when no callback is configured. Copies of this generation cannot
+share a request broker with older protocol copies.
+
 The current runtime generation carries these callbacks through the closed declaration and selected
 runtime. Copies using incompatible runtime generations refuse each other in either load
 order; there is no downgrade that drops a guard. Deploy the qualified family of

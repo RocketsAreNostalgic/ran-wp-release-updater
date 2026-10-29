@@ -603,9 +603,9 @@ function ran_wp_release_updater_test_verify_runtime( string $source ): array {
 		$payload .= $file . "\0" . hash_file( 'sha256', $source . '/' . $file ) . "\n";
 	}
 	ran_wp_release_updater_test_require_fact(
-		6 === ( $runtime['runtime_protocol'] ?? null )
+		7 === ( $runtime['runtime_protocol'] ?? null )
 		&& hash( 'sha256', $payload ) === ( $runtime['package_revision'] ?? null ),
-		'Runtime manifest does not match the Protocol 4 source bytes.'
+		'Runtime manifest does not match the current source bytes.'
 	);
 	return $runtime;
 }
@@ -937,12 +937,138 @@ function ran_wp_release_updater_test_automatic_example( string $source, string $
 		ran_wp_release_updater_test_require_fact( true === ( $observation['pass'] ?? null ) && false === ( $observation['installed'] ?? null ), 'Automatic example did not remain correct after process shutdown.' );
 		$requests[] = $observation;
 	}
+	ran_wp_release_updater_test_automatic_example_admission( $archives, $wordpress, $run, $database, $socket, $wp_command, $password, $source, $requests );
 	$proof = array(
 		'archives'    => array_map( static fn( string $archive ): string => (string) hash_file( 'sha256', $archive ), $archives ),
 		'requests'    => $requests,
 		'pass'        => true,
 		'duration_ms' => (int) ( ( hrtime( true ) - $started ) / 1000000 ),
 	);
+}
+
+/**
+ * Exercise standalone candidate admission through the same public example
+ * registration and Core automatic-update path. The copied entrypoint is
+ * fixture-only: the tracked example, its default entrypoint, and its lock stay
+ * unchanged.
+ *
+ * @param array<string,string> $archives
+ * @param list<string>         $wp_command
+ * @param list<array<array-key,mixed>> $requests
+ */
+function ran_wp_release_updater_test_automatic_example_admission( array $archives, string $wordpress, string $run, mysqli $database, string $socket, array $wp_command, string $password, string $source, array &$requests ): void {
+	$variants = array();
+	foreach ( $archives as $version => $archive ) {
+		$variants[ $version ] = $run . '/automatic-example-admission-' . $version . '.zip';
+		ran_wp_release_updater_test_automatic_example_admission_archive( $archive, $variants[ $version ] );
+	}
+	foreach ( array(
+		'deny-fresh'        => array( '0.2.0', 'deny', false ),
+		'allow-native'      => array( '0.2.0', 'allow', true ),
+		'cached-revocation' => array( '0.3.0', 'allow', false ),
+	) as $name => $case ) {
+		list( $version, $policy, $expect_install ) = $case;
+		$site                                      = ran_wp_release_updater_test_create_site( $wordpress, $run . '/automatic-example-admission-' . $name . '-site', $database, $socket );
+		ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, false );
+		$arguments = array_merge( $wp_command, array( '--path=' . $site ) );
+		ran_wp_release_updater_test_command( array_merge( $arguments, array( 'plugin', 'install', $variants['0.1.0'], '--activate' ) ), $site, 'automatic-example-admission-install-' . $name, array( 'RAN_UPDATER_AUTOMATIC_EXAMPLE_ADMISSION' => 'allow' ) );
+		$observer = __DIR__ . '/wordpress-integration/automatic-example.php';
+		$schedule = $run . '/automatic-example-admission-' . $name . '-schedule.json';
+		$mode     = 'cached-revocation' === $name ? 'acquire' : 'schedule';
+		ran_wp_release_updater_test_command(
+			array_merge( $arguments, array( 'eval-file', $observer ) ),
+			$site,
+			'automatic-example-admission-schedule-' . $name,
+			array(
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_ARCHIVE'   => $variants[ $version ],
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_OUTPUT'    => $schedule,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_VERSION'   => $version,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_MODE'      => $mode,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_SOURCE'    => $source,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_ADMISSION' => $policy,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP'      => 'cached-revocation' === $name ? '1' : '0',
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP_FIXTURE' => __DIR__ . '/wordpress-integration/automatic-example-http.php',
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP_LOG'  => $run . '/automatic-example-admission-' . $name . '-acquire-http.json',
+			)
+		);
+		$scheduled = ran_wp_release_updater_test_read_json( $schedule );
+		ran_wp_release_updater_test_require_fact( true === ( $scheduled['pass'] ?? null ), 'Standalone admission scheduling assertions failed.' );
+		$initial_manifest_hash = $scheduled['installed_manifest'] ?? null;
+		ran_wp_release_updater_test_require_fact( is_string( $initial_manifest_hash ), 'Standalone admission did not retain its initial installed manifest.' );
+		if ( 'cached-revocation' === $name ) {
+			$policy = 'deny';
+			ran_wp_release_updater_test_require_fact( true === ( $scheduled['update_offer_present'] ?? null ), 'Allowed standalone acquisition did not create a cached offer.' );
+		}
+		$http_log = $run . '/automatic-example-admission-' . $name . '-http.json';
+		ran_wp_release_updater_test_command(
+			array_merge( $arguments, array( 'cron', 'event', 'run', 'wp_maybe_auto_update', '--due-now' ) ),
+			$site,
+			'automatic-example-admission-cron-' . $name,
+			array(
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_ARCHIVE'   => $variants[ $version ],
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP'      => '1',
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP_FIXTURE' => __DIR__ . '/wordpress-integration/automatic-example-http.php',
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP_LOG'  => $http_log,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_VERSION'   => $version,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_ADMISSION' => $policy,
+			)
+		);
+		$http = ran_wp_release_updater_test_read_json( $http_log );
+		ran_wp_release_updater_test_require_fact( true === ( $http['doing_cron'] ?? null ) && true === ( $http['hook'] ?? null ), 'Standalone admission did not execute the scheduled Core cron hook.' );
+		$observed = $run . '/automatic-example-admission-' . $name . '-observe.json';
+		ran_wp_release_updater_test_command(
+			array_merge( $arguments, array( 'eval-file', $observer ) ),
+			$site,
+			'automatic-example-admission-observe-' . $name,
+			array(
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_ARCHIVE'   => $variants[ $version ],
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_OUTPUT'    => $observed,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_VERSION'   => $version,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_MODE'      => 'observe',
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_SOURCE'    => $source,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_ADMISSION' => $policy,
+			)
+		);
+		$after = ran_wp_release_updater_test_read_json( $observed );
+		ran_wp_release_updater_test_require_fact( true === ( $after['active'] ?? null ) && ! in_array( false, $after['cleanup'] ?? array(), true ) && true === ( $after['booster_absent'] ?? null ) && true === ( $after['runtime_is_example_vendor'] ?? null ) && array( 'ran-wp-release-updater-example/ran-wp-release-updater-example.php' ) === ( $after['plugin_inventory'] ?? null ), 'Standalone admission did not prove the active example-owned runtime without Booster.' );
+		$target_manifest_hash = $after['archive_manifest'] ?? null;
+		ran_wp_release_updater_test_require_fact( is_string( $target_manifest_hash ), 'Standalone admission did not retain its target archive manifest.' );
+		$installed_as_expected = true === $expect_install ? in_array( $after['after_version'] ?? null, array( $version ), true ) : '0.1.0' === ( $after['after_version'] ?? null );
+		$manifest_as_expected  = true === $expect_install ? in_array( $after['installed_manifest'] ?? null, array( $target_manifest_hash ), true ) : in_array( $after['installed_manifest'] ?? null, array( $initial_manifest_hash ), true );
+		$completed_as_expected = true === $expect_install ? 1 === ( $http['complete_plugin']['result_count'] ?? null ) && 1 === ( $http['complete_plugin']['success_count'] ?? null ) : 0 === ( $http['complete_plugin']['result_count'] ?? null ) && 0 === ( $http['complete_plugin']['success_count'] ?? null );
+		ran_wp_release_updater_test_require_fact( $installed_as_expected && $manifest_as_expected && $completed_as_expected, 'Standalone admission native mutation result differed from policy.' );
+		ran_wp_release_updater_test_require_fact( $expect_install || false === ( $after['update_offer_present'] ?? null ), 'Refused standalone admission left an actionable cached offer.' );
+		$requests[] = array(
+			'standalone_admission' => $name,
+			'expected_install'     => $expect_install,
+			'pass'                 => true,
+			'http'                 => $http,
+			'after'                => $after,
+		);
+	}
+}
+
+function ran_wp_release_updater_test_automatic_example_admission_archive( string $source, string $destination ): void {
+	$archive = new ZipArchive();
+	if ( true !== $archive->open( $source ) ) {
+		throw new RuntimeException( 'Pinned standalone example archive cannot be opened.' );
+	}
+	$contents = $archive->getFromName( 'ran-wp-release-updater-example/ran-wp-release-updater-example.php' );
+	$archive->close();
+	if ( ! is_string( $contents ) ) {
+		throw new RuntimeException( 'Pinned standalone example entrypoint cannot be read.' );
+	}
+	$needle      = '$ran_release_updater_example_target    = $ran_release_updater_example_registrar->plugin(';
+	$replacement = '$ran_release_updater_example_fixture_policy = getenv( \'RAN_UPDATER_AUTOMATIC_EXAMPLE_ADMISSION\' );' . "\n\n" . '// Fixture-only standalone host policy: the public registrar binds admission before plugin().' . "\n" . '$ran_release_updater_example_target    = $ran_release_updater_example_registrar->with_descriptor_admission( static function ( \\RAN\\WPReleaseUpdater\\V1\\Contract\\IdentityDescriptor $descriptor ) use ( $ran_release_updater_example_fixture_policy ): bool { return \'allow\' === $ran_release_updater_example_fixture_policy; } )->plugin(';
+	$copy        = str_replace( $needle, $replacement, $contents, $count );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.copy_copy -- Copies an existing disposable ZIP before replacing its test-owned entrypoint.
+	if ( 1 !== $count || ! copy( $source, $destination ) ) {
+		throw new RuntimeException( 'Standalone admission fixture archive cannot be prepared.' );
+	}
+	$archive = new ZipArchive();
+	if ( true !== $archive->open( $destination ) || ! $archive->deleteName( 'ran-wp-release-updater-example/ran-wp-release-updater-example.php' ) || ! $archive->addFromString( 'ran-wp-release-updater-example/ran-wp-release-updater-example.php', $copy ) || ! $archive->close() ) {
+		throw new RuntimeException( 'Standalone admission fixture entrypoint cannot be written.' );
+	}
 }
 
 /**

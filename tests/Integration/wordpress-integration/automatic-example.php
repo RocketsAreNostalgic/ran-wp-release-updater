@@ -15,7 +15,7 @@ $ran_wp_release_updater_test_automatic_mode    = false === $ran_wp_release_updat
 $ran_wp_release_updater_test_automatic_slug    = 'ran-wp-release-updater-example';
 $ran_wp_release_updater_test_automatic_plugin  = $ran_wp_release_updater_test_automatic_slug . '/ran-wp-release-updater-example.php';
 
-if ( ! is_file( $ran_wp_release_updater_test_automatic_archive ) || ! preg_match( '/\A0\.[123]\.0\z/', $ran_wp_release_updater_test_automatic_version ) || ! is_dir( $ran_wp_release_updater_test_automatic_source ) || ! in_array( $ran_wp_release_updater_test_automatic_mode, array( 'observe', 'schedule' ), true ) ) {
+if ( ! is_file( $ran_wp_release_updater_test_automatic_archive ) || ! preg_match( '/\A0\.[123]\.0\z/', $ran_wp_release_updater_test_automatic_version ) || ! is_dir( $ran_wp_release_updater_test_automatic_source ) || ! in_array( $ran_wp_release_updater_test_automatic_mode, array( 'observe', 'schedule', 'acquire' ), true ) ) {
 	throw new RuntimeException( 'Automatic example fixture inputs are invalid.' );
 }
 
@@ -25,6 +25,11 @@ $ran_wp_release_updater_test_automatic_before_transient = get_site_transient( 'u
 if ( 'schedule' === $ran_wp_release_updater_test_automatic_mode ) {
 	// Core owns discovery. Clear only its stale cache so the fresh cron request must discover again.
 	delete_site_transient( 'update_plugins' );
+	wp_schedule_single_event( time() - 1, 'wp_maybe_auto_update' );
+}
+if ( 'acquire' === $ran_wp_release_updater_test_automatic_mode ) {
+	delete_site_transient( 'update_plugins' );
+	wp_update_plugins();
 	wp_schedule_single_event( time() - 1, 'wp_maybe_auto_update' );
 }
 $ran_wp_release_updater_test_automatic_after              = get_plugin_data( WP_PLUGIN_DIR . '/' . $ran_wp_release_updater_test_automatic_plugin, false, false );
@@ -55,22 +60,28 @@ $ran_wp_release_updater_test_automatic_runtime_copy = json_decode( (string) file
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- The candidate runtime copy is exact fixture evidence, not a WordPress-managed file.
 $ran_wp_release_updater_test_automatic_source_copy = json_decode( (string) file_get_contents( $ran_wp_release_updater_test_automatic_source . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 $ran_wp_release_updater_test_automatic_origin      = ( new ReflectionClass( 'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePackageUpdater' ) )->getFileName();
+$ran_wp_release_updater_test_automatic_plugins     = get_plugins();
+$ran_wp_release_updater_test_automatic_offer       = get_site_transient( 'update_plugins' );
 $ran_wp_release_updater_test_automatic_installed   = $ran_wp_release_updater_test_automatic_before_version !== $ran_wp_release_updater_test_automatic_after_version;
 $ran_wp_release_updater_test_automatic_proof       = array(
-	'before_version'       => $ran_wp_release_updater_test_automatic_before_version,
-	'after_version'        => $ran_wp_release_updater_test_automatic_after_version,
-	'installed'            => $ran_wp_release_updater_test_automatic_installed,
-	'mode'                 => $ran_wp_release_updater_test_automatic_mode,
-	'active'               => is_plugin_active( $ran_wp_release_updater_test_automatic_plugin ),
+	'before_version'            => $ran_wp_release_updater_test_automatic_before_version,
+	'after_version'             => $ran_wp_release_updater_test_automatic_after_version,
+	'installed'                 => $ran_wp_release_updater_test_automatic_installed,
+	'mode'                      => $ran_wp_release_updater_test_automatic_mode,
+	'active'                    => is_plugin_active( $ran_wp_release_updater_test_automatic_plugin ),
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Exact manifest bytes provide stable process-boundary evidence.
-	'archive_manifest'     => hash( 'sha256', json_encode( $ran_wp_release_updater_test_automatic_archive_manifest, JSON_THROW_ON_ERROR ) ),
+	'archive_manifest'          => hash( 'sha256', json_encode( $ran_wp_release_updater_test_automatic_archive_manifest, JSON_THROW_ON_ERROR ) ),
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Exact manifest bytes provide stable process-boundary evidence.
-	'installed_manifest'   => hash( 'sha256', json_encode( $ran_wp_release_updater_test_automatic_installed_manifest, JSON_THROW_ON_ERROR ) ),
-	'runtime_revision'     => $ran_wp_release_updater_test_automatic_runtime_copy['package_revision'] ?? null,
-	'runtime_origin'       => $ran_wp_release_updater_test_automatic_origin,
-	'cleanup'              => $ran_wp_release_updater_test_automatic_cleanup,
-	'update_transient_was' => false !== $ran_wp_release_updater_test_automatic_before_transient,
-	'pass'                 => 'schedule' === $ran_wp_release_updater_test_automatic_mode || ( $ran_wp_release_updater_test_automatic_after_version === $ran_wp_release_updater_test_automatic_version
+	'installed_manifest'        => hash( 'sha256', json_encode( $ran_wp_release_updater_test_automatic_installed_manifest, JSON_THROW_ON_ERROR ) ),
+	'runtime_revision'          => $ran_wp_release_updater_test_automatic_runtime_copy['package_revision'] ?? null,
+	'runtime_origin'            => $ran_wp_release_updater_test_automatic_origin,
+	'plugin_inventory'          => array_keys( $ran_wp_release_updater_test_automatic_plugins ),
+	'booster_absent'            => ! is_dir( WP_PLUGIN_DIR . '/ran-booster' ) && ! class_exists( 'RAN\\Booster', false ) && ! array_filter( get_declared_classes(), static fn( string $fixture_class ): bool => str_starts_with( $fixture_class, 'RAN\\Booster\\' ) ),
+	'runtime_is_example_vendor' => is_string( $ran_wp_release_updater_test_automatic_origin ) && str_starts_with( $ran_wp_release_updater_test_automatic_origin, $ran_wp_release_updater_test_automatic_runtime . '/' ),
+	'update_offer_present'      => is_object( $ran_wp_release_updater_test_automatic_offer ) && isset( $ran_wp_release_updater_test_automatic_offer->response[ $ran_wp_release_updater_test_automatic_plugin ] ),
+	'cleanup'                   => $ran_wp_release_updater_test_automatic_cleanup,
+	'update_transient_was'      => false !== $ran_wp_release_updater_test_automatic_before_transient,
+	'pass'                      => in_array( $ran_wp_release_updater_test_automatic_mode, array( 'schedule', 'acquire' ), true ) || ( $ran_wp_release_updater_test_automatic_after_version === $ran_wp_release_updater_test_automatic_version
 		&& is_plugin_active( $ran_wp_release_updater_test_automatic_plugin )
 		&& $ran_wp_release_updater_test_automatic_archive_manifest === $ran_wp_release_updater_test_automatic_installed_manifest
 		&& is_array( $ran_wp_release_updater_test_automatic_runtime_copy ) && is_array( $ran_wp_release_updater_test_automatic_source_copy )

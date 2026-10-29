@@ -59,15 +59,18 @@ final class ReadmeExamplesTest extends TestCase {
 		$this->assert_release_source_fence( 'plugin', 'fence-list', $examples[4] );
 
 		$integration = $this->php_fences( dirname( __DIR__, 2 ) . '/docs/integration.md' );
-		self::assertCount( 4, $integration, 'Integration guide examples changed without updating their executable proof.' );
+		self::assertCount( 5, $integration, 'Integration guide examples changed without updating their executable proof.' );
 		self::assertStringContainsString( '$registrar->plugin(', $integration[0] );
 		self::assertStringContainsString( '$registrar->theme(', $integration[1] );
 		self::assertStringContainsString( 'EXAMPLE_PLUGIN_GITHUB_TOKEN', $integration[2] );
 		self::assertStringContainsString( '$release_updater->status()', $integration[3] );
+		self::assertStringContainsString( 'with_descriptor_admission', $integration[4] );
+		self::assertStringContainsString( 'IdentityDescriptor', $integration[4] );
 		$this->assert_plugin( $integration[0], false );
 		$this->assert_theme( $integration[1] );
 		$this->assert_plugin( $integration[2], true );
 		$this->assert_status_methods( $integration[0], $integration[3] );
+		$this->assert_plugin( $integration[4], false, true );
 	}
 
 	public function test_public_guides_stay_forward_looking_and_link_the_durable_documentation_set(): void {
@@ -218,7 +221,7 @@ final class ReadmeExamplesTest extends TestCase {
 		return $command;
 	}
 
-	private function assert_plugin( string $example, bool $is_private ): void {
+	private function assert_plugin( string $example, bool $is_private, bool $expects_descriptor_admission = false ): void {
 		if ( $is_private ) {
 			$needle            = "static fn (): ?string => getenv('EXAMPLE_PLUGIN_GITHUB_TOKEN') ?: null";
 			$replacement_count = 0;
@@ -233,13 +236,14 @@ final class ReadmeExamplesTest extends TestCase {
 		}
 		$body   = $this->plugin_header() . "\n" . $example . "\n"
 			. '$before=readmeSnapshot($registrar);$status=$release_updater->status();$diagnostics=$release_updater->diagnostics();$refresh=$release_updater->refresh();'
-			. 'runAfterSetupTheme();echo json_encode(["before"=>$before,"registered"=>$release_updater->register(),"status"=>$release_updater->status(),"diagnostics"=>$release_updater->diagnostics(),"refresh"=>$refresh,"credential_calls"=>$GLOBALS["readme_credential_calls"]]);';
+			. 'runAfterSetupTheme();$submissions=(new ReflectionProperty($GLOBALS["ran_wp_release_updater_v1_broker"],"submissions"))->getValue($GLOBALS["ran_wp_release_updater_v1_broker"]);echo json_encode(["before"=>$before,"registered"=>$release_updater->register(),"status"=>$release_updater->status(),"diagnostics"=>$release_updater->diagnostics(),"refresh"=>$refresh,"credential_calls"=>$GLOBALS["readme_credential_calls"],"descriptor_admission"=>is_callable($submissions[1]["declaration"]["descriptor_admission"]??null)]);';
 		$result = $this->execute_example( 'example-plugin.php', $body, $this->root . '/plugins/example-plugin' );
 		self::assertTrue( $result['registered'] );
 		self::assertSame( 'target_active', $result['status']['code'] );
 		self::assertSame( 'active', $result['diagnostics']['state'] );
 		self::assertIsBool( $result['refresh'] );
 		self::assertSame( 0, $result['credential_calls'] );
+		self::assertSame( $expects_descriptor_admission, $result['descriptor_admission'] );
 		$this->assert_activation_ordering( $result, 'plugin', 'example-plugin.php', 'acme/example-plugin' );
 	}
 

@@ -67,6 +67,7 @@ final class RequestProtocolValidator {
 		'archive_version_mismatch',
 		'archive_wordpress_requirement_incompatible',
 		'archive_zip_extension_unavailable',
+		'candidate_admission_rejected',
 		'candidate_descriptor_mismatch',
 		'candidate_inspection_failed',
 		'candidate_invalid',
@@ -80,6 +81,7 @@ final class RequestProtocolValidator {
 		'acquisition_identity_invalid',
 		'archive_changed_before_extraction',
 		'binding_fence_lost',
+		'descriptor_admission_rejected',
 		'outcome_uncertain',
 		'remote_release_changed',
 		'runtime_liveness_lost',
@@ -244,6 +246,7 @@ final class RequestProtocolValidator {
 			'operation_guard',
 			'native_mutation_begin',
 			'native_mutation_complete',
+			'descriptor_admission',
 		);
 		if (
 			! self::exact_keys( $value, $keys )
@@ -293,7 +296,8 @@ final class RequestProtocolValidator {
 			|| ( null === $value['operation_guard'] ) !== ( null === $value['native_mutation_begin'] )
 			|| ( null === $value['operation_guard'] ) !== ( null === $value['native_mutation_complete'] )
 			|| ( null !== $value['native_mutation_begin'] && ! is_callable( $value['native_mutation_begin'] ) )
-			|| ( null !== $value['native_mutation_complete'] && ! is_callable( $value['native_mutation_complete'] ) ) ) {
+			|| ( null !== $value['native_mutation_complete'] && ! is_callable( $value['native_mutation_complete'] ) )
+			|| ( null !== $value['descriptor_admission'] && ! is_callable( $value['descriptor_admission'] ) ) ) {
 			return 'declaration_invalid';
 		}
 		return null === $value['credential_resolver'] || is_callable( $value['credential_resolver'] ) ? null : 'credential_resolver_invalid';
