@@ -210,6 +210,50 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 'candidate_admission_rejected', $updater->status()['candidate_validation_code'] );
 		}
 
+		public function test_descriptor_admission_flip_during_acquisition_refuses_update_and_information(): void {
+			foreach ( array( 'update', 'information' ) as $path ) {
+				$archive    = $this->archive();
+				$descriptor = $this->descriptor( $archive, 'stable', false );
+				$adapter    = new ControllableReleaseAdapter( $descriptor, $archive, $this->temporary_directory );
+				$updater    = NativePackageUpdater::from_configuration(
+					$this->config( 'manual' ),
+					$this->binding( 'manual', 'stable' ),
+					$adapter,
+					new FakeOptionDatabase( 100 ),
+					$this->policy(),
+					native_discovery_reuse: true,
+					descriptor_admission: static function ( IdentityDescriptor $descriptor ) use ( $adapter ): bool {
+						unset( $descriptor );
+						return 0 === $adapter->acquire_calls;
+					}
+				);
+				self::assertInstanceOf( NativePackageUpdater::class, $updater );
+				if ( 'update' === $path ) {
+					$result = $updater->filter_update(
+						false,
+						array(
+							'Version'   => '1.0.0',
+							'UpdateURI' => $this->uri(),
+						),
+						'package/package.php',
+						array()
+					);
+					self::assertFalse( $result );
+					$completion = $GLOBALS['ran_wp_release_updater_test_observations'][1][1];
+					self::assertSame( 'rejected', $completion['status'] );
+					self::assertSame( 'candidate_rejected', $completion['reason'] );
+					self::assertSame( 'candidate_admission_rejected', $completion['candidate_validation_code'] );
+				} else {
+					$result = $updater->filter_plugin_information( false, 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', "plugin\0package/package.php" ), 0, 24 ) ) );
+					self::assertFalse( $result );
+				}
+				self::assertSame( 1, $adapter->acquire_calls );
+				self::assertFileDoesNotExist( $adapter->acquired_paths[0] );
+				self::assertSame( 'candidate_admission_rejected', $updater->status()['candidate_validation_code'] );
+				self::assertNull( $updater->status()['offered_version'] );
+			}
+		}
+
 		public function test_descriptor_admission_removes_unprovable_or_rejected_cached_offer(): void {
 			$admit           = true;
 			list( $updater ) = $this->subject(

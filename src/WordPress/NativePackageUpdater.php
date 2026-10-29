@@ -344,7 +344,7 @@ final class NativePackageUpdater {
 				$payload[ $key ] = null;
 			}
 		}
-		$validation_codes = array( 'release_list_failed', 'candidate_list_invalid', 'candidate_invalid', 'candidate_not_newer', 'candidate_inspection_failed', 'candidate_descriptor_mismatch', 'candidate_validation_failed', 'archive_identity_verified' );
+		$validation_codes = array( 'release_list_failed', 'candidate_list_invalid', 'candidate_invalid', 'candidate_not_newer', 'candidate_inspection_failed', 'candidate_admission_rejected', 'candidate_descriptor_mismatch', 'candidate_validation_failed', 'archive_identity_verified' );
 		if ( ! in_array( $payload['candidate_validation_code'], $validation_codes, true ) ) {
 			$payload['candidate_validation_code'] = null;
 		}
@@ -1129,6 +1129,11 @@ final class NativePackageUpdater {
 				$reason                                    = 'candidate_validation_failed';
 				$this->status['candidate_validation_code'] = 'candidate_validation_failed';
 				return null;
+			}
+			if ( ! $this->descriptor_admitted( $descriptor ) ) {
+				$reason                                    = 'candidate_rejected';
+				$this->status['candidate_validation_code'] = 'candidate_admission_rejected';
+				continue;
 			}
 			$this->status['candidate_header_version'] = $facts['version'];
 			$this->descriptor                         = $descriptor;
