@@ -59,18 +59,32 @@ final class ReadmeExamplesTest extends TestCase {
 		$this->assert_release_source_fence( 'plugin', 'fence-list', $examples[4] );
 
 		$integration = $this->php_fences( dirname( __DIR__, 2 ) . '/docs/integration.md' );
-		self::assertCount( 5, $integration, 'Integration guide examples changed without updating their executable proof.' );
+		self::assertCount( 6, $integration, 'Integration guide examples changed without updating their executable proof.' );
 		self::assertStringContainsString( '$registrar->plugin(', $integration[0] );
 		self::assertStringContainsString( '$registrar->theme(', $integration[1] );
 		self::assertStringContainsString( 'EXAMPLE_PLUGIN_GITHUB_TOKEN', $integration[2] );
 		self::assertStringContainsString( '$release_updater->status()', $integration[3] );
-		self::assertStringContainsString( 'with_descriptor_admission', $integration[4] );
-		self::assertStringContainsString( 'IdentityDescriptor', $integration[4] );
+		self::assertStringContainsString( 'with_operation_guard', $integration[4] );
+		self::assertStringContainsString( 'with_descriptor_admission', $integration[5] );
+		self::assertStringContainsString( 'IdentityDescriptor', $integration[5] );
 		$this->assert_plugin( $integration[0], false );
 		$this->assert_theme( $integration[1] );
 		$this->assert_plugin( $integration[2], true );
 		$this->assert_status_methods( $integration[0], $integration[3] );
-		$this->assert_plugin( $integration[4], false, true );
+		$this->assert_origin_bound_source( $integration[4] );
+		$this->assert_plugin( $integration[5], false, true );
+	}
+
+	private function assert_origin_bound_source( string $example ): void {
+		$body   = 'function get_current_network_id(): int { return $GLOBALS["example_network"]; }'
+			. 'function get_current_blog_id(): int { return $GLOBALS["example_blog"]; }'
+			. '$GLOBALS["example_network"]=17;$GLOBALS["example_blog"]=1;putenv("EXAMPLE_PLUGIN_GITHUB_TOKEN=fixture-token");'
+			. $example . "\n"
+			. '$d=(new ReflectionProperty($source,"declaration"))->getValue($source);$guard=$d["operation_guard"];$credentials=$d["credential_resolver"];'
+			. '$origin=[$guard(),$credentials()];$GLOBALS["example_blog"]=2;$other_blog=[$guard(),$credentials()];'
+			. '$GLOBALS["example_blog"]=1;$GLOBALS["example_network"]=18;echo json_encode([$origin,$other_blog,[$guard(),$credentials()]]);';
+		$result = $this->execute_example( 'origin-source.php', $body, $this->root . '/plugins/example-plugin' );
+		self::assertSame( array( array( true, 'fixture-token' ), array( false, null ), array( false, null ) ), $result );
 	}
 
 	public function test_public_guides_stay_forward_looking_and_link_the_durable_documentation_set(): void {

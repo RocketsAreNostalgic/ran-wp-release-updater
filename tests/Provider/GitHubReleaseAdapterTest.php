@@ -625,6 +625,33 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 		}
 
+		public function test_origin_guard_refuses_context_change_during_credential_resolution_before_transport(): void {
+			$origin  = 17;
+			$current = $origin;
+			$calls   = 0;
+			$service = new GitHubReleaseService(
+				$this->service_configuration( $this->binding() ),
+				new GitHubCredentialResolver(
+					static function () use ( &$current, &$calls ): string {
+						++$calls;
+						$current = 23;
+						return 'fixture-token';
+					}
+				),
+				operation_guard: static function () use ( $origin, &$current ): bool {
+					return $origin === $current;
+				}
+			);
+			try {
+				$service->list();
+				self::fail( 'Changed origin must refuse before transport.' );
+			} catch ( ReleaseFailure $failure ) {
+				self::assertSame( 'runtime_unavailable', $failure->release_code );
+			}
+			self::assertSame( 1, $calls );
+			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
+		}
+
 		public function test_public_service_stops_after_liveness_changes_during_http_callback(): void {
 			$revoked = false;
 			$service = new GitHubReleaseService(
