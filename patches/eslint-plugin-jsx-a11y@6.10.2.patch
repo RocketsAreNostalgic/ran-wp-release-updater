@@ -1,0 +1,26 @@
+diff --git a/lib/util/mayContainChildComponent.js b/lib/util/mayContainChildComponent.js
+index 9c12846d93a699b3870fcc682b70318d549a9b11..e2150b09520f15aab2cf71cc55f5ac5cc9cd5b96 100644
+--- a/lib/util/mayContainChildComponent.js
++++ b/lib/util/mayContainChildComponent.js
+@@ -35,7 +35,7 @@ function mayContainChildComponent(root, componentName) {
+           return true;
+         }
+         // Check for components with the provided name.
+-        if (childNode.type === 'JSXElement' && childNode.openingElement && (0, _minimatch["default"])(elementType(childNode.openingElement), componentName)) {
++        if (childNode.type === 'JSXElement' && childNode.openingElement && (0, _minimatch.minimatch)(elementType(childNode.openingElement), componentName)) {
+           return true;
+         }
+         if (traverseChildren(childNode, depth + 1)) {
+diff --git a/lib/util/mayHaveAccessibleLabel.js b/lib/util/mayHaveAccessibleLabel.js
+index 07eb76610957454796da190d118f1b1061bbad20..0b9bb5aa5e62cd19cf2231fef3b59872d8c5d67c 100644
+--- a/lib/util/mayHaveAccessibleLabel.js
++++ b/lib/util/mayHaveAccessibleLabel.js
+@@ -72,7 +72,7 @@ function mayHaveAccessibleLabel(root) {
+       var name = getElementType(node.openingElement);
+       var isReactComponent = name.length > 0 && name[0] === name[0].toUpperCase();
+       if (isReactComponent && !controlComponents.some(function (control) {
+-        return (0, _minimatch["default"])(name, control);
++        return (0, _minimatch.minimatch)(name, control);
+       })) {
+         return true;
+       }

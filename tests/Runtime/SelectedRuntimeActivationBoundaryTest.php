@@ -489,11 +489,14 @@ PHP
 	}
 
 	private function extract_beta15_runtime_fixture( string $destination ): void {
-		$fixture = dirname( __DIR__ ) . '/Fixtures/beta15-runtime/runtime.json.gz';
-		self::assertSame( 'c11e968c69ffbd936a742c5150707e7483f9eb1c9adf5ee8883260b3c50b9346', hash_file( 'sha256', $fixture ) );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the local immutable fixture bytes.
-		$compressed = file_get_contents( $fixture );
+		$fixture = dirname( __DIR__ ) . '/Fixtures/beta15-runtime/runtime.json.gz.base64';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the local immutable fixture text.
+		$encoded_fixture = file_get_contents( $fixture );
+		self::assertIsString( $encoded_fixture );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Decode the checked ASCII fixture text.
+		$compressed = base64_decode( $encoded_fixture, true );
 		self::assertIsString( $compressed );
+		self::assertSame( 'c11e968c69ffbd936a742c5150707e7483f9eb1c9adf5ee8883260b3c50b9346', hash( 'sha256', $compressed ) );
 		$json = gzdecode( $compressed );
 		self::assertIsString( $json );
 		$files = json_decode( $json, true, 512, JSON_THROW_ON_ERROR );
