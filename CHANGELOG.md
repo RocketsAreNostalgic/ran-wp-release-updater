@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.16](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.15...v1.0.0-beta.16) (2026-10-31)
+
+
+### Bug Fixes
+
+* **runtime:** admit guard-only declarations ([#148](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/148)) ([468ecc3](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/468ecc3afa62f23bb3a0711c1e328939e3c360ef))
+
 ## [1.0.0-beta.15](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.14...v1.0.0-beta.15) (2026-10-29)
 
 
