@@ -339,6 +339,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertSame( 'invalid_configuration', $invalid_conditional['code'] );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- The existing HTTP fixture reads this exact shared response queue.
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- The existing HTTP fixture reads this exact shared response queue.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
 			$result                          = $source->list();
 			self::assertSame(
@@ -595,6 +597,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$available = false;
 			};
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Existing isolated transport fixture uses this exact response queue identity.
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- The existing HTTP fixture reads this exact shared response queue.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
 			try {
 				$service->list();
@@ -603,6 +606,46 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				self::assertSame( 'runtime_unavailable', $failure->release_code );
 			}
 			self::assertCount( 1, $GLOBALS['ran_github_requests'] );
+		}
+
+		public function test_native_adapter_guard_stops_next_provider_http_step(): void {
+			$available = true;
+			$adapter   = new GitHubReleaseAdapter(
+				$this->binding(),
+				null,
+				static function () use ( &$available ): bool {
+					return $available;
+				}
+			);
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- The existing HTTP fixture reads this exact shared response queue.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
+			$adapter->list_releases();
+			self::assertCount( 1, $GLOBALS['ran_github_requests'] );
+			self::assertStringContainsString( '/releases', $GLOBALS['ran_github_requests'][0][0] );
+			$available = false;
+			try {
+				$adapter->inspect( '7', 'v1.2.3' );
+				self::fail( 'Revocation must prevent inspection HTTP.' );
+			} catch ( ReleaseFailure $failure ) {
+				self::assertSame( 'runtime_unavailable', $failure->release_code );
+			}
+			self::assertCount( 1, $GLOBALS['ran_github_requests'] );
+
+			$available = true;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- The existing HTTP fixture reads this exact shared response queue.
+			$GLOBALS['ran_github_responses'] = $this->inspection_responses( 7, 'v1.2.3', false, true );
+			$descriptor                      = $adapter->inspect( '7', 'v1.2.3' );
+			$count                           = count( $GLOBALS['ran_github_requests'] );
+			self::assertSame( 4, $count );
+			self::assertStringContainsString( '/commits/', $GLOBALS['ran_github_requests'][3][0] );
+			$available = false;
+			try {
+				$adapter->acquire( $descriptor );
+				self::fail( 'Revocation must prevent acquisition HTTP.' );
+			} catch ( ReleaseFailure $failure ) {
+				self::assertSame( 'runtime_unavailable', $failure->release_code );
+			}
+			self::assertCount( $count, $GLOBALS['ran_github_requests'] );
 		}
 
 		public function test_public_service_stops_after_liveness_changes_during_credential_resolution(): void {

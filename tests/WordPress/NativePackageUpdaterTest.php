@@ -1966,6 +1966,41 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 0, $adapter->list_calls + $adapter->inspect_calls + $adapter->acquire_calls );
 		}
 
+		public function test_guard_alone_fails_closed_before_provider_io(): void {
+			foreach ( array( false, new \RuntimeException( 'guard failed' ) ) as $outcome ) {
+				list( $updater, $adapter ) = $this->subject(
+					operation_guard: static function () use ( $outcome ): bool {
+						if ( $outcome instanceof \RuntimeException ) {
+							throw $outcome;
+						}
+						return $outcome;
+					}
+				);
+				self::assertFalse(
+					$updater->filter_update(
+						false,
+						array(
+							'Version'   => '1.0.0',
+							'UpdateURI' => $this->uri(),
+						),
+						'package/package.php',
+						array()
+					)
+				);
+				self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			}
+		}
+
+		public function test_mutation_callbacks_require_a_guard_and_a_complete_pair(): void {
+			list( , $adapter, $database, , $binding ) = $this->subject();
+			$guard                                    = static fn (): bool => true;
+			$begin                                    = static fn (): string => 'owner';
+			$complete                                 = static function (): void {};
+			foreach ( array( array( null, $begin, $complete ), array( $guard, $begin, null ), array( $guard, null, $complete ) ) as $callbacks ) {
+				self::assertNull( NativePackageUpdater::from_configuration( $this->config( 'manual' ), $binding, $adapter, $database, $this->policy(), operation_guard: $callbacks[0], native_mutation_begin: $callbacks[1], native_mutation_complete: $callbacks[2] ) );
+			}
+		}
+
 		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
 		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null ): array {
 			$archive_path = $this->archive();
