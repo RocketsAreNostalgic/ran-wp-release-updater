@@ -3,6 +3,7 @@ packages:
 
 overrides:
   'eslint-plugin-react-hooks>zod': ^4.6.6
+  minimatch: 11.0.1
 
 # pnpm 11 fails closed when a dependency has an undeclared install/build script.
 # These transitive scripts are not required by this repository's lint/format tasks.

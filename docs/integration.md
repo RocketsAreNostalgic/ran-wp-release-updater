@@ -298,9 +298,10 @@ Call `$registrar->with_operation_guard($operation_allowed)` and then
 
 Both methods clone the registrar. Reuse that bound instance and the same callable
 identities; different callbacks are different native declarations. Unguarded
-standalone registration retains its existing behavior. A guarded plugin/theme
-requires both native callbacks; a prospective `releases()` source needs only the
-operation guard. The guard returns exactly `true` for current authority; false,
+standalone registration retains its existing behavior. An operation guard can be
+used alone for a plugin/theme; optional native begin and complete callbacks must
+be supplied as a pair and require that guard. A prospective `releases()` source
+needs only the operation guard. The guard returns exactly `true` for current authority; false,
 non-boolean results and exceptions refuse. Hosts must bind it to the request's
 exact selected implementation and generation, including anonymous operations.
 This does not grant credentials or override source, capability or recovery rules.

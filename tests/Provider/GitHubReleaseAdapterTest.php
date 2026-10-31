@@ -339,8 +339,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertSame( 'invalid_configuration', $invalid_conditional['code'] );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- The existing HTTP fixture reads this exact shared response queue.
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- The existing HTTP fixture reads this exact shared response queue.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
 			$result                          = $source->list();
 			self::assertSame(
@@ -597,7 +595,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$available = false;
 			};
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Existing isolated transport fixture uses this exact response queue identity.
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- The existing HTTP fixture reads this exact shared response queue.
 			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array() ) );
 			try {
 				$service->list();

@@ -513,7 +513,9 @@ PHP
 		}
 		self::assertSame( '599185285734b402059c8a205db29b157e5277e1dfb607fc906a2592a9bf9606', hash( 'sha256', $payload ) );
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Decode the checked fixture manifest.
-		$manifest = json_decode( base64_decode( $files['runtime-copy.json'], true ), true, 512, JSON_THROW_ON_ERROR );
+		$manifest_bytes = base64_decode( $files['runtime-copy.json'], true );
+		self::assertIsString( $manifest_bytes );
+		$manifest = json_decode( $manifest_bytes, true, 512, JSON_THROW_ON_ERROR );
 		self::assertSame(
 			array(
 				'package_revision' => '599185285734b402059c8a205db29b157e5277e1dfb607fc906a2592a9bf9606',
