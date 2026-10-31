@@ -110,7 +110,7 @@ final class NativePackageUpdater {
 		?callable $native_mutation_complete = null,
 		?callable $descriptor_admission = null
 	): ?self {
-		if ( ( null === $operation_guard ) !== ( null === $native_mutation_begin ) || ( null === $operation_guard ) !== ( null === $native_mutation_complete ) ) {
+		if ( ( null === $native_mutation_begin ) !== ( null === $native_mutation_complete ) || ( null === $operation_guard && null !== $native_mutation_begin ) ) {
 			return null;
 		}
 		$binding_facts = $binding->to_array();

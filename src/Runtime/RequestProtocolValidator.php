@@ -293,8 +293,8 @@ final class RequestProtocolValidator {
 			return 'maximum_artifact_bytes_invalid';
 		}
 		if ( ( null !== $value['operation_guard'] && ! is_callable( $value['operation_guard'] ) )
-			|| ( null === $value['operation_guard'] ) !== ( null === $value['native_mutation_begin'] )
-			|| ( null === $value['operation_guard'] ) !== ( null === $value['native_mutation_complete'] )
+			|| ( null === $value['native_mutation_begin'] ) !== ( null === $value['native_mutation_complete'] )
+			|| ( null === $value['operation_guard'] && null !== $value['native_mutation_begin'] )
 			|| ( null !== $value['native_mutation_begin'] && ! is_callable( $value['native_mutation_begin'] ) )
 			|| ( null !== $value['native_mutation_complete'] && ! is_callable( $value['native_mutation_complete'] ) )
 			|| ( null !== $value['descriptor_admission'] && ! is_callable( $value['descriptor_admission'] ) ) ) {
