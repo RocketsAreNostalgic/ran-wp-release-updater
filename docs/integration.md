@@ -234,6 +234,41 @@ The package has a bounded multisite guarantee: the same target observed from the
 
 This does **not** claim ownership of network activation, target inventory, multisite administration, or product-specific network policy. Those remain host responsibilities.
 
+The selected runtime captures the network ID at activation; changing the ambient
+network later in the request does not retarget its existing handles. Fences for
+different networks are independent, so they do not serialize mutations of the
+shared plugin or theme files across an installation. A host that permits those
+operations needs its own installation-wide mutation lock and recovery policy.
+
+Credentials and guards are request-local callbacks. The captured network ID does
+not automatically bind them to the originating network or site. For example,
+a host can bind a read-only release source to the current network and blog:
+
+```php
+$origin_network = get_current_network_id();
+$origin_blog = get_current_blog_id();
+$at_origin = static fn (): bool => get_current_network_id() === $origin_network
+    && get_current_blog_id() === $origin_blog;
+$registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';
+$source = $registrar->with_operation_guard($at_origin)->releases(
+    provider: 'github',
+    package_type: 'plugin',
+    repository: 'acme/example-plugin',
+    repository_id: '123456789',
+    credentials: static fn (): ?string => $at_origin()
+        ? (getenv('EXAMPLE_PLUGIN_GITHUB_TOKEN') ?: null)
+        : null
+);
+```
+
+This example refuses an operation when its guard observes a changed context;
+the credential callback also checks the origin before reading the token. The
+service rechecks the guard after credential resolution and before transport. A
+native target additionally requires the host mutation callbacks described below.
+Those callbacks must keep the original owner for completion and recovery rather
+than deriving ownership from whichever site is current during cleanup. This
+example does not implement multisite administration or cross-network locking.
+
 ## Advanced release reads
 
 If you need verified release metadata or bytes without registering a native update target, use the request-local `releases()` API. It never installs a package. See [Release-source API](release-sources.md).

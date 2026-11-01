@@ -50,6 +50,20 @@ The package does not introduce a generic updater base class, public provider reg
 
 `RequestBroker` is the single request-local broker for declarations and physical-runtime selection. It does not replace the durable fence coordinator.
 
+The selected runtime captures the current network ID at activation. Its target
+fence identifies the network, target type, and installed package identity, not
+the current blog. Main-site and subsite observations of the same target on one
+network therefore share that fence. Different network IDs have independent
+fences: this is not an installation-wide mutex for the shared plugin or theme
+files. A host coordinating mutations across networks must supply its own
+installation-wide exclusion and recovery policy.
+
+The runtime and its callbacks are request-local. Capturing a network ID does not
+bind host credentials or authorization to that origin, or follow later context
+switches. Hosts that depend on an origin must bind and recheck it in their own
+callbacks. Cleanup and completion must retain the operation's original owner,
+even if the ambient context or provider availability changes.
+
 These names describe different lifetimes:
 
 - request-local runtime selection;

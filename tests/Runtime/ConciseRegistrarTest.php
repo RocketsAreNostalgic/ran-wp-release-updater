@@ -306,6 +306,21 @@ PHP,
 		}
 	}
 
+	public function test_ambient_network_change_after_activation_does_not_retarget_handle(): void {
+		$result = $this->probe(
+			<<<'PHP'
+function get_current_network_id(): int { ++$GLOBALS['p0_network_calls']; return $GLOBALS['p0_network_value']; }
+$GLOBALS['p0_network_calls']=0;$GLOBALS['p0_network_value']=17;$r=require $data['bootstrap'];$h=$r->plugin('github',$data['plugin'],'acme/example','123456789');$h->register();$broker=$GLOBALS['ran_wp_release_updater_v1_broker'];$broker->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>7,'wordpress_version'=>'6.8.0']);$before=array_keys((new ReflectionProperty($broker,'target_handles'))->getValue($broker));$GLOBALS['p0_network_value']=23;$duplicate=$r->plugin('github',$data['plugin'],'acme/example','123456789');$duplicate->register();$after=array_keys((new ReflectionProperty($broker,'target_handles'))->getValue($broker));echo json_encode(['before'=>$before,'after'=>$after,'status'=>$h->status()['code'],'duplicate'=>$duplicate->status()['code'],'calls'=>$GLOBALS['p0_network_calls'],'hooks'=>count($GLOBALS['p0_1_hooks'])]);
+PHP
+		);
+		self::assertCount( 1, $result['before'] );
+		self::assertSame( $result['before'], $result['after'] );
+		self::assertSame( 'target_active', $result['status'] );
+		self::assertSame( 'target_active', $result['duplicate'] );
+		self::assertSame( 1, $result['calls'] );
+		self::assertSame( 10, $result['hooks'] );
+	}
+
 	public function test_logical_and_real_installed_aliases_share_one_target_handle_and_hook_set(): void {
 		$result = $this->probe(
 			<<<'PHP'
