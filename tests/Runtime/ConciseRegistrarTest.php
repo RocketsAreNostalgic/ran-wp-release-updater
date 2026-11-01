@@ -63,7 +63,7 @@ PHP
 $r=require $data['bootstrap'];$guard=static fn()=>true;$begin=static fn()=> 'owner';$complete=static function(){};$g=$r->with_operation_guard($guard)->with_native_mutation_callbacks($begin,$complete);$first=$g->plugin('github',$data['plugin'],'acme/example','123456789');$duplicate=$g->plugin('github',$data['plugin'],'acme/example','123456789');$conflict=$g->with_operation_guard(static fn()=>true)->plugin('github',$data['plugin'],'acme/example','123456789');$incomplete=$r->with_operation_guard($guard)->theme('github',$data['theme'],'acme/example-theme','234567890');$standalone=$r->plugin('github',$data['forced'],'acme/forced-plugin','456789012');foreach([$first,$duplicate,$conflict,$incomplete,$standalone]as$h){$h->register();}$GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>7,'wordpress_version'=>'6.8.0']);echo json_encode(array_map(static fn($h)=>$h->status()['code'],[$first,$duplicate,$conflict,$incomplete,$standalone]));
 PHP
 		);
-		self::assertSame( array( 'target_active', 'target_active', 'target_declaration_conflict', 'declaration_invalid', 'target_active' ), $result );
+		self::assertSame( array( 'target_active', 'target_active', 'target_declaration_conflict', 'target_active', 'target_active' ), $result );
 	}
 
 	public function test_theme_directories_retain_values_with_sparse_and_string_keys(): void {

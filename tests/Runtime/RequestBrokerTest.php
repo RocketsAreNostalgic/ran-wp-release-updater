@@ -81,6 +81,32 @@ final class RequestBrokerTest extends TestCase {
 	public static function legacy_protocols(): array {
 		return array( array( 4 ), array( 5 ), array( 6 ) ); }
 
+	public function test_guard_and_mutation_callback_declaration_admission(): void {
+		$broker      = new \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker();
+		$declaration = array(
+			'target_type'              => 'plugin',
+			'installed_file'           => '/plugins/example/example.php',
+			'provider_code'            => 'github',
+			'repository_locator'       => 'acme/example',
+			'repository_identity'      => '123456789',
+			'channel'                  => 'stable',
+			'update_policy'            => 'manual',
+			'credential_resolver'      => null,
+			'maximum_artifact_bytes'   => 52428800,
+			'operation_guard'          => static fn (): bool => true,
+			'native_mutation_begin'    => null,
+			'native_mutation_complete' => null,
+			'descriptor_admission'     => null,
+		);
+		self::assertTrue( $broker->register_target( $declaration )['accepted'] );
+		$begin    = static fn (): string => 'owner';
+		$complete = static function (): void {};
+		foreach ( array( array( null, $begin, $complete ), array( $declaration['operation_guard'], $begin, null ), array( $declaration['operation_guard'], null, $complete ), array( 'not callable', null, null ), array( $declaration['operation_guard'], 'not callable', $complete ) ) as $callbacks ) {
+			list( $declaration['operation_guard'], $declaration['native_mutation_begin'], $declaration['native_mutation_complete'] ) = $callbacks;
+			self::assertSame( 'declaration_invalid', $broker->register_target( $declaration )['code'] );
+		}
+	}
+
 	public function test_declaration_paths_accept_posix_drive_qualified_and_unc_absolute_forms(): void {
 		$broker      = new \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker( activation_boundary_missed: false, selected_runtime_state: null );
 		$method      = new \ReflectionMethod( $broker, 'declaration_code' );
