@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.17](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.16...v1.0.0-beta.17) (2026-11-12)
+
+
+### Bug Fixes
+
+* **native:** drop the update-check cache when a target refreshes ([#151](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/151)) ([ce7b18d](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/ce7b18d4bd30893c0348be5711ed51c0402b4105))
+
 ## [1.0.0-beta.16](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.15...v1.0.0-beta.16) (2026-10-31)
 
 
