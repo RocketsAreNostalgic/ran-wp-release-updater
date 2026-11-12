@@ -11,7 +11,7 @@ final class ReleaseSource {
 
 	private bool $terminal_unavailable = false;
 
-	public function __construct( private object $service, private SelectedRuntimeState $state ) {
+	public function __construct( private object $service, private SelectedRuntimeState $state, private bool $report_rejection = false ) {
 	}
 
 	private static function direct_filesystem_available(): bool {
@@ -91,12 +91,15 @@ final class ReleaseSource {
 				'inspect' => 'release_inspected',
 				'acquire' => 'release_acquired',
 			};
-			return array(
-				'ok'             => true,
-				'code'           => $code,
-				'value'          => $value,
-				'retry_after'    => null,
-				'cleanup_status' => $cleanup,
+			return $this->envelope(
+				array(
+					'ok'             => true,
+					'code'           => $code,
+					'value'          => $value,
+					'retry_after'    => null,
+					'cleanup_status' => $cleanup,
+				),
+				null
 			);
 		} catch ( \Throwable $failure ) {
 			if ( null !== $artifact ) {
@@ -107,7 +110,10 @@ final class ReleaseSource {
 					new ReleaseFailure(
 						$failure->release_code,
 						$failure->retry_after,
-						null !== $artifact ? $cleanup : $failure->cleanup_status
+						null !== $artifact ? $cleanup : $failure->cleanup_status,
+						null,
+						$failure->rejection_reason,
+						$failure->rejection_detail
 					)
 				);
 			}
@@ -142,13 +148,32 @@ final class ReleaseSource {
 			$retry   = null;
 			$cleanup = in_array( $cleanup, array( 'not_applicable', 'complete', 'failed' ), true ) ? $cleanup : 'failed';
 		}
-		return array(
-			'ok'             => false,
-			'code'           => $code,
-			'value'          => null,
-			'retry_after'    => $retry,
-			'cleanup_status' => $cleanup,
+		return $this->envelope(
+			array(
+				'ok'             => false,
+				'code'           => $code,
+				'value'          => null,
+				'retry_after'    => $retry,
+				'cleanup_status' => $cleanup,
+			),
+			$code === $failure->release_code && null !== $failure->rejection_reason
+				? array(
+					'reason' => $failure->rejection_reason,
+					'detail' => $failure->rejection_detail,
+				)
+				: null
 		);
+	}
+
+	/**
+	 * Adds the opt-in `rejection` key only for a source declared with rejection reasons.
+	 *
+	 * @param array<string,mixed> $result
+	 * @param array{reason:string,detail:?string}|null $rejection
+	 * @return array<string,mixed>
+	 */
+	private function envelope( array $result, ?array $rejection ): array {
+		return $this->report_rejection ? $result + array( 'rejection' => $rejection ) : $result;
 	}
 
 	/**

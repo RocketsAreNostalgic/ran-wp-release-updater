@@ -110,7 +110,7 @@ final class GitHubReleaseService {
 	 */
 	public static function from_release_declaration( array $declaration, SelectedRuntimeState $state ): object {
 		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard' );
-		if ( ! self::exact_keys( $declaration, $keys ) || 'github' !== $declaration['provider_code'] ) {
+		if ( ! self::exact_keys( $declaration, array_key_exists( 'rejection_reasons', $declaration ) ? array( ...$keys, 'rejection_reasons' ) : $keys ) || 'github' !== $declaration['provider_code'] ) {
 			throw new InvalidArgumentException( 'The release declaration is invalid.' );
 		}
 		$wordpress = SelectedRuntimeState::normalize_word_press_version( $GLOBALS['wp_version'] ?? null );
@@ -392,11 +392,13 @@ final class GitHubReleaseService {
 				|| $identity['size'] !== $facts['artifact_size']
 				|| $identity['size'] > $this->binding['maximum_artifact_bytes']
 			) {
-				throw new ReleaseFailure( 'package_incompatible' );
+				throw null !== $identity && $identity['size'] !== $facts['artifact_size']
+					? ReleaseFailure::rejected( 'download_size_mismatch', 'downloaded ' . $identity['size'] . ' bytes, expected ' . $facts['artifact_size'] )
+					: new ReleaseFailure( 'package_incompatible' );
 			}
 			$sha256 = hash_file( 'sha256', $path );
 			if ( ! is_string( $sha256 ) || ! hash_equals( $facts['artifact_sha256'], $sha256 ) ) {
-				throw new ReleaseFailure( 'package_incompatible' );
+				throw is_string( $sha256 ) ? ReleaseFailure::rejected( 'download_digest_mismatch' ) : new ReleaseFailure( 'package_incompatible' );
 			}
 
 			$this->repository_identity( $token );
@@ -463,6 +465,9 @@ final class GitHubReleaseService {
 			);
 			if ( ! is_array( $package ) ) {
 				throw new ReleaseFailure( 'package_incompatible' );
+			}
+			if ( isset( $package['reason'] ) ) {
+				throw ReleaseFailure::rejected( $package['reason'], $package['detail'] );
 			}
 			$inspection = ProspectiveReleaseInspection::create(
 				array(
@@ -556,22 +561,30 @@ final class GitHubReleaseService {
 			|| ! is_bool( $release['draft'] ?? null )
 			|| ! is_bool( $release['prerelease'] ?? null )
 			|| ! is_bool( $release['immutable'] ?? null )
-			|| $release['draft']
 			|| ! is_string( $release['tag_name'] ?? null )
 		) {
 			throw new ReleaseFailure( 'package_incompatible' );
 		}
+		if ( $release['draft'] ) {
+			throw ReleaseFailure::rejected( 'release_draft' );
+		}
 
 		$tag     = $release['tag_name'];
 		$version = self::version_from_tag( $tag );
+		if ( null === $version ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
+			throw ReleaseFailure::rejected( 'tag_not_version', $tag );
+		}
+		if ( null !== $expected_tag && ! hash_equals( $expected_tag, $tag ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
+			throw ReleaseFailure::rejected( 'tag_mismatch', 'found ' . substr( $tag, 0, 40 ) . ', expected ' . substr( $expected_tag, 0, 40 ) );
+		}
+		if ( 'stable' === $this->binding['release_channel'] && ( $release['prerelease'] || ReleaseVersion::is_prerelease( $version ) ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
+			throw ReleaseFailure::rejected( 'prerelease_not_allowed', $tag );
+		}
 		if (
-			null === $version
-			|| ( null !== $expected_tag && ! hash_equals( $expected_tag, $tag ) )
-			|| (
-				'stable' === $this->binding['release_channel']
-				&& ( $release['prerelease'] || ReleaseVersion::is_prerelease( $version ) )
-			)
-			|| ! self::valid_release_page(
+			! self::valid_release_page(
 				$release['html_url'] ?? null,
 				$this->binding['canonical_repository_locator']
 			)
@@ -775,7 +788,7 @@ final class GitHubReleaseService {
 	private function post_allocation_failure( \Throwable $exception, bool $clean ): ReleaseFailure {
 		$cleanup = $clean ? 'complete' : 'failed';
 		if ( $exception instanceof ReleaseFailure ) {
-			return new ReleaseFailure( $exception->release_code, $exception->retry_after, $cleanup, $exception );
+			return new ReleaseFailure( $exception->release_code, $exception->retry_after, $cleanup, $exception, $exception->rejection_reason, $exception->rejection_detail );
 		}
 		if ( $exception instanceof GitHubReleaseReadUnavailable ) {
 			return new ReleaseFailure( 'operation_failed', null, $cleanup, $exception );
@@ -1005,7 +1018,7 @@ final class GitHubReleaseService {
 	/** @return array{identity:string,name:string,sha256:string,size:int} */
 	private function zip_asset( mixed $assets ): array {
 		if ( ! is_array( $assets ) || ! array_is_list( $assets ) ) {
-			throw new ReleaseFailure( 'package_incompatible' );
+			throw ReleaseFailure::rejected( 'no_package_zip' );
 		}
 		$matches = array_values(
 			array_filter(
@@ -1018,7 +1031,8 @@ final class GitHubReleaseService {
 			)
 		);
 		if ( 1 !== count( $matches ) ) {
-			throw new ReleaseFailure( 'package_incompatible' );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
+			throw ReleaseFailure::rejected( array() === $matches ? 'no_package_zip' : 'multiple_package_zips', (string) count( $matches ) . ' ZIP assets' );
 		}
 
 		$asset    = $matches[0];
@@ -1027,14 +1041,19 @@ final class GitHubReleaseService {
 		$digest   = is_string( $asset['digest'] ?? null )
 			? strtolower( $asset['digest'] )
 			: '';
-		if (
-			null === $identity
-			|| null === $size
-			|| $size > $this->binding['maximum_artifact_bytes']
-			|| 'uploaded' !== ( $asset['state'] ?? null )
-			|| 1 !== preg_match( '/\Asha256:([a-f0-9]{64})\z/D', $digest, $digest_match )
-		) {
-			throw new ReleaseFailure( 'package_incompatible' );
+		if ( null === $identity || null === $size ) {
+			throw ReleaseFailure::rejected( 'asset_metadata_invalid' );
+		}
+		if ( $size > $this->binding['maximum_artifact_bytes'] ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
+			throw ReleaseFailure::rejected( 'asset_too_large', $size . ' bytes, limit ' . $this->binding['maximum_artifact_bytes'] );
+		}
+		if ( 'uploaded' !== ( $asset['state'] ?? null ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
+			throw ReleaseFailure::rejected( 'asset_not_uploaded', is_string( $asset['state'] ?? null ) ? 'state ' . $asset['state'] : null );
+		}
+		if ( 1 !== preg_match( '/\Asha256:([a-f0-9]{64})\z/D', $digest, $digest_match ) ) {
+			throw ReleaseFailure::rejected( 'digest_missing' );
 		}
 
 		return array(

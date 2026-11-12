@@ -267,6 +267,16 @@ PHP;
 		);
 	}
 
+	/** @param array<string,mixed>|null $result */
+	private function assert_rejected( ?array $result, ?string $reason = null ): void {
+		self::assertIsArray( $result );
+		self::assertArrayNotHasKey( 'package_root', $result );
+		self::assertIsString( $result['reason'] ?? null );
+		if ( null !== $reason ) {
+			self::assertSame( $reason, $result['reason'] );
+		}
+	}
+
 	public function test_prospective_inspection_rejects_ambiguous_plugin_headers(): void {
 		$archive = $this->archive(
 			array(
@@ -274,7 +284,7 @@ PHP;
 				'example-plugin/b.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
 			)
 		);
-		self::assertNull( ( new PackageIdentityValidator() )->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ) );
+		$this->assert_rejected( ( new PackageIdentityValidator() )->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ), 'header_plugin_ambiguous' );
 	}
 
 	/**
@@ -287,7 +297,7 @@ PHP;
 		array $links = array()
 	): void {
 		$archive = $this->archive( $entries, $links );
-		self::assertNull( $this->prospective_plugin( $archive ) );
+		$this->assert_rejected( $this->prospective_plugin( $archive ) );
 	}
 
 	/** @return array<string,array{0:array<string,string>,1?:list<string>}> */
@@ -329,7 +339,7 @@ PHP;
 		for ( $index = 1; $index <= 10000; ++$index ) {
 			$many[ 'example-plugin/entry-' . $index ] = '';
 		}
-		self::assertNull( $this->prospective_plugin( $this->archive( $many ) ) );
+		$this->assert_rejected( $this->prospective_plugin( $this->archive( $many ) ), 'archive_entry_limit' );
 
 		foreach (
 			array(
@@ -342,7 +352,7 @@ PHP;
 			) as $header
 		) {
 			$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
-			self::assertNull( $this->prospective_plugin( $archive ) );
+			$this->assert_rejected( $this->prospective_plugin( $archive ) );
 		}
 	}
 
@@ -553,7 +563,7 @@ PHP;
 			),
 		) as $name => $entries ) {
 			$archive = $this->archive( $entries );
-			self::assertNull( $validator->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ), $name );
+			$this->assert_rejected( $validator->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ), 'archive_path_unsafe' );
 			self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $archive )->code(), $name );
 		}
 
@@ -576,7 +586,7 @@ PHP;
 			array(),
 			array( 'example-plugin/example-plugin.php' => array( \ZipArchive::OPSYS_UNIX, 0040000 << 16 ) )
 		);
-		self::assertNull( $validator->inspect_prospective( $this->prospective_policy( $mismatch, 'plugin' ), $mismatch ) );
+		$this->assert_rejected( $validator->inspect_prospective( $this->prospective_policy( $mismatch, 'plugin' ), $mismatch ), 'archive_path_unsafe' );
 		self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $mismatch, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $mismatch )->code() );
 	}
 

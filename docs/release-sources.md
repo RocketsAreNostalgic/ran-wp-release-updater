@@ -37,7 +37,7 @@ add_action('init', static function () use ($source): void {
 
 The source adds no native update hooks, does not schedule retries, and never installs the acquired archive.
 
-The optional `releases()` arguments are the same release-read policies used by native targets, without an update policy: `channel` accepts `stable` or `prerelease` and defaults to `stable`; `credentials` is an optional request-local callable returning a token string or `null` and defaults to anonymous access; `maximum_artifact_bytes` is a positive compressed-ZIP byte ceiling and defaults to 52,428,800 bytes.
+The optional `releases()` arguments are the same release-read policies used by native targets, without an update policy (plus `rejection_reasons`, described below): `channel` accepts `stable` or `prerelease` and defaults to `stable`; `credentials` is an optional request-local callable returning a token string or `null` and defaults to anonymous access; `maximum_artifact_bytes` is a positive compressed-ZIP byte ceiling and defaults to 52,428,800 bytes.
 
 Release-source operations require WordPress's `direct` filesystem implementation. On a normal request where `FS_METHOD` is not explicitly configured, initialize the WordPress Filesystem API before the operation as shown above and continue only when `$GLOBALS['wp_filesystem']` is a `WP_Filesystem_Direct`. If the host resolves to FTP/SSH or initialization fails, do not force `FS_METHOD` from plugin code; the source returns `filesystem_unsupported` and does not prompt for filesystem credentials or perform provider work. A site that explicitly configures `FS_METHOD` as `direct` already satisfies the source's direct-method gate.
 
@@ -54,6 +54,39 @@ cleanup_status
 ```
 
 A failure has `value: null`. Only rate-limited results carry a non-null retry delay. Cleanup status describes custody of any archive allocated by that operation rather than the application's own files.
+
+### Rejection reasons (opt-in)
+
+By default a rejected release is just `package_incompatible`. A source created with `rejection_reasons: true` (the last optional `releases()` argument) adds a sixth envelope key, `rejection`, to every result of that source. Sources created without it return exactly the five fields above, so a consumer that has not opted in never sees the key and a consumer that has can fall back to `package_incompatible` when `rejection` is `null`.
+
+`rejection` is `null` except on a failed `inspect()` or `acquire()` with code `package_incompatible` for a known cause, where it is `['reason' => string, 'detail' => string|null]`. `detail` is one short printable-ASCII string (at most 120 characters) such as `found 1.2.0, expected 1.2.3`; it never carries digests, asset URLs or credentials. Treat an unknown `reason` as the generic code: new reasons may be added, existing names are stable.
+
+| Reason | Detail |
+| --- | --- |
+| `release_draft` | none |
+| `tag_not_version` | the release tag |
+| `tag_mismatch` | `found <tag>, expected <tag>` |
+| `prerelease_not_allowed` | the release tag (Stable channel) |
+| `no_package_zip` | none |
+| `multiple_package_zips` | `<n> ZIP assets` |
+| `asset_not_uploaded` | `state <state>` |
+| `asset_metadata_invalid` | none |
+| `asset_too_large` | `<bytes> bytes, limit <bytes>` |
+| `digest_missing` | none (no GitHub `sha256:` digest) |
+| `download_size_mismatch` | `downloaded <n> bytes, expected <n>` |
+| `download_digest_mismatch` | none |
+| `archive_unreadable`, `archive_entry_limit`, `archive_size_limit`, `archive_path_unsafe`, `archive_path_duplicate` | none |
+| `archive_root_not_single` | none (more than one top-level folder, or a loose top-level file; the folder name is not compared with an expected slug at inspection) |
+| `no_package_header` | none (no plugin main file or `style.css` header) |
+| `header_plugin_ambiguous` | none (more than one plugin main file) |
+| `header_name_missing`, `header_version_missing`, `header_update_uri_missing` | none |
+| `header_invalid`, `header_duplicate` | the header key, for example `Version` |
+| `header_version_mismatch` | `found <header>, expected <tag version>` |
+| `header_update_uri_mismatch` | the header's `Update URI` |
+| `header_requires_php_missing`, `header_requires_wp_missing` | none |
+| `header_requires_php_unmet`, `header_requires_wp_unmet` | the header value |
+
+An older bundled copy does not know the option: asking an older selected runtime for it fails with `invalid_configuration`, so create the source with the option and, on that code, create it again without it.
 
 ## Operations
 

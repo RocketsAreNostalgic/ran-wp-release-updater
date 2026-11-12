@@ -155,6 +155,77 @@ final class ReleaseSourceSchemaTest extends TestCase {
 		);
 	}
 
+	public function test_undeclared_source_treats_a_rejection_key_as_malformed(): void {
+		$result = $this->projection( 'inspect', $this->rejected( 'no_package_zip', null ) );
+		self::assertSame( 'runtime_unavailable', $result['code'] );
+		self::assertSame( array( 'ok', 'code', 'value', 'retry_after', 'cleanup_status' ), array_keys( $result ) );
+	}
+
+	public function test_declared_source_passes_a_valid_rejection_through(): void {
+		foreach ( array(
+			array( 'multiple_package_zips', '2 ZIP assets' ),
+			array( 'a_reason_added_later', null ),
+		) as [$reason, $detail] ) {
+			$result = $this->projection( 'inspect', $this->rejected( $reason, $detail ), true );
+			self::assertSame( 'package_incompatible', $result['code'], $reason );
+			self::assertSame(
+				array(
+					'reason' => $reason,
+					'detail' => $detail,
+				),
+				$result['rejection']
+			);
+		}
+	}
+
+	public function test_declared_source_rejects_malformed_rejections(): void {
+		$base = $this->rejected( 'no_package_zip', null );
+		foreach ( array(
+			'missing key'    => array_diff_key( $base, array( 'rejection' => 1 ) ),
+			'bad reason'     => $this->rejected( 'Not A Reason', null ),
+			'newline detail' => $this->rejected( 'header_invalid', "a\nb" ),
+			'long detail'    => $this->rejected( 'header_invalid', str_repeat( 'a', 121 ) ),
+			'empty detail'   => $this->rejected( 'header_invalid', '' ),
+			'extra field'    => array_replace(
+				$base,
+				array(
+					'rejection' => array(
+						'reason' => 'x',
+						'detail' => null,
+						'url'    => 'https://example.test',
+					),
+				)
+			),
+			'wrong code'     => array_replace( $base, array( 'code' => 'operation_failed' ) ),
+			'on success'     => array_replace(
+				$this->envelope( 'release_inspected', array(), 'complete' ),
+				array(
+					'rejection' => array(
+						'reason' => 'no_package_zip',
+						'detail' => null,
+					),
+				)
+			),
+		) as $name => $malformed ) {
+			self::assertSame( 'runtime_unavailable', $this->projection( 'inspect', $malformed, true )['code'], $name );
+		}
+	}
+
+	/** @return array<string,mixed> */
+	private function rejected( string $reason, ?string $detail ): array {
+		return array(
+			'ok'             => false,
+			'code'           => 'package_incompatible',
+			'value'          => null,
+			'retry_after'    => null,
+			'cleanup_status' => 'complete',
+			'rejection'      => array(
+				'reason' => $reason,
+				'detail' => $detail,
+			),
+		);
+	}
+
 	/** @return array<string,mixed> */
 	private function envelope( string $code, mixed $value, string $cleanup ): array {
 		return array(
@@ -170,7 +241,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 	 * @return array<string,mixed>
 	 * @param array<string,mixed> $result
 	 */
-	private function projection( string $operation, array $result ): array {
+	private function projection( string $operation, array $result, bool $rejection_reasons = false ): array {
 		$root = dirname( __DIR__, 2 );
 		if ( ! is_dir( $root . '/.workspaces/p0.3/php-tmp' ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
@@ -183,7 +254,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			. '$operation=' . var_export( $operation, true ) . ';$result=' . var_export( $result, true ) . ';$registrar=require ' . var_export( $root . '/bootstrap.php', true ) . ';'
 			. '$broker=$GLOBALS["ran_wp_release_updater_v1_broker"];$activation=$broker->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>7,"wordpress_version"=>"6.8.0"]);'
-			. '$source=$registrar->releases("github","plugin","acme/example","99");$property=new ReflectionProperty($source,"selected");'
+			. '$source=$registrar->releases("github","plugin","acme/example","99"' . ( $rejection_reasons ? ',"stable",null,52428800,true' : '' ) . ');$property=new ReflectionProperty($source,"selected");'
 			. '$property->setValue($source,new class($result){public function __construct(private array $result){} public function list(array $c=[]):array{return $this->result;} public function inspect(string $i,string $t):array{return $this->result;} public function acquire(string $i,string $t,string $f):array{return $this->result;}});'
 			. '$projected=match($operation){"list"=>$source->list(),"acquire"=>$source->acquire("7","v1.2.3","v2:".str_repeat("a",64)),default=>$source->inspect("7","v1.2.3")};echo json_encode(["activation"=>$activation,"projected"=>$projected]);';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.

@@ -394,7 +394,7 @@ return new class( $ran_wp_release_updater_broker ) {
 		return $this->target( 'theme', $stylesheet_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
 	}
 
-	public function releases( string $provider, string $package_type, string $repository, string $repository_id, string $channel = 'stable', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800 ): object {
+	public function releases( string $provider, string $package_type, string $repository, string $repository_id, string $channel = 'stable', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $rejection_reasons = false ): object {
 		$declaration = array(
 			'provider_code'          => $provider,
 			'target_type'            => $package_type,
@@ -405,6 +405,9 @@ return new class( $ran_wp_release_updater_broker ) {
 			'maximum_artifact_bytes' => $maximum_artifact_bytes,
 			'operation_guard'        => $this->operation_guard,
 		);
+		if ( $rejection_reasons ) {
+			$declaration['rejection_reasons'] = true;
+		}
 		return new class( $this->broker, $declaration ) {
 			private ?object $selected = null;
 			private bool $terminal    = false;
@@ -483,7 +486,7 @@ return new class( $ran_wp_release_updater_broker ) {
 					return $this->failure( 'runtime_unavailable' );
 				}
 				try {
-					$valid = $this->valid_result( $method, $result ) && ! $this->terminal_now();
+					$valid = $this->valid_envelope( $method, $result ) && ! $this->terminal_now();
 				} catch ( Throwable ) {
 					$valid = false;
 				}
@@ -521,6 +524,25 @@ return new class( $ran_wp_release_updater_broker ) {
 					$this->terminal = true;
 				}
 				return $this->terminal;
+			}
+
+			/** Accepts the opt-in `rejection` key only on a source declared with rejection reasons. */
+			private function valid_envelope( string $operation, mixed $result ): bool {
+				if ( true !== ( $this->declaration['rejection_reasons'] ?? false ) ) {
+					return $this->valid_result( $operation, $result );
+				}
+				if ( ! is_array( $result ) || ! array_key_exists( 'rejection', $result ) ) {
+					return false;
+				}
+				$rejection = $result['rejection'];
+				unset( $result['rejection'] );
+				if ( null !== $rejection && ( false !== ( $result['ok'] ?? null ) || 'package_incompatible' !== ( $result['code'] ?? null )
+					|| ! $this->keys( $rejection, array( 'reason', 'detail' ) )
+					|| ! $this->matches( $rejection['reason'], '/\A[a-z][a-z0-9_]{0,63}\z/D' )
+					|| ( null !== $rejection['detail'] && ! $this->matches( $rejection['detail'], '/\A[\x20-\x7E]{1,120}\z/D' ) ) ) ) {
+					return false;
+				}
+				return $this->valid_result( $operation, $result );
 			}
 
 			private function valid_result( string $operation, mixed $result ): bool {
@@ -759,13 +781,14 @@ return new class( $ran_wp_release_updater_broker ) {
 
 			/** @return array{ok:false,code:string,value:null,retry_after:null,cleanup_status:string} */
 			private function failure( string $code, string $cleanup = 'not_applicable' ): array {
-				return array(
+				$result = array(
 					'ok'             => false,
 					'code'           => $code,
 					'value'          => null,
 					'retry_after'    => null,
 					'cleanup_status' => $cleanup,
 				);
+				return true === ( $this->declaration['rejection_reasons'] ?? false ) ? $result + array( 'rejection' => null ) : $result;
 			}
 		};
 	}
