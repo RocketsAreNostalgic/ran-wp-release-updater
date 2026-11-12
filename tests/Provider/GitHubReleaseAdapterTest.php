@@ -1103,8 +1103,170 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 
 			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 
-			self::assertSame( array( '2.0.0', '1.1.0', '1.1.0' ), array_column( $result['candidates'], 'version' ) );
-			self::assertSame( array( '6', '10', '2' ), array_column( $result['candidates'], 'release_identity' ) );
+			self::assertSame( array( '2.0.0', '1.2.0', '1.1.0', '1.1.0' ), array_column( $result['candidates'], 'version' ) );
+			self::assertSame( array( '6', '3', '10', '2' ), array_column( $result['candidates'], 'release_identity' ) );
+		}
+
+		public function test_listing_accepts_two_part_stable_tags_and_prefers_the_complete_tag_on_a_tie(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = array(
+				$this->response(
+					200,
+					array(
+						$this->release( 1, 'v1.2' ),
+						$this->release( 2, 'v1.2.0' ),
+						$this->release( 3, '1.3' ),
+						$this->release( 4, 'v1.2-beta.1' ),
+						$this->release( 5, 'v01.2' ),
+						$this->release( 6, 'v1.2.3.4' ),
+						$this->release( 7, 'release-1.2' ),
+						$this->release( 8, 'v1.2.3-beta.1' ),
+						$this->release( 9, 'v1' ),
+					)
+				),
+			);
+
+			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+
+			self::assertSame( array( '1.3.0', '1.2.0', '1.2.0' ), array_column( $result['candidates'], 'version' ) );
+			self::assertSame( array( '3', '2', '1' ), array_column( $result['candidates'], 'release_identity' ) );
+			self::assertSame( array( '1.3', 'v1.2.0', 'v1.2' ), array_column( $result['candidates'], 'tag' ) );
+		}
+
+		public function test_two_part_tags_that_normalise_past_the_version_limit_are_filtered(): void {
+			$fits    = 'v1' . str_repeat( '0', 95 ) . '.1';
+			$too_big = 'v1' . str_repeat( '0', 96 ) . '.1';
+			$limit   = 'v1' . str_repeat( '0', 97 ) . '.1';
+			self::assertSame( 98, strlen( substr( $fits, 1 ) ) );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = array(
+				$this->response(
+					200,
+					array(
+						$this->release( 1, $fits ),
+						$this->release( 2, $too_big ),
+						$this->release( 3, $limit ),
+						$this->release( 4, 'v1.0' ),
+					)
+				),
+			);
+
+			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+
+			self::assertSame( array( '1', '4' ), array_column( $result['candidates'], 'release_identity' ) );
+
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( $this->release( 9, $too_big ) ) ) );
+			$single                          = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+			self::assertSame( array(), $single['candidates'] );
+			foreach ( $result['candidates'] as $candidate ) {
+				self::assertLessThanOrEqual( 100, strlen( $candidate['version'] ) );
+			}
+		}
+
+		/** @return array<string,array{string,?string}> */
+		public static function hostile_tag_provider(): array {
+			$sha256 = hash( 'sha256', 'a' );
+			return array(
+				'credential url'   => array( 'https://user:pw@github.com/o/r/ghp_' . str_repeat( 'a', 36 ) . '?access=1', null ),
+				'filesystem path'  => array( '/Users/me/Local Sites/x/wp-content', null ),
+				'markup'           => array( '<img src=x onerror=alert(1)>', null ),
+				'base64 sha256'    => array( 'ypeBEsobvcr6wjGzmiPcTaeG7/gUfE5yuYB3ha/uSLs=', null ),
+				'dashed hex'       => array( implode( '-', str_split( $sha256, 8 ) ), null ),
+				'sha1 prefix'      => array( 'sha1:da39a3ee', null ),
+				'sha512 prefix'    => array( 'sha512:cf83e135', null ),
+				'39 hex'           => array( substr( $sha256, 0, 39 ), null ),
+				'long with digest' => array( str_repeat( 'x ', 70 ) . $sha256, null ),
+				'ghp bare'         => array( 'ghp_', null ),
+				'github pat bare'  => array( 'github_pat_1', null ),
+				'jwt start'        => array( 'eyJhbGciOi', null ),
+				'aws key id'       => array( 'AKIA1', null ),
+				'bearer'           => array( 'Bearer abc', null ),
+				'dotted hex'       => array( implode( '.', str_split( $sha256, 8 ) ), null ),
+				'unicode hex'      => array( implode( "\u{200B}", str_split( $sha256, 8 ) ), null ),
+				'assigned path'    => array( 'x=/etc/passwd', null ),
+				'file url'         => array( 'file:///etc/passwd', null ),
+				'relative path'    => array( 'var/www/html/wp-config.php', null ),
+				'prose password'   => array( 'the password is hunter2', null ),
+				'pwd prose'        => array( 'pwd hunter2', null ),
+				'ordinary word'    => array( 'tokenizer-1', 'tokenizer-1' ),
+			);
+		}
+
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'hostile_tag_provider' )]
+		public function test_public_rejection_detail_never_echoes_hostile_publisher_text( string $tag, ?string $detail ): void {
+			$source = $this->prospective_source( null, 'plugin', true );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 200, $this->release( 7, $tag ) ) );
+			$result                          = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertSame( 'package_incompatible', $result['code'] );
+			self::assertSame(
+				array(
+					'reason' => 'tag_not_version',
+					'detail' => $detail,
+				),
+				$result['rejection']
+			);
+		}
+
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		public function test_public_rejection_detail_drops_a_hostile_update_uri(): void {
+			$header  = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://user:pw@github.com/owner/repository?token=abc\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
+			$source  = $this->prospective_source( null, 'plugin', true );
+			$archive = $this->prospective_archive( $header );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			$result                          = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertSame(
+				array(
+					'reason' => 'header_update_uri_mismatch',
+					'detail' => null,
+				),
+				$result['rejection']
+			);
+		}
+
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		public function test_public_acquire_carries_the_rejection_reason(): void {
+			$header  = "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
+			$initial = $this->prospective_archive( $header );
+			$hostile = $this->prospective_archive( $header, array( 'repository/other.php' => str_replace( 'Repository', 'Other', $header ) ) );
+			$source  = $this->prospective_source( null, 'plugin', true );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $initial );
+			$inspection                      = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertTrue( $inspection['ok'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $hostile );
+			$rejected                        = $this->prospective_operation( $source, 'acquire', array( '7', 'v1.2.3', $inspection['value']['fingerprint'] ) );
+			self::assertSame( 'package_incompatible', $rejected['code'] );
+			self::assertSame( 'complete', $rejected['cleanup_status'] );
+			self::assertSame(
+				array(
+					'reason' => 'header_plugin_ambiguous',
+					'detail' => null,
+				),
+				$rejected['rejection']
+			);
+			$this->assert_all_temporary_paths_absent();
+		}
+
+		public function test_two_part_tag_is_inspected_with_a_matching_two_part_or_complete_header(): void {
+			foreach ( array( '1.2', '1.2.0' ) as $header_version ) {
+				$archive = $this->prospective_archive(
+					"<?php\n/*\nPlugin Name: Repository\nVersion: " . $header_version . "\n"
+					. "Update URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/"
+				);
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+				$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2', $archive );
+				$facts                           = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2' )->to_array();
+				self::assertSame( 'v1.2', $facts['tag'], $header_version );
+				self::assertSame( '1.2.0', $facts['version'], $header_version );
+			}
 		}
 
 		public function test_prerelease_listing_keeps_semver_ordering_within_its_channel(): void {
@@ -2478,6 +2640,239 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertTrue( unlink( $path ) );
 		}
 
+		/** @return array<string,array{string}> */
+		public static function rejection_reason_provider(): array {
+			$cases = array();
+			foreach ( array_keys( \RAN\WPReleaseUpdater\V1\Contract\ReleaseRejection::REASONS ) as $reason ) {
+				$cases[ $reason ] = array( $reason );
+			}
+			return $cases;
+		}
+
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'rejection_reason_provider' )]
+		public function test_public_inspection_reports_each_exact_rejection_reason( string $name ): void {
+			$case   = $this->rejection_case( $name );
+			$source = $this->prospective_source( null, $case['type'], true );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = $case['responses'];
+			$result                          = $this->prospective_operation( $source, 'inspect', array( '7', $case['expected'] ) );
+			self::assertFalse( $result['ok'] );
+			self::assertSame( 'package_incompatible', $result['code'] );
+			self::assertNull( $result['value'] );
+			self::assertSame( array( 'ok', 'code', 'value', 'retry_after', 'cleanup_status', 'rejection' ), array_keys( $result ) );
+			self::assertSame(
+				array(
+					'reason' => $name,
+					'detail' => $case['detail'],
+				),
+				$result['rejection']
+			);
+			self::assertSame( $case['downloaded'] ? 'complete' : 'not_applicable', $result['cleanup_status'] );
+			if ( $case['downloaded'] ) {
+				$this->assert_all_temporary_paths_absent();
+			}
+		}
+
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		public function test_rejection_key_is_absent_unless_the_source_opts_in(): void {
+			$case   = $this->rejection_case( 'multiple_package_zips' );
+			$source = $this->prospective_source();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = $case['responses'];
+			$result                          = $this->prospective_operation( $source, 'inspect', array( '7', $case['expected'] ) );
+			self::assertSame( array( 'ok', 'code', 'value', 'retry_after', 'cleanup_status' ), array_keys( $result ) );
+			self::assertSame( 'package_incompatible', $result['code'] );
+		}
+
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		public function test_opted_in_success_and_unrelated_failure_carry_a_null_rejection(): void {
+			$archive = $this->prospective_archive( $this->rejection_header() );
+			$source  = $this->prospective_source( null, 'plugin', true );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
+			$ok                              = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertTrue( $ok['ok'] );
+			self::assertNull( $ok['rejection'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 404, null ) );
+			$missing                         = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertFalse( $missing['ok'] );
+			self::assertNotSame( 'package_incompatible', $missing['code'] );
+			self::assertNull( $missing['rejection'] );
+		}
+
+		private function rejection_header(): string {
+			return "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
+				. "Update URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
+		}
+
+		/**
+		 * @return array{type:string,expected:string,detail:?string,downloaded:bool,responses:list<array<string,mixed>>}
+		 */
+		private function rejection_case( string $name ): array {
+			$type       = 'plugin';
+			$tag        = 'v1.2.3';
+			$expected   = 'v1.2.3';
+			$detail     = null;
+			$downloaded = true;
+			$header     = $this->rejection_header();
+			$extra      = array();
+			$raw        = null;
+			$release_at = static fn ( array $release ): array => $release;
+			switch ( $name ) {
+				case 'release_draft':
+					$downloaded = false;
+					$release_at = static fn ( array $r ): array => array_replace( $r, array( 'draft' => true ) );
+					break;
+				case 'tag_not_version':
+					$downloaded = false;
+					$tag        = 'nightly';
+					$detail     = 'nightly';
+					break;
+				case 'tag_mismatch':
+					$downloaded = false;
+					$tag        = 'v1.2.4';
+					$detail     = 'found v1.2.4, expected v1.2.3';
+					break;
+				case 'prerelease_not_allowed':
+					$downloaded = false;
+					$tag        = 'v1.2.3-beta.1';
+					$expected   = 'v1.2.3-beta.1';
+					$detail     = 'v1.2.3-beta.1';
+					break;
+				case 'no_package_zip':
+					$downloaded = false;
+					$release_at = static fn ( array $r ): array => array_replace( $r, array( 'assets' => array() ) );
+					break;
+				case 'multiple_package_zips':
+					$downloaded = false;
+					$detail     = '2 ZIP assets';
+					$release_at = static fn ( array $r ): array => array_replace( $r, array( 'assets' => array( $r['assets'][0], array_replace( $r['assets'][0], array( 'name' => 'other.zip' ) ) ) ) );
+					break;
+				case 'asset_not_uploaded':
+					$downloaded = false;
+					$detail     = 'state starter';
+					$release_at = static fn ( array $r ): array => array_replace( $r, array( 'assets' => array( array_replace( $r['assets'][0], array( 'state' => 'starter' ) ) ) ) );
+					break;
+				case 'asset_metadata_invalid':
+					$downloaded = false;
+					$release_at = static function ( array $r ): array {
+						unset( $r['assets'][0]['id'] );
+						return $r;
+					};
+					break;
+				case 'asset_too_large':
+					$downloaded = false;
+					$detail     = '52428801 bytes, limit 52428800';
+					$release_at = static fn ( array $r ): array => array_replace( $r, array( 'assets' => array( array_replace( $r['assets'][0], array( 'size' => 52428801 ) ) ) ) );
+					break;
+				case 'digest_missing':
+					$downloaded = false;
+					$release_at = static function ( array $r ): array {
+						unset( $r['assets'][0]['digest'] );
+						return $r;
+					};
+					break;
+				case 'download_size_mismatch':
+					$detail     = '{size}';
+					$release_at = static fn ( array $r ): array => array_replace( $r, array( 'assets' => array( array_replace( $r['assets'][0], array( 'size' => $r['assets'][0]['size'] + 1 ) ) ) ) );
+					break;
+				case 'download_digest_mismatch':
+					$release_at = static fn ( array $r ): array => array_replace( $r, array( 'assets' => array( array_replace( $r['assets'][0], array( 'digest' => 'sha256:' . hash( 'sha256', 'other' ) ) ) ) ) );
+					break;
+				case 'archive_unreadable':
+					$raw = 'this is not a ZIP archive';
+					break;
+				case 'archive_entry_limit':
+					$raw = "PK\x05\x06" . str_repeat( "\0", 18 );
+					break;
+				case 'archive_path_unsafe':
+					$extra = array( 'repository/../evil.php' => '<?php' );
+					break;
+				case 'archive_path_duplicate':
+					$extra = array(
+						'repository/Same.php' => '<?php',
+						'repository/same.php' => '<?php',
+					);
+					break;
+				case 'archive_root_not_single':
+					$extra = array( 'other/readme.txt' => 'x' );
+					break;
+				case 'archive_size_limit':
+					$extra = array( 'repository/zeros.bin' => str_repeat( "\0", 300000 ) );
+					break;
+				case 'no_package_header':
+					$header = "<?php\n// No plugin header here.";
+					break;
+				case 'header_name_missing':
+					$type   = 'theme';
+					$header = "/*\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\n*/";
+					break;
+				case 'header_version_missing':
+					$header = str_replace( "Version: 1.2.3\n", '', $header );
+					break;
+				case 'header_update_uri_missing':
+					$header = str_replace( "Update URI: https://github.com/owner/repository\n", '', $header );
+					break;
+				case 'header_invalid':
+					$header = str_replace( 'Version: 1.2.3', 'Version: abc', $header );
+					$detail = 'Version';
+					break;
+				case 'header_duplicate':
+					$header = str_replace( "Version: 1.2.3\n", "Plugin Name: Again\nVersion: 1.2.3\n", $header );
+					$detail = 'Name';
+					break;
+				case 'header_plugin_ambiguous':
+					$extra = array( 'repository/other.php' => str_replace( 'Repository', 'Other', $header ) );
+					break;
+				case 'header_version_mismatch':
+					$header = str_replace( 'Version: 1.2.3', 'Version: 1.2.0', $header );
+					$detail = 'found 1.2.0, expected 1.2.3';
+					break;
+				case 'header_update_uri_mismatch':
+					$header = str_replace( 'owner/repository', 'owner/other', $header );
+					$detail = 'https://github.com/owner/other';
+					break;
+				case 'header_requires_php_unmet':
+					$header = str_replace( 'Requires PHP: 8.2', 'Requires PHP: 9.0', $header );
+					$detail = '9.0';
+					break;
+				case 'header_requires_wp_unmet':
+					$header = str_replace( 'Requires at least: 6.8', 'Requires at least: 7.9', $header );
+					$detail = '7.9';
+					break;
+				default:
+					// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Test fixture failure text is not HTML output.
+					throw new RuntimeException( 'Unknown rejection fixture ' . $name );
+			}
+			$archive                        = $raw ?? ( 'theme' === $type ? $this->prospective_theme_archive( $header ) : $this->prospective_archive( $header, $extra ) );
+			$release                        = $this->release( 7, $tag );
+			$release['assets'][0]['digest'] = 'sha256:' . hash( 'sha256', $archive );
+			$release['assets'][0]['size']   = strlen( $archive );
+			$release                        = $release_at( $release );
+			if ( '{size}' === $detail ) {
+				$detail = 'downloaded ' . strlen( $archive ) . ' bytes, expected ' . ( strlen( $archive ) + 1 );
+			}
+			return array(
+				'type'       => $type,
+				'expected'   => $expected,
+				'detail'     => $detail,
+				'downloaded' => $downloaded,
+				'responses'  => array(
+					$this->response( 200, array( 'id' => 99 ) ),
+					$this->response( 200, $release ),
+					$this->raw_response( 200, str_repeat( 'a', 40 ) ),
+					$this->response( 200, array( 'id' => 99 ) ),
+					$this->response( 200, null, array(), $archive ),
+					$this->response( 200, array( 'id' => 99 ) ),
+				),
+			);
+		}
+
 		private function binding(
 			string $channel = 'stable',
 			string $target_type = 'plugin',
@@ -2512,11 +2907,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			return new GitHubReleaseService( $this->service_configuration( $binding ), $credentials, liveness_guard: null );
 		}
 
-		private function prospective_source( ?callable $credentials = null, string $package_type = 'plugin' ): object {
+		private function prospective_source( ?callable $credentials = null, string $package_type = 'plugin', bool $rejection_reasons = false ): object {
 			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the WordPress version consumed by the isolated public runtime fixture.
 			$GLOBALS['wp_version'] = '6.8.0';
 			$registrar             = require dirname( __DIR__, 2 ) . '/bootstrap.php';
-			$source                = $registrar->releases( 'github', $package_type, 'owner/repository', '99', 'stable', $credentials );
+			$source                = $registrar->releases( 'github', $package_type, 'owner/repository', '99', 'stable', $credentials, 52428800, $rejection_reasons );
 			$broker                = $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null;
 			self::assertInstanceOf( \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker::class, $broker );
 			if ( 'active' !== $broker->diagnostics()['state'] ) {

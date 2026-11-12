@@ -637,3 +637,26 @@ incompatible broker with verified package provenance; a new broker also latches
 loss of its bootstrap provenance, including removal by a protocol-5 bootstrap.
 Unverified foreign brokers remain untouched. Both physical load orders must be
 qualified with the final tuple. No merge/release or manual acceptance is implied.
+
+
+## Prospective rejection reasons (#155)
+
+Rejected prospective inspections can name a closed reason and one bounded detail
+(`Contract\ReleaseRejection`) in an opt-in sixth `rejection` envelope key. The
+runtime protocol stays 7. A protocol-7 bootstrap validates the five-key envelope
+exactly and latches the runtime unavailable on any other shape, and the broker
+validates the source handle's public methods exactly, so neither an extra key nor
+an extra method can be added unconditionally without breaking mixed copies. The
+key is therefore declared per source (`releases(..., rejection_reasons: true)`,
+an optional trailing declaration key) and only a bootstrap and runtime that both
+know it exchange it; every other source keeps the five-key envelope and the
+generic `package_incompatible` code. The bootstrap validates only the shape of a
+declared `rejection` (identifier-shaped reason, printable-ASCII detail up to 120
+characters), so reasons may be added without a protocol change, while the closed
+list itself is enforced by the runtime. `package_revision` changes with the bytes.
+
+Every PHP file under `src/` that the selected runtime needs must be listed in
+the `runtime.php` class map (the broker-family files `bootstrap.php` loads by
+path are the only exceptions). A bundled deployment has no autoloader for
+`src/`, so an unlisted class fails at its first use and bypasses the selected-
+root ownership check; `RuntimeClassMapTest` enforces the complete list.

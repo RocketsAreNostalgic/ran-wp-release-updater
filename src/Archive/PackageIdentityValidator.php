@@ -31,7 +31,7 @@ final class PackageIdentityValidator {
 
 	/**
 	 * @param array<string,mixed> $policy
-	 * @return array{package_root:string,main_file:string}|null
+	 * @return array{package_root:string,main_file:string}|array{reason:string,detail:?string}|null A package, a closed rejection reason, or null for a failure with no safe reason.
 	 */
 	public function inspect_prospective( array $policy, string $archive_path ): ?array {
 		if ( count( $policy ) !== count( self::PROSPECTIVE_POLICY_KEYS ) ) {
@@ -69,7 +69,7 @@ final class PackageIdentityValidator {
 		}
 		$zip = new \ZipArchive();
 		if ( true !== $zip->open( $archive_path ) ) {
-			return null;
+			return self::rejected( 'archive_unreadable' );
 		}
 		try {
 			if ( null !== $this->after_open ) {
@@ -81,9 +81,10 @@ final class PackageIdentityValidator {
 			$scan = ArchiveScanner::scan( $zip );
 			$root = $scan->root();
 			if ( ! $scan->is_valid() || ! is_string( $root ) ) {
-				return null;
+				return self::rejected( 'archive_root_mismatch' === $scan->failure_code() ? 'archive_root_not_single' : (string) $scan->failure_code() );
 			}
 			$candidate = null;
+			$pending   = null;
 			foreach ( $scan->entries() as $entry ) {
 				$parts            = explode( '/', $entry['path'] );
 				$is_theme_header  = $root . '/style.css' === $entry['path'];
@@ -104,37 +105,77 @@ final class PackageIdentityValidator {
 				$parsed   = is_string( $contents ) ? self::parse_header( $contents, $policy['target_type'] ) : array();
 				$metadata = isset( $parsed['headers']['Name'] ) ? $parsed['headers']['Name'] : null;
 				if ( 'plugin' === $policy['target_type'] && null === $metadata ) {
+					if ( is_string( $contents ) && 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*Plugin Name:/mi', str_replace( array( "\r\n", "\r" ), "\n", substr( $contents, 0, self::MAX_HEADER_BYTES ) ) ) ) {
+						$pending ??= self::header_rejection( $parsed );
+					}
 					continue;
 				}
-				if ( null === $contents || null === $metadata ) {
+				if ( null === $contents ) {
 					return null;
 				}
-				$uri       = $parsed['headers']['UpdateURI'] ?? null;
-				$version   = $parsed['headers']['Version'] ?? null;
-				$php       = $parsed['headers']['RequiresPHP'] ?? null;
-				$wordpress = $parsed['headers']['RequiresWP'] ?? null;
-				if (
-					null === $uri
-					|| null === $version
-					|| CanonicalUpdateUri::canonicalize( $uri ) !== $policy['canonical_update_uri']
-					|| 0 !== ReleaseVersion::compare( $version, $policy['version'] )
-					|| ! is_string( $php )
-					|| ! self::meets_requirement( $policy['php_runtime_version'], $php )
-					|| ! is_string( $wordpress )
-					|| ! self::meets_requirement( $policy['wordpress_runtime_version'], $wordpress )
-					|| null !== $candidate
-				) {
-					return null;
+				if ( null === $metadata ) {
+					$header_failure = self::header_rejection( $parsed );
+					return self::rejected( $header_failure[0], $header_failure[1] );
+				}
+				$uri       = $parsed['headers']['UpdateURI'] ?? '';
+				$version   = $parsed['headers']['Version'] ?? '';
+				$php       = true === ( $parsed['present']['RequiresPHP'] ?? false ) ? $parsed['headers']['RequiresPHP'] : null;
+				$wordpress = true === ( $parsed['present']['RequiresWP'] ?? false ) ? $parsed['headers']['RequiresWP'] : null;
+				$failed    = match ( true ) {
+					CanonicalUpdateUri::canonicalize( $uri ) !== $policy['canonical_update_uri'] => array( 'header_update_uri_mismatch', self::uri_detail( $uri, $policy['canonical_update_uri'] ) ),
+					0 !== ReleaseVersion::compare( $version, $policy['version'] ) => array( 'header_version_mismatch', 'found ' . $version . ', expected ' . $policy['version'] ),
+					null !== $php && ! self::meets_requirement( $policy['php_runtime_version'], $php ) => array( 'header_requires_php_unmet', $php ),
+					null !== $wordpress && ! self::meets_requirement( $policy['wordpress_runtime_version'], $wordpress ) => array( 'header_requires_wp_unmet', $wordpress ),
+					null !== $candidate => array( 'header_plugin_ambiguous', null ),
+					default => null,
+				};
+				if ( null !== $failed ) {
+					return self::rejected( $failed[0], $failed[1] );
 				}
 				$candidate = array(
 					'package_root' => $root,
 					'main_file'    => $header,
 				);
 			}
+			if ( null === $candidate ) {
+				return null === $pending ? self::rejected( 'no_package_header' ) : self::rejected( $pending[0], $pending[1] );
+			}
 			return $this->matches_archive_identity( $archive_path, $facts, $identity ) ? $candidate : null;
 		} finally {
 			$zip->close();
 		}
+	}
+
+	/** Only a canonical, credential-free URI on the expected host may be echoed. */
+	private static function uri_detail( string $uri, string $expected ): ?string {
+		$canonical = CanonicalUpdateUri::canonicalize( $uri );
+		$host      = static fn ( string $value ): string => (string) strtok( substr( $value, (int) strpos( $value, '//' ) + 2 ), '/' );
+		return null !== $canonical && $host( $canonical ) === $host( $expected ) ? $canonical : null;
+	}
+
+	/** @return array{reason:string,detail:?string} */
+	private static function rejected( string $reason, ?string $detail = null ): array {
+		return array(
+			'reason' => $reason,
+			'detail' => $detail,
+		);
+	}
+
+	/**
+	 * @param array{code?:string,header?:string} $parsed
+	 * @return array{string,?string}
+	 */
+	private static function header_rejection( array $parsed ): array {
+		$header = $parsed['header'] ?? 'Name';
+		return match ( $parsed['code'] ?? '' ) {
+			'installed_header_ambiguous' => array( 'header_duplicate', $header ),
+			'installed_header_invalid' => array( 'header_invalid', $header ),
+			default => match ( $header ) {
+				'Version' => array( 'header_version_missing', null ),
+				'UpdateURI' => array( 'header_update_uri_missing', null ),
+				default => array( 'header_name_missing', null ),
+			},
+		};
 	}
 
 	/**

@@ -15,6 +15,7 @@ $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\CanonicalUpdateUri' => 'src/Contract/CanonicalUpdateUri.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\IdentityDescriptor' => 'src/Contract/IdentityDescriptor.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseVersion'  => 'src/Contract/ReleaseVersion.php',
+	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseRejection' => 'src/Contract/ReleaseRejection.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\BindingRecord'   => 'src/Contract/BindingRecord.php',
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\ValidatedPackage' => 'src/Archive/ValidatedPackage.php',
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact' => 'src/Archive/TemporaryArtifact.php',
@@ -90,7 +91,7 @@ $ran_wp_release_updater_provider_catalog = array(
 		},
 		'release' => static function ( array $d, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
 			$service = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::from_release_declaration( $d, $state );
-			return new \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource( $service, $state );
+			return new \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource( $service, $state, array_key_exists( 'rejection_reasons', $d ) && true === $d['rejection_reasons'] );
 		},
 	),
 );

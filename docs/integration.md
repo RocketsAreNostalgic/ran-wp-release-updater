@@ -141,7 +141,7 @@ Do not include credentials, query strings, fragments, release paths, or a traili
 A usable release must satisfy all of the following:
 
 - it is a non-draft GitHub Release;
-- its tag uses the supported three-part SemVer subset in either `MAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH` form, optionally with the same prerelease suffix subset such as `1.2.3-beta.1` or `v1.2.3-beta.1`; build metadata (`+...`) is not supported;
+- its tag uses the supported three-part SemVer subset in either `MAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH` form (a stable two-part `MAJOR.MINOR` or `vMAJOR.MINOR` tag is read as `MAJOR.MINOR.0`; when two tags give the same version the complete one is listed first), optionally with the same prerelease suffix subset such as `1.2.3-beta.1` or `v1.2.3-beta.1`; build metadata (`+...`) is not supported;
 - stable-channel releases are not marked prerelease and do not use a prerelease SemVer suffix;
 - it contains exactly one fully uploaded `.zip` release asset;
 - GitHub exposes a `sha256:` digest for that uploaded asset;

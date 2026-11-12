@@ -267,6 +267,16 @@ PHP;
 		);
 	}
 
+	/** @param array<string,mixed>|null $result */
+	private function assert_rejected( ?array $result, ?string $reason = null ): void {
+		self::assertIsArray( $result );
+		self::assertArrayNotHasKey( 'package_root', $result );
+		self::assertIsString( $result['reason'] ?? null );
+		if ( null !== $reason ) {
+			self::assertSame( $reason, $result['reason'] );
+		}
+	}
+
 	public function test_prospective_inspection_rejects_ambiguous_plugin_headers(): void {
 		$archive = $this->archive(
 			array(
@@ -274,7 +284,7 @@ PHP;
 				'example-plugin/b.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
 			)
 		);
-		self::assertNull( ( new PackageIdentityValidator() )->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ) );
+		$this->assert_rejected( ( new PackageIdentityValidator() )->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ), 'header_plugin_ambiguous' );
 	}
 
 	/**
@@ -287,7 +297,7 @@ PHP;
 		array $links = array()
 	): void {
 		$archive = $this->archive( $entries, $links );
-		self::assertNull( $this->prospective_plugin( $archive ) );
+		$this->assert_rejected( $this->prospective_plugin( $archive ) );
 	}
 
 	/** @return array<string,array{0:array<string,string>,1?:list<string>}> */
@@ -329,21 +339,92 @@ PHP;
 		for ( $index = 1; $index <= 10000; ++$index ) {
 			$many[ 'example-plugin/entry-' . $index ] = '';
 		}
-		self::assertNull( $this->prospective_plugin( $this->archive( $many ) ) );
+		$this->assert_rejected( $this->prospective_plugin( $this->archive( $many ) ), 'archive_entry_limit' );
 
 		foreach (
 			array(
-				'missing PHP requirement'       => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires at least: 6.8\n*/",
-				'missing WordPress requirement' => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires PHP: 8.2\n*/",
-				'URI mismatch'                  => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/other\n*/",
-				'version mismatch'              => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.1\nUpdate URI: https://updates.example.test/owner/package\n*/",
-				'PHP mismatch'                  => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires PHP: 8.3\n*/",
-				'WordPress mismatch'            => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires at least: 6.9\n*/",
+				'URI mismatch'       => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/other\n*/",
+				'version mismatch'   => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.1\nUpdate URI: https://updates.example.test/owner/package\n*/",
+				'PHP mismatch'       => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires PHP: 8.3\n*/",
+				'WordPress mismatch' => "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires at least: 6.9\n*/",
 			) as $header
 		) {
 			$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
-			self::assertNull( $this->prospective_plugin( $archive ) );
+			$this->assert_rejected( $this->prospective_plugin( $archive ) );
 		}
+	}
+
+	public function test_prospective_requires_headers_match_install_time_validation(): void {
+		$head      = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n";
+		$validator = new PackageIdentityValidator();
+		$policy    = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+		$cases     = array(
+			'both absent'      => array( '', null ),
+			'php absent'       => array( "Requires at least: 6.8\n", null ),
+			'wordpress absent' => array( "Requires PHP: 8.2\n", null ),
+			'both met'         => array( "Requires PHP: 8.2\nRequires at least: 6.8\n", null ),
+			'php empty'        => array( "Requires PHP:\nRequires at least: 6.8\n", 'header_requires_php_unmet' ),
+			'php invalid'      => array( "Requires PHP: soon\n", 'header_requires_php_unmet' ),
+			'php unmet'        => array( "Requires PHP: 8.3\n", 'header_requires_php_unmet' ),
+			'wordpress empty'  => array( "Requires at least:\n", 'header_requires_wp_unmet' ),
+			'wordpress unmet'  => array( "Requires at least: 6.9\n", 'header_requires_wp_unmet' ),
+		);
+		foreach ( $cases as $name => [$requires, $reason] ) {
+			$archive  = $this->archive( array( 'example-plugin/example-plugin.php' => $head . $requires . '*/' ) );
+			$result   = $this->prospective_plugin( $archive );
+			$accepted = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );
+			self::assertSame( null === $reason, $validator->validate( $accepted, $policy, $archive )->is_valid(), $name );
+			if ( null === $reason ) {
+				self::assertSame( 'example-plugin', $result['package_root'] ?? null, $name );
+			} else {
+				$this->assert_rejected( $result, $reason );
+			}
+		}
+	}
+
+	/** @return array<string,array{string,?string}> */
+	public static function update_uri_detail_provider(): array {
+		return array(
+			'userinfo and query'   => array( 'https://user:password@updates.example.test/owner/package?token=secret', null ),
+			'fragment'             => array( 'https://updates.example.test/owner/other#frag', null ),
+			'encoded userinfo'     => array( 'https://us%40er:p%40ss@updates.example.test/owner/package', null ),
+			'ipv6 host'            => array( 'https://[::1]/owner/package', null ),
+			'other host'           => array( 'https://evil.example.test/owner/package', null ),
+			'canonical other path' => array( 'https://Updates.Example.Test/owner/other/', 'https://updates.example.test/owner/other' ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'update_uri_detail_provider' )]
+	public function test_update_uri_rejection_echoes_only_a_canonical_credential_free_value( string $uri, ?string $detail ): void {
+		$header  = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: " . $uri . "\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
+		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
+		$result  = $this->prospective_plugin( $archive );
+		$this->assert_rejected( $result, 'header_update_uri_mismatch' );
+		self::assertSame( $detail, is_array( $result ) && array_key_exists( 'detail', $result ) ? $result['detail'] : 'missing' );
+	}
+
+	/** @return array<string,array{string,string,?string}> */
+	public static function line_ending_reason_provider(): array {
+		$cases = array();
+		foreach ( array(
+			"\r"   => 'CR',
+			"\r\n" => 'CRLF',
+		) as $ending => $label ) {
+			$cases[ $label . ' version missing' ]    = array( $ending, "Plugin Name: Example Plugin\nUpdate URI: https://updates.example.test/owner/package\n", 'header_version_missing', null );
+			$cases[ $label . ' update uri missing' ] = array( $ending, "Plugin Name: Example Plugin\nVersion: 1.0.0\n", 'header_update_uri_missing', null );
+			$cases[ $label . ' invalid version' ]    = array( $ending, "Plugin Name: Example Plugin\nVersion: soon\nUpdate URI: https://updates.example.test/owner/package\n", 'header_invalid', 'Version' );
+			$cases[ $label . ' duplicate name' ]     = array( $ending, "Plugin Name: Example Plugin\nPlugin Name: Again\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n", 'header_duplicate', 'Name' );
+		}
+		return $cases;
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'line_ending_reason_provider' )]
+	public function test_header_rejection_reasons_survive_non_unix_line_endings( string $ending, string $body, string $reason, ?string $detail ): void {
+		$header  = str_replace( "\n", $ending, "<?php\n/*\n" . $body . '*/' );
+		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
+		$result  = $this->prospective_plugin( $archive );
+		$this->assert_rejected( $result, $reason );
+		self::assertSame( $detail, is_array( $result ) && array_key_exists( 'detail', $result ) ? $result['detail'] : 'missing' );
 	}
 
 	public function test_prospective_inspection_keeps_cross_type_headers_and_rejects_replacement(): void {
@@ -553,7 +634,7 @@ PHP;
 			),
 		) as $name => $entries ) {
 			$archive = $this->archive( $entries );
-			self::assertNull( $validator->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ), $name );
+			$this->assert_rejected( $validator->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ), 'archive_path_unsafe' );
 			self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $archive )->code(), $name );
 		}
 
@@ -576,7 +657,7 @@ PHP;
 			array(),
 			array( 'example-plugin/example-plugin.php' => array( \ZipArchive::OPSYS_UNIX, 0040000 << 16 ) )
 		);
-		self::assertNull( $validator->inspect_prospective( $this->prospective_policy( $mismatch, 'plugin' ), $mismatch ) );
+		$this->assert_rejected( $validator->inspect_prospective( $this->prospective_policy( $mismatch, 'plugin' ), $mismatch ), 'archive_path_unsafe' );
 		self::assertSame( 'archive_path_unsafe', $validator->validate( $this->descriptor( $mismatch, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $mismatch )->code() );
 	}
 
@@ -680,7 +761,7 @@ PHP;
 		);
 	}
 
-	/** @return array{package_root:string,main_file:string}|null */
+	/** @return array{package_root:string,main_file:string}|array{reason:string,detail:?string}|null */
 	private function prospective_plugin( string $archive ): ?array {
 		return ( new PackageIdentityValidator() )->inspect_prospective(
 			$this->prospective_policy( $archive, 'plugin' ),

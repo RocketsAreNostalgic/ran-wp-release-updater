@@ -306,6 +306,12 @@ final class RequestProtocolValidator {
 	/** @param array<string,mixed> $value */
 	public static function release_declaration_code( array $value ): ?string {
 		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard' );
+		if ( array_key_exists( 'rejection_reasons', $value ) ) {
+			if ( true !== $value['rejection_reasons'] ) {
+				return 'invalid_configuration';
+			}
+			$keys[] = 'rejection_reasons';
+		}
 		if ( ! self::exact_keys( $value, $keys ) || ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true ) ) {
 			return 'invalid_configuration';
 		}
