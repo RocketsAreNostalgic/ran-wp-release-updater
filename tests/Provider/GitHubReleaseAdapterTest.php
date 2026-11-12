@@ -1177,6 +1177,18 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				'sha512 prefix'    => array( 'sha512:cf83e135', null ),
 				'39 hex'           => array( substr( $sha256, 0, 39 ), null ),
 				'long with digest' => array( str_repeat( 'x ', 70 ) . $sha256, null ),
+				'ghp bare'         => array( 'ghp_', null ),
+				'github pat bare'  => array( 'github_pat_1', null ),
+				'jwt start'        => array( 'eyJhbGciOi', null ),
+				'aws key id'       => array( 'AKIA1', null ),
+				'bearer'           => array( 'Bearer abc', null ),
+				'dotted hex'       => array( implode( '.', str_split( $sha256, 8 ) ), null ),
+				'unicode hex'      => array( implode( "\u{200B}", str_split( $sha256, 8 ) ), null ),
+				'assigned path'    => array( 'x=/etc/passwd', null ),
+				'file url'         => array( 'file:///etc/passwd', null ),
+				'relative path'    => array( 'var/www/html/wp-config.php', null ),
+				'prose password'   => array( 'the password is hunter2', null ),
+				'pwd prose'        => array( 'pwd hunter2', null ),
 				'ordinary word'    => array( 'tokenizer-1', 'tokenizer-1' ),
 			);
 		}

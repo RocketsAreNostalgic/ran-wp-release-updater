@@ -90,12 +90,67 @@ final class ReleaseRejectionTest extends TestCase {
 			'digest past limit' => array( str_repeat( 'x ', 70 ) . $sha256 ),
 			'split by limit'    => array( str_repeat( 'x ', 59 ) . substr( $sha256, 0, 40 ) ),
 			'password text'     => array( 'password: hunter2' ),
+		) + self::evasion_cases();
+	}
+
+	/** @return array<string,array{string}> */
+	private static function evasion_cases(): array {
+		$sha256 = hash( 'sha256', 'a' );
+		$cases  = array(
+			'ghp bare'       => 'ghp_',
+			'gho bare'       => 'found gho_x',
+			'ghu ghs ghr'    => 'ghs_1',
+			'github pat'     => 'github_pat_1',
+			'gitlab pat'     => 'glpat-1',
+			'slack token'    => 'xoxb-1',
+			'aws akia'       => 'AKIA1',
+			'aws asia'       => 'ASIA1',
+			'jwt start'      => 'eyJhbGciOi',
+			'npm token'      => 'npm_x',
+			'stripe live'    => 'sk_live_1',
+			'stripe test'    => 'sk_test_1',
+			'basic auth'     => 'Basic dXNlcjpw',
+			'bearer auth'    => 'Bearer abc.def',
+			'dot hex'        => implode( '.', str_split( $sha256, 8 ) ),
+			'comma hex'      => implode( ',', str_split( $sha256, 8 ) ),
+			'slash hex'      => implode( '/', str_split( $sha256, 8 ) ),
+			'question hex'   => implode( '?', str_split( $sha256, 8 ) ),
+			'space hex'      => implode( ' ', str_split( $sha256, 8 ) ),
+			'zero width hex' => implode( "\u{200B}", str_split( $sha256, 8 ) ),
+			'non-ascii hex'  => implode( "\u{00E9}", str_split( $sha256, 4 ) ),
+			'dotted base64'  => 'Ab1Cd2Ef3Gh4.Ij5Kl6Mn7Op8.Qr9St0Uv1Wx2Yz3',
+			'assign path'    => 'x=/etc/passwd',
+			'colon path'     => 'at:/etc/passwd',
+			'bracket path'   => '[/etc/passwd]',
+			'pipe path'      => 'x|/etc/passwd',
+			'file url'       => 'file:///etc/passwd',
+			'parent segment' => 'a/../b',
+			'leading parent' => '../x',
+			'relative path'  => 'var/www/html/wp-config.php',
+			'one slash file' => 'html/wp-config.php',
+			'other url'      => 'ftp://example.test/x',
+			'prose password' => 'the password is hunter2',
+			'pwd word'       => 'pwd hunter2',
+			'secret value'   => 'secret value abc',
+			'api key words'  => 'api key abc',
+			'apikey word'    => 'apikey abc',
+			'authorization'  => 'authorization granted',
+			'word before'    => 'hunter2 is the password',
+			'token prose'    => 'token abc',
 		);
+		return array_map( static fn ( string $value ): array => array( $value ), $cases );
 	}
 
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafe_detail_provider' )]
 	public function test_unsafe_detail_shapes_are_dropped_whole( string $value ): void {
 		self::assertNull( ReleaseRejection::detail( 'tag_not_version', $value ) );
+	}
+
+	public function test_canonical_update_uri_echo_and_plain_text_survive_the_screen(): void {
+		self::assertSame( 'https://updates.example.test/owner/other', ReleaseRejection::detail( 'header_update_uri_mismatch', 'https://updates.example.test/owner/other' ) );
+		self::assertSame( 'release/v1.2.3', ReleaseRejection::detail( 'tag_not_version', 'release/v1.2.3' ) );
+		self::assertSame( 'Author', ReleaseRejection::detail( 'header_duplicate', 'Author' ) );
+		self::assertSame( 'Requires PHP', ReleaseRejection::detail( 'header_invalid', 'Requires PHP' ) );
 	}
 
 	public function test_ordinary_text_with_credential_like_words_is_kept(): void {
