@@ -1103,8 +1103,48 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 
 			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
 
-			self::assertSame( array( '2.0.0', '1.1.0', '1.1.0' ), array_column( $result['candidates'], 'version' ) );
-			self::assertSame( array( '6', '10', '2' ), array_column( $result['candidates'], 'release_identity' ) );
+			self::assertSame( array( '2.0.0', '1.2.0', '1.1.0', '1.1.0' ), array_column( $result['candidates'], 'version' ) );
+			self::assertSame( array( '6', '3', '10', '2' ), array_column( $result['candidates'], 'release_identity' ) );
+		}
+
+		public function test_listing_accepts_two_part_stable_tags_and_prefers_the_complete_tag_on_a_tie(): void {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = array(
+				$this->response(
+					200,
+					array(
+						$this->release( 1, 'v1.2' ),
+						$this->release( 2, 'v1.2.0' ),
+						$this->release( 3, '1.3' ),
+						$this->release( 4, 'v1.2-beta.1' ),
+						$this->release( 5, 'v01.2' ),
+						$this->release( 6, 'v1.2.3.4' ),
+						$this->release( 7, 'release-1.2' ),
+						$this->release( 8, 'v1.2.3-beta.1' ),
+						$this->release( 9, 'v1' ),
+					)
+				),
+			);
+
+			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+
+			self::assertSame( array( '1.3.0', '1.2.0', '1.2.0' ), array_column( $result['candidates'], 'version' ) );
+			self::assertSame( array( '3', '2', '1' ), array_column( $result['candidates'], 'release_identity' ) );
+			self::assertSame( array( '1.3', 'v1.2.0', 'v1.2' ), array_column( $result['candidates'], 'tag' ) );
+		}
+
+		public function test_two_part_tag_is_inspected_with_a_matching_two_part_or_complete_header(): void {
+			foreach ( array( '1.2', '1.2.0' ) as $header_version ) {
+				$archive = $this->prospective_archive(
+					"<?php\n/*\nPlugin Name: Repository\nVersion: " . $header_version . "\n"
+					. "Update URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/"
+				);
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+				$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2', $archive );
+				$facts                           = $this->service( $this->binding() )->inspect_prospective( '7', 'v1.2' )->to_array();
+				self::assertSame( 'v1.2', $facts['tag'], $header_version );
+				self::assertSame( '1.2.0', $facts['version'], $header_version );
+			}
 		}
 
 		public function test_prerelease_listing_keeps_semver_ordering_within_its_channel(): void {

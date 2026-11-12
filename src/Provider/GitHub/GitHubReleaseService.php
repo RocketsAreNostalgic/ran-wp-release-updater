@@ -291,7 +291,12 @@ final class GitHubReleaseService {
 					if ( null === $comparison ) {
 						throw new RuntimeException( 'The GitHub release version is invalid.' );
 					}
-					return 0 !== $comparison ? $comparison : strcmp( $left['release_identity'], $right['release_identity'] );
+					if ( 0 !== $comparison ) {
+						return $comparison;
+					}
+					// Equal versions prefer a complete MAJOR.MINOR.PATCH tag over a two-part one, then the lower release identity.
+					$form = self::two_part_tag( $left['tag'] ) <=> self::two_part_tag( $right['tag'] );
+					return 0 !== $form ? $form : strcmp( $left['release_identity'], $right['release_identity'] );
 				}
 			);
 
@@ -1120,7 +1125,11 @@ final class GitHubReleaseService {
 			return null;
 		}
 		$version = str_starts_with( $tag, 'v' ) ? substr( $tag, 1 ) : $tag;
-		return ReleaseVersion::normalize( $version );
+		return ReleaseVersion::normalize_header( $version );
+	}
+
+	private static function two_part_tag( string $tag ): int {
+		return 1 === preg_match( '/\Av?\d+\.\d+\z/D', $tag ) ? 1 : 0;
 	}
 
 	private static function valid_release_uri( mixed $uri, string $locator ): bool {

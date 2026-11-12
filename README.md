@@ -102,7 +102,7 @@ Custom provider registration is not supported. Unknown provider codes leave a ta
 
 At a minimum, a compatible GitHub Release must:
 
-- be non-draft and use the supported three-part SemVer subset in either `MAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH` form, optionally with the same prerelease suffix subset such as `1.2.3-beta.1` or `v1.2.3-beta.1`; build metadata (`+...`) is not supported;
+- be non-draft and use the supported three-part SemVer subset in either `MAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH` form (a stable two-part `MAJOR.MINOR` or `vMAJOR.MINOR` tag is read as `MAJOR.MINOR.0`; when two tags give the same version the complete one is listed first), optionally with the same prerelease suffix subset such as `1.2.3-beta.1` or `v1.2.3-beta.1`; build metadata (`+...`) is not supported;
 - contain exactly one fully uploaded `.zip` asset with GitHub-provided `sha256:` metadata;
 - contain one top-level package directory matching the installed plugin/theme identity;
 - carry matching package name/version/`Update URI` headers inside the ZIP.
