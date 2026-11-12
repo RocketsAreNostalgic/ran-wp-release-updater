@@ -582,7 +582,7 @@ final class GitHubReleaseService {
 		}
 		if ( null !== $expected_tag && ! hash_equals( $expected_tag, $tag ) ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
-			throw ReleaseFailure::rejected( 'tag_mismatch', 'found ' . substr( $tag, 0, 40 ) . ', expected ' . substr( $expected_tag, 0, 40 ) );
+			throw ReleaseFailure::rejected( 'tag_mismatch', 'found ' . $tag . ', expected ' . $expected_tag );
 		}
 		if ( 'stable' === $this->binding['release_channel'] && ( $release['prerelease'] || ReleaseVersion::is_prerelease( $version ) ) ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
@@ -1124,7 +1124,7 @@ final class GitHubReleaseService {
 		if ( strlen( $tag ) > ReleaseVersion::MAX_LENGTH + 1 ) {
 			return null;
 		}
-		$version = str_starts_with( $tag, 'v' ) ? substr( $tag, 1 ) : $tag;
+		$version    = str_starts_with( $tag, 'v' ) ? substr( $tag, 1 ) : $tag;
 		return ReleaseVersion::normalize_header( $version );
 	}
 

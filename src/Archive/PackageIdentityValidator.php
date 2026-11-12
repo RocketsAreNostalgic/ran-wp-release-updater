@@ -105,7 +105,7 @@ final class PackageIdentityValidator {
 				$parsed   = is_string( $contents ) ? self::parse_header( $contents, $policy['target_type'] ) : array();
 				$metadata = isset( $parsed['headers']['Name'] ) ? $parsed['headers']['Name'] : null;
 				if ( 'plugin' === $policy['target_type'] && null === $metadata ) {
-					if ( is_string( $contents ) && 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*Plugin Name:/mi', $contents ) ) {
+					if ( is_string( $contents ) && 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*Plugin Name:/mi', str_replace( array( "\r\n", "\r" ), "\n", substr( $contents, 0, self::MAX_HEADER_BYTES ) ) ) ) {
 						$pending ??= self::header_rejection( $parsed );
 					}
 					continue;
@@ -122,8 +122,8 @@ final class PackageIdentityValidator {
 				$php       = true === ( $parsed['present']['RequiresPHP'] ?? false ) ? $parsed['headers']['RequiresPHP'] : null;
 				$wordpress = true === ( $parsed['present']['RequiresWP'] ?? false ) ? $parsed['headers']['RequiresWP'] : null;
 				$failed    = match ( true ) {
-					CanonicalUpdateUri::canonicalize( $uri ) !== $policy['canonical_update_uri'] => array( 'header_update_uri_mismatch', $uri ),
-					0 !== ReleaseVersion::compare( $version, $policy['version'] ) => array( 'header_version_mismatch', 'found ' . substr( $version, 0, 40 ) . ', expected ' . $policy['version'] ),
+					CanonicalUpdateUri::canonicalize( $uri ) !== $policy['canonical_update_uri'] => array( 'header_update_uri_mismatch', self::uri_detail( $uri, $policy['canonical_update_uri'] ) ),
+					0 !== ReleaseVersion::compare( $version, $policy['version'] ) => array( 'header_version_mismatch', 'found ' . $version . ', expected ' . $policy['version'] ),
 					null !== $php && ! self::meets_requirement( $policy['php_runtime_version'], $php ) => array( 'header_requires_php_unmet', $php ),
 					null !== $wordpress && ! self::meets_requirement( $policy['wordpress_runtime_version'], $wordpress ) => array( 'header_requires_wp_unmet', $wordpress ),
 					null !== $candidate => array( 'header_plugin_ambiguous', null ),
@@ -144,6 +144,13 @@ final class PackageIdentityValidator {
 		} finally {
 			$zip->close();
 		}
+	}
+
+	/** Only a canonical, credential-free URI on the expected host may be echoed. */
+	private static function uri_detail( string $uri, string $expected ): ?string {
+		$canonical = CanonicalUpdateUri::canonicalize( $uri );
+		$host      = static fn ( string $value ): string => (string) strtok( substr( $value, (int) strpos( $value, '//' ) + 2 ), '/' );
+		return null !== $canonical && $host( $canonical ) === $host( $expected ) ? $canonical : null;
 	}
 
 	/** @return array{reason:string,detail:?string} */

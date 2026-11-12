@@ -41,12 +41,34 @@ final class ReleaseRejectionTest extends TestCase {
 	public function test_detail_is_bounded_printable_and_never_a_digest(): void {
 		self::assertSame( 'found 1.2.0, expected 1.2.3', ReleaseRejection::detail( 'header_version_mismatch', "  found 1.2.0, expected 1.2.3\n" ) );
 		self::assertSame( 'a?b?c?', ReleaseRejection::detail( 'header_invalid', "a\x00b\u{202E}c\u{00E9}" ) );
-		self::assertSame( str_repeat( 'z', 120 ), ReleaseRejection::detail( 'header_invalid', str_repeat( 'z', 500 ) ) );
+		self::assertSame( substr( str_repeat( 'ab ', 200 ), 0, 120 ), ReleaseRejection::detail( 'header_invalid', str_repeat( 'ab ', 200 ) ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', "\xB1\xB2" ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', '' ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', null ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', 'sha256:' . str_repeat( 'a', 64 ) ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', str_repeat( 'f', 40 ) ) );
 		self::assertNull( ReleaseRejection::detail( 'no_package_zip', 'anything' ) );
+	}
+
+	public function test_digest_is_screened_before_the_detail_is_bounded(): void {
+		$hex = str_repeat( 'f0', 20 );
+		self::assertNull( ReleaseRejection::detail( 'tag_not_version', str_repeat( 'z', 100 ) . $hex ) );
+		self::assertNull( ReleaseRejection::detail( 'tag_mismatch', 'found v1.2.4' . str_repeat( 'z', 100 ) . $hex . ', expected v1.2.3' ) );
+		self::assertNull( ReleaseRejection::detail( 'header_version_mismatch', 'found 1.2.0, expected ' . $hex ) );
+	}
+
+	public function test_credential_looking_detail_is_dropped_not_redacted(): void {
+		foreach ( array(
+			'https://user:password@github.com/owner/repository',
+			'https://us%40er@github.com/owner/repository',
+			'found access_token, expected 1.2.3',
+			'https://github.com/owner/repository?token=1',
+			'https://github.com/owner/repository/secret',
+			'key=value',
+			str_repeat( 'Ab1+', 12 ),
+		) as $value ) {
+			self::assertNull( ReleaseRejection::detail( 'header_update_uri_mismatch', $value ), $value );
+		}
+		self::assertSame( 'Author', ReleaseRejection::detail( 'header_duplicate', 'Author' ) );
 	}
 }

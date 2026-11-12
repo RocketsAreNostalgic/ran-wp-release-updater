@@ -382,6 +382,51 @@ PHP;
 		}
 	}
 
+	/** @return array<string,array{string,?string}> */
+	public static function update_uri_detail_provider(): array {
+		return array(
+			'userinfo and query'   => array( 'https://user:password@updates.example.test/owner/package?token=secret', null ),
+			'fragment'             => array( 'https://updates.example.test/owner/other#frag', null ),
+			'encoded userinfo'     => array( 'https://us%40er:p%40ss@updates.example.test/owner/package', null ),
+			'ipv6 host'            => array( 'https://[::1]/owner/package', null ),
+			'other host'           => array( 'https://evil.example.test/owner/package', null ),
+			'canonical other path' => array( 'https://Updates.Example.Test/owner/other/', 'https://updates.example.test/owner/other' ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'update_uri_detail_provider' )]
+	public function test_update_uri_rejection_echoes_only_a_canonical_credential_free_value( string $uri, ?string $detail ): void {
+		$header  = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: " . $uri . "\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
+		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
+		$result  = $this->prospective_plugin( $archive );
+		$this->assert_rejected( $result, 'header_update_uri_mismatch' );
+		self::assertSame( $detail, $result['detail'] );
+	}
+
+	/** @return array<string,array{string,string,?string}> */
+	public static function line_ending_reason_provider(): array {
+		$cases = array();
+		foreach ( array(
+			"\r"   => 'CR',
+			"\r\n" => 'CRLF',
+		) as $ending => $label ) {
+			$cases[ $label . ' version missing' ]    = array( $ending, "Plugin Name: Example Plugin\nUpdate URI: https://updates.example.test/owner/package\n", 'header_version_missing', null );
+			$cases[ $label . ' update uri missing' ] = array( $ending, "Plugin Name: Example Plugin\nVersion: 1.0.0\n", 'header_update_uri_missing', null );
+			$cases[ $label . ' invalid version' ]    = array( $ending, "Plugin Name: Example Plugin\nVersion: soon\nUpdate URI: https://updates.example.test/owner/package\n", 'header_invalid', 'Version' );
+			$cases[ $label . ' duplicate name' ]     = array( $ending, "Plugin Name: Example Plugin\nPlugin Name: Again\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n", 'header_duplicate', 'Name' );
+		}
+		return $cases;
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'line_ending_reason_provider' )]
+	public function test_header_rejection_reasons_survive_non_unix_line_endings( string $ending, string $body, string $reason, ?string $detail ): void {
+		$header  = str_replace( "\n", $ending, "<?php\n/*\n" . $body . '*/' );
+		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
+		$result  = $this->prospective_plugin( $archive );
+		$this->assert_rejected( $result, $reason );
+		self::assertSame( $detail, $result['detail'] );
+	}
+
 	public function test_prospective_inspection_keeps_cross_type_headers_and_rejects_replacement(): void {
 		$archive = $this->archive(
 			array(

@@ -48,13 +48,21 @@ final class ReleaseRejection {
 		return array_key_exists( $reason, self::REASONS );
 	}
 
-	/** Returns the bounded printable-ASCII detail, or null when the reason takes none or the text is unsafe. */
+	/**
+	 * Returns the bounded printable-ASCII detail, or null when the reason takes none or the whole text looks
+	 * like a digest, credential, token or userinfo. The complete text is screened before it is bounded.
+	 */
 	public static function detail( string $reason, ?string $detail ): ?string {
 		if ( null === $detail || true !== ( self::REASONS[ $reason ] ?? false ) || 1 !== preg_match( '//u', $detail ) ) {
 			return null;
 		}
 		$detail = preg_replace( '/[^\x20-\x7E]/u', '?', trim( $detail ) );
-		$detail = is_string( $detail ) ? substr( $detail, 0, self::MAX_DETAIL ) : '';
-		return '' === $detail || 1 === preg_match( '/sha256:|[a-f0-9]{40}/i', $detail ) ? null : $detail;
+		if (
+			! is_string( $detail ) || '' === $detail
+			|| 1 === preg_match( '/sha256:|[a-f0-9]{40}|[A-Za-z0-9+\/=_-]{40}|@|%40|token|passw|secret|credential|bearer|authori[sz]|key=/i', $detail )
+		) {
+			return null;
+		}
+		return substr( $detail, 0, self::MAX_DETAIL );
 	}
 }
