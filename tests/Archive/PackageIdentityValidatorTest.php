@@ -400,7 +400,7 @@ PHP;
 		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
 		$result  = $this->prospective_plugin( $archive );
 		$this->assert_rejected( $result, 'header_update_uri_mismatch' );
-		self::assertSame( $detail, $result['detail'] );
+		self::assertSame( $detail, is_array( $result ) && array_key_exists( 'detail', $result ) ? $result['detail'] : 'missing' );
 	}
 
 	/** @return array<string,array{string,string,?string}> */
@@ -424,7 +424,7 @@ PHP;
 		$archive = $this->archive( array( 'example-plugin/example-plugin.php' => $header ) );
 		$result  = $this->prospective_plugin( $archive );
 		$this->assert_rejected( $result, $reason );
-		self::assertSame( $detail, $result['detail'] );
+		self::assertSame( $detail, is_array( $result ) && array_key_exists( 'detail', $result ) ? $result['detail'] : 'missing' );
 	}
 
 	public function test_prospective_inspection_keeps_cross_type_headers_and_rejects_replacement(): void {

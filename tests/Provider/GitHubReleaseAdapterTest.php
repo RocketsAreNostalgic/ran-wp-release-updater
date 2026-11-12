@@ -1133,6 +1133,32 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertSame( array( '1.3', 'v1.2.0', 'v1.2' ), array_column( $result['candidates'], 'tag' ) );
 		}
 
+		public function test_two_part_tags_that_normalise_past_the_version_limit_are_filtered(): void {
+			$fits    = 'v1' . str_repeat( '0', 95 ) . '.1';
+			$too_big = 'v1' . str_repeat( '0', 96 ) . '.1';
+			$limit   = 'v1' . str_repeat( '0', 97 ) . '.1';
+			self::assertSame( 98, strlen( substr( $fits, 1 ) ) );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+			$GLOBALS['ran_github_responses'] = array(
+				$this->response(
+					200,
+					array(
+						$this->release( 1, $fits ),
+						$this->release( 2, $too_big ),
+						$this->release( 3, $limit ),
+						$this->release( 4, 'v1.0' ),
+					)
+				),
+			);
+
+			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+
+			self::assertSame( array( '1', '4' ), array_column( $result['candidates'], 'release_identity' ) );
+			foreach ( $result['candidates'] as $candidate ) {
+				self::assertLessThanOrEqual( 100, strlen( $candidate['version'] ) );
+			}
+		}
+
 		public function test_two_part_tag_is_inspected_with_a_matching_two_part_or_complete_header(): void {
 			foreach ( array( '1.2', '1.2.0' ) as $header_version ) {
 				$archive = $this->prospective_archive(

@@ -1125,7 +1125,8 @@ final class GitHubReleaseService {
 			return null;
 		}
 		$version    = str_starts_with( $tag, 'v' ) ? substr( $tag, 1 ) : $tag;
-		return ReleaseVersion::normalize_header( $version );
+		$normalized = ReleaseVersion::normalize_header( $version );
+		return null === $normalized ? null : ReleaseVersion::normalize( $normalized );
 	}
 
 	private static function two_part_tag( string $tag ): int {
