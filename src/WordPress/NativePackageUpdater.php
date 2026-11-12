@@ -810,6 +810,11 @@ final class NativePackageUpdater {
 		$this->clear_discovery_snapshot();
 		$this->queued_multi_run = false;
 		$this->clear_pending();
+		// WordPress caches the whole update check in this site transient and answers from it
+		// for up to twelve hours, so without this the next check would never reach the provider.
+		if ( function_exists( 'delete_site_transient' ) ) {
+			delete_site_transient( 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes' );
+		}
 		return true;
 	}
 
