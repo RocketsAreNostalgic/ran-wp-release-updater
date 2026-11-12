@@ -75,7 +75,7 @@ final class ReleaseRejection {
 	}
 
 	private static function unsafe( string $text ): bool {
-		$word      = '(?<![A-Za-z])(?:passw(?:or)?d|pwd|secret|token|api[^A-Za-z0-9]?key|authori[z]ation)s?(?![A-Za-z])';
+		$word      = '(?<![A-Za-z])(?:passw(?:or)?d|pwd|secret|token|api[^A-Za-z0-9]?key|authori[sz]ation)s?(?![A-Za-z])';
 		$canonical = 1 === preg_match( '#\Ahttps://[a-z0-9.-]+(?:/[A-Za-z0-9._~-]+)*\z#', $text );
 		$patterns  = array(
 			'#@|%40|[<>\\\\]|[?&;][^\s=]*=|\bsha-?\d{1,3}\s*[:=]|(?:token|passw(?:or)?d|pwd|secret|api[_-]?key|credentials?|key)s?\s*[=:]|[A-Za-z0-9+/_=]{32}#i',
