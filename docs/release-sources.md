@@ -83,8 +83,7 @@ By default a rejected release is just `package_incompatible`. A source created w
 | `header_invalid`, `header_duplicate` | the header key, for example `Version` |
 | `header_version_mismatch` | `found <header>, expected <tag version>` |
 | `header_update_uri_mismatch` | the header's `Update URI` |
-| `header_requires_php_missing`, `header_requires_wp_missing` | none |
-| `header_requires_php_unmet`, `header_requires_wp_unmet` | the header value |
+| `header_requires_php_unmet`, `header_requires_wp_unmet` | the header value; an absent `Requires PHP` or `Requires at least` header is accepted, a present empty, invalid or unmet one is not |
 
 An older bundled copy does not know the option: asking an older selected runtime for it fails with `invalid_configuration`, so create the source with the option and, on that code, create it again without it.
 

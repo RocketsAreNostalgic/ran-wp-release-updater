@@ -2715,15 +2715,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					$header = str_replace( 'owner/repository', 'owner/other', $header );
 					$detail = 'https://github.com/owner/other';
 					break;
-				case 'header_requires_php_missing':
-					$header = str_replace( "Requires PHP: 8.2\n", '', $header );
-					break;
 				case 'header_requires_php_unmet':
 					$header = str_replace( 'Requires PHP: 8.2', 'Requires PHP: 9.0', $header );
 					$detail = '9.0';
-					break;
-				case 'header_requires_wp_missing':
-					$header = str_replace( "Requires at least: 6.8\n", '', $header );
 					break;
 				case 'header_requires_wp_unmet':
 					$header = str_replace( 'Requires at least: 6.8', 'Requires at least: 7.9', $header );

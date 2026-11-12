@@ -119,15 +119,13 @@ final class PackageIdentityValidator {
 				}
 				$uri       = $parsed['headers']['UpdateURI'] ?? '';
 				$version   = $parsed['headers']['Version'] ?? '';
-				$php       = $parsed['headers']['RequiresPHP'] ?? null;
-				$wordpress = $parsed['headers']['RequiresWP'] ?? null;
+				$php       = true === ( $parsed['present']['RequiresPHP'] ?? false ) ? $parsed['headers']['RequiresPHP'] : null;
+				$wordpress = true === ( $parsed['present']['RequiresWP'] ?? false ) ? $parsed['headers']['RequiresWP'] : null;
 				$failed    = match ( true ) {
 					CanonicalUpdateUri::canonicalize( $uri ) !== $policy['canonical_update_uri'] => array( 'header_update_uri_mismatch', $uri ),
 					0 !== ReleaseVersion::compare( $version, $policy['version'] ) => array( 'header_version_mismatch', 'found ' . substr( $version, 0, 40 ) . ', expected ' . $policy['version'] ),
-					! is_string( $php ) || '' === $php => array( 'header_requires_php_missing', null ),
-					! self::meets_requirement( $policy['php_runtime_version'], $php ) => array( 'header_requires_php_unmet', $php ),
-					! is_string( $wordpress ) || '' === $wordpress => array( 'header_requires_wp_missing', null ),
-					! self::meets_requirement( $policy['wordpress_runtime_version'], $wordpress ) => array( 'header_requires_wp_unmet', $wordpress ),
+					null !== $php && ! self::meets_requirement( $policy['php_runtime_version'], $php ) => array( 'header_requires_php_unmet', $php ),
+					null !== $wordpress && ! self::meets_requirement( $policy['wordpress_runtime_version'], $wordpress ) => array( 'header_requires_wp_unmet', $wordpress ),
 					null !== $candidate => array( 'header_plugin_ambiguous', null ),
 					default => null,
 				};
