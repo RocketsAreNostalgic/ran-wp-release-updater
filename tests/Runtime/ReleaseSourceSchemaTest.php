@@ -179,6 +179,74 @@ final class ReleaseSourceSchemaTest extends TestCase {
 		self::assertSame( '[true,"header_invalid","Version"]', implode( "\n", $output ) );
 	}
 
+	public function test_rejections_keep_their_contract_without_an_autoloader_whether_or_not_a_source_opts_in(): void {
+		$root = dirname( __DIR__, 2 );
+		if ( ! is_dir( $root . '/.workspaces/p0.3/php-tmp' ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
+			mkdir( $root . '/.workspaces/p0.3/php-tmp', 0700, true );
+		}
+		$file   = $root . '/.workspaces/p0.3/php-tmp/noautoload-' . bin2hex( random_bytes( 6 ) ) . '.php';
+		$script = '<?php define("FS_METHOD","direct");$GLOBALS["wp_version"]="6.8.0";$GLOBALS["wpdb"]=new stdClass();'
+			. 'function add_action(string $h,mixed $c,int $p=10,int $a=1):void{} function add_filter(string $h,mixed $c,int $p=10,int $a=1):void{} '
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode a controlled fixture path as a PHP literal for the isolated child script; this is not debug output.
+			. '$registrar=require ' . var_export( $root . '/bootstrap.php', true ) . ';'
+			. '$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>7,"wordpress_version"=>"6.8.0"]);'
+			. '$out=[];foreach([false,true] as $opt){$source=$registrar->releases("github","plugin","acme/example","99","stable",null,52428800,$opt);$source->list();'
+			. '$selected=(new ReflectionProperty($source,"selected"))->getValue($source);'
+			. '(new ReflectionProperty($selected,"service"))->setValue($selected,new class{public function inspect(string $i,string $t):array{throw \\RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseFailure::rejected("header_invalid","Version");}});'
+			. '$out[]=$source->inspect("7","v1.2.3");}'
+			. 'echo json_encode($out);';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime fixtures; WordPress helpers would alter the boundary under test.
+		file_put_contents( $file, $script );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
+		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $root . '/.workspaces/p0.3/php-tmp' ) . ' ' . escapeshellarg( $file ) . ' 2>&1', $output, $status );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
+		@unlink( $file );
+		self::assertSame( 0, $status, implode( "\n", $output ) );
+		$results = json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
+		self::assertSame( 'package_incompatible', $results[0]['code'] );
+		self::assertSame( array( 'ok', 'code', 'value', 'retry_after', 'cleanup_status' ), array_keys( $results[0] ) );
+		self::assertSame( 'package_incompatible', $results[1]['code'] );
+		self::assertSame(
+			array(
+				'reason' => 'header_invalid',
+				'detail' => 'Version',
+			),
+			$results[1]['rejection']
+		);
+	}
+
+	public function test_a_new_bootstrap_treats_an_older_broker_refusing_the_declaration_as_a_plain_failure(): void {
+		$root = dirname( __DIR__, 2 );
+		if ( ! is_dir( $root . '/.workspaces/p0.3/php-tmp' ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
+			mkdir( $root . '/.workspaces/p0.3/php-tmp', 0700, true );
+		}
+		$file   = $root . '/.workspaces/p0.3/php-tmp/oldbroker-' . bin2hex( random_bytes( 6 ) ) . '.php';
+		$script = '<?php define("FS_METHOD","direct");$GLOBALS["wp_version"]="6.8.0";$GLOBALS["wpdb"]=new stdClass();'
+			. 'function add_action(string $h,mixed $c,int $p=10,int $a=1):void{} function add_filter(string $h,mixed $c,int $p=10,int $a=1):void{} '
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode a controlled fixture path as a PHP literal for the isolated child script; this is not debug output.
+			. '$registrar=require ' . var_export( $root . '/bootstrap.php', true ) . ';'
+			. '$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>7,"wordpress_version"=>"6.8.0"]);'
+			. '$source=$registrar->releases("github","plugin","acme/example","99","stable",null,52428800,true);'
+			. '$old=new class{public function release_source(array $d):array{return ["accepted"=>false,"code"=>9===count($d)?"invalid_configuration":"release_source_ready","source_handle"=>null];} public function diagnostics():array{return ["state"=>"active"];}};'
+			. '(new ReflectionProperty($source,"broker"))->setValue($source,$old);'
+			. '$first=$source->inspect("7","v1.2.3");$second=$source->inspect("7","v1.2.3");echo json_encode([$first,$second]);';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime fixtures; WordPress helpers would alter the boundary under test.
+		file_put_contents( $file, $script );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
+		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( $root . '/.workspaces/p0.3/php-tmp' ) . ' ' . escapeshellarg( $file ) . ' 2>&1', $output, $status );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
+		@unlink( $file );
+		self::assertSame( 0, $status, implode( "\n", $output ) );
+		$results = json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
+		foreach ( $results as $result ) {
+			self::assertSame( 'invalid_configuration', $result['code'] );
+			self::assertSame( array( 'ok', 'code', 'value', 'retry_after', 'cleanup_status', 'rejection' ), array_keys( $result ) );
+			self::assertNull( $result['rejection'] );
+		}
+	}
+
 	public function test_undeclared_source_treats_a_rejection_key_as_malformed(): void {
 		$result = $this->projection( 'inspect', $this->rejected( 'no_package_zip', null ) );
 		self::assertSame( 'runtime_unavailable', $result['code'] );

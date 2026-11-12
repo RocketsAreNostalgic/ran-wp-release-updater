@@ -49,8 +49,13 @@ final class ReleaseRejection {
 	}
 
 	/**
-	 * Returns the bounded printable-ASCII detail, or null when the reason takes none or the whole text looks
-	 * like a digest, credential, token or userinfo. The complete text is screened before it is bounded.
+	 * Returns a bounded printable-ASCII detail, or null when the reason takes none or the text looks unsafe.
+	 *
+	 * The complete text is screened before it is bounded, and an unsafe detail is dropped, never redacted.
+	 * Screening is by shape so ordinary words such as "tokenizer" survive: userinfo or an at sign, a query
+	 * string, a credential-style `name=` or `name:` assignment, any 32+ character hex or base64-like run
+	 * (separators ignored), a hash-algorithm prefix, an absolute or home path, a backslash, and markup.
+	 * The result is still publisher-controlled text; consumers must escape it on output.
 	 */
 	public static function detail( string $reason, ?string $detail ): ?string {
 		if ( null === $detail || true !== ( self::REASONS[ $reason ] ?? false ) || 1 !== preg_match( '//u', $detail ) ) {
@@ -59,7 +64,8 @@ final class ReleaseRejection {
 		$detail = preg_replace( '/[^\x20-\x7E]/u', '?', trim( $detail ) );
 		if (
 			! is_string( $detail ) || '' === $detail
-			|| 1 === preg_match( '/sha256:|[a-f0-9]{40}|[A-Za-z0-9+\/=_-]{40}|@|%40|token|passw|secret|credential|key=/i', $detail )
+			|| 1 === preg_match( '#@|%40|[<>\\\\]|[?&;][^\s=]*=|(?:^|[\s(,"\'])(?:/|~|[A-Za-z]:[\\\\/])|\bsha-?\d{1,3}\s*[:=]|(?:token|passw(?:or)?d|pwd|secret|api[_-]?key|credentials?|key)s?\s*[=:]|[A-Za-z0-9+/_=]{32}#i', $detail )
+			|| 1 === preg_match( '/[0-9a-f]{32}/i', (string) preg_replace( '/[\s:_-]+/', '', $detail ) )
 		) {
 			return null;
 		}

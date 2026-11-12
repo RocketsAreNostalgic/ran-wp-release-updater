@@ -91,7 +91,7 @@ $ran_wp_release_updater_provider_catalog = array(
 		},
 		'release' => static function ( array $d, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
 			$service = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::from_release_declaration( $d, $state );
-			return new \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource( $service, $state, isset( $d['rejection_reasons'] ) );
+			return new \RAN\WPReleaseUpdater\V1\Runtime\ReleaseSource( $service, $state, array_key_exists( 'rejection_reasons', $d ) && true === $d['rejection_reasons'] );
 		},
 	),
 );

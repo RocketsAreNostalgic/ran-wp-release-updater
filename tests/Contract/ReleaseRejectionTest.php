@@ -41,7 +41,7 @@ final class ReleaseRejectionTest extends TestCase {
 	public function test_detail_is_bounded_printable_and_never_a_digest(): void {
 		self::assertSame( 'found 1.2.0, expected 1.2.3', ReleaseRejection::detail( 'header_version_mismatch', "  found 1.2.0, expected 1.2.3\n" ) );
 		self::assertSame( 'a?b?c?', ReleaseRejection::detail( 'header_invalid', "a\x00b\u{202E}c\u{00E9}" ) );
-		self::assertSame( substr( str_repeat( 'ab ', 200 ), 0, 120 ), ReleaseRejection::detail( 'header_invalid', str_repeat( 'ab ', 200 ) ) );
+		self::assertSame( substr( str_repeat( 'xy ', 200 ), 0, 120 ), ReleaseRejection::detail( 'header_invalid', str_repeat( 'xy ', 200 ) ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', "\xB1\xB2" ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', '' ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', null ) );
@@ -61,14 +61,45 @@ final class ReleaseRejectionTest extends TestCase {
 		foreach ( array(
 			'https://user:password@github.com/owner/repository',
 			'https://us%40er@github.com/owner/repository',
-			'found access_token, expected 1.2.3',
+			'found access_token=abc, expected 1.2.3',
 			'https://github.com/owner/repository?token=1',
-			'https://github.com/owner/repository/secret',
 			'key=value',
 			str_repeat( 'Ab1+', 12 ),
 		) as $value ) {
 			self::assertNull( ReleaseRejection::detail( 'header_update_uri_mismatch', $value ), $value );
 		}
 		self::assertSame( 'Author', ReleaseRejection::detail( 'header_duplicate', 'Author' ) );
+	}
+
+	/** @return array<string,array{string}> */
+	public static function unsafe_detail_provider(): array {
+		$sha256 = hash( 'sha256', 'a' );
+		return array(
+			'credential url'    => array( 'https://user:pw@github.com/o/r/ghp_' . str_repeat( 'a', 36 ) . '?access=1' ),
+			'filesystem path'   => array( '/Users/me/Local Sites/x/wp-content' ),
+			'home path'         => array( '~/secrets' ),
+			'drive path'        => array( 'C:\\Users\\me' ),
+			'markup'            => array( '<img src=x onerror=alert(1)>' ),
+			'base64 sha256'     => array( 'ypeBEsobvcr6wjGzmiPcTaeG7/gUfE5yuYB3ha/uSLs=' ),
+			'base64 sha512'     => array( 'H0D8ktokFpR1CXnubPWC8tXX0o4YM13gWrxU0FYOD1MChgxlK/CNVgJSql50IQVG82n7u86MEs/HlXsmUv6adQ==' ),
+			'dashed hex'        => array( implode( '-', str_split( $sha256, 8 ) ) ),
+			'colon hex'         => array( implode( ':', str_split( $sha256, 2 ) ) ),
+			'sha1 prefix'       => array( 'sha1:da39a3ee' ),
+			'sha512 prefix'     => array( 'sha512:cf83e135' ),
+			'39 hex'            => array( substr( $sha256, 0, 39 ) ),
+			'digest past limit' => array( str_repeat( 'x ', 70 ) . $sha256 ),
+			'split by limit'    => array( str_repeat( 'x ', 59 ) . substr( $sha256, 0, 40 ) ),
+			'password text'     => array( 'password: hunter2' ),
+		);
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'unsafe_detail_provider' )]
+	public function test_unsafe_detail_shapes_are_dropped_whole( string $value ): void {
+		self::assertNull( ReleaseRejection::detail( 'tag_not_version', $value ) );
+	}
+
+	public function test_ordinary_text_with_credential_like_words_is_kept(): void {
+		self::assertSame( 'tokenizer-1', ReleaseRejection::detail( 'tag_not_version', 'tokenizer-1' ) );
+		self::assertSame( 'found v1.2.4, expected v1.2.3', ReleaseRejection::detail( 'tag_mismatch', 'found v1.2.4, expected v1.2.3' ) );
 	}
 }

@@ -59,7 +59,7 @@ A failure has `value: null`. Only rate-limited results carry a non-null retry de
 
 By default a rejected release is just `package_incompatible`. A source created with `rejection_reasons: true` (the last optional `releases()` argument) adds a sixth envelope key, `rejection`, to every result of that source. Sources created without it return exactly the five fields above, so a consumer that has not opted in never sees the key and a consumer that has can fall back to `package_incompatible` when `rejection` is `null`.
 
-`rejection` is `null` except on a failed `inspect()` or `acquire()` with code `package_incompatible` for a known cause, where it is `['reason' => string, 'detail' => string|null]`. `detail` is one short printable-ASCII string (at most 120 characters) such as `found 1.2.0, expected 1.2.3`; it never carries digests, asset URLs or credentials. Treat an unknown `reason` as the generic code: new reasons may be added, existing names are stable.
+`rejection` is `null` except on a failed `inspect()` or `acquire()` with code `package_incompatible` for a known cause, where it is `['reason' => string, 'detail' => string|null]`. `detail` is `null` or one short printable-ASCII string (at most 120 characters) such as `found 1.2.0, expected 1.2.3`. It is publisher-controlled text taken from a release tag or a downloaded package header: treat it as untrusted and escape it on output. The updater screens the complete text before bounding it and drops the whole detail (it never redacts in place) when it looks like userinfo, a query string, a credential-style `name=` assignment, a hash-algorithm prefix, a 32-or-more character hex or base64-like run, an absolute or home path, a backslash, or markup. The screening is by shape, so it is a safety net and not a guarantee that no sensitive text can pass; a mismatched `Update URI` is echoed only as its canonical host/path form on the expected host, otherwise `null`. The option takes exactly `true`; any other value is `invalid_configuration`. Treat an unknown `reason` as the generic code: new reasons may be added, existing names are stable.
 
 | Reason | Detail |
 | --- | --- |
@@ -226,3 +226,7 @@ If cleanup reports `failed`, treat that as an operational fault rather than igno
 Use `releases()` when your application needs prospective release inspection, release selection, metadata display, or a verified archive for a purpose other than the native WordPress update target.
 
 Use `plugin()` or `theme()` plus `register()` when the goal is to participate in WordPress Core's normal plugin/theme update lifecycle. See [Integrating the release updater](integration.md).
+
+## Two-part stable tags
+
+A stable tag such as `v1.3` is listed and offered as version `1.3.0` (`new_version` `1.3.0`) while its package header may still read `Version: 1.3`; the two compare equal. When `v1.3` and `v1.3.0` both exist the complete tag is listed first.

@@ -654,3 +654,9 @@ generic `package_incompatible` code. The bootstrap validates only the shape of a
 declared `rejection` (identifier-shaped reason, printable-ASCII detail up to 120
 characters), so reasons may be added without a protocol change, while the closed
 list itself is enforced by the runtime. `package_revision` changes with the bytes.
+
+Every PHP file under `src/` that the selected runtime needs must be listed in
+the `runtime.php` class map (the broker-family files `bootstrap.php` loads by
+path are the only exceptions). A bundled deployment has no autoloader for
+`src/`, so an unlisted class fails at its first use and bypasses the selected-
+root ownership check; `RuntimeClassMapTest` enforces the complete list.

@@ -109,8 +109,9 @@ final class GitHubReleaseService {
 	 * @param array<string, mixed> $declaration
 	 */
 	public static function from_release_declaration( array $declaration, SelectedRuntimeState $state ): object {
-		$keys = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard' );
-		if ( ! self::exact_keys( $declaration, array_key_exists( 'rejection_reasons', $declaration ) ? array( ...$keys, 'rejection_reasons' ) : $keys ) || 'github' !== $declaration['provider_code'] ) {
+		$keys     = array( 'provider_code', 'target_type', 'repository_locator', 'repository_identity', 'channel', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard' );
+		$opted_in = array_key_exists( 'rejection_reasons', $declaration );
+		if ( ! self::exact_keys( $declaration, $opted_in ? array( ...$keys, 'rejection_reasons' ) : $keys ) || ( $opted_in && true !== $declaration['rejection_reasons'] ) || 'github' !== $declaration['provider_code'] ) {
 			throw new InvalidArgumentException( 'The release declaration is invalid.' );
 		}
 		$wordpress = SelectedRuntimeState::normalize_word_press_version( $GLOBALS['wp_version'] ?? null );
