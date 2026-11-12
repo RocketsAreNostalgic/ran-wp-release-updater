@@ -200,7 +200,7 @@ $release_updater->diagnostics();
 $release_updater->refresh();
 ```
 
-`status()` returns an outer target envelope with `state`, `declaration_accepted`, `hooks_registered`, `code`, and `native`. For an active target, the installed/candidate/offered versions, candidate validation state, last check, release identity, relationship, and native failure code are under `status()['native']`; they are not top-level fields. `diagnostics()` returns an envelope with `state` plus a nested `diagnostics` list of machine-readable entries. `refresh()` clears request-local native state when the selected runtime is live.
+`status()` returns an outer target envelope with `state`, `declaration_accepted`, `hooks_registered`, `code`, and `native`. For an active target, the installed/candidate/offered versions, candidate validation state, last check, release identity, relationship, and native failure code are under `status()['native']`; they are not top-level fields. `diagnostics()` returns an envelope with `state` plus a nested `diagnostics` list of machine-readable entries. `refresh()` clears request-local native state when the selected runtime is live, and also deletes the WordPress `update_plugins` or `update_themes` site transient for the target's type, so that the next WordPress update check asks the provider again instead of answering from its twelve-hour cache. It does not run a check itself; call `wp_update_plugins()` or `wp_update_themes()` afterwards when you need the result in the same request.
 
 The native installer returns `WP_Error` failures using the prefix:
 

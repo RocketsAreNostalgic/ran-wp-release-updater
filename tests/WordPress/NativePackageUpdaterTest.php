@@ -42,6 +42,13 @@ namespace {
 			return 1;
 		}
 	}
+	if ( ! function_exists( 'delete_site_transient' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress update-check cache seam.
+		function delete_site_transient( string $transient ): bool {
+			$GLOBALS['ran_wp_release_updater_test_deleted_transients'][] = $transient;
+			return true;
+		}
+	}
 	if ( ! function_exists( 'do_action' ) ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress observation seam.
 		function do_action( string $hook, mixed ...$arguments ): void {
@@ -680,6 +687,28 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				),
 				$updater->status()
 			);
+		}
+		public function test_refresh_drops_the_update_check_cache_so_wordpress_asks_the_provider_again(): void {
+			$GLOBALS['ran_wp_release_updater_test_deleted_transients'] = array();
+			list( $updater ) = $this->subject();
+
+			self::assertTrue( $updater->refresh() );
+			self::assertSame( array( 'update_plugins' ), $GLOBALS['ran_wp_release_updater_test_deleted_transients'] );
+		}
+		public function test_a_theme_target_drops_the_theme_update_check_cache(): void {
+			$GLOBALS['ran_wp_release_updater_test_deleted_transients'] = array();
+			list( $updater ) = $this->subject();
+			( new \ReflectionProperty( NativePackageUpdater::class, 'target_type' ) )->setValue( $updater, 'theme' );
+
+			self::assertTrue( $updater->refresh() );
+			self::assertSame( array( 'update_themes' ), $GLOBALS['ran_wp_release_updater_test_deleted_transients'] );
+		}
+		public function test_a_refused_refresh_leaves_the_update_check_cache_alone(): void {
+			$GLOBALS['ran_wp_release_updater_test_deleted_transients'] = array();
+			list( $updater ) = $this->subject( 'manual', null, 'stable', false, null, false, null, static fn (): bool => false );
+
+			self::assertFalse( $updater->refresh() );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_deleted_transients'] );
 		}
 		public function test_listing_rate_limit_facts_stop_before_any_candidate_inspection(): void {
 			list( $updater, $adapter, , $descriptor ) = $this->subject();
