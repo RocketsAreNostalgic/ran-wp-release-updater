@@ -173,12 +173,19 @@ final class ReleaseRejectionTest extends TestCase {
 			'https://updates.example.test/owner/' . $hex,
 			'https://updates.example.test/owner/ghp_abcdef',
 			'https://updates.example.test/owner/secret/hunter2',
+			'https://a0123456789abcdef0123456789abcdef.example.com/o',
+			'https://secret-hunter2.example.com/o/r',
+			'https://token.ghp-abcdefghij0123456789abcdef0123456789.example.com/o',
+			'https://updates.example.test/' . str_repeat( 'owner/', 15 ) . 'owner',
 			'https://updates.example.test/' . implode( '/', str_split( $hex, 8 ) ),
 			'https://updates.example.test/owner/authorisation/hunter2',
 			'https://updates.example.test/' . str_repeat( 'a', 120 ),
 			'https://updates.example.test/owner/other found',
 		) as $value ) {
 			self::assertNull( ReleaseRejection::detail( 'header_update_uri_mismatch', $value ), $value );
+		}
+		foreach ( array( 'https://github.com/owner/repo', 'https://bitbucket.org/my-ws/my-repo', 'https://raw.githubusercontent.com/o/r/main' ) as $kept ) {
+			self::assertSame( $kept, ReleaseRejection::detail( 'header_update_uri_mismatch', $kept ) );
 		}
 		self::assertNull( ReleaseRejection::detail( 'tag_not_version', 'https://updates.example.test/owner/other' ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', 'https://updates.example.test/owner/other' ) );

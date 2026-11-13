@@ -63,7 +63,7 @@ final class ReleaseRejection {
 	 * The one exception is the `Update URI` echo of `header_update_uri_mismatch`. A producer has
 	 * already validated it as a canonical `https` URI on the expected host, with no userinfo, port,
 	 * query or fragment, and the strict screen would drop its `:` and `/`. Exactly that canonical form
-	 * is kept when it fits the bound and every path segment, and the segments read together as words, pass the strict screen; any other text
+	 * is kept when it fits the bound and the host and path segments, read together as words, pass the strict screen; any other text
 	 * for that reason takes the ordinary strict path.
 	 */
 	public static function detail( string $reason, ?string $detail ): ?string {
@@ -76,18 +76,12 @@ final class ReleaseRejection {
 		return FailureText::strict( $detail, self::MAX_DETAIL );
 	}
 
+	/** The joined screen over host and path words is the control; the length guard keeps the echo within the bound. */
 	private static function canonical_update_uri( string $text ): bool {
 		if ( strlen( $text ) > self::MAX_DETAIL || CanonicalUpdateUri::canonicalize( $text ) !== $text ) {
 			return false;
 		}
-		$segments = explode( '/', substr( $text, strlen( 'https://' ) ) );
-		array_shift( $segments );
-		foreach ( $segments as $segment ) {
-			if ( FailureText::strict( $segment, self::MAX_DETAIL ) !== $segment ) {
-				return false;
-			}
-		}
-		$path = implode( ' ', $segments );
-		return FailureText::strict( $path, self::MAX_DETAIL ) === $path;
+		$words = implode( ' ', explode( '/', substr( $text, strlen( 'https://' ) ) ) );
+		return FailureText::strict( $words, self::MAX_DETAIL ) === $words;
 	}
 }

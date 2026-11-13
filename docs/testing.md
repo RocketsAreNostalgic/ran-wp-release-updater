@@ -46,7 +46,7 @@ test independently discovers all script PHP, including nested `scripts/tests`,
 compares effective selection, asserts level 8, detects an excluded nested script,
 and proves a new script's incorrect return fails actual analysis.
 
-Current direct analysis covers all 105 maintained PHP files: 36 production files and
+Current direct analysis covers all 106 maintained PHP files: 37 production files and
 three scripts at level 8, plus 66 test files at level 8. The small
 `scripts/analyze-tests.php` runner discovers the whole tests directory through
 PHPStan's file finder, then passes each file separately to the locked analyzer.
@@ -87,7 +87,7 @@ analysis; unmatched identifiers fail. Controls reuse actual annotations and
 prove the immediately following occurrence remains diagnosed. See
 QUALITY_ACCEPTANCE.md for dispositions requiring candidate review.
 
-All 36 maintained production PHP files (`bootstrap.php`, `runtime.php` and
+All 37 maintained production PHP files (`bootstrap.php`, `runtime.php` and
 production PHP under `src/`) now have direct level-8 roots. Issue #60 records the historical
 source acceptance; this coverage count does not certify later exception changes.
 

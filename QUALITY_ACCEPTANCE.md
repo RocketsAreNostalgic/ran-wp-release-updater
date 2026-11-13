@@ -10,7 +10,7 @@ Core dependency update. The native-operation refinement below was delivered sepa
 
 | Surface | Required evidence |
 | --- | --- |
-| `bootstrap.php`, `runtime.php`, and 34 PHP files under `src/` | All 36 shipped PHP paths are direct PHPStan level-8 roots. `scanDirectories` is additional discovery, not coverage. |
+| `bootstrap.php`, `runtime.php`, and 35 PHP files under `src/` | All 37 shipped PHP paths are direct PHPStan level-8 roots. `scanDirectories` is additional discovery, not coverage. |
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
 | Generated `src/Dependency/FailureText.php` | Namespace-only byte parity against the locked `ran/updater-support` source (`composer check:updater-support`) and direct level-8 analysis remain required. Unlike ArchiveSafety it passes the shared ruleset, so it is not PHPCS excluded. Never hand-edit this file. |
@@ -660,8 +660,8 @@ Detail screening is the shared `FailureText::strict( $detail, 120 )` of
 `ran/updater-support` v1.0.0-beta.6, generated into `src/Dependency/FailureText.php`
 by `composer sync:updater-support` and listed in the `runtime.php` class map. The
 only local shape is the canonical `Update URI` echo of `header_update_uri_mismatch`,
-which is kept only as a canonical `https` URI on the expected host whose path
-segments pass the same screen, alone and read together. `ReleaseRejectionSharedScreenerTest` and the public
+which is kept only as a canonical `https` URI (the producer ties its host to the
+expected one) whose host and path words, read together, pass the same screen. `ReleaseRejectionSharedScreenerTest` and the public
 opted-in source test run the shared hostile and benign corpus from the locked
 dependency.
 
