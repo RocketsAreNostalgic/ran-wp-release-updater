@@ -250,10 +250,14 @@ state in the same way a native check does.
 Guarantees:
 
 - The check never writes or deletes an `update_plugins` or `update_themes`
-  transient entry, never builds an offer or download token, never changes
-  `offered_version`/`offered_release_identity` of an earlier native offer, and
-  keeps no descriptor or reusable discovery snapshot. A reported release cannot
-  become installable through this call.
+  transient entry and never builds an offer or download token. A reported
+  release cannot become installable through this call.
+- It leaves the last native check's state as that check left it: the
+  `status()['native']` facts (including `offered_version` and
+  `offered_release_identity`), the retained descriptor and the reusable
+  discovery snapshot are restored when the call ends, including when an
+  observer throws. The check itself keeps no descriptor or snapshot, and a
+  native check that follows can still reuse its own earlier snapshot.
 - It applies to `disabled`, `manual` and `automatic`. Native and background
   checks, and offers for `manual` and `automatic`, are unchanged: `disabled`
   still returns before discovery there with reason `policy_disabled`.
@@ -261,18 +265,22 @@ Guarantees:
   lease or provider work occurs; the report and the completion observation have
   `status` `skipped` and reason `policy_forced_off`, distinct from the
   `policy_disabled` reason a native `disabled` check records.
-- It leaves `status()['native']` as the last native check left it, and it emits
-  the same `check_started_v1` and `check_completed_v1` observations as a native
-  check (not for `runtime_busy` or when nothing answered). Consumers that treat
-  a `succeeded` completion as "an offer exists" must read the reason:
-  `newer_release_observed` is not an offer. For anything but `forced-off` or an
-  invalid identity the check marks the target type as operation-started, as a
-  native check does, so run it after targets are declared.
-- Every call does full provider discovery, archive inspection and validation and
+- Every check discovers afresh and is observed. It never answers from a native
+  check's reusable snapshot, and it emits `check_started_v1` and
+  `check_completed_v1` once past the identity and `forced-off` gates (not for
+  `runtime_busy` or when nothing answered). Consumers that treat a `succeeded`
+  completion as "an offer exists" must read the reason: `newer_release_observed`
+  is not an offer.
+- Once a check proceeds past the identity and `forced-off` gates it marks the
+  target type as operation-started, as a native check does, so run it after
+  targets are declared. For every policy except `forced-off` it also claims the
+  discovery lease (the 600-second binding claim) and holds it for the rest of
+  the request, as a native check does.
+- Every call does provider discovery, archive inspection and validation and
   keeps no reusable result. Do not wire it to unauthenticated or high-frequency
   paths.
-- Remote text is never
-  returned; only the finite codes and validated versions above.
+- Remote text is never returned; only the finite codes and validated versions
+  above.
 
 The native installer returns `WP_Error` failures using the prefix:
 
@@ -378,7 +386,8 @@ finite safe subset of the native discovery codes. No credentials, URLs, remote
 messages, exception contents, or archive tokens are included.
 
 `newer_release_observed` (read-only check only, see above) means a newer eligible
-release exists but no offer was constructed. `update_available` means an eligible native offer was constructed. Only a
+release exists but no offer was constructed. `update_available` means an eligible
+native offer was constructed. Only a
 complete valid listing can establish `no_candidates` or `no_newer_candidate`;
 unknown or rejected potentially newer candidates cannot establish either.
 Policy suppression and failed discovery admission are skipped checks, not proof

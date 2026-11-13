@@ -291,17 +291,34 @@ final class NativePackageUpdater {
 	 * @return mixed Unchanged $result, or the check report array for this target.
 	 */
 	public function filter_check_releases( mixed $result, mixed $target_type, mixed $installed_identity ): mixed {
-		if ( $target_type !== $this->target_type || ! is_string( $installed_identity ) || ! hash_equals( $this->installed_identity, $installed_identity ) || ! $this->live() ) {
+		if ( $target_type !== $this->target_type || ! is_string( $installed_identity ) || ! hash_equals( $this->installed_identity, $installed_identity ) ) {
 			return $result;
 		}
-		$previous     = $this->status;
+		$previous   = $this->status;
+		$descriptor = $this->descriptor;
+		$snapshot   = $this->discovery_snapshot;
+		if ( ! $this->live() ) {
+			return $result;
+		}
+		try {
+			return $this->read_only_check();
+		} finally {
+			// The check leaves native status, descriptor and reusable discovery as the last native check left them.
+			$this->status = $previous;
+			if ( $this->live() ) {
+				$this->descriptor         = $descriptor;
+				$this->discovery_snapshot = $snapshot;
+			}
+		}
+	}
+
+	/** @return array{status:string,reason:string,policy:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,candidate_validation_code:string|null,offered:false} */
+	private function read_only_check(): array {
 		$reason       = 'unexpected_failure';
 		$check_id     = null;
 		$this->status = self::empty_status();
 		if ( $this->native_beginning || null !== $this->native_owner || $this->pending_install->active() ) {
-			$report       = $this->check_report( 'runtime_busy' );
-			$this->status = $previous;
-			return $report;
+			return $this->check_report( 'runtime_busy' );
 		}
 		$this->status['installed_version'] = $this->headers['Version'];
 		$this->status['last_check']        = time();
@@ -320,7 +337,9 @@ final class NativePackageUpdater {
 				$reason   = 'discovery_not_admitted';
 				$check_id = $this->start_check_observation();
 			} else {
-				$descriptor = $this->discover(
+				// Always discover afresh: a native snapshot must not answer, so every check is observed.
+				$this->discovery_snapshot = null;
+				$descriptor               = $this->discover(
 					$this->headers['Version'],
 					$reason,
 					function () use ( &$check_id ): void {
@@ -330,19 +349,14 @@ final class NativePackageUpdater {
 				if ( $descriptor instanceof IdentityDescriptor ) {
 					$reason = $this->manual_eligible( $descriptor ) ? 'newer_release_observed' : 'candidate_not_eligible';
 				}
-				// The observed release must not seed a later offer, token or staged install.
-				$this->clear_discovery_snapshot();
-				$this->descriptor = null;
 			}
 		}
 		$report = $this->check_report( $reason );
 		$this->complete_check_observation( $check_id, $reason );
 		if ( ! $this->live() ) {
 			$this->status = self::empty_status();
-			$report       = $this->check_report( 'runtime_liveness_lost' );
+			return $this->check_report( 'runtime_liveness_lost' );
 		}
-		// A read-only check leaves the handle status of the last native check untouched.
-		$this->status = $previous;
 		return $report;
 	}
 

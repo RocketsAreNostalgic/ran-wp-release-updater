@@ -2109,6 +2109,60 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( $before, $updater->status() );
 			self::assertSame( 2, $adapter->list_calls );
 		}
+		public function test_manual_check_discovers_afresh_and_preserves_earlier_native_discovery_state(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual', native_discovery_reuse: true );
+			$offer                     = $this->offer( $updater );
+			self::assertSame( 1, $adapter->list_calls );
+			$state      = new \ReflectionObject( $updater );
+			$descriptor = $state->getProperty( 'descriptor' )->getValue( $updater );
+			$snapshot   = $state->getProperty( 'discovery_snapshot' )->getValue( $updater );
+			$status     = $updater->status();
+			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
+			// The native snapshot must not answer the check: it asks the provider and is observed.
+			$report = $this->manual_check( $updater );
+			self::assertSame( 'newer_release_observed', $report['reason'] );
+			self::assertSame( 2, $adapter->list_calls );
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			self::assertSame( array( 'ran_wp_release_updater_check_started_v1', 'ran_wp_release_updater_check_completed_v1' ), array( $events[0][0], $events[1][0] ) );
+			// The earlier native state is intact: same descriptor and snapshot, same status, same reusable offer.
+			self::assertSame( $descriptor, $state->getProperty( 'descriptor' )->getValue( $updater ) );
+			self::assertSame( $snapshot, $state->getProperty( 'discovery_snapshot' )->getValue( $updater ) );
+			self::assertSame( $status, $updater->status() );
+			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
+			$again = $this->offer( $updater );
+			self::assertSame( $offer['package'], $again['package'] );
+			self::assertSame( 2, $adapter->list_calls );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_observations'] );
+		}
+		public function test_a_throwing_observer_cannot_leave_native_state_polluted_by_the_check(): void {
+			list( $updater ) = $this->subject( 'manual', native_discovery_reuse: true );
+			$this->offer( $updater );
+			$status = $updater->status();
+			$GLOBALS['ran_wp_release_updater_test_observer_throws'] = true;
+			try {
+				$this->manual_check( $updater );
+				self::fail( 'Listener exception must escape the check.' );
+			} catch ( \RuntimeException $failure ) {
+				self::assertSame( 'Observer failed.', $failure->getMessage() );
+			}
+			self::assertSame( $status, $updater->status() );
+		}
+		public function test_manual_check_reports_liveness_lost_without_facts(): void {
+			$calls                     = new \stdClass();
+			$calls->adapter            = null;
+			list( $updater, $adapter ) = $this->subject(
+				'disabled',
+				operation_guard: static function () use ( $calls ): bool {
+					return ! $calls->adapter instanceof ControllableReleaseAdapter || 0 === $calls->adapter->list_calls;
+				}
+			);
+			$calls->adapter            = $adapter;
+			$report                    = $this->manual_check( $updater );
+			self::assertSame( 'runtime_liveness_lost', $report['reason'] );
+			self::assertSame( 'failed', $report['status'] );
+			self::assertNull( $report['candidate_version'] );
+			self::assertFalse( $report['offered'] );
+		}
 		public function test_manual_check_reports_nothing_stale_when_busy(): void {
 			list( $updater ) = $this->subject( 'manual' );
 			$this->prepare_install( $updater );
