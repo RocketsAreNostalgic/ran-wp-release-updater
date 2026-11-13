@@ -335,7 +335,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			if ( 'plugin' === $target_type ) {
 				$hooks[] = 'plugins_api';
 			}
-			return array_merge( $hooks, array( 'plugin' === $target_type ? 'auto_update_plugin' : 'auto_update_theme', 'upgrader_package_options', 'upgrader_pre_download', 'upgrader_pre_install', 'pre_unzip_file', 'upgrader_source_selection', 'upgrader_install_package_result', 'upgrader_process_complete' ) );
+			return array_merge( $hooks, array( 'ran_wp_release_updater_check_releases_v1', 'plugin' === $target_type ? 'auto_update_plugin' : 'auto_update_theme', 'upgrader_package_options', 'upgrader_pre_download', 'upgrader_pre_install', 'pre_unzip_file', 'upgrader_source_selection', 'upgrader_install_package_result', 'upgrader_process_complete' ) );
 		}
 
 		private function archive(
