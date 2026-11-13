@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.0-beta.18](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.17...v1.0.0-beta.18) (2026-11-13)
+
+
+### Features
+
+* **github:** accept two-part stable release tags ([f216b19](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/f216b19e62996df06e9b5703c206f661c5dcd84e)), closes [#154](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/154)
+* **release-source:** adopt the shared failure-text screener ([#176](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/176)) ([f666cd4](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/f666cd40eaa780046d3da7cf00a0b95f88cff7ec))
+* **release-source:** carry a bounded rejection reason ([#157](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/157)) ([4b50a47](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/4b50a47b21f2a7d58f54f487edc22f70b53ba310))
+* **release-source:** carry a bounded rejection reason from inspection ([2c680b2](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/2c680b26132114ff990ffdf6a964f0626617ea20)), closes [#155](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/155)
+
+
+### Bug Fixes
+
+* **github:** filter two-part tags that normalise past the limit ([e6ba03e](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/e6ba03e7aa02e3da74fb82d805429cd3b4aa1d9f)), closes [#154](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/154)
+* **release-source:** accept absent Requires headers at inspection ([514d67d](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/514d67d4526ced780a4f92c6845c6715e9a4e630)), closes [#154](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/154)
+* **release-source:** drop more unsafe rejection detail shapes ([fe22166](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/fe22166eaa9b9a042a764e0508b9e8c06c6dc3f6)), closes [#157](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/157)
+* **release-source:** keep credentials out of rejection details ([15ea376](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/15ea37659b4a090d84bd57568c32329f8900baad)), closes [#155](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/155)
+* **release-source:** keep rejection screening provider-neutral ([e4b3f62](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/e4b3f62e4d1e3d096f340cb1cba35e35c49e3ea8)), closes [#155](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/155)
+* **release-source:** screen both authorisation spellings in details ([fa8a160](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/fa8a160da4e3c6b0f424a9e9e0371e414561f0e3)), closes [#157](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/157)
+* **release-source:** screen rejection details by shape, guard class map ([4539037](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/4539037a9296602eb94af6c51df0d363995f475b)), closes [#155](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/155)
+
 ## [1.0.0-beta.17](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.16...v1.0.0-beta.17) (2026-11-12)
 
 
