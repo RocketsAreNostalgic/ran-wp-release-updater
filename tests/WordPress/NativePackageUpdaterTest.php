@@ -2091,23 +2091,38 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 'policy_disabled', end( $GLOBALS['ran_wp_release_updater_test_observations'] )[1]['reason'] );
 			self::assertSame( 'skipped', end( $GLOBALS['ran_wp_release_updater_test_observations'] )[1]['status'] );
 		}
-		public function test_manual_check_when_disabled_does_not_leave_a_reusable_download_token(): void {
-			list( $updater, $adapter ) = $this->subject( 'disabled', native_discovery_reuse: true );
+		public function test_manual_check_does_not_leave_a_reusable_discovery_snapshot(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual', native_discovery_reuse: true );
 			$this->manual_check( $updater );
-			$acquired = $adapter->acquire_calls;
-			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
-			// With reuse enabled a leaked snapshot would let a later native check offer without discovery.
-			$updater->filter_update(
-				false,
-				array(
-					'Version'   => '1.0.0',
-					'UpdateURI' => $this->uri(),
-				),
-				'package/package.php',
-				array()
-			);
-			self::assertSame( 1, $adapter->list_calls );
-			self::assertSame( $acquired, $adapter->acquire_calls );
+			$state = new \ReflectionObject( $updater );
+			self::assertNull( $state->getProperty( 'descriptor' )->getValue( $updater ) );
+			self::assertNull( $state->getProperty( 'discovery_snapshot' )->getValue( $updater ) );
+			// A leaked snapshot would let this native check offer without asking the provider again.
+			$this->offer( $updater );
+			self::assertSame( 2, $adapter->list_calls );
+		}
+		public function test_manual_check_leaves_native_status_untouched(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual' );
+			$this->offer( $updater );
+			$before = $updater->status();
+			$this->manual_check( $updater );
+			self::assertSame( $before, $updater->status() );
+			self::assertSame( 2, $adapter->list_calls );
+		}
+		public function test_manual_check_reports_nothing_stale_when_busy(): void {
+			list( $updater ) = $this->subject( 'manual' );
+			$this->prepare_install( $updater );
+			$busy = $this->manual_check( $updater );
+			self::assertSame( 'runtime_busy', $busy['reason'] );
+			self::assertNull( $busy['candidate_version'] );
+			self::assertNull( $busy['relationship'] );
+			self::assertNull( $busy['candidate_validation_code'] );
+		}
+		public function test_manual_check_reports_a_second_consecutive_check(): void {
+			list( $updater, $adapter ) = $this->subject( 'disabled' );
+			self::assertSame( 'newer_release_observed', $this->manual_check( $updater )['reason'] );
+			self::assertSame( 'newer_release_observed', $this->manual_check( $updater )['reason'] );
+			self::assertSame( 2, $adapter->list_calls );
 		}
 		public function test_manual_check_emits_one_started_and_completed_observation_for_disabled(): void {
 			list( $updater ) = $this->subject( 'disabled' );

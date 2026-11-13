@@ -261,8 +261,17 @@ Guarantees:
   lease or provider work occurs; the report and the completion observation have
   `status` `skipped` and reason `policy_forced_off`, distinct from the
   `policy_disabled` reason a native `disabled` check records.
-- It emits the usual `check_started_v1` and `check_completed_v1` observations
-  (not for `runtime_busy` or when nothing answered). Remote text is never
+- It leaves `status()['native']` as the last native check left it, and it emits
+  the same `check_started_v1` and `check_completed_v1` observations as a native
+  check (not for `runtime_busy` or when nothing answered). Consumers that treat
+  a `succeeded` completion as "an offer exists" must read the reason:
+  `newer_release_observed` is not an offer. For anything but `forced-off` or an
+  invalid identity the check marks the target type as operation-started, as a
+  native check does, so run it after targets are declared.
+- Every call does full provider discovery, archive inspection and validation and
+  keeps no reusable result. Do not wire it to unauthenticated or high-frequency
+  paths.
+- Remote text is never
   returned; only the finite codes and validated versions above.
 
 The native installer returns `WP_Error` failures using the prefix:
@@ -345,7 +354,7 @@ See [Architecture and package relationships](architecture.md) for the trust mode
 
 The selected runtime emits `ran_wp_release_updater_check_started_v1` and
 `ran_wp_release_updater_check_completed_v1` WordPress actions around an admitted
-native update check. Start precedes remote discovery, after any reusable request
+native update check, and around the read-only check described above. Start precedes remote discovery, after any reusable request
 snapshot is ruled out; local validation/policy/admission failures also emit a
 pair. Reusing an already verified request snapshot emits neither action. Each
 action receives one array. `refresh()` and information reads

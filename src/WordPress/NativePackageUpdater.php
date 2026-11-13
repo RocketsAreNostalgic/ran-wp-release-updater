@@ -294,14 +294,15 @@ final class NativePackageUpdater {
 		if ( $target_type !== $this->target_type || ! is_string( $installed_identity ) || ! hash_equals( $this->installed_identity, $installed_identity ) || ! $this->live() ) {
 			return $result;
 		}
-		$previous = $this->status;
-		$reason   = 'unexpected_failure';
-		$check_id = null;
+		$previous     = $this->status;
+		$reason       = 'unexpected_failure';
+		$check_id     = null;
+		$this->status = self::empty_status();
 		if ( $this->native_beginning || null !== $this->native_owner || $this->pending_install->active() ) {
-			return $this->check_report( 'runtime_busy' );
+			$report       = $this->check_report( 'runtime_busy' );
+			$this->status = $previous;
+			return $report;
 		}
-		$this->begin_operation();
-		$this->status                      = self::empty_status();
 		$this->status['installed_version'] = $this->headers['Version'];
 		$this->status['last_check']        = time();
 		if ( null === ReleaseVersion::normalize_header( $this->headers['Version'] ) ) {
@@ -310,33 +311,39 @@ final class NativePackageUpdater {
 		} elseif ( 'forced-off' === $this->policy ) {
 			$reason   = 'policy_forced_off';
 			$check_id = $this->start_check_observation();
-		} elseif ( ! $this->direct_filesystem() ) {
-			$reason   = 'filesystem_unavailable';
-			$check_id = $this->start_check_observation();
-		} elseif ( ! $this->claim_discovery() ) {
-			$reason   = 'discovery_not_admitted';
-			$check_id = $this->start_check_observation();
 		} else {
-			$descriptor = $this->discover(
-				$this->headers['Version'],
-				$reason,
-				function () use ( &$check_id ): void {
-					$check_id = $this->start_check_observation();
+			$this->begin_operation();
+			if ( ! $this->direct_filesystem() ) {
+				$reason   = 'filesystem_unavailable';
+				$check_id = $this->start_check_observation();
+			} elseif ( ! $this->claim_discovery() ) {
+				$reason   = 'discovery_not_admitted';
+				$check_id = $this->start_check_observation();
+			} else {
+				$descriptor = $this->discover(
+					$this->headers['Version'],
+					$reason,
+					function () use ( &$check_id ): void {
+						$check_id = $this->start_check_observation();
+					}
+				);
+				if ( $descriptor instanceof IdentityDescriptor ) {
+					$reason = $this->manual_eligible( $descriptor ) ? 'newer_release_observed' : 'candidate_not_eligible';
 				}
-			);
-			if ( $descriptor instanceof IdentityDescriptor ) {
-				$reason = $this->manual_eligible( $descriptor ) ? 'newer_release_observed' : 'candidate_not_eligible';
+				// The observed release must not seed a later offer, token or staged install.
+				$this->clear_discovery_snapshot();
+				$this->descriptor = null;
 			}
-			// The observed release must not seed a later offer, token or staged install.
-			$this->clear_discovery_snapshot();
-			$this->descriptor = null;
 		}
-		// An earlier native offer is still held by the transient: keep its status facts.
-		$this->status['offered_version']          = $previous['offered_version'];
-		$this->status['offered_release_identity'] = $previous['offered_release_identity'];
-		$report                                   = $this->check_report( $reason );
+		$report = $this->check_report( $reason );
 		$this->complete_check_observation( $check_id, $reason );
-		return $this->live() ? $report : $this->check_report( 'runtime_liveness_lost' );
+		if ( ! $this->live() ) {
+			$this->status = self::empty_status();
+			$report       = $this->check_report( 'runtime_liveness_lost' );
+		}
+		// A read-only check leaves the handle status of the last native check untouched.
+		$this->status = $previous;
+		return $report;
 	}
 
 	/**
