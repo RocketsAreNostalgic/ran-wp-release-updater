@@ -207,8 +207,63 @@ $release_updater->refresh();
 `refresh()` clears request-local native state when the selected runtime is live. It also deletes the WordPress `update_plugins` or `update_themes` site transient for the target's type, which removes WordPress's twelve-hour freshness shortcut. The next WordPress update check then calls this target's update filter again.
 
 - `refresh()` runs no check itself. Call `wp_update_plugins()` or `wp_update_themes()` afterwards when you need the result in the same request.
-- A refresh is not proof that the provider was contacted. The filter still returns early for a `disabled` or `forced-off` policy, an unavailable filesystem, or when discovery is not admitted.
+- A refresh is not proof that the provider was contacted. The native filter still returns early for a `disabled` or `forced-off` policy, an unavailable filesystem, or when discovery is not admitted; use the read-only check below to learn the newest release without offering it.
 - `status()['native']['last_check']` is stamped as soon as the filter runs, before those early exits, so it does not show what a check did. Read `status()['native']` (`failure_code`, `candidate_validation_code`, the `offered_*` fields) and `diagnostics()` instead.
+
+### Checking without offering
+
+`refresh()` followed by a WordPress update check is an offer path: a `disabled`
+or `forced-off` target returns before discovery, so it cannot answer "is there a
+newer release?". A host that wants that answer, for example behind a manual
+Check releases control, calls the optional read-only check filter. The runtime
+registers it for every active target and no handle method or protocol change is
+involved, so an older elected runtime simply does not answer.
+
+```text
+$report = apply_filters( 'ran_wp_release_updater_check_releases_v1', null, 'plugin', 'package/package.php' );
+```
+
+Arguments are the unanswered default (`null`), the target type (`plugin` or
+`theme`) and the installed identity. The host must authorize the caller itself,
+as for any call that reaches the provider. Only the matching live target
+answers. The filter returns `null` unchanged when nothing answered (no such
+target, runtime not live, or an older runtime), and the host must treat that as
+"unsupported", not as an up-to-date result.
+
+An answering target returns exactly these keys:
+
+| Key | Value |
+| --- | --- |
+| `status` | `succeeded`, `rejected`, `skipped` or `failed`, as for native observations |
+| `reason` | Observation reason, below |
+| `policy` | The target's `update_policy` |
+| `relationship`, `installed_version`, `candidate_version`, `candidate_validation_code` | Nullable, validated and bounded exactly as in the completion observation |
+| `offered` | Always `false` |
+
+Reasons are those of the completion observation plus `newer_release_observed`
+(`succeeded`: a newer, manually eligible release exists), and `runtime_busy`
+(`failed`: a native install is pending or beginning, so nothing was checked).
+A `no_newer_candidate`, `no_candidates`, `candidate_rejected` or
+`candidate_not_eligible` result reports an up-to-date, rejected or ineligible
+state in the same way a native check does.
+
+Guarantees:
+
+- The check never writes or deletes an `update_plugins` or `update_themes`
+  transient entry, never builds an offer or download token, never changes
+  `offered_version`/`offered_release_identity` of an earlier native offer, and
+  keeps no descriptor or reusable discovery snapshot. A reported release cannot
+  become installable through this call.
+- It applies to `disabled`, `manual` and `automatic`. Native and background
+  checks, and offers for `manual` and `automatic`, are unchanged: `disabled`
+  still returns before discovery there with reason `policy_disabled`.
+- `forced-off` is site configuration and stays fully blocked. No filesystem,
+  lease or provider work occurs; the report and the completion observation have
+  `status` `skipped` and reason `policy_forced_off`, distinct from the
+  `policy_disabled` reason a native `disabled` check records.
+- It emits the usual `check_started_v1` and `check_completed_v1` observations
+  (not for `runtime_busy` or when nothing answered). Remote text is never
+  returned; only the finite codes and validated versions above.
 
 The native installer returns `WP_Error` failures using the prefix:
 
@@ -313,7 +368,8 @@ oversized facts are omitted as null, never truncated. Validation codes are a
 finite safe subset of the native discovery codes. No credentials, URLs, remote
 messages, exception contents, or archive tokens are included.
 
-`update_available` means an eligible native offer was constructed. Only a
+`newer_release_observed` (read-only check only, see above) means a newer eligible
+release exists but no offer was constructed. `update_available` means an eligible native offer was constructed. Only a
 complete valid listing can establish `no_candidates` or `no_newer_candidate`;
 unknown or rejected potentially newer candidates cannot establish either.
 Policy suppression and failed discovery admission are skipped checks, not proof

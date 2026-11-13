@@ -165,6 +165,7 @@ final class NativePackageUpdater {
 		if ( 'plugin' === $this->target_type ) {
 			add_filter( 'plugins_api', array( $this, 'filter_plugin_information' ), 10, 3 );
 		}
+		add_filter( 'ran_wp_release_updater_check_releases_v1', array( $this, 'filter_check_releases' ), 10, 3 );
 		add_filter( 'plugin' === $this->target_type ? 'auto_update_plugin' : 'auto_update_theme', array( $this, 'filter_auto_update' ), 10, 2 );
 		add_filter( 'upgrader_package_options', array( $this, 'capture_package_options' ), PHP_INT_MAX, 1 );
 		add_filter( 'upgrader_pre_download', array( $this, 'filter_pre_download' ), PHP_INT_MAX, 4 );
@@ -279,6 +280,113 @@ final class NativePackageUpdater {
 		return $offer;
 	}
 
+	/**
+	 * Host-requested release check that reports facts and never offers a release.
+	 *
+	 * Unlike filter_update(), `disabled` still discovers here. Nothing is written to
+	 * the WordPress update transient, no offer token is built and no install state is
+	 * touched. `forced-off` is blocked before any filesystem, lease or network work.
+	 * Another target's request, or a runtime that is not live, is returned unchanged.
+	 *
+	 * @return mixed Unchanged $result, or the check report array for this target.
+	 */
+	public function filter_check_releases( mixed $result, mixed $target_type, mixed $installed_identity ): mixed {
+		if ( $target_type !== $this->target_type || ! is_string( $installed_identity ) || ! hash_equals( $this->installed_identity, $installed_identity ) || ! $this->live() ) {
+			return $result;
+		}
+		$previous = $this->status;
+		$reason   = 'unexpected_failure';
+		$check_id = null;
+		if ( $this->native_beginning || null !== $this->native_owner || $this->pending_install->active() ) {
+			return $this->check_report( 'runtime_busy' );
+		}
+		$this->begin_operation();
+		$this->status                      = self::empty_status();
+		$this->status['installed_version'] = $this->headers['Version'];
+		$this->status['last_check']        = time();
+		if ( null === ReleaseVersion::normalize_header( $this->headers['Version'] ) ) {
+			$reason   = 'runtime_identity_invalid';
+			$check_id = $this->start_check_observation();
+		} elseif ( 'forced-off' === $this->policy ) {
+			$reason   = 'policy_forced_off';
+			$check_id = $this->start_check_observation();
+		} elseif ( ! $this->direct_filesystem() ) {
+			$reason   = 'filesystem_unavailable';
+			$check_id = $this->start_check_observation();
+		} elseif ( ! $this->claim_discovery() ) {
+			$reason   = 'discovery_not_admitted';
+			$check_id = $this->start_check_observation();
+		} else {
+			$descriptor = $this->discover(
+				$this->headers['Version'],
+				$reason,
+				function () use ( &$check_id ): void {
+					$check_id = $this->start_check_observation();
+				}
+			);
+			if ( $descriptor instanceof IdentityDescriptor ) {
+				$reason = $this->manual_eligible( $descriptor ) ? 'newer_release_observed' : 'candidate_not_eligible';
+			}
+			// The observed release must not seed a later offer, token or staged install.
+			$this->clear_discovery_snapshot();
+			$this->descriptor = null;
+		}
+		// An earlier native offer is still held by the transient: keep its status facts.
+		$this->status['offered_version']          = $previous['offered_version'];
+		$this->status['offered_release_identity'] = $previous['offered_release_identity'];
+		$report                                   = $this->check_report( $reason );
+		$this->complete_check_observation( $check_id, $reason );
+		return $this->live() ? $report : $this->check_report( 'runtime_liveness_lost' );
+	}
+
+	/**
+	 * @return array{status:string,reason:string,policy:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,candidate_validation_code:string|null,offered:false}
+	 */
+	private function check_report( string $reason ): array {
+		$payload = $this->check_facts( $reason );
+		return array(
+			'status'                    => $payload['status'],
+			'reason'                    => $reason,
+			'policy'                    => $this->policy,
+			'relationship'              => $payload['relationship'],
+			'installed_version'         => $payload['installed_version'],
+			'candidate_version'         => $payload['candidate_version'],
+			'candidate_validation_code' => $payload['candidate_validation_code'],
+			'offered'                   => false,
+		);
+	}
+
+	/**
+	 * @return array{status:string,reason:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,offered_version:string|null,candidate_validation_code:string|null}
+	 */
+	private function check_facts( string $reason ): array {
+		$payload = array(
+			'status' => 'failed',
+			'reason' => $reason,
+		);
+		if ( in_array( $reason, array( 'update_available', 'newer_release_observed', 'no_candidates', 'no_newer_candidate' ), true ) ) {
+			$payload['status'] = 'succeeded';
+		} elseif ( in_array( $reason, array( 'candidate_rejected', 'candidate_not_eligible' ), true ) ) {
+			$payload['status'] = 'rejected';
+		} elseif ( in_array( $reason, array( 'policy_disabled', 'policy_forced_off', 'discovery_not_admitted' ), true ) ) {
+			$payload['status'] = 'skipped';
+		}
+		foreach ( array( 'relationship', 'installed_version', 'candidate_version', 'offered_version', 'candidate_validation_code' ) as $key ) {
+			$value           = $this->status[ $key ];
+			$payload[ $key ] = is_string( $value ) && strlen( $value ) <= 64 ? $value : null;
+		}
+		foreach ( array( 'installed_version', 'candidate_version', 'offered_version' ) as $key ) {
+			if ( is_string( $payload[ $key ] ) && null === ReleaseVersion::normalize_header( $payload[ $key ] ) ) {
+				$payload[ $key ] = null;
+			}
+		}
+		$validation_codes = array( 'release_list_failed', 'candidate_list_invalid', 'candidate_invalid', 'candidate_not_newer', 'candidate_inspection_failed', 'candidate_admission_rejected', 'candidate_descriptor_mismatch', 'candidate_validation_failed', 'archive_identity_verified' );
+		if ( ! in_array( $payload['candidate_validation_code'], $validation_codes, true ) ) {
+			$payload['candidate_validation_code'] = null;
+		}
+		return $payload;
+	}
+
 	private function start_check_observation(): ?string {
 		$facts = $this->binding->to_array();
 		if ( ! function_exists( 'do_action' ) || ! function_exists( 'get_current_blog_id' ) ) {
@@ -323,31 +431,7 @@ final class NativePackageUpdater {
 		if ( null === $check_id ) {
 			return;
 		}
-		$payload = array(
-			'check_id' => $check_id,
-			'status'   => 'failed',
-			'reason'   => $reason,
-		);
-		if ( in_array( $reason, array( 'update_available', 'no_candidates', 'no_newer_candidate' ), true ) ) {
-			$payload['status'] = 'succeeded';
-		} elseif ( in_array( $reason, array( 'candidate_rejected', 'candidate_not_eligible' ), true ) ) {
-			$payload['status'] = 'rejected';
-		} elseif ( in_array( $reason, array( 'policy_disabled', 'policy_forced_off', 'discovery_not_admitted' ), true ) ) {
-			$payload['status'] = 'skipped';
-		}
-		foreach ( array( 'relationship', 'installed_version', 'candidate_version', 'offered_version', 'candidate_validation_code' ) as $key ) {
-			$value           = $this->status[ $key ];
-			$payload[ $key ] = is_string( $value ) && strlen( $value ) <= 64 ? $value : null;
-		}
-		foreach ( array( 'installed_version', 'candidate_version', 'offered_version' ) as $key ) {
-			if ( is_string( $payload[ $key ] ) && null === ReleaseVersion::normalize_header( $payload[ $key ] ) ) {
-				$payload[ $key ] = null;
-			}
-		}
-		$validation_codes = array( 'release_list_failed', 'candidate_list_invalid', 'candidate_invalid', 'candidate_not_newer', 'candidate_inspection_failed', 'candidate_admission_rejected', 'candidate_descriptor_mismatch', 'candidate_validation_failed', 'archive_identity_verified' );
-		if ( ! in_array( $payload['candidate_validation_code'], $validation_codes, true ) ) {
-			$payload['candidate_validation_code'] = null;
-		}
+		$payload = array( 'check_id' => $check_id ) + $this->check_facts( $reason );
 		self::observe_check( 'completed', $payload );
 	}
 

@@ -448,7 +448,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array(), $database->read_option_names() );
 			$updater->register();
 			$updater->register();
-			self::assertCount( 10, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 11, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
 		public function test_offer_rechecks_runtime_uri_uses_unique_info_slug_and_default_denies_automatic(): void {
@@ -1257,7 +1257,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$property->setValue( $broker, 'active' );
 			list( $updater, $adapter, $database ) = $this->subject( 'manual', null, 'stable', false, $state );
 			$updater->register();
-			self::assertCount( 10, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 11, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
 			foreach ( array( 'stale_global', 'wrong_protocol' ) as $failure ) {
 				if ( 'stale_global' === $failure ) {
@@ -1591,7 +1591,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
-			self::assertCount( 9, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 10, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$offer = $updater->filter_update(
 				false,
 				array(
@@ -1621,7 +1621,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$stock = new \Theme_Upgrader();
 				$GLOBALS['ran_wp_release_updater_test_doing_action'] = $automatic_action ? 'wp_maybe_auto_update' : null;
 				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', $stock, $extra ) );
-				self::assertCount( 10, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+				self::assertCount( 11, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 				if ( $failed_result ) {
 					$original      = new \WP_Error( 'post_copy_failed', 'Post-copy failure.' );
 					$stock->result = $original;
@@ -1633,11 +1633,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					self::assertNotSame( $original, $outgoing );
 					$bridged = ! $automatic_action && ! $replace_skin;
 					self::assertSame( $bridged ? array() : $original, $stock->result );
-					self::assertSame( $bridged ? 11 : 10, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
+					self::assertSame( $bridged ? 12 : 11, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
 					if ( $bridged ) {
 						self::assertSame(
 							array( 'action', 'upgrader_process_complete', array( $updater, 'restore_theme_error_result' ), PHP_INT_MIN, 2 ),
-							$GLOBALS['ran_wp_release_updater_test_hooks'][10]
+							$GLOBALS['ran_wp_release_updater_test_hooks'][11]
 						);
 					}
 					$stock->skin->result = $outgoing;
@@ -2030,6 +2030,195 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			}
 		}
 
+		private const CHECK_FILTER = 'ran_wp_release_updater_check_releases_v1';
+		/** @return array<string,mixed> */
+		private function manual_check( NativePackageUpdater $updater, string $type = 'plugin', string $identity = 'package/package.php' ): array {
+			$report = $updater->filter_check_releases( null, $type, $identity );
+			self::assertIsArray( $report );
+			return $report;
+		}
+		public function test_manual_check_registers_its_filter_with_every_target(): void {
+			list( $updater ) = $this->subject( 'disabled' );
+			$updater->register();
+			$hooks = array_filter( $GLOBALS['ran_wp_release_updater_test_hooks'], static fn( array $hook ): bool => self::CHECK_FILTER === $hook[1] );
+			self::assertCount( 1, $hooks );
+		}
+		public function test_manual_check_when_disabled_reports_the_release_without_any_offer_state(): void {
+			$GLOBALS['ran_wp_release_updater_test_deleted_transients'] = array();
+			list( $updater, $adapter )                                 = $this->subject( 'disabled', native_discovery_reuse: true );
+			$report = $this->manual_check( $updater );
+			self::assertSame(
+				array(
+					'status'                    => 'succeeded',
+					'reason'                    => 'newer_release_observed',
+					'policy'                    => 'disabled',
+					'relationship'              => 'newer',
+					'installed_version'         => '1.0.0',
+					'candidate_version'         => '2.0.0',
+					'candidate_validation_code' => 'archive_identity_verified',
+					'offered'                   => false,
+				),
+				$report
+			);
+			self::assertSame( 1, $adapter->list_calls );
+			// No offer token or offer fields can be read from anything the check returned or kept.
+			foreach ( $report as $value ) {
+				self::assertFalse( is_string( $value ) && str_contains( $value, 'ran-wp-release-updater:v1:' ) );
+			}
+			self::assertNull( $updater->status()['offered_version'] );
+			self::assertNull( $updater->status()['offered_release_identity'] );
+			$state = new \ReflectionObject( $updater );
+			self::assertNull( $state->getProperty( 'descriptor' )->getValue( $updater ) );
+			self::assertNull( $state->getProperty( 'discovery_snapshot' )->getValue( $updater ) );
+			// The transient is neither written nor cleared by the check, and the cached-entry filter has nothing to remove.
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_deleted_transients'] );
+			$transient           = new \stdClass();
+			$transient->response = array();
+			self::assertSame( array(), $updater->filter_cached_update( $transient )->response );
+			// Native checks stay policy-gated: no new discovery and no offer, exactly as before.
+			self::assertFalse(
+				$updater->filter_update(
+					false,
+					array(
+						'Version'   => '1.0.0',
+						'UpdateURI' => $this->uri(),
+					),
+					'package/package.php',
+					array()
+				)
+			);
+			self::assertSame( 1, $adapter->list_calls );
+			self::assertSame( 'policy_disabled', end( $GLOBALS['ran_wp_release_updater_test_observations'] )[1]['reason'] );
+			self::assertSame( 'skipped', end( $GLOBALS['ran_wp_release_updater_test_observations'] )[1]['status'] );
+		}
+		public function test_manual_check_when_disabled_does_not_leave_a_reusable_download_token(): void {
+			list( $updater, $adapter ) = $this->subject( 'disabled', native_discovery_reuse: true );
+			$this->manual_check( $updater );
+			$acquired = $adapter->acquire_calls;
+			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
+			// With reuse enabled a leaked snapshot would let a later native check offer without discovery.
+			$updater->filter_update(
+				false,
+				array(
+					'Version'   => '1.0.0',
+					'UpdateURI' => $this->uri(),
+				),
+				'package/package.php',
+				array()
+			);
+			self::assertSame( 1, $adapter->list_calls );
+			self::assertSame( $acquired, $adapter->acquire_calls );
+		}
+		public function test_manual_check_emits_one_started_and_completed_observation_for_disabled(): void {
+			list( $updater ) = $this->subject( 'disabled' );
+			$this->manual_check( $updater );
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			self::assertSame( array( 'ran_wp_release_updater_check_started_v1', 'ran_wp_release_updater_check_completed_v1' ), array( $events[0][0], $events[1][0] ) );
+			self::assertSame( $events[0][1]['check_id'], $events[1][1]['check_id'] );
+			self::assertSame( 'succeeded', $events[1][1]['status'] );
+			self::assertSame( 'newer_release_observed', $events[1][1]['reason'] );
+			self::assertSame( '2.0.0', $events[1][1]['candidate_version'] );
+			self::assertNull( $events[1][1]['offered_version'] );
+		}
+		public function test_forced_off_is_blocked_before_any_provider_work_and_is_reported_distinctly(): void {
+			list( $forced, $forced_adapter ) = $this->subject( 'forced-off' );
+			$report                          = $this->manual_check( $forced );
+			self::assertSame( 'skipped', $report['status'] );
+			self::assertSame( 'policy_forced_off', $report['reason'] );
+			self::assertSame( 'forced-off', $report['policy'] );
+			self::assertFalse( $report['offered'] );
+			self::assertNull( $report['candidate_version'] );
+			self::assertSame( 0, $forced_adapter->list_calls );
+			self::assertSame( 0, $forced_adapter->inspect_calls );
+			self::assertSame( 0, $forced_adapter->acquire_calls );
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			self::assertSame( 'policy_forced_off', $events[1][1]['reason'] );
+			self::assertSame( 'skipped', $events[1][1]['status'] );
+			// A disabled package never reports the site-configuration reason.
+			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
+			list( $disabled )                                    = $this->subject( 'disabled' );
+			self::assertNotSame( 'policy_forced_off', $this->manual_check( $disabled )['reason'] );
+			// Native checks keep their existing, already distinct skip reasons.
+			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
+			self::assertFalse(
+				$forced->filter_update(
+					false,
+					array(
+						'Version'   => '1.0.0',
+						'UpdateURI' => $this->uri(),
+					),
+					'package/package.php',
+					array()
+				)
+			);
+			self::assertSame( 'policy_forced_off', $GLOBALS['ran_wp_release_updater_test_observations'][1][1]['reason'] );
+			self::assertSame( 0, $forced_adapter->list_calls );
+		}
+		public function test_manual_check_reports_rejected_and_failed_outcomes_like_other_policies(): void {
+			list( $updater, $adapter ) = $this->subject( 'disabled' );
+			$adapter->list_response    = array(
+				'candidates' => array(
+					array(
+						'release_identity' => '',
+						'tag'              => 5,
+						'version'          => '2.0.0',
+					),
+				),
+			);
+			$bad                       = $this->manual_check( $updater );
+			self::assertSame( 'failed', $bad['status'] );
+			self::assertSame( 'candidate_invalid', $bad['reason'] );
+			list( $rejecting ) = $this->subject(
+				'disabled',
+				descriptor_admission: static function ( IdentityDescriptor $descriptor ): bool {
+					unset( $descriptor );
+					return false;
+				}
+			);
+			$rejected          = $this->manual_check( $rejecting );
+			self::assertSame( 'rejected', $rejected['status'] );
+			self::assertSame( 'candidate_rejected', $rejected['reason'] );
+			self::assertFalse( $rejected['offered'] );
+		}
+		public function test_manual_check_is_ignored_for_other_targets_and_when_not_live(): void {
+			list( $updater, $adapter ) = $this->subject( 'disabled' );
+			self::assertNull( $updater->filter_check_releases( null, 'theme', 'package/package.php' ) );
+			self::assertNull( $updater->filter_check_releases( null, 'plugin', 'other/other.php' ) );
+			self::assertSame( 'kept', $updater->filter_check_releases( 'kept', 'plugin', 'other/other.php' ) );
+			self::assertNull( $updater->filter_check_releases( null, 'plugin', 7 ) );
+			self::assertSame( 0, $adapter->list_calls );
+			list( $guarded, $guarded_adapter ) = $this->subject( 'disabled', operation_guard: static fn(): bool => false );
+			self::assertNull( $guarded->filter_check_releases( null, 'plugin', 'package/package.php' ) );
+			self::assertSame( 0, $guarded_adapter->list_calls );
+		}
+		public function test_manual_check_does_not_change_manual_or_automatic_offers(): void {
+			foreach ( array( 'manual', 'automatic' ) as $mode ) {
+				list( $updater, $adapter ) = $this->subject( $mode );
+				$offer                     = $this->offer( $updater );
+				$before                    = $updater->status();
+				$report                    = $this->manual_check( $updater );
+				self::assertSame( 'newer_release_observed', $report['reason'] );
+				self::assertSame( $mode, $report['policy'] );
+				self::assertFalse( $report['offered'] );
+				// The offered facts of the earlier native check remain, and the offer still verifies.
+				self::assertSame( $before['offered_version'], $updater->status()['offered_version'] );
+				self::assertSame( $before['offered_release_identity'], $updater->status()['offered_release_identity'] );
+				self::assertSame( 'automatic' === $mode, $offer['autoupdate'] );
+				self::assertSame( 2, $adapter->list_calls );
+				$again = $this->offer( $updater );
+				self::assertSame( $offer['package'], $again['package'] );
+				self::assertSame( $offer['autoupdate'], $again['autoupdate'] );
+			}
+		}
+		public function test_manual_check_refuses_while_a_native_install_is_pending(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual' );
+			$this->prepare_install( $updater );
+			$calls  = $adapter->list_calls;
+			$report = $this->manual_check( $updater );
+			self::assertSame( 'runtime_busy', $report['reason'] );
+			self::assertSame( 'failed', $report['status'] );
+			self::assertSame( $calls, $adapter->list_calls );
+		}
 		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
 		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null ): array {
 			$archive_path = $this->archive();
