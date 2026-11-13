@@ -39,9 +39,10 @@ final class ReleaseRejectionTest extends TestCase {
 	}
 
 	public function test_detail_is_bounded_printable_and_never_a_digest(): void {
-		self::assertSame( 'found 1.2.0, expected 1.2.3', ReleaseRejection::detail( 'header_version_mismatch', "  found 1.2.0, expected 1.2.3\n" ) );
-		self::assertSame( 'a?b?c?', ReleaseRejection::detail( 'header_invalid', "a\x00b\u{202E}c\u{00E9}" ) );
-		self::assertSame( substr( str_repeat( 'xy ', 200 ), 0, 120 ), ReleaseRejection::detail( 'header_invalid', str_repeat( 'xy ', 200 ) ) );
+		self::assertSame( 'found 1.2.0, expected 1.2.3', ReleaseRejection::detail( 'header_version_mismatch', '  found 1.2.0, expected 1.2.3  ' ) );
+		self::assertNull( ReleaseRejection::detail( 'header_version_mismatch', "found 1.2.0, expected 1.2.3\n" ) );
+		self::assertNull( ReleaseRejection::detail( 'header_invalid', "a\x00b\u{202E}c\u{00E9}" ) );
+		self::assertSame( rtrim( substr( str_repeat( 'xy ', 200 ), 0, 120 ) ), ReleaseRejection::detail( 'header_invalid', str_repeat( 'xy ', 200 ) ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', "\xB1\xB2" ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', '' ) );
 		self::assertNull( ReleaseRejection::detail( 'header_invalid', null ) );
@@ -136,10 +137,10 @@ final class ReleaseRejectionTest extends TestCase {
 			'apikey word'      => 'apikey abc',
 			'authorization'    => 'authorization granted',
 			'word before'      => 'hunter2 is the password',
-			'token prose'      => 'token abc',
 			'british spelling' => 'authorisation hunter2',
 			'british before'   => 'hunter2 authorisation',
 			'british header'   => 'Authorisation: abc',
+			'token prose'      => 'token abc',
 			'american header'  => 'Authorization: abc',
 		);
 		return array_map( static fn ( string $value ): array => array( $value ), $cases );
@@ -152,9 +153,42 @@ final class ReleaseRejectionTest extends TestCase {
 
 	public function test_canonical_update_uri_echo_and_plain_text_survive_the_screen(): void {
 		self::assertSame( 'https://updates.example.test/owner/other', ReleaseRejection::detail( 'header_update_uri_mismatch', 'https://updates.example.test/owner/other' ) );
-		self::assertSame( 'release/v1.2.3', ReleaseRejection::detail( 'tag_not_version', 'release/v1.2.3' ) );
+		self::assertNull( ReleaseRejection::detail( 'tag_not_version', 'release/v1.2.3' ) );
 		self::assertSame( 'Author', ReleaseRejection::detail( 'header_duplicate', 'Author' ) );
 		self::assertSame( 'Requires PHP', ReleaseRejection::detail( 'header_invalid', 'Requires PHP' ) );
+	}
+
+	public function test_update_uri_exemption_is_only_the_validated_canonical_form(): void {
+		$hex = str_repeat( 'f0', 20 );
+		foreach ( array(
+			'https://user@updates.example.test/owner/other',
+			'https://user:pw@updates.example.test/owner/other',
+			'https://updates.example.test/owner/other?a=1',
+			'https://updates.example.test/owner/other#frag',
+			'https://updates.example.test:8443/owner/other',
+			'http://updates.example.test/owner/other',
+			'https://UPDATES.example.test/owner/other',
+			'https://updates.example.test/owner/other/',
+			'https://updates.example.test/owner/../other',
+			'https://updates.example.test/owner/' . $hex,
+			'https://updates.example.test/owner/ghp_abcdef',
+			'https://updates.example.test/owner/secret/hunter2',
+			'https://a0123456789abcdef0123456789abcdef.example.com/o',
+			'https://secret-hunter2.example.com/o/r',
+			'https://token.ghp-abcdefghij0123456789abcdef0123456789.example.com/o',
+			'https://updates.example.test/' . str_repeat( 'owner/', 15 ) . 'owner',
+			'https://updates.example.test/' . implode( '/', str_split( $hex, 8 ) ),
+			'https://updates.example.test/owner/authorisation/hunter2',
+			'https://updates.example.test/' . str_repeat( 'a', 120 ),
+			'https://updates.example.test/owner/other found',
+		) as $value ) {
+			self::assertNull( ReleaseRejection::detail( 'header_update_uri_mismatch', $value ), $value );
+		}
+		foreach ( array( 'https://github.com/owner/repo', 'https://bitbucket.org/my-ws/my-repo', 'https://raw.githubusercontent.com/o/r/main' ) as $kept ) {
+			self::assertSame( $kept, ReleaseRejection::detail( 'header_update_uri_mismatch', $kept ) );
+		}
+		self::assertNull( ReleaseRejection::detail( 'tag_not_version', 'https://updates.example.test/owner/other' ) );
+		self::assertNull( ReleaseRejection::detail( 'header_invalid', 'https://updates.example.test/owner/other' ) );
 	}
 
 	public function test_ordinary_text_with_credential_like_words_is_kept(): void {

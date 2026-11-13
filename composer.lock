@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "c513960d25a15a4904b9a4707a71b175",
+    "content-hash": "c3ec5b4afebdbf0f055c7bd6b1b0e232",
     "packages": [],
     "packages-dev": [
         {
@@ -1350,16 +1350,16 @@
         },
         {
             "name": "ran/updater-support",
-            "version": "v1.0.0-beta.4",
+            "version": "v1.0.0-beta.6",
             "source": {
                 "type": "git",
                 "url": "https://github.com/RocketsAreNostalgic/ran-updater-support.git",
-                "reference": "357db930b407941bd19a9e890c925d3d16ae9b15"
+                "reference": "5be2949f62d839eba0dec0896c23f58932765e4e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RocketsAreNostalgic/ran-updater-support/zipball/357db930b407941bd19a9e890c925d3d16ae9b15",
-                "reference": "357db930b407941bd19a9e890c925d3d16ae9b15",
+                "url": "https://api.github.com/repos/RocketsAreNostalgic/ran-updater-support/zipball/5be2949f62d839eba0dec0896c23f58932765e4e",
+                "reference": "5be2949f62d839eba0dec0896c23f58932765e4e",
                 "shasum": ""
             },
             "require": {
@@ -1370,7 +1370,7 @@
                 "phpcompatibility/phpcompatibility-paragonie": "2.0.0-alpha2",
                 "phpcompatibility/phpcompatibility-wp": "3.0.0-alpha2",
                 "phpstan/phpstan": "^2.1",
-                "ran/coding-standards": "dev-main"
+                "ran/coding-standards": "^1.0"
             },
             "type": "library",
             "autoload": {
@@ -1389,8 +1389,17 @@
                 "validate:strict": [
                     "composer validate --strict --no-check-publish"
                 ],
+                "test:standards": [
+                    "node --test tests/owned-methods.test.mjs"
+                ],
                 "test:contract": [
                     "php tests/contract.php"
+                ],
+                "test:failure-text": [
+                    "php tests/failure-text.php"
+                ],
+                "test:failure-text-mutation": [
+                    "php tests/failure-text-mutation.php"
                 ],
                 "standards": [
                     "phpcs --standard=.phpcs.xml"
@@ -1399,7 +1408,8 @@
                     "phpcbf --standard=.phpcs.xml --report=summary"
                 ],
                 "analyze": [
-                    "phpstan analyse --configuration=phpstan.neon --no-progress --memory-limit=512M"
+                    "@analyze:production",
+                    "@analyze:maintained"
                 ],
                 "test:release-control": [
                     "node --test tests/release-workflow-contract.test.mjs"
@@ -1408,8 +1418,21 @@
                     "bash -o pipefail -c 'find src tests -type f -name \"*.php\" -print0 | xargs -0 -n1 php -l'"
                 ],
                 "test": [
+                    "@test:analysis-coverage",
                     "@test:contract",
+                    "@test:failure-text",
+                    "@test:failure-text-mutation",
+                    "@test:standards",
                     "@test:release-control"
+                ],
+                "test:analysis-coverage": [
+                    "bash tests/analysis-coverage.sh"
+                ],
+                "analyze:production": [
+                    "phpstan analyse --configuration=phpstan.neon --no-progress --memory-limit=512M"
+                ],
+                "analyze:maintained": [
+                    "phpstan analyse --configuration=phpstan-maintained.neon --no-progress --memory-limit=512M"
                 ]
             },
             "license": [
@@ -1421,7 +1444,7 @@
                 "security": "https://github.com/RocketsAreNostalgic/ran-updater-support/security/advisories/new",
                 "source": "https://github.com/RocketsAreNostalgic/ran-updater-support"
             },
-            "time": "2026-09-23T11:24:10+00:00"
+            "time": "2026-11-13T03:05:14+00:00"
         },
         {
             "name": "sebastian/cli-parser",
