@@ -661,7 +661,7 @@ Detail screening is the shared `FailureText::strict( $detail, 120 )` of
 by `composer sync:updater-support` and listed in the `runtime.php` class map. The
 only local shape is the canonical `Update URI` echo of `header_update_uri_mismatch`,
 which is kept only as a canonical `https` URI on the expected host whose path
-segments pass the same screen. `ReleaseRejectionSharedScreenerTest` and the public
+segments pass the same screen, alone and read together. `ReleaseRejectionSharedScreenerTest` and the public
 opted-in source test run the shared hostile and benign corpus from the locked
 dependency.
 

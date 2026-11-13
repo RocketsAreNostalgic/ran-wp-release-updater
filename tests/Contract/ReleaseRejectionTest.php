@@ -172,6 +172,9 @@ final class ReleaseRejectionTest extends TestCase {
 			'https://updates.example.test/owner/../other',
 			'https://updates.example.test/owner/' . $hex,
 			'https://updates.example.test/owner/ghp_abcdef',
+			'https://updates.example.test/owner/secret/hunter2',
+			'https://updates.example.test/' . implode( '/', str_split( $hex, 8 ) ),
+			'https://updates.example.test/owner/authorisation/hunter2',
 			'https://updates.example.test/' . str_repeat( 'a', 120 ),
 			'https://updates.example.test/owner/other found',
 		) as $value ) {
