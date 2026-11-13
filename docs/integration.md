@@ -108,7 +108,7 @@ Policy behaviour:
 
 - `manual` publishes a verified native offer but does not admit automatic installation.
 - `automatic` admits automatic installation only when the provider evidence proves the release immutable/provenanced and the normal verification profile also passes.
-- `forced-off` and `disabled` suppress the native update offer.
+- `forced-off` and `disabled` suppress the native update offer. They apply on every native path: the update check, plugin information, the pre-download step and the cached update entry. None of those paths does discovery, claims a lease, calls the provider or builds a download token, and a cached entry for the package is dropped.
 
 Unknown providers are not dynamically loaded. The target remains inactive and reports `unsupported_provider`.
 
