@@ -46,7 +46,7 @@ PHP
 		self::assertTrue( $result['before']['hooks_registered'] );
 		self::assertFalse( $result['answer'] );
 		self::assertIsInt( $result['after']['native']['last_check'] );
-		self::assertSame( 12, $result['hooks'] );
+		self::assertSame( 13, $result['hooks'] );
 	}
 
 	public function test_direct_inactive_theme_declaration_after_theme_cutoff_is_deferred_without_native_work_or_hooks(): void {
@@ -84,7 +84,7 @@ PHP
 			$result['diagnostics']
 		);
 		self::assertSame( 0, $result['calls'] );
-		self::assertSame( 12, $result['before_hooks'] );
+		self::assertSame( 13, $result['before_hooks'] );
 		self::assertSame( $result['before_hooks'], $result['after_hooks'] );
 	}
 

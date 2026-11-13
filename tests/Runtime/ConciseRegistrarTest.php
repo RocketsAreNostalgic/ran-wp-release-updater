@@ -165,7 +165,7 @@ PHP
 		self::assertSame( 'target_active', $result['first']['code'] );
 		self::assertSame( 'target_active', $result['second']['code'] );
 		self::assertSame( 'declaration_deferred_operation_started', $result['late']['code'] );
-		self::assertSame( 22, $result['hooks'] );
+		self::assertSame( 24, $result['hooks'] );
 		self::assertSame( 3, $result['logical'] );
 	}
 
@@ -188,7 +188,7 @@ PHP
 			$result['late_diagnostics']
 		);
 		self::assertSame( 1, $result['runs'] );
-		self::assertSame( 11, $result['hooks'] );
+		self::assertSame( 12, $result['hooks'] );
 	}
 
 	public function test_c03_declaration_after_the_installer_cutoff_is_deferred_even_when_core_fails_early(): void {
@@ -207,7 +207,7 @@ PHP
 			),
 			$result['diagnostics']
 		);
-		self::assertSame( 11, $result['hooks'] );
+		self::assertSame( 12, $result['hooks'] );
 	}
 
 	public function test_c04_fresh_request_declaration_is_not_deferred_by_a_prior_request_cutoff(): void {

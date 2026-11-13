@@ -159,7 +159,7 @@ final class NativePackageUpdater {
 		}
 
 		add_filter( ( 'plugin' === $this->target_type ? 'update_plugins_' : 'update_themes_' ) . $host, array( $this, 'filter_update' ), 10, 4 );
-		if ( null !== $this->descriptor_admission ) {
+		if ( null !== $this->descriptor_admission || $this->policy_blocked() ) {
 			add_filter( 'site_transient_update_' . ( 'plugin' === $this->target_type ? 'plugins' : 'themes' ), array( $this, 'filter_cached_update' ), 10, 1 );
 		}
 		if ( 'plugin' === $this->target_type ) {
@@ -178,7 +178,12 @@ final class NativePackageUpdater {
 	}
 
 	public function filter_cached_update( mixed $transient ): mixed {
-		if ( null === $this->descriptor_admission || ! is_object( $transient ) || ! is_array( $transient->response ?? null ) || ! array_key_exists( $this->installed_identity, $transient->response ) ) {
+		$blocked = $this->policy_blocked();
+		if ( ( null === $this->descriptor_admission && ! $blocked ) || ! is_object( $transient ) || ! is_array( $transient->response ?? null ) || ! array_key_exists( $this->installed_identity, $transient->response ) ) {
+			return $transient;
+		}
+		if ( $blocked ) {
+			unset( $transient->response[ $this->installed_identity ] );
 			return $transient;
 		}
 		$entry      = $transient->response[ $this->installed_identity ];
@@ -223,7 +228,7 @@ final class NativePackageUpdater {
 			$check_id = $this->start_check_observation();
 			return $this->diagnose( 'runtime_package_identity_invalid', $update );
 		}
-		if ( in_array( $this->policy, array( 'disabled', 'forced-off' ), true ) ) {
+		if ( $this->policy_blocked() ) {
 			$reason   = 'disabled' === $this->policy ? 'policy_disabled' : 'policy_forced_off';
 			$check_id = $this->start_check_observation();
 			return false;
@@ -470,7 +475,7 @@ final class NativePackageUpdater {
 	}
 
 	public function filter_plugin_information( mixed $result, string $action, mixed $arguments ): mixed {
-		if ( 'plugin_information' !== $action || ! is_object( $arguments ) || $this->information_slug() !== ( $arguments->slug ?? null ) || ! $this->live() ) {
+		if ( 'plugin_information' !== $action || ! is_object( $arguments ) || $this->information_slug() !== ( $arguments->slug ?? null ) || $this->policy_blocked() || ! $this->live() ) {
 			return $result;
 		}
 		$this->begin_operation();
@@ -529,6 +534,9 @@ final class NativePackageUpdater {
 		unset( $upgrader );
 		if ( ! $this->matches_target_identity( $hook_extra ) ) {
 			return $reply;
+		}
+		if ( $this->policy_blocked() ) {
+			return $reply instanceof \WP_Error ? $reply : $this->failure( 'policy_blocked' );
 		}
 		if ( $this->native_beginning || null !== $this->native_owner || ! $this->live() ) {
 			return null === $this->operation_guard ? $reply : $this->failure( 'runtime_liveness_lost' );
@@ -926,6 +934,11 @@ final class NativePackageUpdater {
 			delete_site_transient( 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes' );
 		}
 		return true;
+	}
+
+	/** `disabled` and `forced-off` admit no discovery, lease, provider work or download token on any path. */
+	private function policy_blocked(): bool {
+		return in_array( $this->policy, array( 'disabled', 'forced-off' ), true );
 	}
 
 	private function live(): bool {

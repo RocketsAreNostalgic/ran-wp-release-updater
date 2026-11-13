@@ -279,6 +279,105 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertArrayNotHasKey( 'package/package.php', $transient->response );
 		}
 
+		/** @return array<string,array{string}> */
+		public static function blocked_policies(): array {
+			return array(
+				'disabled'   => array( 'disabled' ),
+				'forced-off' => array( 'forced-off' ),
+			);
+		}
+
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'blocked_policies' )]
+		public function test_blocked_policy_plugin_information_does_no_discovery_lease_or_token_work( string $mode ): void {
+			list( $updater, $adapter, $database ) = $this->subject( $mode );
+			$sentinel                             = (object) array( 'slug' => 'other' );
+			$result                               = $updater->filter_plugin_information( $sentinel, 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', "plugin\0package/package.php" ), 0, 24 ) ) );
+			self::assertSame( $sentinel, $result );
+			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			self::assertSame( array(), $database->rows() );
+			self::assertSame( array(), $database->prepared_sql() );
+			self::assertSame( array(), $database->read_option_names() );
+		}
+
+		public function test_manual_policy_plugin_information_still_offers_a_download_token(): void {
+			list( $updater ) = $this->subject();
+			$result          = $updater->filter_plugin_information( false, 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', "plugin\0package/package.php" ), 0, 24 ) ) );
+			self::assertInstanceOf( \stdClass::class, $result );
+			self::assertNotSame( '', $result->download_link ?? '' );
+		}
+
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'blocked_policies' )]
+		public function test_blocked_policy_pre_download_refuses_without_discovery_lease_or_acquisition( string $mode ): void {
+			list( $updater, $adapter, $database, $descriptor ) = $this->subject( $mode );
+			// A token this target's own binding accepts, so only the policy gate stands between it and acquisition.
+			$package = ( new \ReflectionMethod( $updater, 'token' ) )->invoke( $updater, $descriptor );
+			self::assertIsString( $package );
+			$result = $updater->filter_pre_download( false, $package, null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertSame( 'ran_wp_release_updater_policy_blocked', $result->code );
+			self::assertContains( 'policy_blocked', $updater->diagnostics() );
+			$earlier = new \WP_Error( 'earlier', 'Earlier failure.' );
+			self::assertSame( $earlier, $updater->filter_pre_download( $earlier, $package, null, $this->extra() ) );
+			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			self::assertSame( array(), $database->rows() );
+			self::assertSame( array(), $database->prepared_sql() );
+			self::assertSame( array(), $database->read_option_names() );
+		}
+
+		public function test_blocked_policy_pre_download_ignores_other_packages(): void {
+			list( $updater ) = $this->subject( 'disabled' );
+			self::assertFalse( $updater->filter_pre_download( false, 'https://example.test/a.zip', null, array( 'plugin' => 'other/other.php' ) ) );
+		}
+
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'blocked_policies' )]
+		public function test_blocked_policy_pre_download_refuses_a_non_token_package_for_the_same_target( string $mode ): void {
+			list( $updater, $adapter ) = $this->subject( $mode );
+			$result                    = $updater->filter_pre_download( false, 'https://example.test/a.zip', null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+		}
+
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'blocked_policies' )]
+		public function test_blocked_policy_drops_a_cached_offer_made_under_an_earlier_policy( string $mode ): void {
+			list( $manual ) = $this->subject();
+			$earlier        = $this->offer( $manual )['package'];
+			foreach ( array( null, static fn(): bool => true ) as $admission ) {
+				list( $updater, $adapter, $database, $descriptor ) = $this->subject( $mode, descriptor_admission: $admission );
+				// A token the entry's own binding would still accept, as an earlier policy could have cached it.
+				$package = ( new \ReflectionMethod( $updater, 'token' ) )->invoke( $updater, $descriptor );
+				self::assertIsString( $package );
+				self::assertNotSame( $earlier, $package );
+				$transient = (object) array(
+					'response' => array(
+						'package/package.php' => (object) array( 'package' => $package ),
+						'other/other.php'     => (object) array( 'package' => 'https://example.test/other.zip' ),
+					),
+				);
+				self::assertSame( $transient, $updater->filter_cached_update( $transient ) );
+				self::assertSame( array( 'other/other.php' ), array_keys( $transient->response ) );
+				self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+				self::assertSame( array(), $database->rows() );
+				self::assertSame( array(), $database->read_option_names() );
+			}
+		}
+
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'blocked_policies' )]
+		public function test_blocked_policy_registers_the_cached_filter_without_a_descriptor_admission( string $mode ): void {
+			list( $updater ) = $this->subject( $mode );
+			$updater->register();
+			$hooks = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 );
+			self::assertContains( 'site_transient_update_plugins', $hooks );
+		}
+
+		public function test_manual_policy_cached_filter_is_unchanged_without_a_descriptor_admission(): void {
+			list( $updater ) = $this->subject();
+			$updater->register();
+			self::assertNotContains( 'site_transient_update_plugins', array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ) );
+			$transient = (object) array( 'response' => array( 'package/package.php' => (object) array( 'package' => $this->offer( $updater )['package'] ) ) );
+			self::assertSame( $transient, $updater->filter_cached_update( $transient ) );
+			self::assertArrayHasKey( 'package/package.php', $transient->response );
+		}
+
 		public function test_descriptor_admission_requires_literal_true_and_fails_closed_on_throw(): void {
 			foreach ( array( false, 'true', new \RuntimeException( 'Rejected.' ) ) as $outcome ) {
 				list( $updater, $adapter ) = $this->subject(
@@ -2036,6 +2135,28 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$report = $updater->filter_check_releases( null, $type, $identity );
 			self::assertIsArray( $report );
 			return $report;
+		}
+		public function test_read_only_check_for_disabled_still_discovers_beside_the_blocked_native_paths(): void {
+			list( $updater, $adapter, $database, $descriptor ) = $this->subject( 'disabled', native_discovery_reuse: true );
+			$report = $this->manual_check( $updater );
+			self::assertSame( 'newer_release_observed', $report['reason'] );
+			self::assertFalse( $report['offered'] );
+			$discovery = $adapter->list_calls;
+			$counts    = array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls );
+			self::assertGreaterThan( 0, $discovery );
+			$rows = $database->rows();
+			// The three gated paths neither reuse nor add to what the check did.
+			$package   = ( new \ReflectionMethod( $updater, 'token' ) )->invoke( $updater, $descriptor );
+			$transient = (object) array( 'response' => array( 'package/package.php' => (object) array( 'package' => $package ) ) );
+			self::assertSame( 'keep', $updater->filter_plugin_information( 'keep', 'plugin_information', (object) array( 'slug' => 'ran-wp-release-updater-' . substr( hash( 'sha256', "plugin\0package/package.php" ), 0, 24 ) ) ) );
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_pre_download( false, $package, null, $this->extra() ) );
+			self::assertSame( $transient, $updater->filter_cached_update( $transient ) );
+			self::assertSame( array(), $transient->response );
+			self::assertSame( $counts, array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			self::assertSame( $rows, $database->rows() );
+			// The blocked paths do not disable the check: it still discovers afresh.
+			self::assertSame( 'newer_release_observed', $this->manual_check( $updater )['reason'] );
+			self::assertGreaterThan( $discovery, $adapter->list_calls );
 		}
 		public function test_manual_check_registers_its_filter_with_every_target(): void {
 			list( $updater ) = $this->subject( 'disabled' );
