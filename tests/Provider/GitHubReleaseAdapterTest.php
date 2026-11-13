@@ -2705,6 +2705,45 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertNull( $missing['rejection'] );
 		}
 
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		public function test_shared_failure_text_corpus_reaches_the_public_opted_in_source_only_when_safe(): void {
+			$corpus  = \RAN\WPReleaseUpdater\V1\Tests\Contract\ReleaseRejectionSharedScreenerTest::corpus();
+			$source  = $this->prospective_source( null, 'plugin', true );
+			$case    = $this->rejection_case( 'tag_not_version' );
+			$reached = array(
+				'hostile'     => 0,
+				'strict_only' => 0,
+				'benign'      => 0,
+			);
+			foreach ( array_keys( $reached ) as $group ) {
+				foreach ( $corpus[ $group ] as $label => $value ) {
+					if ( 1 !== preg_match( '//u', $value ) ) {
+						// A JSON provider response cannot carry invalid UTF-8, so no tag can take this shape.
+						unset( $corpus[ $group ][ $label ] );
+						continue;
+					}
+					$responses = $case['responses'];
+					// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+					$GLOBALS['ran_github_responses'] = array_replace( $responses, array( 1 => $this->response( 200, $this->release( 7, $value ) ) ) );
+					$result                          = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+					self::assertFalse( $result['ok'], $group . ' ' . $label );
+					self::assertIsArray( $result['rejection'], $group . ' ' . $label );
+					self::assertSame( 'tag_not_version', $result['rejection']['reason'], $group . ' ' . $label );
+					self::assertSame( 'benign' === $group ? rtrim( substr( $value, 0, 120 ) ) : null, $result['rejection']['detail'], $group . ' ' . $label );
+					++$reached[ $group ];
+				}
+			}
+			self::assertSame( array_map( 'count', array_intersect_key( $corpus, $reached ) ), $reached );
+			foreach ( array( 'authorisation hunter2', 'hunter2 authorisation', 'Authorisation: abc', 'hunter2 is the password' ) as $value ) {
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+				$GLOBALS['ran_github_responses'] = array_replace( $case['responses'], array( 1 => $this->response( 200, $this->release( 7, $value ) ) ) );
+				$result                          = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+				self::assertSame( 'tag_not_version', $result['rejection']['reason'] ?? null, $value );
+				self::assertNull( $result['rejection']['detail'], $value );
+			}
+		}
+
 		private function rejection_header(): string {
 			return "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\n"
 				. "Update URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";

@@ -26,7 +26,7 @@
     "phpstan/phpstan": "^2.1",
     "phpunit/phpunit": "^11.0",
     "ran/coding-standards": "^1.0",
-    "ran/updater-support": "1.0.0-beta.4",
+    "ran/updater-support": "1.0.0-beta.6",
     "szepeviktor/phpstan-wordpress": "^2.0"
   },
   "autoload-dev": {

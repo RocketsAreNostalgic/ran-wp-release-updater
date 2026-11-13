@@ -24,7 +24,7 @@ method bodies. Production analysis now defaults to the repository root rather
 than enumerating individual source files. Root-relative tests/scripts, installed
 dependencies and disposable cache/workspace/coverage directories are excluded;
 they are separate development or generated state, not omitted production. The
-generated ArchiveSafety helper remains directly analyzed. Exclusions apply to
+generated ArchiveSafety and FailureText helpers remain directly analyzed. Exclusions apply to
 analysis and scanning so fixture-defined constants do not change production
 type inference.
 
@@ -46,8 +46,8 @@ test independently discovers all script PHP, including nested `scripts/tests`,
 compares effective selection, asserts level 8, detects an excluded nested script,
 and proves a new script's incorrect return fails actual analysis.
 
-Current direct analysis covers all 100 maintained PHP files: 35 production files and
-three scripts at level 8, plus 62 test files at level 8. The small
+Current direct analysis covers all 105 maintained PHP files: 36 production files and
+three scripts at level 8, plus 66 test files at level 8. The small
 `scripts/analyze-tests.php` runner discovers the whole tests directory through
 PHPStan's file finder, then passes each file separately to the locked analyzer.
 `--list` exposes exactly that selection to the independent coverage guard.
@@ -87,7 +87,7 @@ analysis; unmatched identifiers fail. Controls reuse actual annotations and
 prove the immediately following occurrence remains diagnosed. See
 QUALITY_ACCEPTANCE.md for dispositions requiring candidate review.
 
-All 35 maintained production PHP files (`bootstrap.php`, `runtime.php` and
+All 36 maintained production PHP files (`bootstrap.php`, `runtime.php` and
 production PHP under `src/`) now have direct level-8 roots. Issue #60 records the historical
 source acceptance; this coverage count does not certify later exception changes.
 
@@ -137,7 +137,7 @@ type to PHPStan so the existing impure cleanup retry remains analysed without
 suppression. Bootstrap/provenance, public release-source schema and registrar
 lifecycle tests cover these boundaries.
 
-The generated `src/Dependency/ArchiveSafety.php` is explicitly analysed at level 8.
+The generated `src/Dependency/ArchiveSafety.php` and `src/Dependency/FailureText.php` are explicitly analysed at level 8.
 Its source remains owned by the pinned `ran/updater-support` dependency;
 `scripts/sync-updater-support.php --check` requires namespace-only byte parity.
 Future fixes belong upstream and must arrive through the reviewed dependency and
