@@ -308,6 +308,11 @@ final class NativePackageUpdater {
 			if ( $this->live() ) {
 				$this->descriptor         = $descriptor;
 				$this->discovery_snapshot = $snapshot;
+			} else {
+				// A displaced runtime keeps no discovery state, exactly as a native call that finds it displaced.
+				$this->descriptor                         = null;
+				$this->status['offered_release_identity'] = null;
+				$this->status['offered_version']          = null;
 			}
 		}
 	}

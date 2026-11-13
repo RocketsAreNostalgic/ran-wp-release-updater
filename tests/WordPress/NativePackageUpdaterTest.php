@@ -2117,6 +2117,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$descriptor = $state->getProperty( 'descriptor' )->getValue( $updater );
 			$snapshot   = $state->getProperty( 'discovery_snapshot' )->getValue( $updater );
 			$status     = $updater->status();
+			// The check discovers a different descriptor object, so restoring the earlier one is observable.
+			$second                 = $this->with_release_identity( $descriptor, 'release:3', 'v2.0.1' );
+			$adapter->list_response = array( 'candidates' => array( $this->candidate( $second ) ) );
+			$adapter->inspect_outcomes[ $second->release_identity() ] = $second;
+			self::assertNotSame( $descriptor, $second );
 			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
 			// The native snapshot must not answer the check: it asks the provider and is observed.
 			$report = $this->manual_check( $updater );
@@ -2162,6 +2167,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 'failed', $report['status'] );
 			self::assertNull( $report['candidate_version'] );
 			self::assertFalse( $report['offered'] );
+			self::assertNull( ( new \ReflectionObject( $updater ) )->getProperty( 'descriptor' )->getValue( $updater ) );
 		}
 		public function test_manual_check_reports_nothing_stale_when_busy(): void {
 			list( $updater ) = $this->subject( 'manual' );

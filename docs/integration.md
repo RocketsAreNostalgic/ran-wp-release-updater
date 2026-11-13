@@ -257,7 +257,10 @@ Guarantees:
   `offered_release_identity`), the retained descriptor and the reusable
   discovery snapshot are restored when the call ends, including when an
   observer throws. The check itself keeps no descriptor or snapshot, and a
-  native check that follows can still reuse its own earlier snapshot.
+  native check that follows can still reuse its own earlier snapshot while the
+  discovery lease it was taken under is still held (a replaced lease invalidates
+  the snapshot, as it does for native checks). A runtime that is displaced during
+  the check keeps no discovery state.
 - It applies to `disabled`, `manual` and `automatic`. Native and background
   checks, and offers for `manual` and `automatic`, are unchanged: `disabled`
   still returns before discovery there with reason `policy_disabled`.
