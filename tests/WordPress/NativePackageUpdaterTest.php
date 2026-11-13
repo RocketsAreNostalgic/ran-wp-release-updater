@@ -308,10 +308,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'blocked_policies' )]
 		public function test_blocked_policy_pre_download_refuses_without_discovery_lease_or_acquisition( string $mode ): void {
-			list( $manual )                       = $this->subject();
-			$package                              = $this->offer( $manual )['package'];
-			list( $updater, $adapter, $database ) = $this->subject( $mode );
-			$result                               = $updater->filter_pre_download( false, $package, null, $this->extra() );
+			list( $updater, $adapter, $database, $descriptor ) = $this->subject( $mode );
+			// A token this target's own binding accepts, so only the policy gate stands between it and acquisition.
+			$package = ( new \ReflectionMethod( $updater, 'token' ) )->invoke( $updater, $descriptor );
+			self::assertIsString( $package );
+			$result = $updater->filter_pre_download( false, $package, null, $this->extra() );
 			self::assertInstanceOf( \WP_Error::class, $result );
 			self::assertSame( 'ran_wp_release_updater_policy_blocked', $result->code );
 			self::assertContains( 'policy_blocked', $updater->diagnostics() );
@@ -326,6 +327,14 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		public function test_blocked_policy_pre_download_ignores_other_packages(): void {
 			list( $updater ) = $this->subject( 'disabled' );
 			self::assertFalse( $updater->filter_pre_download( false, 'https://example.test/a.zip', null, array( 'plugin' => 'other/other.php' ) ) );
+		}
+
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'blocked_policies' )]
+		public function test_blocked_policy_pre_download_refuses_a_non_token_package_for_the_same_target( string $mode ): void {
+			list( $updater, $adapter ) = $this->subject( $mode );
+			$result                    = $updater->filter_pre_download( false, 'https://example.test/a.zip', null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
 
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'blocked_policies' )]
