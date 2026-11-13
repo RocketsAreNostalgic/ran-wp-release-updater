@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0-beta.19](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.18...v1.0.0-beta.19) (2026-11-13)
+
+
+### Features
+
+* **native:** add a read-only release check that never offers ([#178](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/178)) ([0e71023](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/0e710233abf7f280a0664b8439309c99f7409f1a))
+
+
+### Bug Fixes
+
+* **native:** apply update policy on every updater path ([#180](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/180)) ([a4e0a4f](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/a4e0a4fed82c8146137bb163ae420f5f5962746a))
+
 ## [1.0.0-beta.18](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.17...v1.0.0-beta.18) (2026-11-13)
 
 
