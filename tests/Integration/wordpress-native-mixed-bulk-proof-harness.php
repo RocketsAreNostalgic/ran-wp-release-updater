@@ -409,6 +409,7 @@ function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, stri
 	);
 	$updater             = NativePackageUpdater::from_configuration(
 		array(
+			'installed_directory'        => ( 'plugin' === $type ? WP_PLUGIN_DIR : get_theme_root( $slug ) ) . '/' . $slug,
 			'headers'                    => $headers,
 			'installed_package_identity' => $identity,
 			'policy'                     => 'manual',

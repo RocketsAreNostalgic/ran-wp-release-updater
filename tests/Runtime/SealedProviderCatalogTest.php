@@ -298,6 +298,7 @@ PHP;
 			'wordpress_runtime_version' => $GLOBALS['wp_version'],
 		) );
 		$config = array(
+			'installed_directory' => dirname( $d['installed_file'] ),
 			'headers' => array(
 				'Author' => '',
 				'Description' => '',

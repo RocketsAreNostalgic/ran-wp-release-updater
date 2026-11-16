@@ -6,6 +6,9 @@ namespace {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound, Generic.Classes.DuplicateClassName.Found -- This stub must occupy the WordPress global class identity used by production calls. The same foreign stub name is reused behind conditional or isolated-process load boundaries.
 		final class WP_Error {
 			public function __construct( public string $code, public string $message ) {}
+			public function get_error_code(): string {
+				return $this->code;
+			}
 		}
 	}
 	if ( ! class_exists( 'Theme_Upgrader_Skin' ) ) {
@@ -93,6 +96,102 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		/** @var list<string> */
 		private array $paths = array();
 		private string $temporary_directory;
+
+		public function test_working_copy_is_refused_before_acquisition_on_manual_and_automatic_updates(): void {
+			foreach ( array( 'manual', 'automatic' ) as $mode ) {
+				list( $updater, $adapter ) = $this->subject( $mode );
+				$offer                     = $this->offer( $updater );
+				$GLOBALS['ran_wp_release_updater_test_doing_action'] = 'automatic' === $mode ? 'wp_maybe_auto_update' : null;
+				$this->working_copy_marker();
+				$calls  = $adapter->acquire_calls;
+				$result = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+				self::assertInstanceOf( \WP_Error::class, $result );
+				self::assertSame( 'ran_wp_release_updater_target_is_working_copy', $result->code );
+				self::assertSame( 'target_is_working_copy', $updater->status()['failure_code'] );
+				self::assertContains( 'target_is_working_copy', $updater->diagnostics() );
+				self::assertSame( $calls, $adapter->acquire_calls );
+			}
+		}
+
+		public function test_marker_created_after_download_is_refused_before_install_and_source_handoff(): void {
+			foreach ( array( 'pre_install', 'source_selection' ) as $boundary ) {
+				list( $updater ) = $this->subject();
+				$offer           = $this->offer( $updater );
+				$archive         = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+				self::assertIsString( $archive );
+				self::assertNull( $updater->filter_pre_unzip_file( null, $archive, '/tmp', array(), 0.0 ) );
+				if ( 'source_selection' === $boundary ) {
+					self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
+				}
+				$marker = $this->working_copy_marker();
+				$stage  = $this->staged();
+				$result = 'pre_install' === $boundary
+					? $updater->filter_pre_install( true, $this->extra() )
+					: $updater->filter_source_selection( $stage, '/tmp', null, $this->extra() );
+				self::assertInstanceOf( \WP_Error::class, $result );
+				self::assertSame( 'ran_wp_release_updater_target_is_working_copy', $result->code );
+				self::assertSame( $result, $updater->capture_install_package_result( $result, $this->extra() ) );
+				self::assertFileDoesNotExist( $archive );
+				self::assertFileExists( $marker );
+				$updater->finalize_pending_install();
+				self::assertSame( 'target_is_working_copy', $updater->status()['failure_code'] );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove this test-owned marker between independent lifecycle attempts.
+				unlink( $marker );
+			}
+		}
+
+		public function test_explicit_working_copy_override_preserves_the_verified_install_path(): void {
+			list( $updater ) = $this->subject( allow_working_copy: true );
+			$marker          = $this->working_copy_marker();
+			$this->complete( $updater );
+			self::assertFileExists( $marker );
+		}
+
+		public function test_marker_created_by_final_admission_is_checked_before_native_mutation(): void {
+			$control         = new class() {
+				public bool $create_marker = false;
+				public bool $began         = false;
+			};
+			list( $updater ) = $this->subject(
+				operation_guard: static fn(): bool => true,
+				native_mutation_begin: static function () use ( $control ): string {
+					$control->began = true;
+					return 'owner';
+				},
+				native_mutation_complete: static function (): void {},
+				descriptor_admission: function () use ( $control ): bool {
+					if ( $control->create_marker ) {
+						$this->working_copy_marker();
+					}
+					return true;
+				}
+			);
+			$offer           = $this->offer( $updater );
+			$archive         = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $archive );
+			self::assertNull( $updater->filter_pre_unzip_file( null, $archive, '/tmp', array(), 0.0 ) );
+			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
+			$control->create_marker = true;
+			$result                 = $updater->filter_source_selection( $this->staged(), '/tmp', null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertSame( 'ran_wp_release_updater_target_is_working_copy', $result->code );
+			self::assertFalse( $control->began );
+			self::assertFileDoesNotExist( $archive );
+		}
+
+		private function working_copy_marker(): string {
+			$directory     = $this->temporary_directory . '/installed';
+			$marker        = $directory . '/.git';
+			$this->paths[] = $marker;
+			if ( ! is_dir( $directory ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create the actual installed-target fixture directory.
+				mkdir( $directory, 0700 );
+				$this->paths[] = $directory;
+			}
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Create a real Git working-copy marker rather than mocking detection.
+			file_put_contents( $marker, 'gitdir: separate-metadata' );
+			return $marker;
+		}
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function setUp(): void {
 			$this->temporary_directory = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/native-package-updater-' . bin2hex( random_bytes( 6 ) );
@@ -2416,13 +2515,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( $calls, $adapter->list_calls );
 		}
 		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
-		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null ): array {
+		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null, bool $allow_working_copy = false ): array {
 			$archive_path = $this->archive();
 			$descriptor   = $this->descriptor( $archive_path, $channel, $prerelease );
 			$binding      = $this->binding( $mode, $channel );
 			$adapter      = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
 			$database   ??= new FakeOptionDatabase( 100 );
-			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete, $descriptor_admission );
+			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete, $descriptor_admission, $allow_working_copy );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			return array( $updater, $adapter, $database, $descriptor, $binding );
 		}
@@ -2498,6 +2597,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		/** @return array<string,mixed> */
 		private function config( string $mode ): array {
 			return array(
+				'installed_directory'        => $this->temporary_directory . '/installed',
 				'headers'                    => array(
 					'Author'      => 'A',
 					'Description' => 'D',

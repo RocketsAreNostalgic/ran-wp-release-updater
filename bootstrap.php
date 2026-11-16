@@ -386,12 +386,12 @@ return new class( $ran_wp_release_updater_broker ) {
 	public function __construct( private object $broker ) {
 	}
 
-	public function plugin( string $provider, string $plugin_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800 ): object {
-		return $this->target( 'plugin', $plugin_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
+	public function plugin( string $provider, string $plugin_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $allow_working_copy = false ): object {
+		return $this->target( 'plugin', $plugin_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes, $allow_working_copy );
 	}
 
-	public function theme( string $provider, string $stylesheet_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800 ): object {
-		return $this->target( 'theme', $stylesheet_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
+	public function theme( string $provider, string $stylesheet_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $allow_working_copy = false ): object {
+		return $this->target( 'theme', $stylesheet_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes, $allow_working_copy );
 	}
 
 	public function releases( string $provider, string $package_type, string $repository, string $repository_id, string $channel = 'stable', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $rejection_reasons = false ): object {
@@ -801,7 +801,7 @@ return new class( $ran_wp_release_updater_broker ) {
 		return $this->broker->diagnostics();
 	}
 
-	private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes ): object {
+	private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes, bool $allow_working_copy ): object {
 		$declaration = array(
 			'target_type'              => $type,
 			'installed_file'           => $file,
@@ -817,6 +817,9 @@ return new class( $ran_wp_release_updater_broker ) {
 			'native_mutation_complete' => $this->native_mutation_complete,
 			'descriptor_admission'     => $this->descriptor_admission,
 		);
+		if ( $allow_working_copy ) {
+			$declaration['allow_working_copy'] = true;
+		}
 		return new class( $this->broker, $declaration ) {
 			private int $submission_id = 0;
 			private bool $submitted    = false;

@@ -8,6 +8,9 @@ namespace {
 		// phpcs:ignore Generic.Classes.DuplicateClassName.Found, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound -- Conditional WP_Error stubs model the same foreign class without redeclaring it when already loaded. This stub must occupy the WordPress global class identity used by production calls.
 		final class WP_Error {
 			public function __construct( public string $code, public string $message ) {}
+			public function get_error_code(): string {
+				return $this->code;
+			}
 		}
 	}
 	if ( ! function_exists( 'add_filter' ) ) {
@@ -433,6 +436,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		/** @return array<string,mixed> */
 		private function configuration( string $target_type, string $uri ): array {
 			return array(
+				'installed_directory'        => dirname( __DIR__, 2 ) . '/.workspaces/absent-target',
 				'headers'                    => array(
 					'Author'      => 'Test',
 					'Description' => 'Local fake adapter proof',

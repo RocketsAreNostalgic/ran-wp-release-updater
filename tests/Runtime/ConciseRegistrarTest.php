@@ -8,6 +8,43 @@ use PHPUnit\Framework\TestCase;
 
 final class ConciseRegistrarTest extends TestCase {
 
+	public function test_working_copy_option_reaches_plugin_and_theme_hooks_and_closed_status(): void {
+		foreach ( array( 'plugin', 'theme' ) as $type ) {
+			foreach ( array( false, true ) as $allow ) {
+				$result = $this->probe(
+					<<<'PHP'
+class WP_Error { public function __construct(public string $code, public string $message) {} public function get_error_code(): string { return $this->code; } }
+$r=require $data['bootstrap'];
+$h=$r->{$data['type']}('github',$data[$data['type']],$data['type']==='plugin' ? 'acme/example' : 'acme/example-theme','123456789',allow_working_copy:$data['allow']);
+$h->register();
+$GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>7,'wordpress_version'=>'6.8.0']);
+file_put_contents(dirname($data[$data['type']]).'/.git','gitdir: metadata');
+$extra=$data['type']==='plugin' ? ['plugin'=>'plugin/plugin.php'] : ['theme'=>'theme'];
+foreach($GLOBALS['p0_1_hooks'] as $hook) { if($hook['hook']==='upgrader_pre_download') { $error=($hook['callback'])(false,'unused',null,$extra); } }
+echo json_encode(['error'=>$error->get_error_code(),'status'=>$h->status(),'diagnostics'=>$h->diagnostics()]);
+PHP,
+					array(
+						'type'  => $type,
+						'allow' => $allow,
+					)
+				);
+				$code   = $allow ? 'unverified_pre_download' : 'target_is_working_copy';
+				self::assertSame( 'ran_wp_release_updater_' . $code, $result['error'] );
+				self::assertSame( $code, $result['status']['native']['failure_code'] );
+				self::assertContains( array( 'code' => $code ), $result['diagnostics']['diagnostics'] );
+			}
+		}
+	}
+
+	public function test_working_copy_override_conflicts_with_a_protected_registration(): void {
+		$result = $this->probe(
+			<<<'PHP'
+$r=require $data['bootstrap'];$a=$r->plugin('github',$data['plugin'],'acme/example','123456789');$a->register();$b=$r->plugin('github',$data['plugin'],'acme/example','123456789',allow_working_copy:true);$b->register();$GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>7,'wordpress_version'=>'6.8.0']);echo json_encode($b->status());
+PHP
+		);
+		self::assertSame( 'target_declaration_conflict', $result['code'] );
+	}
+
 	private string $root;
 
 	// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.

@@ -46,8 +46,8 @@ test independently discovers all script PHP, including nested `scripts/tests`,
 compares effective selection, asserts level 8, detects an excluded nested script,
 and proves a new script's incorrect return fails actual analysis.
 
-Current direct analysis covers all 106 maintained PHP files: 37 production files and
-three scripts at level 8, plus 66 test files at level 8. The small
+Current direct analysis covers all 108 maintained PHP files: 38 production files and
+three scripts at level 8, plus 67 test files at level 8. The small
 `scripts/analyze-tests.php` runner discovers the whole tests directory through
 PHPStan's file finder, then passes each file separately to the locked analyzer.
 `--list` exposes exactly that selection to the independent coverage guard.
@@ -87,7 +87,7 @@ analysis; unmatched identifiers fail. Controls reuse actual annotations and
 prove the immediately following occurrence remains diagnosed. See
 QUALITY_ACCEPTANCE.md for dispositions requiring candidate review.
 
-All 37 maintained production PHP files (`bootstrap.php`, `runtime.php` and
+All 38 maintained production PHP files (`bootstrap.php`, `runtime.php` and
 production PHP under `src/`) now have direct level-8 roots. Issue #60 records the historical
 source acceptance; this coverage count does not certify later exception changes.
 
@@ -137,8 +137,8 @@ type to PHPStan so the existing impure cleanup retry remains analysed without
 suppression. Bootstrap/provenance, public release-source schema and registrar
 lifecycle tests cover these boundaries.
 
-The generated `src/Dependency/ArchiveSafety.php` and `src/Dependency/FailureText.php` are explicitly analysed at level 8.
-Its source remains owned by the pinned `ran/updater-support` dependency;
+The generated `src/Dependency/ArchiveSafety.php`, `src/Dependency/FailureText.php` and `src/Dependency/TargetWorkingCopy.php` are explicitly analysed at level 8.
+Their source remains owned by the pinned `ran/updater-support` dependency;
 `scripts/sync-updater-support.php --check` requires namespace-only byte parity.
 Future fixes belong upstream and must arrive through the reviewed dependency and
 copy-sync process. Direct analysis does not remove its generated-code PHPCS

@@ -10,10 +10,10 @@ Core dependency update. The native-operation refinement below was delivered sepa
 
 | Surface | Required evidence |
 | --- | --- |
-| `bootstrap.php`, `runtime.php`, and 35 PHP files under `src/` | All 37 shipped PHP paths are direct PHPStan level-8 roots. `scanDirectories` is additional discovery, not coverage. |
+| `bootstrap.php`, `runtime.php`, and 36 PHP files under `src/` | All 38 shipped PHP paths are direct PHPStan level-8 roots. `scanDirectories` is additional discovery, not coverage. |
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
-| Generated `src/Dependency/FailureText.php` | Namespace-only byte parity against the locked `ran/updater-support` source (`composer check:updater-support`) and direct level-8 analysis remain required. Unlike ArchiveSafety it passes the shared ruleset, so it is not PHPCS excluded. Never hand-edit this file. |
+| Generated `src/Dependency/FailureText.php` and `src/Dependency/TargetWorkingCopy.php` | Namespace-only byte parity against the locked `ran/updater-support` source (`composer check:updater-support`) and direct level-8 analysis remain required. Unlike ArchiveSafety these pass the shared ruleset, so they are not PHPCS excluded. Never hand-edit these files. |
 | Generated `src/Dependency/ArchiveSafety.php` | PHPCS excluded; namespace-only byte parity against the locked `ran/updater-support` source and direct level-8 analysis remain required. Never hand-edit this file. |
 | All `tests/` PHP, including root files and future/nested roots | Owned methods, variables, Yoda conditions, unused parameters and reserved parameter names have no file/root exclusions. Thirty-one PHPUnit lifecycle overrides, twelve unused foreign-stub parameter reports, the existing skin override parameter and native ZipArchive property uses retain exact local exceptions. No test-path exclusions remain. Global-variable prefixing and other fixture-specific exceptions are occurrence-local as listed below. |
 

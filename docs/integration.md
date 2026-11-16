@@ -408,6 +408,25 @@ exceptions from nested WordPress hooks: do not catch those and resume dispatch. 
 observations, not a guaranteed delivery system or a new installation authority.
 
 
+## Protecting version-control working copies
+
+Native plugin and theme updates refuse a target containing `.git`, `.svn`, `.hg`
+or `.bzr`, including marker files, directories, symlinks and dangling links.
+Only the target folder is checked; ancestor folders and Composer metadata do not
+count. A missing target folder is unaffected. The check runs before download,
+before pre-install side effects and again at the source handoff before WordPress
+moves or replaces the installed folder, for interactive, bulk and background updates.
+
+The native error code is `ran_wp_release_updater_target_is_working_copy`.
+The same closed reason, `target_is_working_copy`, appears in
+`$handle->status()['native']['failure_code']` and `$handle->diagnostics()` in the
+current request. It survives WordPress's install-result hook.
+
+An intentional overwrite requires `allow_working_copy: true` on that target's
+`plugin()` or `theme()` registration. The option defaults to `false`; it is not
+a global filter or a persisted permission. Conflicting registrations for the
+same target are rejected, including registrations that disagree on this option.
+
 ## Host-bound provider replacement
 
 A host that can replace its GitHub implementation must bind the registrar before

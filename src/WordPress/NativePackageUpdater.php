@@ -13,13 +13,14 @@ use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
+use RAN\WPReleaseUpdater\V1\Dependency\TargetWorkingCopy;
 use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 
 /** The single native WordPress lifecycle owner for a sealed neutral release. */
 final class NativePackageUpdater {
 	private const MAX_DIAGNOSTICS                       = 16;
-	private const CONFIGURATION_KEYS                    = array( 'headers', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
+	private const CONFIGURATION_KEYS                    = array( 'headers', 'installed_directory', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
 	private const HEADER_KEYS                           = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
 	private bool $registered                            = false;
 	private ?IdentityDescriptor $descriptor             = null;
@@ -67,6 +68,7 @@ final class NativePackageUpdater {
 	 */
 	private function __construct(
 		private string $target_type,
+		private string $installed_directory,
 		private string $installed_identity,
 		private string $update_uri,
 		private string $policy,
@@ -81,7 +83,8 @@ final class NativePackageUpdater {
 		?callable $operation_guard = null,
 		?callable $native_mutation_begin = null,
 		?callable $native_mutation_complete = null,
-		?callable $descriptor_admission = null
+		?callable $descriptor_admission = null,
+		private bool $allow_working_copy = false
 	) {
 		$this->archive_store            = new OwnedArchiveStore();
 		$this->manifest_builder         = new StagedPackageManifest();
@@ -108,7 +111,8 @@ final class NativePackageUpdater {
 		?callable $operation_guard = null,
 		?callable $native_mutation_begin = null,
 		?callable $native_mutation_complete = null,
-		?callable $descriptor_admission = null
+		?callable $descriptor_admission = null,
+		bool $allow_working_copy = false
 	): ?self {
 		if ( ( null === $native_mutation_begin ) !== ( null === $native_mutation_complete ) || ( null === $operation_guard && null !== $native_mutation_begin ) ) {
 			return null;
@@ -129,6 +133,7 @@ final class NativePackageUpdater {
 		}
 		return new self(
 			$configuration['target_type'],
+			$configuration['installed_directory'],
 			$configuration['installed_package_identity'],
 			$uri,
 			$configuration['policy'],
@@ -143,7 +148,8 @@ final class NativePackageUpdater {
 			$operation_guard,
 			$native_mutation_begin,
 			$native_mutation_complete,
-			$descriptor_admission
+			$descriptor_admission,
+			$allow_working_copy
 		);
 	}
 
@@ -554,6 +560,10 @@ final class NativePackageUpdater {
 			return $this->failure( 'unverified_pre_download_result' );
 		}
 		$this->clear_pending( false );
+		if ( $this->working_copy_blocked() ) {
+			$this->clear_pending();
+			return $this->failure( 'target_is_working_copy' );
+		}
 		$token = $this->parse_token( $package );
 		if ( ! $this->direct_filesystem() || ! $token instanceof IdentityDescriptor || ! $this->descriptor_admitted( $token ) || ! $this->newer_than_installed( $token ) || ! $this->manual_eligible( $token ) ) {
 			return $this->failure( 'unverified_pre_download' );
@@ -720,7 +730,15 @@ final class NativePackageUpdater {
 			$this->clear_pending();
 			return $this->failure( 'staged_package_identity_invalid' );
 		}
-		if ( ! $this->live() || ! $this->descriptor_admitted( $this->descriptor ) || ! $this->begin_native_mutation() ) {
+		if ( ! $this->live() || ! $this->descriptor_admitted( $this->descriptor ) ) {
+			$this->clear_pending();
+			return $this->failure( 'runtime_liveness_lost' );
+		}
+		if ( $this->working_copy_blocked() ) {
+			$this->clear_pending();
+			return $this->failure( 'target_is_working_copy' );
+		}
+		if ( ! $this->begin_native_mutation() ) {
 			$this->clear_pending();
 			return $this->failure( 'runtime_liveness_lost' );
 		}
@@ -738,6 +756,10 @@ final class NativePackageUpdater {
 			}
 			$this->clear_pending();
 			return $this->failure( 'runtime_liveness_lost' );
+		}
+		if ( $this->working_copy_blocked() ) {
+			$this->clear_pending();
+			return $this->failure( 'target_is_working_copy' );
 		}
 		$verified = $this->verify_current();
 		if (
@@ -769,6 +791,10 @@ final class NativePackageUpdater {
 	/** @param array<string,mixed> $hook_extra */
 	public function capture_install_package_result( mixed $result, array $hook_extra ): mixed {
 		if ( ! $this->matches_operation( $hook_extra ) ) {
+			return $result;
+		}
+		if ( $result instanceof \WP_Error && 'ran_wp_release_updater_target_is_working_copy' === $result->get_error_code() ) {
+			$this->clear_pending();
 			return $result;
 		}
 		if ( null === $this->native_owner && ! $this->live() ) {
@@ -936,6 +962,10 @@ final class NativePackageUpdater {
 		return true;
 	}
 
+	private function working_copy_blocked(): bool {
+		return ! $this->allow_working_copy && TargetWorkingCopy::is_working_copy( $this->installed_directory );
+	}
+
 	/** `disabled` and `forced-off` admit no discovery, lease, provider work or download token on any path. */
 	private function policy_blocked(): bool {
 		return in_array( $this->policy, array( 'disabled', 'forced-off' ), true );
@@ -989,7 +1019,11 @@ final class NativePackageUpdater {
 
 	/** @param array<string,mixed> $configuration */
 	private static function valid_configuration( array $configuration, BindingRecord $binding ): bool {
-		if ( ! self::exact_keys( $configuration, self::CONFIGURATION_KEYS ) || ! is_array( $configuration['headers'] ) || ! self::exact_keys( $configuration['headers'], self::HEADER_KEYS ) || ! is_string( $configuration['update_uri'] ) || ! in_array( $configuration['policy'], array( 'disabled', 'forced-off', 'manual', 'automatic' ), true ) || ! self::valid_native_identity( $configuration['target_type'], $configuration['installed_package_identity'] ) ) {
+		if ( ! self::exact_keys( $configuration, self::CONFIGURATION_KEYS ) || ! is_string( $configuration['installed_directory'] ) || ! is_array( $configuration['headers'] ) || ! self::exact_keys( $configuration['headers'], self::HEADER_KEYS ) || ! is_string( $configuration['update_uri'] ) || ! in_array( $configuration['policy'], array( 'disabled', 'forced-off', 'manual', 'automatic' ), true ) || ! self::valid_native_identity( $configuration['target_type'], $configuration['installed_package_identity'] ) ) {
+			return false;
+		}
+		$directory = str_replace( '\\', '/', $configuration['installed_directory'] );
+		if ( ! str_starts_with( $directory, '/' ) && 1 !== preg_match( '/\A[A-Za-z]:\//D', $directory ) ) {
 			return false;
 		}
 		foreach ( $configuration['headers'] as $header ) {

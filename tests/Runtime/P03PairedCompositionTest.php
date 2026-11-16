@@ -135,6 +135,7 @@ $binding = \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::create(array(
 	'target_type' => $data['type'], 'theme_template' => '', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8.0',
 ));
 $configuration = array(
+	'installed_directory' => dirname( $data['installed'] ),
 	'headers' => $headers,
 	'installed_package_identity' => $identity,
 	'policy' => 'manual',

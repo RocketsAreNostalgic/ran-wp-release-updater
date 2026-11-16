@@ -71,6 +71,14 @@ final class FailureText {
 	);
 
 	/**
+	 * Clock-time shapes the attached-colon rule ignores: `HH:MM` or `HH:MM:SS` (hour 0 to 23,
+	 * minutes and seconds 00 to 59), optionally with `Z` or a UTC offset, and the time after the
+	 * `T` of an ISO date. The time must not follow a letter, digit, colon, slash, dot, plus or
+	 * hyphen, and must not be followed by a letter, digit, colon or slash.
+	 */
+	private const CLOCK_TIME = '#(?:(?<![A-Za-z0-9:/.+-])|(?<=\d{4}-\d{2}-\d{2}T))(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:Z|[+-](?:[01]\d|2[0-3]):?[0-5]\d)?(?![A-Za-z0-9:/])#';
+
+	/**
 	 * Prose rules, applied only by `strict()`: a credential word beside any other text,
 	 * before or after it. Only a lone word on its own (`token`, `api keys`) passes.
 	 * Curated English sentences that merely mention a token or password are not
@@ -233,8 +241,10 @@ final class FailureText {
 	 * @param bool   $prose Whether the prose credential-word rules apply.
 	 */
 	private static function matches_table( string $text, bool $prose ): bool {
-		foreach ( $prose ? array_merge( self::RULES, self::PROSE_VALUE_RULES ) : self::RULES as $pattern ) {
-			if ( self::test( $pattern, $text ) ) {
+		foreach ( $prose ? array_merge( self::RULES, self::PROSE_VALUE_RULES ) : self::RULES as $name => $pattern ) {
+			// Clock times are allowed to carry colons; every other attached colon still drops the text.
+			$subject = 'colon_attached' === $name ? self::replace( self::CLOCK_TIME, '0', $text ) : $text;
+			if ( self::test( $pattern, $subject ) ) {
 				return true;
 			}
 		}
@@ -349,7 +359,19 @@ final class FailureText {
 	 * @throws \RuntimeException When the engine fails.
 	 */
 	private static function strip( string $pattern, string $subject ): string {
-		$result = preg_replace( $pattern, '', $subject );
+		return self::replace( $pattern, '', $subject );
+	}
+
+	/**
+	 * Replaces every match of $pattern; an engine failure is thrown, never read as an unchanged result.
+	 *
+	 * @param string $pattern     Pattern.
+	 * @param string $replacement Replacement.
+	 * @param string $subject     Subject.
+	 * @throws \RuntimeException When the engine fails.
+	 */
+	private static function replace( string $pattern, string $replacement, string $subject ): string {
+		$result = preg_replace( $pattern, $replacement, $subject );
 		if ( null === $result ) {
 			throw new \RuntimeException( 'The regular-expression engine failed.' );
 		}
