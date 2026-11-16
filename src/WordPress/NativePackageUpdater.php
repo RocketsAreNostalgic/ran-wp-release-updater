@@ -742,6 +742,10 @@ final class NativePackageUpdater {
 			$this->clear_pending();
 			return $this->failure( 'runtime_liveness_lost' );
 		}
+		if ( $this->working_copy_blocked() ) {
+			$this->finalize_pending_install();
+			return $this->failure( 'target_is_working_copy' );
+		}
 		$this->admit_theme_error_bridge( $upgrader, $hook_extra );
 		return $source;
 	}
@@ -962,6 +966,7 @@ final class NativePackageUpdater {
 		return true;
 	}
 
+	/** @phpstan-impure Host callbacks can change target markers between checks. */
 	private function working_copy_blocked(): bool {
 		return ! $this->allow_working_copy && TargetWorkingCopy::is_working_copy( $this->installed_directory );
 	}

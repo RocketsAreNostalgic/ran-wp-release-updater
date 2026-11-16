@@ -192,6 +192,65 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			file_put_contents( $marker, 'gitdir: separate-metadata' );
 			return $marker;
 		}
+
+		/** @return list<array{bool}> */
+		public static function post_begin_working_copy_cases(): array {
+			return array( array( false ), array( true ) );
+		}
+
+		#[\PHPUnit\Framework\Attributes\DataProvider( 'post_begin_working_copy_cases' )]
+		public function test_marker_created_by_native_begin_is_refused_unless_explicitly_overridden( bool $allow ): void {
+			$observed                                 = new class() {
+				public ?string $outcome = null;
+				public ?string $owner   = null;
+				public int $completions = 0;
+			};
+			list( $updater, , $database, , $binding ) = $this->subject(
+				operation_guard: static fn(): bool => true,
+				native_mutation_begin: function (): string {
+					$this->working_copy_marker();
+					return 'owner';
+				},
+				native_mutation_complete: static function ( string $owner, string $target_type, string $identity, string $outcome ) use ( $observed ): void {
+					unset( $target_type, $identity );
+					$observed->owner   = $owner;
+					$observed->outcome = $outcome;
+					++$observed->completions;
+				},
+				allow_working_copy: $allow
+			);
+			$offer                                    = $this->offer( $updater );
+			$archive                                  = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $archive );
+			self::assertNull( $updater->filter_pre_unzip_file( null, $archive, '/tmp', array(), 0.0 ) );
+			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
+			$stage  = $this->staged();
+			$result = $updater->filter_source_selection( $stage, '/tmp', null, $this->extra() );
+			if ( $allow ) {
+				self::assertSame( $stage, $result );
+				$updater->capture_install_package_result( array( 'destination' => $stage ), $this->extra() );
+				$updater->observe_completion(
+					null,
+					array(
+						'action'  => 'update',
+						'type'    => 'plugin',
+						'plugins' => array( 'package/package.php' ),
+					)
+				);
+			} else {
+				self::assertInstanceOf( \WP_Error::class, $result );
+				self::assertSame( 'ran_wp_release_updater_target_is_working_copy', $result->code );
+				self::assertSame( $result, $updater->capture_install_package_result( $result, $this->extra() ) );
+			}
+			$updater->finalize_pending_install();
+			self::assertSame( $allow ? null : 'target_is_working_copy', $updater->status()['failure_code'] );
+			self::assertSame( $allow ? 'verified_success' : 'uncertain', $observed->outcome );
+			self::assertSame( 1, $observed->completions );
+			self::assertSame( 'owner', $observed->owner );
+			self::assertFileDoesNotExist( $archive );
+			self::assertFileExists( $this->temporary_directory . '/installed/.git' );
+			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'b', 64 ), 60 )['result'] );
+		}
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function setUp(): void {
 			$this->temporary_directory = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/native-package-updater-' . bin2hex( random_bytes( 6 ) );
