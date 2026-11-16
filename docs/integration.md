@@ -427,6 +427,10 @@ An intentional overwrite requires `allow_working_copy: true` on that target's
 a global filter or a persisted permission. Conflicting registrations for the
 same target are rejected, including registrations that disagree on this option.
 
+This closed refusal and declaration option advance the runtime generation.
+Incompatible physical copies refuse each other in either load order; deploy the
+qualified family together so an older broker cannot discard this refusal reason.
+
 ## Host-bound provider replacement
 
 A host that can replace its GitHub implementation must bind the registrar before

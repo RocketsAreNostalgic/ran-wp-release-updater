@@ -640,6 +640,16 @@ Unverified foreign brokers remain untouched. Both physical load orders must be
 qualified with the final tuple. No merge/release or manual acceptance is implied.
 
 
+## Working-copy refusal runtime boundary
+
+The native `target_is_working_copy` reason extends the broker's closed status and
+diagnostics vocabulary, and `allow_working_copy` extends its target declaration.
+The first bootstrap loads the broker validator before runtime election, so these
+changes require protocol 8. Bootstrap, broker, selector, selected state and runtime
+metadata advance together. Purpose-built protocol-7 coexistence fixtures join the
+existing incompatible-generation tests in both load orders. Older validators are
+not widened or bypassed; publication and downstream adoption remain separate gates.
+
 ## Prospective rejection reasons (#155)
 
 Rejected prospective inspections can name a closed reason and one bounded detail
