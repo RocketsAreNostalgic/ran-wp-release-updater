@@ -1,6 +1,15 @@
 packages:
   - '.'
 
+# Temporary GHSA-fc5q-39xc-vjpf exception: ReDoS in a glob matcher reached only
+# through development lint tooling; these dependencies are not shipped in the runtime.
+# On 17 November 2026, affected <=4.0.7, latest published 4.0.7, no patched version.
+# Remove as soon as a patched picomatch is published; tracking:
+# https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/193
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf
+
 overrides:
   'eslint-plugin-react-hooks>zod': ^4.6.6
   minimatch: 11.0.1
