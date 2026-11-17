@@ -38,7 +38,7 @@ echo json_encode(array('protocol' => $broker->protocol_version(), 'state' => $re
 PHP
 		);
 
-		self::assertSame( 10, $result['protocol'] );
+		self::assertSame( 11, $result['protocol'] );
 		self::assertSame( 'active', $result['state'] );
 		self::assertSame( 1, $result['candidates'] );
 	}
@@ -315,7 +315,7 @@ PHP,
 		foreach ( array( array( $old, $new ), array( $new, $old ) ) as $order ) {
 			$result = $this->probe(
 				<<<'PHP'
-define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); require $data['first'].'/bootstrap.php'; $broker=$GLOBALS['ran_wp_release_updater_v1_broker']; $r=require $data['second'].'/bootstrap.php'; $h=$r->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $activation=$broker->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>10,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status(),'activation'=>$activation,'first'=>$broker->diagnostics(),'second'=>$r->diagnostics(),'runtime_loaded'=>class_exists(RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::class,false)]);
+define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); require $data['first'].'/bootstrap.php'; $broker=$GLOBALS['ran_wp_release_updater_v1_broker']; $r=require $data['second'].'/bootstrap.php'; $h=$r->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $activation=$broker->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>11,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status(),'activation'=>$activation,'first'=>$broker->diagnostics(),'second'=>$r->diagnostics(),'runtime_loaded'=>class_exists(RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::class,false)]);
 PHP,
 				array(
 					'first'  => $order[0],
@@ -333,7 +333,7 @@ PHP,
 		}
 		$control = $this->probe(
 			<<<'PHP'
-define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); $r=require $data['new'].'/bootstrap.php'; $h=$r->with_operation_guard(static fn()=>true)->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>10,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status()]);
+define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); $r=require $data['new'].'/bootstrap.php'; $h=$r->with_operation_guard(static fn()=>true)->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>11,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status()]);
 PHP,
 			array(
 				'new'    => $new,
@@ -358,7 +358,7 @@ PHP
 		);
 
 		self::assertTrue( $result['unchanged'] );
-		self::assertSame( 10, $result['protocol'] );
+		self::assertSame( 11, $result['protocol'] );
 		self::assertSame( 'conflict', $result['state'] );
 		self::assertSame( 'protocol_conflict_inactive', $result['code'] );
 		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['diagnostics'] );
@@ -494,15 +494,16 @@ PHP
 	/** @return array<string,array{string}> */
 	public static function reviewed_runtime_fixtures(): array {
 		return array(
-			'protocol 7' => array( 'beta15' ),
-			'protocol 8' => array( 'beta20' ),
-			'protocol 9' => array( 'protocol9' ),
+			'protocol 7'  => array( 'beta15' ),
+			'protocol 8'  => array( 'beta20' ),
+			'protocol 9'  => array( 'protocol9' ),
+			'protocol 10' => array( 'protocol10' ),
 		);
 	}
 	private function extract_reviewed_runtime_fixture( string $destination, string $release ): void {
 		$previous = 'beta15' === $release;
 		$revision = match ( $release ) {
-			'beta15' => '599185285734b402059c8a205db29b157e5277e1dfb607fc906a2592a9bf9606', 'beta20' => 'd9e14911e41262d6e5c2aa50742c5d5ed5da578092fbc67e83ac9f6c591f4796', default => '00366d5688cae53ecb7cbfca296cd99b1b1a121fd1bcdecf4035da14c3413452' };
+			'beta15' => '599185285734b402059c8a205db29b157e5277e1dfb607fc906a2592a9bf9606', 'beta20' => 'd9e14911e41262d6e5c2aa50742c5d5ed5da578092fbc67e83ac9f6c591f4796', 'protocol9' => '00366d5688cae53ecb7cbfca296cd99b1b1a121fd1bcdecf4035da14c3413452', default => '61689a262626989223475f4826b7fc3a299157a07012dd4b0ad97f5f0e4060bd' };
 		$fixture = dirname( __DIR__ ) . '/Fixtures/' . $release . '-runtime/runtime.json.gz.base64';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the local immutable fixture text.
 		$encoded_fixture = file_get_contents( $fixture );
@@ -514,7 +515,7 @@ PHP
 			match ( $release ) {
 			'beta15' => 'c11e968c69ffbd936a742c5150707e7483f9eb1c9adf5ee8883260b3c50b9346',
 			'beta20' => '7bd2df743b4b8c83996ccad0636a14d814677a2db6bde7e7b2084bc1c77a8452',
-			default => 'c4c12087bdaeba5c26ad537ce9952d26b5359c7ce08073dc289c4528b940650e' },
+			'protocol9' => 'c4c12087bdaeba5c26ad537ce9952d26b5359c7ce08073dc289c4528b940650e', default => 'ad8d866157f8e64721d216c65d879b715ef2d32fd1af779912dc2041bfc17211' },
 			hash( 'sha256', $compressed )
 		);
 		$json = gzdecode( $compressed );
@@ -546,7 +547,7 @@ PHP
 				'php_floor'        => '8.2.0',
 				'runtime_file'     => 'runtime.php',
 				'runtime_protocol' => match ( $release ) {
-				'beta15' => 7, 'beta20' => 8, default => 9 },
+				'beta15' => 7, 'beta20' => 8, 'protocol9' => 9, default => 10 },
 				'wordpress_floor'  => '6.5.0',
 			),
 			$manifest
@@ -591,7 +592,7 @@ PHP
 					'package_version'  => $version,
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 10,
+					'runtime_protocol' => 11,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR

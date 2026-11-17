@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\WordPress;
 
+use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
 use InvalidArgumentException;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Archive\ValidatedPackage;
@@ -1617,8 +1618,12 @@ final class NativePackageUpdater {
 		if ( ! is_string( $identity ) ) {
 			return false;
 		} if ( 'theme' === $type ) {
-			return 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $identity );
-		} return 'plugin' === $type && 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D', $identity ); }
+			return PackageDirectory::is_valid_name( $identity );
+		}
+		$parts = explode( '/', $identity );
+		return 'plugin' === $type && 2 === count( $parts ) && PackageDirectory::is_valid_name( $parts[0] )
+			&& 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D', $parts[1] );
+	}
 	/** @param list<string> $keys */ private static function exact_keys( mixed $value, array $keys ): bool {
 		if ( ! is_array( $value ) || count( $value ) !== count( $keys ) ) {
 			return false;

@@ -24,7 +24,7 @@ method bodies. Production analysis now defaults to the repository root rather
 than enumerating individual source files. Root-relative tests/scripts, installed
 dependencies and disposable cache/workspace/coverage directories are excluded;
 they are separate development or generated state, not omitted production. The
-generated ArchiveSafety and FailureText helpers remain directly analyzed. Exclusions apply to
+generated dependency helpers remain directly analyzed. Exclusions apply to
 analysis and scanning so fixture-defined constants do not change production
 type inference.
 
@@ -137,12 +137,12 @@ type to PHPStan so the existing impure cleanup retry remains analysed without
 suppression. Bootstrap/provenance, public release-source schema and registrar
 lifecycle tests cover these boundaries.
 
-The generated `src/Dependency/ArchiveSafety.php`, `src/Dependency/FailureText.php` and `src/Dependency/TargetWorkingCopy.php` are explicitly analysed at level 8.
+All six generated PHP files under `src/Dependency/` are explicitly analysed at level 8.
 Their source remains owned by the pinned `ran/updater-support` dependency;
 `scripts/sync-updater-support.php --check` requires namespace-only byte parity.
 Future fixes belong upstream and must arrive through the reviewed dependency and
-copy-sync process. Direct analysis does not remove its generated-code PHPCS
-exclusion or permit local edits to the copied helper.
+copy-sync process. ArchiveSafety alone retains its generated-code PHPCS exclusion;
+the other copies pass the shared ruleset. Parity copies are never edited locally.
 
 Focused commands retain the same underlying tools and boundaries:
 

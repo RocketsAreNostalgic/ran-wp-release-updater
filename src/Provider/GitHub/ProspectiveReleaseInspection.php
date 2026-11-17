@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\Provider\GitHub;
 
+use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
 use InvalidArgumentException;
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
@@ -125,7 +126,7 @@ final readonly class ProspectiveReleaseInspection {
 			&& is_string( $value['wordpress_runtime_version'] )
 			&& null !== ReleaseVersion::normalize_header( $value['wordpress_runtime_version'] )
 			&& is_string( $root )
-			&& 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $root )
+			&& PackageDirectory::is_valid_name( $root )
 			&& is_string( $main )
 			&& self::valid_main_file( $type, $main )
 			&& self::valid_assurance_facts( $value['assurance_facts'] );

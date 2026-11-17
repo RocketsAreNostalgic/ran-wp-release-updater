@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\Contract;
 
+use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
 use InvalidArgumentException;
 
 final readonly class BindingRecord {
@@ -165,7 +166,7 @@ final readonly class BindingRecord {
 				( 'plugin' === $target_type && '' === $value )
 				|| (
 					'theme' === $target_type
-					&& ( '' === $value || 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $value ) )
+					&& ( '' === $value || PackageDirectory::is_valid_name( $value ) )
 				)
 			);
 	}
