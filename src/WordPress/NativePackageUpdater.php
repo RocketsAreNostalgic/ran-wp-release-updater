@@ -13,6 +13,7 @@ use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
+use RAN\WPReleaseUpdater\V1\Contract\ReleaseRejection;
 use RAN\WPReleaseUpdater\V1\Dependency\TargetWorkingCopy;
 use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 use RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator;
@@ -20,9 +21,15 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 
 /** The single native WordPress lifecycle owner for a sealed neutral release. */
 final class NativePackageUpdater {
-	private const MAX_DIAGNOSTICS                       = 16;
-	private const CONFIGURATION_KEYS                    = array( 'headers', 'installed_directory', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
-	private const HEADER_KEYS                           = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
+	private const MAX_DIAGNOSTICS    = 16;
+	private const CONFIGURATION_KEYS = array( 'headers', 'installed_directory', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
+	private const HEADER_KEYS        = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
+	/** @var array<string,mixed>|null */
+	private ?array $listing_diagnostics = null;
+	private ?bool $search_exhausted     = null;
+	/** @var list<array{release_identity:?string,tag:?string,reason:string}> */
+	private array $candidate_rejections = array();
+
 	private bool $registered                            = false;
 	private ?IdentityDescriptor $descriptor             = null;
 	private ?BindingState $state                        = null;
@@ -430,7 +437,10 @@ final class NativePackageUpdater {
 	}
 
 	private function start_check_observation(): ?string {
-		$facts = $this->binding->to_array();
+		$this->listing_diagnostics  = null;
+		$this->search_exhausted     = null;
+		$this->candidate_rejections = array();
+		$facts                      = $this->binding->to_array();
 		if ( ! function_exists( 'do_action' ) || ! function_exists( 'get_current_blog_id' ) ) {
 			return null;
 		}
@@ -473,8 +483,14 @@ final class NativePackageUpdater {
 		if ( null === $check_id ) {
 			return;
 		}
-		$payload = array( 'check_id' => $check_id ) + $this->check_facts( $reason );
+		$payload  = array( 'check_id' => $check_id ) + $this->check_facts( $reason );
+		$extended = $payload + array(
+			'search_exhausted'     => $this->search_exhausted,
+			'listing_diagnostics'  => $this->listing_diagnostics,
+			'candidate_rejections' => $this->candidate_rejections,
+		);
 		self::observe_check( 'completed', $payload );
+		do_action( 'ran_wp_release_updater_check_completed_v2', $extended );
 	}
 
 	/**
@@ -1232,7 +1248,10 @@ final class NativePackageUpdater {
 			$this->status['candidate_validation_code'] = 'release_list_failed';
 			return null;
 		}
-		$rate_limit = $listed['rate_limit'] ?? null;
+		$diagnostics               = $listed['diagnostics'] ?? null;
+		$this->listing_diagnostics = ReleaseRejection::valid_diagnostics( $diagnostics ) && is_array( $diagnostics ) ? $diagnostics : null;
+		$this->search_exhausted    = is_bool( $listed['search_exhausted'] ?? null ) ? $listed['search_exhausted'] : null;
+		$rate_limit                = $listed['rate_limit'] ?? null;
 		if ( is_array( $rate_limit ) && true === ( $rate_limit['limited'] ?? null ) ) {
 			$reason                                    = 'release_list_failed';
 			$this->status['candidate_validation_code'] = 'release_list_failed';
@@ -1268,6 +1287,7 @@ final class NativePackageUpdater {
 				$descriptor = $this->adapter->inspect( $candidate['release_identity'], $candidate['tag'] );
 				BindingRecord::assert_descriptor_binding( $descriptor, $this->binding );
 			} catch ( ReleaseFailure $failure ) {
+				$this->retain_candidate_rejection( $candidate, $failure->rejection_reason );
 				$reason                                    = 'candidate_inspection_failed';
 				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
 				if ( self::can_reject_candidate( $failure ) ) {
@@ -1295,6 +1315,7 @@ final class NativePackageUpdater {
 				$artifact = $this->adapter->acquire( $descriptor );
 				$valid    = $artifact->inspect( fn( string $path ) => $this->validator->validate( $descriptor, $this->archive_policy, $path ) );
 			} catch ( ReleaseFailure $failure ) {
+				$this->retain_candidate_rejection( $candidate, $failure->rejection_reason );
 				$reason                                    = 'candidate_validation_failed';
 				$this->status['candidate_validation_code'] = 'candidate_validation_failed';
 				if ( $artifact instanceof \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact && ! $artifact->discard() ) {
@@ -1349,6 +1370,13 @@ final class NativePackageUpdater {
 		}
 		return null;
 	}
+	/** @param array<string,mixed> $candidate */
+	private function retain_candidate_rejection( array $candidate, ?string $reason ): void {
+		if ( null !== $reason && ReleaseRejection::valid( $reason ) && count( $this->candidate_rejections ) < 8 ) {
+			$this->candidate_rejections[] = ReleaseRejection::sample( $candidate['release_identity'], $candidate['tag'], $reason );
+		}
+	}
+
 	private static function can_reject_candidate( ReleaseFailure $failure ): bool {
 		return in_array( $failure->release_code, array( 'release_unavailable', 'package_incompatible' ), true )
 			&& in_array( $failure->cleanup_status, array( 'not_applicable', 'complete' ), true );

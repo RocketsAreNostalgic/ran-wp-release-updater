@@ -532,11 +532,141 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@rmdir( $this->temporary_directory );
 		}
+		public function test_v2_bounds_and_screens_known_rejections_without_inventing_unknown_causes(): void {
+			list( $updater, $adapter ) = $this->subject();
+			$candidates                = array();
+			for ( $index = 1; $index <= 8; ++$index ) {
+				$id                               = (string) $index;
+				$candidates[]                     = array(
+					'release_identity' => $id,
+					'tag'              => 'secret_orchid',
+					'version'          => '3.0.0',
+				);
+				$adapter->inspect_outcomes[ $id ] = ReleaseFailure::rejected( 'tag_not_version', 'withheld detail' );
+			}
+			$adapter->list_response = array(
+				'candidates'  => $candidates,
+				'diagnostics' => array( 'unsafe' => 'withheld' ),
+			);
+			$updater->filter_update(
+				false,
+				array(
+					'Version'   => '1.0.0',
+					'UpdateURI' => $this->uri(),
+				),
+				'package/package.php',
+				array()
+			);
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			self::assertNull( $events[2][1]['listing_diagnostics'] );
+			self::assertCount( 8, $events[2][1]['candidate_rejections'] );
+			self::assertSame(
+				array(
+					'release_identity' => '1',
+					'tag'              => null,
+					'reason'           => 'tag_not_version',
+				),
+				$events[2][1]['candidate_rejections'][0]
+			);
+			$updater->refresh();
+			$adapter->inspect_outcomes['1'] = new \RuntimeException( 'withheld cause' );
+			$updater->filter_update(
+				false,
+				array(
+					'Version'   => '1.0.0',
+					'UpdateURI' => $this->uri(),
+				),
+				'package/package.php',
+				array()
+			);
+			$last = end( $GLOBALS['ran_wp_release_updater_test_observations'] );
+			self::assertSame( array(), $last[1]['candidate_rejections'] );
+		}
+
+		public function test_v2_retains_known_inspection_and_acquisition_rejections_when_an_older_candidate_is_offered(): void {
+			foreach ( array( 'inspect', 'acquire' ) as $stage ) {
+				list( $updater, $adapter, , $older ) = $this->subject();
+				$facts                               = $older->to_array();
+				unset( $facts['fingerprint'] );
+				$newer                           = IdentityDescriptor::create(
+					array_replace(
+						$facts,
+						array(
+							'release_identity' => '77',
+							'tag'              => 'v3.0.0',
+							'version'          => '3.0.0',
+						)
+					)
+				);
+				$diagnostics                     = array(
+					'scanned_count' => 3,
+					'dropped_count' => 1,
+					'drops'         => array(
+						array(
+							'release_identity' => '76',
+							'tag'              => null,
+							'reason'           => 'tag_not_version',
+						),
+					),
+					'truncated'     => false,
+				);
+				$adapter->list_response          = array(
+					'candidates'       => array( $this->candidate( $newer ), $this->candidate( $older ) ),
+					'diagnostics'      => $diagnostics,
+					'search_exhausted' => true,
+				);
+				$adapter->inspect_outcomes['77'] = $newer;
+				if ( 'inspect' === $stage ) {
+					$adapter->inspect_outcomes['77'] = ReleaseFailure::rejected( 'digest_missing' );
+				} else {
+					$adapter->acquire_outcomes['77'] = ReleaseFailure::rejected( 'download_digest_mismatch' );
+				}
+				$GLOBALS['ran_wp_release_updater_test_observations'] = array();
+				$this->offer( $updater );
+				$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+				self::assertCount( 3, $events );
+				self::assertSame( array( 'check_id', 'status', 'reason', 'relationship', 'installed_version', 'candidate_version', 'offered_version', 'candidate_validation_code' ), array_keys( $events[1][1] ) );
+				self::assertSame( 'ran_wp_release_updater_check_completed_v2', $events[2][0] );
+				self::assertSame( $events[1][1], array_intersect_key( $events[2][1], $events[1][1] ) );
+				self::assertSame( 'update_available', $events[2][1]['reason'] );
+				self::assertSame( $diagnostics, $events[2][1]['listing_diagnostics'] );
+				self::assertTrue( $events[2][1]['search_exhausted'] );
+				self::assertSame(
+					array(
+						array(
+							'release_identity' => '77',
+							'tag'              => 'v3.0.0',
+							'reason'           => 'inspect' === $stage ? 'digest_missing' : 'download_digest_mismatch',
+						),
+					),
+					$events[2][1]['candidate_rejections']
+				);
+				$updater->refresh();
+				$adapter->list_response = array(
+					'candidates'       => array(),
+					'search_exhausted' => false,
+					'not_modified'     => false,
+				);
+				$updater->filter_update(
+					false,
+					array(
+						'Version'   => '1.0.0',
+						'UpdateURI' => $this->uri(),
+					),
+					'package/package.php',
+					array()
+				);
+				$last = end( $GLOBALS['ran_wp_release_updater_test_observations'] );
+				self::assertNull( $last[1]['listing_diagnostics'] );
+				self::assertSame( array(), $last[1]['candidate_rejections'] );
+			}
+		}
+
 		public function test_observation_captures_actual_check(): void {
 			list( $updater, $adapter ) = $this->subject();
 			$this->offer( $updater );
 			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
-			self::assertCount( 2, $events );
+			self::assertCount( 3, $events );
 			self::assertSame( 'ran_wp_release_updater_check_started_v1', $events[0][0] );
 			self::assertSame( 'ran_wp_release_updater_check_completed_v1', $events[1][0] );
 			self::assertMatchesRegularExpression( '/^[a-f0-9]{32}$/', $events[0][1]['check_id'] );
@@ -587,14 +717,14 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		public function test_reused_discovery_emits_no_fresh_check(): void {
 			list( $updater, $adapter ) = $this->subject( native_discovery_reuse: true );
 			$this->offer( $updater );
-			self::assertCount( 2, $GLOBALS['ran_wp_release_updater_test_observations'] );
+			self::assertCount( 3, $GLOBALS['ran_wp_release_updater_test_observations'] );
 			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
 			$this->offer( $updater );
 			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_observations'] );
 			self::assertSame( 1, $adapter->list_calls );
 			$updater->refresh();
 			$this->offer( $updater );
-			self::assertCount( 2, $GLOBALS['ran_wp_release_updater_test_observations'] );
+			self::assertCount( 3, $GLOBALS['ran_wp_release_updater_test_observations'] );
 			self::assertSame( 2, $adapter->list_calls );
 		}
 

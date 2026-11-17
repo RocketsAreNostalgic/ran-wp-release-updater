@@ -22,7 +22,7 @@ final class P03PairedCompositionTest extends TestCase {
 	public function test_concise_github_composition_matches_the_explicit_native_path( string $type ): void {
 		$result = $this->probe( $type );
 
-		self::assertCount( 4, $result['observations'] );
+		self::assertCount( 6, $result['observations'] );
 		self::assertSame( 'update_available', $result['observations'][1][1]['reason'] );
 		self::assertSame( $type, $result['observations'][0][1]['target_type'] );
 		self::assertSame( $result['concise']['binding'], $result['explicit']['binding'] );
@@ -117,7 +117,7 @@ $handle = 'plugin' === $data['type']
 	: $registrar->theme('github', $data['installed'], 'acme/example', '123456789', 'stable', 'manual', $resolver);
 $handle->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 9, 'wordpress_version' => '6.8.0'));
+$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 10, 'wordpress_version' => '6.8.0'));
 $handoff = (new ReflectionProperty($broker, 'handoff'))->getValue($broker);
 $targets = (new ReflectionProperty($handoff, 'targets'))->getValue($handoff);
 $conciseHandle = array_values($targets)[0]['handle'];
@@ -330,7 +330,7 @@ PHP;
 					'package_version'  => '0.1.0-beta.3',
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 9,
+					'runtime_protocol' => 10,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR

@@ -1168,6 +1168,147 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			}
 		}
 
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		public function test_public_listing_diagnostics_cross_the_handle_and_missing_digests_remain_inspection_failures(): void {
+			$source                = $this->prospective_source( null, 'plugin', true );
+			$draft                 = $this->release( 6, 'v2.0.0' );
+			$draft['draft']        = true;
+			$draft['published_at'] = null;
+			$release               = $this->release( 7, 'v1.2.3' );
+			unset( $release['assets'][0]['digest'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( $draft, $release ) ), $this->response( 200, array( 'id' => 99 ) ), $this->response( 200, $release ) );
+			$listed                          = $this->prospective_operation( $source, 'list', array() );
+			self::assertTrue( $listed['ok'] );
+			self::assertSame( array( '7' ), array_column( $listed['value']['candidates'], 'release_identity' ) );
+			self::assertSame(
+				array(
+					'scanned_count' => 2,
+					'dropped_count' => 1,
+					'drops'         => array(
+						array(
+							'release_identity' => '6',
+							'tag'              => 'v2.0.0',
+							'reason'           => 'release_draft',
+						),
+					),
+					'truncated'     => false,
+				),
+				$listed['value']['diagnostics']
+			);
+			self::assertCount( 1, $GLOBALS['ran_github_requests'] );
+			$inspected = $this->prospective_operation( $source, 'inspect', array( '7', 'v1.2.3' ) );
+			self::assertSame(
+				array(
+					'reason' => 'digest_missing',
+					'detail' => null,
+				),
+				$inspected['rejection']
+			);
+			self::assertCount( 3, $GLOBALS['ran_github_requests'] );
+		}
+
+		public function test_listing_reports_drops_without_changing_candidates_or_making_more_requests(): void {
+			$draft                 = $this->release( 1, '1.4.0' );
+			$draft['draft']        = true;
+			$draft['published_at'] = null;
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( $draft, $this->release( 2, 'release-next' ), $this->release( 3, 'v1.2' ) ) ) );
+			$result                          = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+			self::assertSame( array( 'v1.2' ), array_column( $result['candidates'], 'tag' ) );
+			self::assertSame(
+				array(
+					'scanned_count' => 3,
+					'dropped_count' => 2,
+					'drops'         => array(
+						array(
+							'release_identity' => '1',
+							'tag'              => '1.4.0',
+							'reason'           => 'release_draft',
+						),
+						array(
+							'release_identity' => '2',
+							'tag'              => 'release-next',
+							'reason'           => 'tag_not_version',
+						),
+					),
+					'truncated'     => false,
+				),
+				$result['diagnostics']
+			);
+			self::assertCount( 1, $GLOBALS['ran_github_requests'] );
+		}
+
+		public function test_listing_classifies_each_existing_filter_and_bounds_the_sample(): void {
+			// GitHub's documented release object has boolean flags, numeric id, tag_name, nullable published_at and assets.
+			// https://docs.github.com/en/rest/releases/releases#list-releases
+			$cases = array(
+				'release_metadata_invalid'    => array( 'id' => 0 ),
+				'release_immutable_invalid'   => array( 'immutable' => null ),
+				'release_draft'               => array(
+					'draft'        => true,
+					'published_at' => null,
+				),
+				'tag_not_version'             => array( 'tag_name' => 'release-next' ),
+				'prerelease_not_allowed'      => array( 'prerelease' => true ),
+				'release_publication_invalid' => array( 'published_at' => 'yesterday' ),
+				'release_page_invalid'        => array( 'html_url' => 'https://other.invalid/release' ),
+			);
+			foreach ( $cases as $reason => $changes ) {
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+				$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( array_replace( $this->release( 1, 'v1.2.3' ), $changes ) ) ) );
+				$result                          = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+				self::assertSame( array(), $result['candidates'], $reason );
+				self::assertSame( $reason, $result['diagnostics']['drops'][0]['reason'] );
+			}
+			$rows = array();
+			for ( $index = 1; $index <= 20; ++$index ) {
+				$rows[] = $this->release( $index, 'release-next' );
+			}
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, $rows ), $this->response( 200, $rows ) );
+			$result                          = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+			self::assertSame( 40, $result['diagnostics']['scanned_count'] );
+			self::assertSame( 40, $result['diagnostics']['dropped_count'] );
+			self::assertCount( 8, $result['diagnostics']['drops'] );
+			self::assertTrue( $result['diagnostics']['truncated'] );
+			self::assertTrue( $result['search_exhausted'] );
+		}
+
+		public function test_listing_screens_whole_tags_and_does_not_count_duplicate_or_capped_candidates_as_drops(): void {
+			foreach ( array( '1.2.3', 'Release-Next', 'v1.2.3+build.1', str_repeat( 'x-', 59 ) . 'xx', 'secret_orchid', 'ghp_abc', 'token_expired', '/private/site', '<tag>', str_repeat( 'x-', 60 ) . 'x', 'https://user:pw@example.invalid' ) as $tag ) {
+				$expected       = in_array( $tag, array( '1.2.3', 'Release-Next', 'v1.2.3+build.1', str_repeat( 'x-', 59 ) . 'xx' ), true ) ? $tag : null;
+				$draft          = $this->release( 1, $tag );
+				$draft['draft'] = true;
+				// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+				$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( $draft ) ) );
+				$result                          = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+				self::assertSame( $expected, $result['diagnostics']['drops'][0]['tag'], $tag );
+			}
+			$rows = array( $this->release( 1, 'v1.0.0' ) );
+			for ( $index = 1; $index <= 9; ++$index ) {
+				$rows[] = $this->release( $index, 'v1.' . $index . '.0', immutable: false );
+			}
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, $rows ) );
+			$result                          = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+			self::assertSame(
+				array(
+					'scanned_count' => 10,
+					'dropped_count' => 0,
+					'drops'         => array(),
+					'truncated'     => false,
+				),
+				$result['diagnostics']
+			);
+			self::assertCount( 8, $result['candidates'] );
+			self::assertTrue( $result['search_exhausted'] );
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
+			$GLOBALS['ran_github_responses'] = array( $this->response( 304, array() ) );
+			self::assertNull( ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases()['diagnostics'] );
+		}
+
 		/** @return array<string,array{string,?string}> */
 		public static function hostile_tag_provider(): array {
 			$sha256 = hash( 'sha256', 'a' );
