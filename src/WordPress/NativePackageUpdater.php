@@ -864,7 +864,7 @@ final class NativePackageUpdater {
 			return;
 		}
 		$field   = 'plugin' === $this->target_type ? 'plugin' : 'theme';
-		$entries = $results[ $this->target_type . 's' ] ?? array();
+		$entries = $results[ $this->target_type ] ?? array();
 		foreach ( is_array( $entries ) ? $entries : array() as $entry ) {
 			if ( is_object( $entry ) && is_object( $entry->item ?? null ) && ( $entry->item->$field ?? null ) === $this->installed_identity ) {
 				$this->observe_wordpress_error( $entry->result ?? null );

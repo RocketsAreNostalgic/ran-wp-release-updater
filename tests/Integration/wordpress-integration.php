@@ -905,11 +905,13 @@ function ran_wp_release_updater_test_automatic_example( string $source, string $
 				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP_FIXTURE' => __DIR__ . '/wordpress-integration/automatic-example-http.php',
 				'RAN_UPDATER_AUTOMATIC_EXAMPLE_HTTP_LOG' => $http_log,
 				'RAN_UPDATER_AUTOMATIC_EXAMPLE_VERSION'  => $version,
+				'RAN_UPDATER_AUTOMATIC_EXAMPLE_RESULT_ERROR' => '0.2.0' === $version ? '1' : '0',
 			)
 		);
 		$http                = ran_wp_release_updater_test_read_json( $http_log );
 		$proof['requests'][] = $http;
 		$requests[]          = $http;
+		ran_wp_release_updater_test_require_fact( ( '0.2.0' === $version ) === ( $http['terminal_error_injected'] ?? null ), 'Automatic terminal-result injection did not match the intended transition.' );
 		ran_wp_release_updater_test_require_fact( true === ( $http['doing_cron'] ?? null ), 'Automatic example did not execute in WordPress cron.' );
 		ran_wp_release_updater_test_require_fact( true === ( $http['hook'] ?? null ), 'Automatic example did not dispatch the wp_maybe_auto_update hook.' );
 		ran_wp_release_updater_test_require_fact(
@@ -935,6 +937,15 @@ function ran_wp_release_updater_test_automatic_example( string $source, string $
 		$observation         = ran_wp_release_updater_test_read_json( $observed );
 		$proof['requests'][] = $observation;
 		ran_wp_release_updater_test_require_fact( true === ( $observation['pass'] ?? null ) && false === ( $observation['installed'] ?? null ), 'Automatic example did not remain correct after process shutdown.' );
+		$outcome = $observation['last_native_outcome'] ?? null;
+		ran_wp_release_updater_test_require_fact(
+			is_array( $outcome ) && ( $outcome['version'] ?? null ) === $version
+			&& ( '0.2.0' === $version ? 'unverified_install_result' : 'verified_success' ) === ( $outcome['outcome'] ?? null )
+			// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
+			&& ( '0.2.0' === $version ? 'wordpress' : 'release_updater' ) === ( $outcome['source'] ?? null )
+			&& ( '0.2.0' === $version ? 'plugin_update_fatal_error_rollback_failed' : null ) === ( $outcome['wordpress_code'] ?? null ),
+			'Automatic outcome did not retain the terminal error, replace it with verified success, or survive a fresh request.'
+		);
 		$requests[] = $observation;
 	}
 	ran_wp_release_updater_test_automatic_example_admission( $archives, $wordpress, $run, $database, $socket, $wp_command, $password, $source, $requests );

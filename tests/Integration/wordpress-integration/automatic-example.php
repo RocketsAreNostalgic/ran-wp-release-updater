@@ -80,6 +80,7 @@ $ran_wp_release_updater_test_automatic_proof       = array(
 	'runtime_is_example_vendor' => is_string( $ran_wp_release_updater_test_automatic_origin ) && str_starts_with( $ran_wp_release_updater_test_automatic_origin, $ran_wp_release_updater_test_automatic_runtime . '/' ),
 	'update_offer_present'      => is_object( $ran_wp_release_updater_test_automatic_offer ) && isset( $ran_wp_release_updater_test_automatic_offer->response[ $ran_wp_release_updater_test_automatic_plugin ] ),
 	'cleanup'                   => $ran_wp_release_updater_test_automatic_cleanup,
+	'last_native_outcome'       => is_array( $ran_wp_release_updater_test_automatic_fence ) ? ( $ran_wp_release_updater_test_automatic_fence['last_native_outcome'] ?? null ) : null,
 	'update_transient_was'      => false !== $ran_wp_release_updater_test_automatic_before_transient,
 	'pass'                      => in_array( $ran_wp_release_updater_test_automatic_mode, array( 'schedule', 'acquire' ), true ) || ( $ran_wp_release_updater_test_automatic_after_version === $ran_wp_release_updater_test_automatic_version
 		&& is_plugin_active( $ran_wp_release_updater_test_automatic_plugin )

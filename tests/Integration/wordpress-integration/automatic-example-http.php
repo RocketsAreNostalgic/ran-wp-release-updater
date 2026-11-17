@@ -8,15 +8,17 @@ $ran_wp_release_updater_test_automatic_http_log     = getenv( 'RAN_UPDATER_AUTOM
 if ( ! is_string( $ran_wp_release_updater_test_automatic_http_archive ) || ! is_file( $ran_wp_release_updater_test_automatic_http_archive ) || ! is_string( $ran_wp_release_updater_test_automatic_http_version ) || ! preg_match( '/\A0\.[23]\.0\z/', $ran_wp_release_updater_test_automatic_http_version ) || ! is_string( $ran_wp_release_updater_test_automatic_http_log ) || '' === $ran_wp_release_updater_test_automatic_http_log ) {
 	throw new RuntimeException( 'Automatic example HTTP fixture inputs are invalid.' );
 }
-$ran_wp_release_updater_test_automatic_http_calls    = array();
-$ran_wp_release_updater_test_automatic_http_writes   = 0;
-$ran_wp_release_updater_test_automatic_http_complete = array(
+$ran_wp_release_updater_test_automatic_http_calls          = array();
+$ran_wp_release_updater_test_automatic_http_writes         = 0;
+$ran_wp_release_updater_test_automatic_http_complete       = array(
 	'result_count'  => 0,
 	'success_count' => 0,
 );
-$ran_wp_release_updater_test_automatic_http_hook     = false;
-$ran_wp_release_updater_test_automatic_http_vcs      = null;
-$ran_wp_release_updater_test_automatic_http_mail     = 0;
+$ran_wp_release_updater_test_automatic_http_hook           = false;
+$ran_wp_release_updater_test_automatic_http_vcs            = null;
+$ran_wp_release_updater_test_automatic_http_mail           = 0;
+$ran_wp_release_updater_test_automatic_http_result_error   = '1' === getenv( 'RAN_UPDATER_AUTOMATIC_EXAMPLE_RESULT_ERROR' );
+$ran_wp_release_updater_test_automatic_http_error_injected = false;
 add_filter(
 	'pre_wp_mail',
 	static function () use ( &$ran_wp_release_updater_test_automatic_http_mail ): bool {
@@ -110,7 +112,7 @@ add_action(
 );
 add_action(
 	'automatic_updates_complete',
-	static function ( $results ) use ( &$ran_wp_release_updater_test_automatic_http_complete ): void {
+	static function ( $results ) use ( &$ran_wp_release_updater_test_automatic_http_complete, $ran_wp_release_updater_test_automatic_http_result_error, &$ran_wp_release_updater_test_automatic_http_error_injected ): void {
 		if ( ! is_array( $results ) || ! is_array( $results['plugin'] ?? null ) ) {
 			return;
 		}
@@ -122,9 +124,15 @@ add_action(
 			++$ran_wp_release_updater_test_automatic_http_complete['result_count'];
 			if ( true === ( $ran_wp_release_updater_test_automatic_http_result->result ?? null ) ) {
 				++$ran_wp_release_updater_test_automatic_http_complete['success_count'];
+				if ( $ran_wp_release_updater_test_automatic_http_result_error ) {
+					// Inject at Core's real result boundary, retaining its actual singular keys and candidate bytes.
+					$ran_wp_release_updater_test_automatic_http_result->result = new WP_Error( 'plugin_update_fatal_error_rollback_failed', 'Injected terminal result with candidate bytes retained.' );
+					$ran_wp_release_updater_test_automatic_http_error_injected = true;
+				}
 			}
 		}
 	},
+	1
 );
 add_filter(
 	'automatic_updates_is_vcs_checkout',
@@ -134,7 +142,7 @@ add_filter(
 	}
 );
 register_shutdown_function(
-	static function () use ( $ran_wp_release_updater_test_automatic_http_log, &$ran_wp_release_updater_test_automatic_http_calls, &$ran_wp_release_updater_test_automatic_http_writes, &$ran_wp_release_updater_test_automatic_http_complete, &$ran_wp_release_updater_test_automatic_http_hook, &$ran_wp_release_updater_test_automatic_http_vcs ): void {
+	static function () use ( $ran_wp_release_updater_test_automatic_http_log, &$ran_wp_release_updater_test_automatic_http_calls, &$ran_wp_release_updater_test_automatic_http_writes, &$ran_wp_release_updater_test_automatic_http_complete, &$ran_wp_release_updater_test_automatic_http_hook, &$ran_wp_release_updater_test_automatic_http_vcs, &$ran_wp_release_updater_test_automatic_http_error_injected ): void {
 		$ran_wp_release_updater_test_automatic_http_target = null;
 		foreach ( ( $GLOBALS['wp_filter']['update_plugins_github.com']->callbacks ?? array() ) as $ran_wp_release_updater_test_automatic_http_priority ) {
 			foreach ( $ran_wp_release_updater_test_automatic_http_priority as $ran_wp_release_updater_test_automatic_http_callback ) {
@@ -150,13 +158,14 @@ register_shutdown_function(
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- JSON retains exact structured cron evidence for the parent process.
 			json_encode(
 				array(
-					'calls'                 => $ran_wp_release_updater_test_automatic_http_calls,
-					'writes'                => $ran_wp_release_updater_test_automatic_http_writes,
-					'doing_cron'            => wp_doing_cron(),
-					'hook'                  => $ran_wp_release_updater_test_automatic_http_hook,
-					'complete_plugin'       => $ran_wp_release_updater_test_automatic_http_complete,
-					'vcs_checkout_observed' => $ran_wp_release_updater_test_automatic_http_vcs,
-					'target'                => $ran_wp_release_updater_test_automatic_http_target,
+					'calls'                   => $ran_wp_release_updater_test_automatic_http_calls,
+					'writes'                  => $ran_wp_release_updater_test_automatic_http_writes,
+					'doing_cron'              => wp_doing_cron(),
+					'hook'                    => $ran_wp_release_updater_test_automatic_http_hook,
+					'complete_plugin'         => $ran_wp_release_updater_test_automatic_http_complete,
+					'terminal_error_injected' => $ran_wp_release_updater_test_automatic_http_error_injected,
+					'vcs_checkout_observed'   => $ran_wp_release_updater_test_automatic_http_vcs,
+					'target'                  => $ran_wp_release_updater_test_automatic_http_target,
 				),
 				JSON_THROW_ON_ERROR
 			) . "\n"

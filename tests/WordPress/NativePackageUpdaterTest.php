@@ -172,7 +172,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$this->prepare_install( $updater );
 			$updater->observe_automatic_results(
 				array(
-					'plugins' => array(
+					'plugin' => array(
 						(object) array(
 							'item'   => (object) array( 'plugin' => 'ordinary/ordinary.php' ),
 							'result' => new \WP_Error( 'unrelated', 'Private.' ),
@@ -182,7 +182,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			$updater->observe_automatic_results(
 				array(
-					'plugins' => array(
+					'plugin' => array(
 						(object) array(
 							'item'   => (object) array( 'plugin' => 'package/package.php' ),
 							'result' => new \WP_Error( 'plugin_update_fatal_error_rollback_failed', 'Private.' ),
@@ -196,6 +196,36 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 'wordpress', $this->retained_outcome( $fresh )['source'] );
 			self::assertSame( 'plugin_update_fatal_error_rollback_failed', $this->retained_outcome( $fresh )['wordpress_code'] );
 			self::assertNotSame( 'verified_success', $this->retained_outcome( $fresh )['outcome'] );
+		}
+
+		public function test_core_automatic_error_prevents_host_success_when_candidate_bytes_remain(): void {
+			$reported        = array();
+			list( $updater ) = $this->subject(
+				'automatic',
+				operation_guard: static fn(): bool => true,
+				native_mutation_begin: static fn(): string => 'owner',
+				native_mutation_complete: static function ( string $owner, string $type, string $identity, string $outcome ) use ( &$reported ): void {
+					unset( $owner, $type, $identity );
+					$reported[] = $outcome;
+				}
+			);
+			$prepared        = $this->prepare_install( $updater );
+			$updater->observe_automatic_results(
+				array(
+					'plugin' => array(
+						(object) array(
+							'item'   => (object) array( 'plugin' => 'package/package.php' ),
+							'result' => new \WP_Error( 'plugin_update_fatal_error_rollback_failed', 'Private.' ),
+						),
+					),
+				)
+			);
+			$updater->finalize_pending_install();
+			$updater->finalize_pending_install();
+			self::assertSame( array( 'uncertain' ), $reported );
+			self::assertFileExists( $prepared['stage'] . '/package.php' );
+			self::assertSame( 'plugin_update_fatal_error_rollback_failed', $this->retained_outcome( $updater )['wordpress_code'] );
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
 		}
 
 		public function test_pre_install_and_source_errors_keep_the_foreign_reference_before_wrapping(): void {
@@ -259,7 +289,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$live = false;
 			$updater->observe_automatic_results(
 				array(
-					'plugins' => array(
+					'plugin' => array(
 						(object) array(
 							'item'   => (object) array( 'plugin' => 'package/package.php' ),
 							'result' => new \WP_Error( 'late_foreign_error', 'Private.' ),
