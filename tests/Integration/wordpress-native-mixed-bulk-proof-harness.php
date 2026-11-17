@@ -31,7 +31,7 @@ $ran_wp_release_updater_test_runtime_manifest = json_decode( (string) file_get_c
 $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(
 	array(
 		'php_version'       => PHP_VERSION,
-		'runtime_protocol'  => 8,
+		'runtime_protocol'  => 9,
 		'wordpress_version' => $GLOBALS['wp_version'],
 	)
 );
@@ -238,8 +238,9 @@ add_action(
 				'acquired_paths_absent' => array_reduce( $adapter->acquired_paths, static fn ( bool $ok, string $path ): bool => $ok && ! file_exists( $path ) && ! is_link( $path ), true ),
 			);
 			$updater_evidence[ $slug ]  = array(
-				'diagnostics'  => $target['updater']->diagnostics(),
-				'failure_code' => $target['updater']->status()['failure_code'],
+				'diagnostics'         => $target['updater']->diagnostics(),
+				'failure_code'        => $target['updater']->status()['failure_code'],
+				'last_native_outcome' => $target['updater']->status()['last_native_outcome'],
 			);
 			$installed_manifest         = ran_wp_release_updater_test_target_file_manifest( $type, $target['identity'] );
 			$expected_manifest          = $expected_archive_manifests[ $slug ] ?? array(); // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
@@ -269,9 +270,21 @@ add_action(
 		foreach ( $ids as $identity ) {
 			$bytes_after[ $identity ] = ran_wp_release_updater_test_target_bytes( $type, $identity );
 		}
-		$backup_root      = WP_CONTENT_DIR . '/upgrade-temp-backup/' . ( 'plugin' === $type ? 'plugins' : 'themes' );
-		$backups_absent   = ! is_dir( $backup_root . '/managed-a' ) && ! is_dir( $backup_root . '/ordinary' ) && ! is_dir( $backup_root . '/managed-b' );
-		$success          = 'success' === $mode;
+		$backup_root    = WP_CONTENT_DIR . '/upgrade-temp-backup/' . ( 'plugin' === $type ? 'plugins' : 'themes' );
+		$backups_absent = ! is_dir( $backup_root . '/managed-a' ) && ! is_dir( $backup_root . '/ordinary' ) && ! is_dir( $backup_root . '/managed-b' );
+		$success        = 'success' === $mode;
+		$outcomes_match = true;
+		foreach ( $updater_evidence as $slug => $item ) {
+			$outcome        = $item['last_native_outcome'];
+			$failing        = ! $success && 'managed-a' === $slug;
+			$outcomes_match = $outcomes_match && is_array( $outcome )
+				&& ( $failing ? 'unverified_install_result' : 'verified_success' ) === ( $outcome['outcome'] ?? null )
+				// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
+				&& ( $failing ? 'wordpress' : 'release_updater' ) === ( $outcome['source'] ?? null )
+				&& ( $failing ? 'mixed_bulk_injected_post_copy_failure' : null ) === ( $outcome['wordpress_code'] ?? null )
+				&& '2.0.0' === ( $outcome['version'] ?? null )
+				&& is_int( $outcome['recorded_at'] ?? null );
+		}
 		$expected_results = $success ? array( true, true, true ) : array( false, true, true );
 		if ( ! array_key_exists( $ids[0], $result_codes ) || ! array_key_exists( $ids[1], $result_codes ) || ! array_key_exists( $ids[2], $result_codes ) || ! isset( $before_bytes[ $ids[0] ], $bytes_after[ $ids[0] ] ) ) {
 			throw new RuntimeException( 'Mixed-bulk result or byte observations are incomplete.' );
@@ -290,6 +303,7 @@ add_action(
 			&& $adapter_evidence['managed-a']['acquired_paths_absent']
 			&& $adapter_evidence['managed-b']['acquired_paths_absent']
 			&& $leases_released
+			&& $outcomes_match
 			&& 0 === $network_calls
 			&& array() === $new_owned_directories
 			&& ! is_file( ABSPATH . '.maintenance' )

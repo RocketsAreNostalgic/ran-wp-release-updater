@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\Runtime;
 
 /**
- * Request-local ownership of the selected protocol-8 broker.
+ * Request-local ownership of the selected protocol-9 broker.
  */
 final class SelectedRuntimeState {
 
@@ -36,7 +36,7 @@ final class SelectedRuntimeState {
 
 		try {
 			$diagnostics = $this->broker->diagnostics();
-			if ( 8 !== $this->broker->protocol_version() ) {
+			if ( 9 !== $this->broker->protocol_version() ) {
 				return 'protocol_conflict_inactive';
 			}
 			return in_array( $diagnostics['state'] ?? null, array( 'activating', 'active' ), true )
@@ -71,13 +71,13 @@ final class SelectedRuntimeState {
 			);
 		}
 		try {
-			if ( 8 !== $this->broker->protocol_version() ) {
+			if ( 9 !== $this->broker->protocol_version() ) {
 				throw new \RuntimeException( 'Inactive broker.' );
 			}
 			return $this->broker->activate(
 				array(
 					'php_version'       => PHP_VERSION,
-					'runtime_protocol'  => 8,
+					'runtime_protocol'  => 9,
 					'wordpress_version' => self::normalize_word_press_version( $GLOBALS['wp_version'] ?? null ),
 				)
 			);

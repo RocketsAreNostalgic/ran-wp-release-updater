@@ -9,6 +9,7 @@ use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 
+/** @internal Durable transitions; consumers read outcomes through target status. */
 final class BindingFenceCoordinator {
 	private const PREFIX   = 'ran_wp_release_updater_target_v1_';
 	private const CLAIM    = array( 'binding_generation', 'binding_hash', 'lease_deadline', 'owner_token' );
@@ -32,7 +33,8 @@ final class BindingFenceCoordinator {
 			return self::lost( $current );
 		}
 		try {
-			$next = BindingState::create( $binding, $owner, $now + $seconds, $current->binding_generation() + 1, $current->fence_epoch() + 1 );
+			$outcome = hash_equals( $binding->binding_hash(), $current->binding()->binding_hash() ) ? $current->last_native_outcome() : null;
+			$next    = BindingState::create( $binding, $owner, $now + $seconds, $current->binding_generation() + 1, $current->fence_epoch() + 1, $outcome );
 		} catch ( InvalidArgumentException ) {
 			return self::lost( $current );
 		}
@@ -49,9 +51,19 @@ final class BindingFenceCoordinator {
 	public static function renew_persistent_binding_state( object $wpdb, BindingState $expected, mixed $claim, int $seconds ): array {
 		return self::transition_persistent_binding_state( $wpdb, $expected, $claim, $seconds, 'renewed' );
 	}
-	/** @return array{current:BindingState|null,result:string} */
-	public static function release_persistent_binding_state( object $wpdb, BindingState $expected, mixed $claim ): array {
-		return self::transition_persistent_binding_state( $wpdb, $expected, $claim, null, 'released' );
+	/** @param array<string,mixed>|null $outcome
+	 * @return array{current:BindingState|null,result:string}
+	 */
+	public static function release_persistent_binding_state( object $wpdb, BindingState $expected, mixed $claim, ?array $outcome = null ): array {
+		return self::transition_persistent_binding_state( $wpdb, $expected, $claim, null, 'released', $outcome );
+	}
+	/** Read the current binding's outcome without claiming or renewing its fence.
+	 * @return array<string,mixed>|null
+	 */
+	public static function read_persistent_native_outcome( object $wpdb, BindingRecord $binding ): ?array {
+		$raw     = self::database( $wpdb ) ? self::read( $wpdb, self::name( $binding ) ) : null;
+		$current = null === $raw ? null : self::state( $raw );
+		return null !== $current && hash_equals( $binding->binding_hash(), $current->binding()->binding_hash() ) ? $current->last_native_outcome() : null;
 	}
 	/** @return array{current:BindingState,now:int,result:'verified'}|array{current:BindingState|null,result:'binding_fence_lost'} */
 	public static function verify_persistent_binding_state( object $wpdb, BindingState $expected, mixed $claim ): array {
@@ -73,8 +85,12 @@ final class BindingFenceCoordinator {
 			'result'  => 'verified',
 		);
 	}
-	/** @return array{current:BindingState|null,now?:int,receipt?:AcquisitionReceipt,result:string} */
-	public static function complete_persistent_install( object $wpdb, BindingState $expected, mixed $claim, mixed $receipt, IdentityDescriptor $descriptor ): array {
+	/** @return array{current:BindingState|null,now?:int,receipt?:AcquisitionReceipt,result:string}
+	 */
+	public static function complete_persistent_install( object $wpdb, BindingState $expected, mixed $claim, mixed $receipt, IdentityDescriptor $descriptor, bool $hold_claim = false ): array {
+		if ( $hold_claim && $expected->fence_epoch() >= BindingState::MAX_SAFE_INTEGER - 1 ) {
+			return self::lost( $expected );
+		}
 		$first = self::verify_persistent_binding_state( $wpdb, $expected, $claim );
 		if ( 'verified' !== $first['result'] ) {
 			return $first;
@@ -88,8 +104,11 @@ final class BindingFenceCoordinator {
 		if ( 'verified' !== $last['result'] ) {
 			return self::lost( $last['current'] );
 		}
-		$released = self::release_persistent_binding_state( $wpdb, $expected, $claim );
-		if ( 'released' !== $released['result'] ) {
+		// Consume the one-use receipt durably, retaining the lease when final cleanup is still due.
+		$released = $hold_claim
+			? self::transition_persistent_binding_state( $wpdb, $expected, $claim, 1, 'completed' )
+			: self::release_persistent_binding_state( $wpdb, $expected, $claim );
+		if ( ! in_array( $released['result'], array( 'released', 'completed' ), true ) ) {
 			return self::lost( $released['current'] );
 		}
 		return array(
@@ -124,8 +143,10 @@ final class BindingFenceCoordinator {
 			'result'  => 'claimed',
 		);
 	}
-	/** @return array{current:BindingState|null,result:string} */
-	private static function transition_persistent_binding_state( object $wpdb, BindingState $expected, mixed $claim, ?int $seconds, string $result ): array {
+	/** @param array<string,mixed>|null $outcome
+	 * @return array{current:BindingState|null,result:string}
+	 */
+	private static function transition_persistent_binding_state( object $wpdb, BindingState $expected, mixed $claim, ?int $seconds, string $result, ?array $outcome = null ): array {
 		if ( ! self::database( $wpdb ) || ( null !== $seconds && $seconds < 1 ) ) {
 			return self::lost();
 		}
@@ -145,7 +166,8 @@ final class BindingFenceCoordinator {
 		}
 		$deadline = null === $seconds ? 1 : max( $current->lease_deadline() + 1, $now + $seconds );
 		try {
-			$next = BindingState::create( $current->binding(), $current->owner_token(), $deadline, $current->binding_generation(), $current->fence_epoch() + 1 );
+			$record = null === $outcome ? $current->last_native_outcome() : array_merge( $outcome, array( 'recorded_at' => $now ) );
+			$next   = BindingState::create( $current->binding(), $current->owner_token(), $deadline, $current->binding_generation(), $current->fence_epoch() + 1, $record );
 		} catch ( InvalidArgumentException ) {
 			return self::lost( $current );
 		}

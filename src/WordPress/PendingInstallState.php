@@ -71,6 +71,18 @@ final class PendingInstallState {
 	public function staging_verified(): bool {
 		return $this->staging_verified; }
 
+	/** Last observed evidence only; this does not assert that a stage succeeded. */
+	public function last_observed_step(): ?string {
+		return match ( true ) {
+			$this->completion_observed => 'completion_observed',
+			$this->install_result_captured => 'install_result_captured',
+			$this->staging_verified => 'staging_verified',
+			$this->extraction_admitted => 'extraction_admitted',
+			$this->active => 'archive_admitted',
+			default => null,
+		};
+	}
+
 	public function admit_extraction(): bool {
 		if ( ! $this->active || null === $this->archive || null === $this->archive_identity || null === $this->receipt ) {
 			return false;

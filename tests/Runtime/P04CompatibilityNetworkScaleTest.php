@@ -38,7 +38,7 @@ $second = $registrars[1]->plugin('github', $data['plugin'], 'acme/compatible', '
 $first->register();
 $second->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 8, 'wordpress_version' => '7.0.4'));
+$activation = $broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 9, 'wordpress_version' => '7.0.4'));
 $selected = (new ReflectionProperty($broker, 'selected_root'))->getValue($broker);
 foreach ($GLOBALS['p04_hooks'] as $entry) {
 	if ('update_plugins_github.com' === $entry['hook']) {
@@ -66,7 +66,7 @@ PHP,
 		self::assertSame( 'target_active', $result['first']['code'] );
 		self::assertSame( 'target_active', $result['second']['code'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 11, $result['hooks'] );
+		self::assertSame( 12, $result['hooks'] );
 	}
 
 	public function test_main_and_subsite_declarations_share_one_network_target_and_fence_key(): void {
@@ -83,7 +83,7 @@ $GLOBALS['p04_blog'] = 23;
 $subsite = $registrar->plugin('github', $data['plugin'], 'acme/network', '123456789');
 $subsite->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 8, 'wordpress_version' => '7.0.4'));
+$broker->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 9, 'wordpress_version' => '7.0.4'));
 $mainStatus = $main->status();
 $subsiteStatus = $subsite->status();
 echo json_encode(array(
@@ -102,7 +102,7 @@ PHP,
 		self::assertSame( 'target_active', $result['main']['code'] );
 		self::assertSame( 'target_active', $result['subsite']['code'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 11, $result['hooks'] );
+		self::assertSame( 12, $result['hooks'] );
 		self::assertSame( array(), $result['diagnostics']['diagnostics'] );
 		self::assertArrayNotHasKey( 'blog_id', $result['main'] );
 		self::assertArrayNotHasKey( 'blog_id', $result['subsite'] );
@@ -135,7 +135,7 @@ foreach ($data['targets'] as $target) {
 }
 foreach ($handles as $handle) { $handle->register(); }
 $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(array(
-	'php_version' => PHP_VERSION, 'runtime_protocol' => 8, 'wordpress_version' => '7.0.4',
+	'php_version' => PHP_VERSION, 'runtime_protocol' => 9, 'wordpress_version' => '7.0.4',
 ));
 $statuses = array_map(static fn(object $handle): array => $handle->status(), $handles);
 echo json_encode(array(
@@ -157,7 +157,7 @@ PHP,
 		self::assertSame( 'runtime_active', $result['activation'] );
 		self::assertSame( $count, $result['logical'] );
 		self::assertSame(
-			11 * (int) ceil( $count / 2 ) + 10 * (int) floor( $count / 2 ),
+			12 * (int) ceil( $count / 2 ) + 11 * (int) floor( $count / 2 ),
 			$result['hooks']
 		);
 		self::assertSame( array_fill( 0, $count, 'target_active' ), $result['statuses'] );
@@ -239,7 +239,7 @@ PHP,
 					'package_version'  => '0.1.0-beta.99',
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 8,
+					'runtime_protocol' => 9,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR

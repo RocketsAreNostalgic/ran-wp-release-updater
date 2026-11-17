@@ -43,7 +43,7 @@ final class RequestBroker {
 	}
 
 	public function protocol_version(): int {
-		return 8;
+		return 9;
 	}
 
 	/** Register a physical runtime-copy.json without loading its runtime. */
@@ -372,7 +372,7 @@ final class RequestBroker {
 	public function diagnostics(): array {
 		$this->protocol_live();
 		return array(
-			'protocol_version'     => 8,
+			'protocol_version'     => 9,
 			'state'                => $this->state,
 			'activation_attempted' => $this->activation_attempted,
 			'candidate_count'      => count( $this->candidates ),
@@ -488,6 +488,7 @@ final class RequestBroker {
 			if ( is_array( $last['native'] ?? null ) ) {
 				$last['native']['offered_release_identity'] = null;
 				$last['native']['offered_version']          = null;
+				$last['native']['last_native_outcome']      = null;
 			}
 			return $this->status(
 				'inactive',

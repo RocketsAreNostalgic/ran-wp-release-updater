@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\Runtime;
 
+use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
+use RAN\WPReleaseUpdater\V1\Dependency\FailureText;
+
 /**
  * Internal protocol/wire validator for RequestBroker handoff boundaries.
  *
@@ -95,6 +98,34 @@ final class RequestProtocolValidator {
 	);
 	private const RELATIONSHIPS              = array( 'invalid', 'newer', 'older', 'same' );
 
+	/** Shared validation for the persisted record and its identical status projection. */
+	public static function valid_native_outcome( mixed $value ): bool {
+		if ( null === $value ) {
+			return true;
+		}
+		if ( ! is_array( $value ) || ! self::exact_keys( $value, array( 'outcome', 'source', 'wordpress_code', 'release_identity', 'version', 'last_observed_step', 'recorded_at' ) ) ) {
+			return false;
+		}
+		return in_array( $value['outcome'], array_merge( array( 'uncertain', 'verified_success' ), self::FAILURE_CODES ), true )
+			&& in_array( $value['source'], array( 'wordpress', 'release_updater' ), true )
+			// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
+			&& ( null === $value['wordpress_code'] || ( 'wordpress' === $value['source'] && is_string( $value['wordpress_code'] ) && self::screen_wordpress_code( $value['wordpress_code'] ) === $value['wordpress_code'] ) )
+			&& ( 'verified_success' !== $value['outcome'] || ( 'release_updater' === $value['source'] && null === $value['wordpress_code'] ) )
+			&& self::opaque( $value['release_identity'], 191 )
+			&& is_string( $value['version'] ) && ReleaseVersion::normalize_header( $value['version'] ) === $value['version']
+			&& ( null === $value['last_observed_step'] || in_array( $value['last_observed_step'], array( 'archive_admitted', 'extraction_admitted', 'staging_verified', 'install_result_captured', 'completion_observed' ), true ) )
+			&& is_int( $value['recorded_at'] ) && $value['recorded_at'] > 0 && $value['recorded_at'] <= 9007199254740991;
+	}
+
+	/** Keep foreign identifiers unchanged; their source is carried separately. */
+	public static function screen_wordpress_code( string $code ): ?string {
+		return FailureText::identifier( $code ) === $code && FailureText::strict( $code, 64 ) === $code ? $code : null;
+	}
+
+	public static function is_native_failure_code( string $code ): bool {
+		return in_array( $code, self::FAILURE_CODES, true );
+	}
+
 	public static function owned_by( object $value, string $root ): bool {
 		try {
 			$file = ( new \ReflectionClass( $value ) )->getFileName();
@@ -169,6 +200,7 @@ final class RequestProtocolValidator {
 			'offered_release_identity',
 			'offered_version',
 			'relationship',
+			'last_native_outcome',
 		);
 		if ( null === $native ) {
 			return true;
@@ -184,7 +216,8 @@ final class RequestProtocolValidator {
 		if ( null !== $native['offered_release_identity'] && ! self::opaque( $native['offered_release_identity'], 191 ) ) {
 			return false;
 		}
-		return ( null === $native['candidate_validation_code'] || in_array( $native['candidate_validation_code'], self::CANDIDATE_VALIDATION_CODES, true ) )
+		return self::valid_native_outcome( $native['last_native_outcome'] )
+			&& ( null === $native['candidate_validation_code'] || in_array( $native['candidate_validation_code'], self::CANDIDATE_VALIDATION_CODES, true ) )
 			&& ( null === $native['failure_code'] || in_array( $native['failure_code'], self::FAILURE_CODES, true ) )
 			&& ( null === $native['last_check'] || ( is_int( $native['last_check'] ) && 0 < $native['last_check'] ) )
 			&& ( null === $native['relationship'] || in_array( $native['relationship'], self::RELATIONSHIPS, true ) )

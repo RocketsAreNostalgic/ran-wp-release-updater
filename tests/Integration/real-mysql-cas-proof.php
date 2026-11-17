@@ -114,11 +114,13 @@ try {
 		throw new RuntimeException( 'Stale writer or completion was not fenced.' );
 	}
 	ran_wp_release_updater_test_assert_final_rows( $database, $binding, $new );
+	ran_wp_release_updater_test_prove_outcome_fence( $database, $binding, $new );
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 	echo json_encode(
 		array(
 			'mysqld_binary'     => $mysqld,
 			'transport'         => 'unix_socket_skip_networking',
+			'native_outcome'    => 'retained_and_fenced',
 			'cold_claims'       => $cold,
 			'expired_takeover'  => $takeover,
 			'non_autoload_rows' => $rows,
@@ -325,6 +327,30 @@ function ran_wp_release_updater_test_assert_final_rows( MysqliOptionDatabase $da
 	} if ( json_decode( $target, true, 64, JSON_THROW_ON_ERROR ) !== $winner['state'] ) {
 		throw new RuntimeException( 'Final self-contained state does not match the selected winner.' );
 	} }
+/** @param array<string,mixed> $winner */
+function ran_wp_release_updater_test_prove_outcome_fence( MysqliOptionDatabase $database, BindingRecord $binding, array $winner ): void {
+	$current  = BindingState::rehydrate( $winner['state'] );
+	$draft    = array(
+		'outcome'            => 'unverified_install_result',
+		'source'             => 'wordpress',
+		'wordpress_code'     => 'copy_failed_copy_dir',
+		'release_identity'   => 'release:2',
+		'version'            => '2.0.0',
+		'last_observed_step' => 'install_result_captured',
+	);
+	$released = BindingFenceCoordinator::release_persistent_binding_state( $database, $current, ran_wp_release_updater_test_claim( $current->to_array() ), $draft );
+	$fresh    = new MysqliOptionDatabase( ran_wp_release_updater_test_connect_proof(), 'options' );
+	$stored   = BindingFenceCoordinator::read_persistent_native_outcome( $fresh, $binding );
+	if ( 'released' !== $released['result'] || null === $stored || ! is_int( $stored['recorded_at'] ) || array_merge( $draft, array( 'recorded_at' => $stored['recorded_at'] ) ) !== $stored ) {
+		throw new RuntimeException( 'Native outcome was not atomically released and readable from a fresh connection.' );
+	}
+	$next  = BindingFenceCoordinator::claim_persistent_binding_state( $fresh, $binding, str_repeat( 'e', 64 ), 30 );
+	$stale = BindingFenceCoordinator::release_persistent_binding_state( $database, $current, ran_wp_release_updater_test_claim( $current->to_array() ), array_merge( $draft, array( 'outcome' => 'uncertain' ) ) );
+	if ( 'claimed' !== $next['result'] || 'binding_fence_lost' !== $stale['result'] || BindingFenceCoordinator::read_persistent_native_outcome( $fresh, $binding ) !== $stored ) {
+		throw new RuntimeException( 'A later claim lost the native outcome or admitted a stale overwrite.' );
+	}
+}
+
 function ran_wp_release_updater_test_target_name( BindingRecord $binding ): string {
 	$facts = $binding->to_array();
 	return 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(

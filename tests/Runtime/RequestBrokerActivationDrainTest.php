@@ -39,9 +39,9 @@ require $data['copy'] . '/bootstrap.php';
 $broker=$GLOBALS['ran_wp_release_updater_v1_broker'];
 $GLOBALS['p02_target_ids']=array();
 $first=$broker->register_target(array('target_type'=>'plugin','installed_file'=>'/first.php','provider_code'=>'github','repository_locator'=>'acme/first','repository_identity'=>'1','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null,'maximum_artifact_bytes'=>52428800,'operation_guard'=>null,'native_mutation_begin'=>null,'native_mutation_complete'=>null,'descriptor_admission'=>null));
-$outer=$broker->activate(array('php_version'=>'8.2.0','runtime_protocol' => 8,'wordpress_version'=>'6.8.0'));
+$outer=$broker->activate(array('php_version'=>'8.2.0','runtime_protocol' => 9,'wordpress_version'=>'6.8.0'));
 $after=$broker->register_target(array('target_type'=>'plugin','installed_file'=>'/after.php','provider_code'=>'github','repository_locator'=>'acme/after','repository_identity'=>'3','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null,'maximum_artifact_bytes'=>52428800,'operation_guard'=>null,'native_mutation_begin'=>null,'native_mutation_complete'=>null,'descriptor_admission'=>null));
-$again=$broker->activate(array('php_version'=>'8.2.0','runtime_protocol' => 8,'wordpress_version'=>'6.8.0'));
+$again=$broker->activate(array('php_version'=>'8.2.0','runtime_protocol' => 9,'wordpress_version'=>'6.8.0'));
 echo json_encode(array('first'=>$first,'inner'=>$GLOBALS['p02_inner'],'outer'=>$outer,'after'=>$after,'again'=>$again,'boot'=>$GLOBALS['p02_boot_ids'],'targets'=>$GLOBALS['p02_target_ids'],'submissions'=>$broker->diagnostics()['submission_count']));
 PHP,
 			array( 'copy' => $copy )
@@ -68,7 +68,7 @@ PHP,
 			<<<'PHP'
 require $data['copy'] . '/bootstrap.php';
 $broker=$GLOBALS['ran_wp_release_updater_v1_broker'];
-$environment=array('php_version'=>'8.2.0','runtime_protocol' => 8,'wordpress_version'=>'6.8.0');
+$environment=array('php_version'=>'8.2.0','runtime_protocol' => 9,'wordpress_version'=>'6.8.0');
 $active=$broker->activate($environment);
 $candidateCountBefore=$broker->diagnostics()['candidate_count'];
 $known=$broker->register_candidate($data['copy'].'/runtime-copy.json');
@@ -77,7 +77,7 @@ $unseenAgain=$broker->register_candidate($data['unseen'].'/runtime-copy.json');
 $activeDiagnostics=$broker->diagnostics();
 $inactive=new RAN\WPReleaseUpdater\V1\Runtime\RequestBroker();
 $inactive->register_candidate($data['copy'].'/runtime-copy.json');
-$firstInactive=$inactive->activate(array('php_version'=>array(),'runtime_protocol' => 8,'wordpress_version'=>'6.8.0'));
+$firstInactive=$inactive->activate(array('php_version'=>array(),'runtime_protocol' => 9,'wordpress_version'=>'6.8.0'));
 $knownInactive=$inactive->register_candidate($data['copy'].'/runtime-copy.json');
 $targetInactive=$inactive->register_target(array('target_type'=>'plugin','installed_file'=>'/inactive.php','provider_code'=>'github','repository_locator'=>'acme/inactive','repository_identity'=>'4','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null,'maximum_artifact_bytes'=>52428800,'operation_guard'=>null,'native_mutation_begin'=>null,'native_mutation_complete'=>null));
 $againInactive=$inactive->activate($environment);
@@ -111,7 +111,7 @@ PHP,
 require $data['load'] . '/bootstrap.php';
 $load=$GLOBALS['ran_wp_release_updater_v1_broker'];
 $queued=$load->register_target(array('target_type'=>'plugin','installed_file'=>'/queued.php','provider_code'=>'github','repository_locator'=>'acme/queued','repository_identity'=>'7','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null,'maximum_artifact_bytes'=>52428800,'operation_guard'=>null,'native_mutation_begin'=>null,'native_mutation_complete'=>null,'descriptor_admission'=>null));
-$environment=array('php_version'=>'8.2.0','runtime_protocol' => 8,'wordpress_version'=>'6.8.0');
+$environment=array('php_version'=>'8.2.0','runtime_protocol' => 9,'wordpress_version'=>'6.8.0');
 $firstLoad=$load->activate($environment);
 $statusLoad=$load->target_status($queued['submission_id']);
 $againLoad=$load->activate($environment);
@@ -132,7 +132,7 @@ $registrar=require $data['copy'] . '/bootstrap.php';
 $handle=$registrar->plugin('github','/terminal.php','acme/terminal','8');
 $first=$handle->register();
 $broker=$GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate(array('php_version'=>'8.2.0','runtime_protocol' => 8,'wordpress_version'=>'6.8.0'));
+$broker->activate(array('php_version'=>'8.2.0','runtime_protocol' => 9,'wordpress_version'=>'6.8.0'));
 $second=$handle->register();
 echo json_encode(array('first'=>$first,'second'=>$second,'status'=>$handle->status(),'submissions'=>$broker->diagnostics()['submission_count']));
 PHP,
@@ -169,7 +169,7 @@ PHP,
 		$composition          = $this->package( 'retained-composition', $this->runtime() );
 		$stale                = $this->probe(
 			<<<'PHP'
-$environment=array('php_version'=>'8.2.0','runtime_protocol' => 8,'wordpress_version'=>'6.8.0');
+$environment=array('php_version'=>'8.2.0','runtime_protocol' => 9,'wordpress_version'=>'6.8.0');
 $registrar=require $data['active'] . '/bootstrap.php';$handle=$registrar->plugin('github','/active.php','acme/active','1');$handle->register();$broker=$GLOBALS['ran_wp_release_updater_v1_broker'];$broker->activate($environment);$before=$broker->diagnostics();$GLOBALS['ran_wp_release_updater_v1_broker']=new stdClass();$stale=array('known'=>$broker->register_candidate($data['active'].'/runtime-copy.json'),'unseen'=>$broker->register_candidate($data['unseen'].'/runtime-copy.json'),'target'=>$broker->register_target(array('target_type'=>'plugin','installed_file'=>'/late.php','provider_code'=>'github','repository_locator'=>'acme/late','repository_identity'=>'2','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null)),'refresh'=>$handle->refresh(),'status'=>$handle->status(),'diagnostics'=>$handle->diagnostics(),'again'=>$broker->activate($environment),'counts'=>$broker->diagnostics());
 echo json_encode(array('before'=>$before,'stale'=>$stale));
 PHP,
@@ -180,7 +180,7 @@ PHP,
 		);
 		$load_terminal        = $this->probe(
 			<<<'PHP'
-$environment=array('php_version'=>'8.2.0','runtime_protocol' => 8,'wordpress_version'=>'6.8.0');
+$environment=array('php_version'=>'8.2.0','runtime_protocol' => 9,'wordpress_version'=>'6.8.0');
 $loadRegistrar=require $data['load'].'/bootstrap.php';$loadHandle=$loadRegistrar->plugin('github','/load.php','acme/load','3');$loadHandle->register();$loadBroker=$GLOBALS['ran_wp_release_updater_v1_broker'];$loadBroker->activate($environment);$terminal=array('candidate'=>$loadBroker->register_candidate($data['load'].'/runtime-copy.json'),'target'=>$loadBroker->register_target(array('target_type'=>'plugin','installed_file'=>'/after-load.php','provider_code'=>'github','repository_locator'=>'acme/after-load','repository_identity'=>'4','channel'=>'stable','update_policy'=>'manual','credential_resolver'=>null)),'again'=>$loadBroker->activate($environment),'status'=>$loadHandle->status(),'counts'=>$loadBroker->diagnostics());
 echo json_encode($terminal);
 PHP,
@@ -188,7 +188,7 @@ PHP,
 		);
 		$composition_terminal = $this->probe(
 			<<<'PHP'
-$environment=array('php_version'=>'8.2.0','runtime_protocol' => 8,'wordpress_version'=>'6.8.0');
+$environment=array('php_version'=>'8.2.0','runtime_protocol' => 9,'wordpress_version'=>'6.8.0');
 $compositionRegistrar=require $data['composition'].'/bootstrap.php';$compositionHandle=$compositionRegistrar->plugin('github','/composition.php','acme/composition','5');$compositionHandle->register();$compositionBroker=$GLOBALS['ran_wp_release_updater_v1_broker'];$compositionBroker->activate($environment);$terminal=array('again'=>$compositionHandle->register(),'status'=>$compositionHandle->status(),'diagnostics'=>$compositionHandle->diagnostics(),'candidate'=>$compositionBroker->register_candidate($data['composition'].'/runtime-copy.json'),'activation'=>$compositionBroker->activate($environment),'counts'=>$compositionBroker->diagnostics());
 echo json_encode($terminal);
 PHP,
@@ -224,7 +224,7 @@ $registrar = require $data['copy'] . '/bootstrap.php';
 $handle = $registrar->plugin( 'github', '/completed.php', 'acme/completed', '9' );
 $handle->register();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
-$broker->activate( array( 'php_version' => '8.2.0', 'runtime_protocol' => 8, 'wordpress_version' => '6.8.0' ) );
+$broker->activate( array( 'php_version' => '8.2.0', 'runtime_protocol' => 9, 'wordpress_version' => '6.8.0' ) );
 $diagnostics = $handle->diagnostics();
 $status = $handle->status();
 $brokerDiagnostics = $broker->diagnostics();
@@ -243,9 +243,40 @@ PHP,
 	private function active_runtime(): string {
 		return <<<'PHP'
 <?php
-final class P02ActiveHandle { public function status(): array { return array('state'=>'active','declaration_accepted'=>true,'hooks_registered'=>true,'code'=>'target_active','native'=>array('candidate_header_version'=>null,'candidate_tag'=>null,'candidate_validation_code'=>null,'candidate_version'=>null,'failure_code'=>null,'installed_version'=>null,'last_check'=>null,'offered_release_identity'=>null,'offered_version'=>null,'relationship'=>null)); } public function diagnostics(): array { return array('state'=>'active','diagnostics'=>array()); } public function refresh(): bool { return true; } }
+final class P02ActiveHandle { public function status(): array { return array('state'=>'active','declaration_accepted'=>true,'hooks_registered'=>true,'code'=>'target_active','native'=>array('candidate_header_version'=>null,'candidate_tag'=>null,'candidate_validation_code'=>null,'candidate_version'=>null,'failure_code'=>null,'installed_version'=>null,'last_check'=>null,'offered_release_identity'=>null,'offered_version'=>null,'relationship'=>null,'last_native_outcome'=>null)); } public function diagnostics(): array { return array('state'=>'active','diagnostics'=>array()); } public function refresh(): bool { return true; } }
 return new class { private function result(array $s): array { return array('submission_id'=>$s['submission_id'],'accepted'=>true,'code'=>'target_active','target_key'=>str_repeat('a',64),'target_handle'=>new P02ActiveHandle()); } public function boot(array $e,array $s): array { return array('accepted'=>true,'code'=>'runtime_active','results'=>array_map(fn(array $v): array=>$this->result($v),$s)); } public function register_target(array $s): array { return $this->result($s); } public function release_source(array $d): array { unset($d); return array('accepted'=>false,'code'=>'provider_unavailable','source_handle'=>null); } };
 PHP;
+	}
+
+	public function test_inactive_handle_does_not_expose_a_cached_outcome_without_current_binding_evidence(): void {
+		$outcome = array(
+			'outcome'            => 'uncertain',
+			'source'             => 'release_updater',
+			'wordpress_code'     => null,
+			'release_identity'   => 'release:2',
+			'version'            => '2.0.0',
+			'last_observed_step' => null,
+			'recorded_at'        => 100,
+		);
+		$runtime = str_replace( '<?php', '<?php require_once __DIR__ . "/src/Contract/ReleaseVersion.php";', $this->update_completed_runtime() );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Export a literal outcome into the isolated executable fixture; this is not debug output.
+		$runtime = str_replace( "'last_native_outcome' => null", "'last_native_outcome' => " . var_export( $outcome, true ), $runtime );
+		$copy    = $this->package( 'retained-outcome', $runtime );
+		$result  = $this->probe(
+			<<<'PHP'
+$r = require $data['copy'] . '/bootstrap.php';
+$h = $r->plugin('github', '/completed.php', 'acme/completed', '9');
+$h->register();
+$GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version' => PHP_VERSION, 'runtime_protocol' => 9, 'wordpress_version' => '6.8.0']);
+$before = $h->status();
+$GLOBALS['ran_wp_release_updater_v1_broker'] = new stdClass();
+echo json_encode(['before' => $before, 'after' => $h->status()]);
+PHP,
+			array( 'copy' => $copy )
+		);
+		self::assertSame( $outcome, $result['before']['native']['last_native_outcome'] );
+		self::assertSame( 'inactive', $result['after']['state'] );
+		self::assertNull( $result['after']['native']['last_native_outcome'] );
 	}
 
 	private function update_completed_runtime(): string {
@@ -270,6 +301,7 @@ final class P02UpdateCompletedHandle
 				'last_check' => null,
 				'offered_release_identity' => null, 'offered_version' => null,
 				'relationship' => null,
+			'last_native_outcome' => null,
 			),
 		);
 	}
@@ -333,6 +365,9 @@ PHP;
 		$root = $this->root . '/' . $name;
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $root . '/src/Runtime', 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Include the real version validator needed by non-null outcome fixtures.
+		mkdir( $root . '/src/Contract', 0700, true );
+		copy( dirname( __DIR__, 2 ) . '/src/Contract/ReleaseVersion.php', $root . '/src/Contract/ReleaseVersion.php' );
 		copy( dirname( __DIR__, 2 ) . '/bootstrap.php', $root . '/bootstrap.php' );
 		copy( dirname( __DIR__, 2 ) . '/src/Runtime/RequestBroker.php', $root . '/src/Runtime/RequestBroker.php' );
 		copy( dirname( __DIR__, 2 ) . '/src/Runtime/RuntimeCopySelector.php', $root . '/src/Runtime/RuntimeCopySelector.php' );
@@ -350,7 +385,7 @@ PHP;
 					'package_version'  => '0.1.0-beta.2',
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 8,
+					'runtime_protocol' => 9,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR
@@ -374,7 +409,7 @@ PHP;
 	}
 
 	private function identity( string $root ): string {
-		$files = array( 'bootstrap.php', 'runtime.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RequestProtocolValidator.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' );
+		$files = array( 'bootstrap.php', 'runtime.php', 'src/Contract/ReleaseVersion.php', 'src/Runtime/RequestBroker.php', 'src/Runtime/RequestProtocolValidator.php', 'src/Runtime/RuntimeCopySelector.php', 'src/Runtime/SelectedRuntimeState.php' );
 		sort( $files, SORT_STRING );
 		$payload = '';
 		foreach ( $files as $file ) {

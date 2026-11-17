@@ -38,7 +38,7 @@ echo json_encode(array('protocol' => $broker->protocol_version(), 'state' => $re
 PHP
 		);
 
-		self::assertSame( 8, $result['protocol'] );
+		self::assertSame( 9, $result['protocol'] );
 		self::assertSame( 'active', $result['state'] );
 		self::assertSame( 1, $result['candidates'] );
 	}
@@ -300,12 +300,13 @@ PHP,
 		self::assertSame( 'active', $result['broker_state'] );
 	}
 
-	public function test_actual_beta15_runtime_refuses_the_current_generation_in_both_load_orders(): void {
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'released_runtime_fixtures' )]
+	public function test_actual_released_runtime_refuses_the_current_generation_in_both_load_orders( string $release ): void {
 		$new = $this->package_copy( 'guard-new', '1.0.0-beta.14' );
 		$old = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/guard-beta15-' . bin2hex( random_bytes( 6 ) );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create a private extracted-runtime fixture root.
 		mkdir( $old, 0700, true );
-		$this->extract_beta15_runtime_fixture( $old );
+		$this->extract_released_runtime_fixture( $old, $release );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create the exact installed-plugin fixture directory.
 		mkdir( $old . '/example', 0700 );
 		$plugin = $old . '/example/example.php';
@@ -314,7 +315,7 @@ PHP,
 		foreach ( array( array( $old, $new ), array( $new, $old ) ) as $order ) {
 			$result = $this->probe(
 				<<<'PHP'
-define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); require $data['first'].'/bootstrap.php'; $broker=$GLOBALS['ran_wp_release_updater_v1_broker']; $r=require $data['second'].'/bootstrap.php'; $h=$r->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $activation=$broker->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>8,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status(),'activation'=>$activation,'first'=>$broker->diagnostics(),'second'=>$r->diagnostics(),'runtime_loaded'=>class_exists(RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::class,false)]);
+define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); require $data['first'].'/bootstrap.php'; $broker=$GLOBALS['ran_wp_release_updater_v1_broker']; $r=require $data['second'].'/bootstrap.php'; $h=$r->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $activation=$broker->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>9,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status(),'activation'=>$activation,'first'=>$broker->diagnostics(),'second'=>$r->diagnostics(),'runtime_loaded'=>class_exists(RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::class,false)]);
 PHP,
 				array(
 					'first'  => $order[0],
@@ -332,7 +333,7 @@ PHP,
 		}
 		$control = $this->probe(
 			<<<'PHP'
-define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); $r=require $data['new'].'/bootstrap.php'; $h=$r->with_operation_guard(static fn()=>true)->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>8,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status()]);
+define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); $r=require $data['new'].'/bootstrap.php'; $h=$r->with_operation_guard(static fn()=>true)->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>9,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status()]);
 PHP,
 			array(
 				'new'    => $new,
@@ -357,7 +358,7 @@ PHP
 		);
 
 		self::assertTrue( $result['unchanged'] );
-		self::assertSame( 8, $result['protocol'] );
+		self::assertSame( 9, $result['protocol'] );
 		self::assertSame( 'conflict', $result['state'] );
 		self::assertSame( 'protocol_conflict_inactive', $result['code'] );
 		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['diagnostics'] );
@@ -490,20 +491,29 @@ PHP
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
 	}
 
-	private function extract_beta15_runtime_fixture( string $destination ): void {
-		$fixture = dirname( __DIR__ ) . '/Fixtures/beta15-runtime/runtime.json.gz.base64';
+	/** @return array<string,array{string}> */
+	public static function released_runtime_fixtures(): array {
+		return array(
+			'protocol 7' => array( 'beta15' ),
+			'protocol 8' => array( 'beta20' ),
+		);
+	}
+	private function extract_released_runtime_fixture( string $destination, string $release ): void {
+		$previous = 'beta15' === $release;
+		$revision = $previous ? '599185285734b402059c8a205db29b157e5277e1dfb607fc906a2592a9bf9606' : 'd9e14911e41262d6e5c2aa50742c5d5ed5da578092fbc67e83ac9f6c591f4796';
+		$fixture  = dirname( __DIR__ ) . '/Fixtures/' . $release . '-runtime/runtime.json.gz.base64';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the local immutable fixture text.
 		$encoded_fixture = file_get_contents( $fixture );
 		self::assertIsString( $encoded_fixture );
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Decode the checked ASCII fixture text.
 		$compressed = base64_decode( $encoded_fixture, true );
 		self::assertIsString( $compressed );
-		self::assertSame( 'c11e968c69ffbd936a742c5150707e7483f9eb1c9adf5ee8883260b3c50b9346', hash( 'sha256', $compressed ) );
+		self::assertSame( $previous ? 'c11e968c69ffbd936a742c5150707e7483f9eb1c9adf5ee8883260b3c50b9346' : '7bd2df743b4b8c83996ccad0636a14d814677a2db6bde7e7b2084bc1c77a8452', hash( 'sha256', $compressed ) );
 		$json = gzdecode( $compressed );
 		self::assertIsString( $json );
 		$files = json_decode( $json, true, 512, JSON_THROW_ON_ERROR );
 		self::assertIsArray( $files );
-		self::assertCount( 36, $files );
+		self::assertCount( $previous ? 36 : 39, $files );
 		$payload = '';
 		foreach ( $files as $path => $encoded ) {
 			self::assertIsString( $path );
@@ -516,18 +526,18 @@ PHP
 				$payload .= $path . "\0" . hash( 'sha256', $contents ) . "\n";
 			}
 		}
-		self::assertSame( '599185285734b402059c8a205db29b157e5277e1dfb607fc906a2592a9bf9606', hash( 'sha256', $payload ) );
+		self::assertSame( $revision, hash( 'sha256', $payload ) );
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Decode the checked fixture manifest.
 		$manifest_bytes = base64_decode( $files['runtime-copy.json'], true );
 		self::assertIsString( $manifest_bytes );
 		$manifest = json_decode( $manifest_bytes, true, 512, JSON_THROW_ON_ERROR );
 		self::assertSame(
 			array(
-				'package_revision' => '599185285734b402059c8a205db29b157e5277e1dfb607fc906a2592a9bf9606',
-				'package_version'  => '1.0.0-beta.15',
+				'package_revision' => $revision,
+				'package_version'  => $previous ? '1.0.0-beta.15' : '1.0.0-beta.20',
 				'php_floor'        => '8.2.0',
 				'runtime_file'     => 'runtime.php',
-				'runtime_protocol' => 7,
+				'runtime_protocol' => $previous ? 7 : 8,
 				'wordpress_floor'  => '6.5.0',
 			),
 			$manifest
@@ -572,7 +582,7 @@ PHP
 					'package_version'  => $version,
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 8,
+					'runtime_protocol' => 9,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR

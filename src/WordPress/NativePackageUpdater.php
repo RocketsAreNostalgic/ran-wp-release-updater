@@ -15,6 +15,7 @@ use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 use RAN\WPReleaseUpdater\V1\Dependency\TargetWorkingCopy;
 use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
+use RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 
 /** The single native WordPress lifecycle owner for a sealed neutral release. */
@@ -53,13 +54,16 @@ final class NativePackageUpdater {
 	private ?\Closure $native_mutation_begin;
 	private ?\Closure $native_mutation_complete;
 	private ?\Closure $descriptor_admission;
-	private ?string $native_owner                  = null;
-	private bool $native_beginning                 = false;
-	private bool $finalizing                       = false;
-	private string $native_outcome                 = 'uncertain';
-	private ?\Theme_Upgrader $theme_error_upgrader = null;
-	private ?\WP_Error $theme_error_original       = null;
-	private ?\WP_Error $theme_error_outgoing       = null;
+	private ?string $native_owner                   = null;
+	private bool $native_beginning                  = false;
+	private bool $finalizing                        = false;
+	private string $native_outcome                  = 'uncertain';
+	private ?\Theme_Upgrader $theme_error_upgrader  = null;
+	private ?\WP_Error $theme_error_original        = null;
+	private ?\WP_Error $theme_error_outgoing        = null;
+	private ?IdentityDescriptor $attempt_descriptor = null;
+	/** @var array{outcome:string,source:string,wordpress_code:string|null}|null */
+	private ?array $attempt_outcome = null;
 
 
 	/**
@@ -180,6 +184,7 @@ final class NativePackageUpdater {
 		add_filter( 'upgrader_source_selection', array( $this, 'filter_source_selection' ), PHP_INT_MAX, 4 );
 		add_filter( 'upgrader_install_package_result', array( $this, 'capture_install_package_result' ), PHP_INT_MAX, 2 );
 		add_action( 'upgrader_process_complete', array( $this, 'observe_completion' ), 10, 2 );
+		add_action( 'automatic_updates_complete', array( $this, 'observe_automatic_results' ), 10, 1 );
 		$this->registered = true;
 	}
 
@@ -542,34 +547,42 @@ final class NativePackageUpdater {
 			return $reply;
 		}
 		if ( $this->policy_blocked() ) {
-			return $reply instanceof \WP_Error ? $reply : $this->failure( 'policy_blocked' );
+			return $reply instanceof \WP_Error ? $reply : $this->failure( 'policy_blocked', false );
 		}
 		if ( $this->native_beginning || null !== $this->native_owner || ! $this->live() ) {
-			return null === $this->operation_guard ? $reply : $this->failure( 'runtime_liveness_lost' );
+			return null === $this->operation_guard ? $reply : $this->failure( 'runtime_liveness_lost', false );
 		}
 		$this->clear_discovery_snapshot();
 		if ( ! $this->matches_operation( $hook_extra ) ) {
-			return false !== $reply && ! $reply instanceof \WP_Error ? $this->failure( 'unverified_pre_download_result' ) : $reply;
+			return false !== $reply && ! $reply instanceof \WP_Error ? $this->failure( 'unverified_pre_download_result', false ) : $reply;
 		}
 		$queued_multi_run       = $this->queued_multi_run;
 		$this->queued_multi_run = false;
-		if ( $reply instanceof \WP_Error ) {
-			return $reply;
-		}
-		if ( false !== $reply ) {
-			return $this->failure( 'unverified_pre_download_result' );
+		if ( false !== $reply && ! $reply instanceof \WP_Error ) {
+			return $this->failure( 'unverified_pre_download_result', false );
 		}
 		$this->clear_pending( false );
-		if ( $this->working_copy_blocked() ) {
-			$this->clear_pending();
-			return $this->failure( 'target_is_working_copy' );
-		}
-		$token = $this->parse_token( $package );
+		$working_copy = $this->working_copy_blocked();
+		$token        = $this->parse_token( $package );
 		if ( ! $this->direct_filesystem() || ! $token instanceof IdentityDescriptor || ! $this->descriptor_admitted( $token ) || ! $this->newer_than_installed( $token ) || ! $this->manual_eligible( $token ) ) {
-			return $this->failure( 'unverified_pre_download' );
+			return $reply instanceof \WP_Error ? $reply : $this->failure( $working_copy ? 'target_is_working_copy' : 'unverified_pre_download', false );
 		}
 		if ( ! $this->claim_discovery() ) {
-			return $this->failure( 'binding_fence_lost' );
+			return $this->failure( 'binding_fence_lost', false );
+		}
+		$this->attempt_descriptor = $token;
+		$this->attempt_outcome    = array(
+			'outcome'        => 'uncertain',
+			'source'         => 'release_updater',
+			'wordpress_code' => null,
+		);
+		if ( $reply instanceof \WP_Error ) {
+			$this->observe_wordpress_error( $reply );
+			$this->clear_pending();
+			return $reply;
+		}
+		if ( $working_copy ) {
+			return $this->fail_pending( 'target_is_working_copy' );
 		}
 		try {
 			$fresh = $this->adapter->inspect( $token->release_identity(), $token->to_array()['tag'] );
@@ -647,8 +660,7 @@ final class NativePackageUpdater {
 			return $pre;
 		}
 		if ( ! $this->live() ) {
-			$this->clear_pending();
-			return $this->failure( 'runtime_liveness_lost' );
+			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 		$verified = $this->verify_current();
 		if (
@@ -660,19 +672,16 @@ final class NativePackageUpdater {
 			|| ! $this->archive_store->same_identity( $file, $this->descriptor, $this->pending_install->archive_identity() )
 			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
 		) {
-			$this->clear_pending();
-			return $this->failure( 'archive_changed_before_extraction' );
+			return $this->fail_pending( 'archive_changed_before_extraction' );
 		}
 		try {
 			AcquisitionReceipt::assert_fresh( $this->pending_install->receipt(), $verified['current'], $this->descriptor, $verified['now'] );
 		} catch ( InvalidArgumentException ) {
-			$this->clear_pending();
-			return $this->failure( 'archive_changed_before_extraction' );
+			return $this->fail_pending( 'archive_changed_before_extraction' );
 		}
 		$this->state = $verified['current'];
 		if ( ! $this->live() || ! $this->pending_install->admit_extraction() ) {
-			$this->clear_pending();
-			return $this->failure( 'archive_changed_before_extraction' );
+			return $this->fail_pending( 'archive_changed_before_extraction' );
 		}
 		return $pre;
 	}
@@ -683,12 +692,12 @@ final class NativePackageUpdater {
 		if ( ! $this->matches_operation( $hook_extra ) ) {
 			return $source;
 		}
+		$this->observe_wordpress_error( $source );
 		if ( ! $this->live() ) {
 			if ( null === $this->operation_guard && ! $this->pending_install->active() ) {
 				return $source;
 			}
-			$this->clear_pending();
-			return $this->failure( 'runtime_liveness_lost' );
+			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 
 		$manifest = is_string( $source ) && $this->matches_staged_metadata( $source )
@@ -706,8 +715,7 @@ final class NativePackageUpdater {
 			|| ! is_string( $source )
 			|| ! is_array( $manifest )
 		) {
-			$this->clear_pending();
-			return $this->failure( 'staged_package_identity_invalid' );
+			return $this->fail_pending( 'staged_package_identity_invalid' );
 		}
 
 		try {
@@ -721,28 +729,24 @@ final class NativePackageUpdater {
 				$this->manifest_builder->expanded_bytes( $manifest )
 			);
 		} catch ( InvalidArgumentException ) {
-			$this->clear_pending();
-			return $this->failure( 'staged_package_identity_invalid' );
+			return $this->fail_pending( 'staged_package_identity_invalid' );
 		}
 
 		$this->state = $verified['current'];
 		if ( ! $this->pending_install->verify_staging() ) {
-			$this->clear_pending();
-			return $this->failure( 'staged_package_identity_invalid' );
+			return $this->fail_pending( 'staged_package_identity_invalid' );
 		}
 		if ( ! $this->live() || ! $this->descriptor_admitted( $this->descriptor ) ) {
-			$this->clear_pending();
-			return $this->failure( 'runtime_liveness_lost' );
+			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 		if ( $this->working_copy_blocked() ) {
-			$this->clear_pending();
-			return $this->failure( 'target_is_working_copy' );
+			return $this->fail_pending( 'target_is_working_copy' );
 		}
 		if ( ! $this->begin_native_mutation() ) {
-			$this->clear_pending();
-			return $this->failure( 'runtime_liveness_lost' );
+			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 		if ( $this->working_copy_blocked() ) {
+			$this->diagnose( 'target_is_working_copy', null, true );
 			$this->finalize_pending_install();
 			return $this->failure( 'target_is_working_copy' );
 		}
@@ -754,16 +758,15 @@ final class NativePackageUpdater {
 		if ( ! $this->matches_operation( $hook_extra ) ) {
 			return $response;
 		}
+		$this->observe_wordpress_error( $response );
 		if ( ! $this->live() ) {
 			if ( null === $this->operation_guard && ! $this->pending_install->active() ) {
 				return $response;
 			}
-			$this->clear_pending();
-			return $this->failure( 'runtime_liveness_lost' );
+			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 		if ( $this->working_copy_blocked() ) {
-			$this->clear_pending();
-			return $this->failure( 'target_is_working_copy' );
+			return $this->fail_pending( 'target_is_working_copy' );
 		}
 		$verified = $this->verify_current();
 		if (
@@ -776,19 +779,16 @@ final class NativePackageUpdater {
 			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
 			|| $response instanceof \WP_Error
 		) {
-			$this->clear_pending();
-			return $this->failure( 'unverified_pre_install' );
+			return $this->fail_pending( 'unverified_pre_install' );
 		}
 		try {
 			AcquisitionReceipt::assert_fresh( $this->pending_install->receipt(), $verified['current'], $this->descriptor, $verified['now'] );
 		} catch ( InvalidArgumentException ) {
-			$this->clear_pending();
-			return $this->failure( 'unverified_pre_install' );
+			return $this->fail_pending( 'unverified_pre_install' );
 		}
 		$this->state = $verified['current'];
 		if ( ! $this->live() ) {
-			$this->clear_pending();
-			return $this->failure( 'runtime_liveness_lost' );
+			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 		return $response;
 	}
@@ -797,6 +797,7 @@ final class NativePackageUpdater {
 		if ( ! $this->matches_operation( $hook_extra ) ) {
 			return $result;
 		}
+		$this->observe_wordpress_error( $result );
 		if ( $result instanceof \WP_Error && 'ran_wp_release_updater_target_is_working_copy' === $result->get_error_code() ) {
 			$this->clear_pending();
 			return $result;
@@ -805,8 +806,7 @@ final class NativePackageUpdater {
 			if ( ! $this->pending_install->active() ) {
 				return $result;
 			}
-			$this->clear_pending();
-			return $this->failure( 'runtime_liveness_lost' );
+			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 		if ( null !== $this->native_owner && ( $result instanceof \WP_Error || false === $result ) ) {
 			$this->pending_install->capture_install_result( $result );
@@ -825,12 +825,10 @@ final class NativePackageUpdater {
 				$this->clear_pending();
 				return $outgoing;
 			}
-			$this->clear_pending();
-			return $this->failure( 'unverified_install_result' );
+			return $this->fail_pending( 'unverified_install_result' );
 		}
 		if ( ! $this->pending_install->capture_install_result( $result ) ) {
-			$this->clear_pending();
-			return $this->failure( 'unverified_install_result' );
+			return $this->fail_pending( 'unverified_install_result' );
 		}
 		return $result;
 	}
@@ -860,6 +858,34 @@ final class NativePackageUpdater {
 			$this->pending_install->observe_completion();
 		}
 	}
+	/** @param array<string,mixed> $results */
+	public function observe_automatic_results( array $results ): void {
+		if ( null === $this->attempt_outcome || ! is_array( $this->pending_install->install_result() ) || ( null === $this->native_owner && ! $this->live() ) ) {
+			return;
+		}
+		$field   = 'plugin' === $this->target_type ? 'plugin' : 'theme';
+		$entries = $results[ $this->target_type . 's' ] ?? array();
+		foreach ( is_array( $entries ) ? $entries : array() as $entry ) {
+			if ( is_object( $entry ) && is_object( $entry->item ?? null ) && ( $entry->item->$field ?? null ) === $this->installed_identity ) {
+				$this->observe_wordpress_error( $entry->result ?? null );
+			}
+		}
+	}
+	private function observe_wordpress_error( mixed $result ): void {
+		if ( null === $this->attempt_outcome || ! $result instanceof \WP_Error ) {
+			return;
+		}
+		$code   = (string) $result->get_error_code();
+		$prefix = 'ran_wp_release_updater_';
+		if ( str_starts_with( $code, $prefix ) && RequestProtocolValidator::is_native_failure_code( substr( $code, strlen( $prefix ) ) ) ) {
+			return;
+		}
+		$this->attempt_outcome = array(
+			'outcome'        => 'unverified_install_result',
+			'source'         => 'wordpress',
+			'wordpress_code' => RequestProtocolValidator::screen_wordpress_code( $code ),
+		);
+	}
 	/** Finalization is deliberately after Core rollback and backup cleanup. */
 	public function finalize_pending_install(): void {
 		if ( $this->finalizing ) {
@@ -868,7 +894,7 @@ final class NativePackageUpdater {
 		$this->finalizing = true;
 		if ( null === $this->native_owner && ! $this->live() ) {
 			if ( $this->pending_install->active() ) {
-				$this->diagnose( 'runtime_liveness_lost', null );
+				$this->diagnose( 'runtime_liveness_lost', null, true );
 			}
 			$this->clear_pending();
 			$this->finalizing = false;
@@ -886,7 +912,7 @@ final class NativePackageUpdater {
 				return;
 			}
 			if ( ! $this->descriptor_admitted( $this->descriptor ) ) {
-				$this->diagnose( 'descriptor_admission_rejected', null );
+				$this->diagnose( 'descriptor_admission_rejected', null, true );
 				return;
 			}
 			$destination               = is_array( $this->pending_install->install_result() ) && is_string( $this->pending_install->install_result()['destination'] ?? null )
@@ -928,13 +954,16 @@ final class NativePackageUpdater {
 				$this->diagnose( 'outcome_uncertain', null );
 				return;
 			}
-			$completed = BindingFenceCoordinator::complete_persistent_install( $this->wpdb, $this->state, $this->claim, $this->pending_install->receipt(), $this->descriptor );
-			if ( 'completed' === $completed['result'] ) {
-				$this->lease_held     = false;
-				$this->native_outcome = 'verified_success';
-			}
-			if ( null === $this->native_owner ) {
-				$this->diagnose( 'completed' === $completed['result'] ? 'update_completed' : 'outcome_uncertain', null );
+			// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
+			if ( 'wordpress' !== ( $this->attempt_outcome['source'] ?? null ) ) {
+				$completed = BindingFenceCoordinator::complete_persistent_install( $this->wpdb, $this->state, $this->claim, $this->pending_install->receipt(), $this->descriptor, true );
+				if ( 'completed' === $completed['result'] && $completed['current'] instanceof BindingState ) {
+					$this->state          = $completed['current'];
+					$this->claim          = $this->claim( $this->state );
+					$this->native_outcome = 'verified_success';
+				} else {
+					$this->diagnose( 'outcome_uncertain', null );
+				}
 			}
 		} finally {
 			$this->clear_pending();
@@ -943,8 +972,10 @@ final class NativePackageUpdater {
 	}
 	/** @return list<string> */ public function diagnostics(): array {
 		return $this->diagnostics; }
-	/** @return array{candidate_header_version:string|null,candidate_tag:string|null,candidate_validation_code:string|null,candidate_version:string|null,failure_code:string|null,installed_version:string|null,last_check:int|null,offered_release_identity:string|null,offered_version:string|null,relationship:string|null} */ public function status(): array {
-		return $this->status; }
+	/** @return array{candidate_header_version:string|null,candidate_tag:string|null,candidate_validation_code:string|null,candidate_version:string|null,failure_code:string|null,installed_version:string|null,last_check:int|null,offered_release_identity:string|null,offered_version:string|null,relationship:string|null,last_native_outcome:array<string,mixed>|null} */ public function status(): array {
+		$outcome = ! $this->selected_runtime_state instanceof SelectedRuntimeState || $this->selected_runtime_state->broker_is_live()
+			? BindingFenceCoordinator::read_persistent_native_outcome( $this->wpdb, $this->binding ) : null;
+		return array_merge( $this->status, array( 'last_native_outcome' => $outcome ) ); }
 	public function refresh(): bool {
 		if ( $this->native_beginning || null !== $this->native_owner ) {
 			return false;
@@ -1468,36 +1499,69 @@ final class NativePackageUpdater {
 		if ( $this->native_beginning || ( null !== $this->native_owner && ! $this->finalizing ) ) {
 			return;
 		}
-		$owner     = $this->native_owner;
-		$archive   = $this->pending_install->archive();
-		$directory = $this->pending_install->archive_directory();
+		$owner      = $this->native_owner;
+		$archive    = $this->pending_install->archive();
+		$directory  = $this->pending_install->archive_directory();
+		$descriptor = $this->attempt_descriptor;
+		$record     = null === $descriptor || null === $this->attempt_outcome ? null : array_merge(
+			$this->attempt_outcome,
+			array(
+				'release_identity'   => $descriptor->release_identity(),
+				'version'            => $descriptor->to_array()['version'],
+				'last_observed_step' => $this->pending_install->last_observed_step(),
+			)
+		);
+		$release    = $release || null !== $record;
+		$state      = $this->state;
+		$claim      = $this->claim;
 		$this->clear_discovery_snapshot();
 		$this->disarm_theme_error_bridge();
-		$this->archive_store->remove( $this->pending_install->archive(), $this->pending_install->archive_directory() );
+		$this->archive_store->remove( $archive, $directory );
+		clearstatcache();
+		$clean     = ( null === $archive || ( ! file_exists( $archive ) && ! is_link( $archive ) ) )
+			&& ( null === $directory || ( ! file_exists( $directory ) && ! is_link( $directory ) ) );
+		$candidate = $this->native_outcome;
+		$outcome   = $clean ? $candidate : 'uncertain';
 		$this->pending_install->clear();
-		if ( $release && $this->lease_held && $this->state instanceof BindingState ) {
-			BindingFenceCoordinator::release_persistent_binding_state( $this->wpdb, $this->state, $this->claim );
-		}
+		$this->attempt_descriptor = null;
+		$this->attempt_outcome    = null;
+		$this->native_owner       = null;
+		$this->native_outcome     = 'uncertain';
 		if ( $release ) {
 			$this->state      = null;
 			$this->claim      = null;
 			$this->lease_held = false;
 		}
+		// Finish private cleanup and the consumer callback before committing the final record.
 		if ( null !== $owner && null !== $this->native_mutation_complete ) {
-			$this->native_owner = null;
-			clearstatcache();
-			$clean                = is_string( $archive ) && is_string( $directory ) && ! file_exists( $archive ) && ! is_link( $archive ) && ! file_exists( $directory ) && ! is_link( $directory );
-			$outcome              = $clean ? $this->native_outcome : 'uncertain';
-			$this->native_outcome = 'uncertain';
 			try {
 				( $this->native_mutation_complete )( $owner, $this->target_type, $this->installed_identity, $outcome );
 			} catch ( \Throwable ) {
 				$outcome = 'uncertain';
 			}
+		}
+		if ( $release && $state instanceof BindingState ) {
+			if ( null !== $record && 'verified_success' === $outcome ) {
+				$record['outcome'] = 'verified_success';
+			}
+			$released = BindingFenceCoordinator::release_persistent_binding_state( $this->wpdb, $state, $claim, $record );
+			$outcome  = 'released' === $released['result'] ? $outcome : 'uncertain';
+		}
+		if ( null !== $owner || 'verified_success' === $candidate ) {
 			$this->diagnose( 'verified_success' === $outcome ? 'update_completed' : 'outcome_uncertain', null );
 		}
 	}
-	private function diagnose( string $code, mixed $return_value ): mixed {
+	private function fail_pending( string $code ): mixed {
+		$error = $this->failure( $code );
+		$this->clear_pending();
+		return $error;
+	}
+	private function diagnose( string $code, mixed $return_value, bool $record_attempt = false ): mixed {
+		// Final uncertainty must not erase a refusal whose cause was already observed.
+		if ( $record_attempt && null !== $this->attempt_outcome && 'release_updater' === $this->attempt_outcome['source'] && RequestProtocolValidator::is_native_failure_code( $code )
+			&& ( 'outcome_uncertain' !== $code || 'uncertain' === $this->attempt_outcome['outcome'] ) ) {
+			$this->attempt_outcome['outcome'] = 'outcome_uncertain' === $code ? 'uncertain' : $code;
+		}
 		if ( count( $this->diagnostics ) === self::MAX_DIAGNOSTICS ) {
 			array_shift( $this->diagnostics );
 		} $this->diagnostics[]        = $code;
@@ -1516,8 +1580,8 @@ final class NativePackageUpdater {
 			'offered_version'           => null,
 			'relationship'              => null,
 		); }
-	private function failure( string $code ): mixed {
-		$this->diagnose( $code, null );
+	private function failure( string $code, bool $record_attempt = true ): mixed {
+		$this->diagnose( $code, null, $record_attempt );
 		return class_exists( '\\WP_Error' ) ? new \WP_Error( 'ran_wp_release_updater_' . $code, 'The update operation was not admitted.' ) : false; }
 	private function direct_filesystem(): bool {
 		return function_exists( 'get_filesystem_method' ) && 'direct' === get_filesystem_method(); }
