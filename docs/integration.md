@@ -521,6 +521,49 @@ completion or separately protected recovery. Process termination may prevent the
 callback entirely, so elapsed time and shutdown events cannot clear the marker.
 No additional persistent recovery journal is owned by this library.
 
+### Retained native update outcome
+
+The existing target status includes nullable `native.last_native_outcome`, read
+from the current binding's non-autoloaded base-options row without taking a lease.
+An inactive handle exposes no cached outcome because its current binding cannot
+be verified.
+It contains `outcome`, `source`, `wordpress_code`, `release_identity`, `version`,
+`last_observed_step`, and `recorded_at` (database Unix time in seconds).
+`outcome` is `verified_success`, `uncertain`, or an existing closed native failure
+reason. `source` is `wordpress` for an attributable native error, otherwise
+`release_updater` for this library's refusal or verification result.
+
+`wordpress_code` is a foreign reference, stored unchanged without a prefix or
+message catalogue. It must pass both `FailureText::identifier()` and
+`FailureText::strict(original, 64)` unchanged; otherwise it is null. Messages,
+error data, paths and URLs are never stored. A null code does not erase an
+observed source or imply success. The source field supplies the WordPress label.
+
+The nullable **last observed** step is `archive_admitted`, `extraction_admitted`,
+`staging_verified`, `install_result_captured`, or `completion_observed`. It is
+context about evidence seen by the library, never proof that a stage succeeded.
+An error before archive admission can have a known refusal and a null step.
+
+WordPress codes are retained where safely attributable through native result
+hooks or automatic results. Unobserved unpack failures remain uncertain with no
+invented cause. Filesystem connection can fail before this library enters the
+attempt; no new outcome is guaranteed then. A killed request or unavailable
+storage can prevent a write. Uncertainty never proves rollback or old bytes.
+
+There is one small record per target ever bound, within the existing 16 KiB row
+limit. Same-binding discovery, renewal, release and refresh retain it. Verified
+success replaces it; a new binding clears it without resetting fence counters.
+Package deletion removes neither the row nor the outcome. There is no deletion
+hook, binding-removal API or library uninstall cleanup. Consumers filter by
+current management and an outcome time newer than their package setup.
+
+Schema-1 rows remain readable; writes use schema 2 and preserve generations and
+epochs. Completion consumes the receipt durably while holding the lease through
+cleanup and the host callback, then commits the final outcome with lease release
+in one fenced CAS. Stale writers cannot overwrite a successor's outcome. No
+public outcome writer is exposed. Uninstall cleanup belongs to a consumer that
+can establish exact binding ownership and quiescence; otherwise retain the row.
+
 Prospective inspection already exposes path-free `artifact_identity`,
 `artifact_sha256`, `artifact_size` and `commit_identity`. They describe the freshly
 verified candidate; inspection is not installation authority and exact install

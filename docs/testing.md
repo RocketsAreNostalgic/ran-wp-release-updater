@@ -237,6 +237,10 @@ candidate updater path, installs 0.1.0 through WordPress Core, and performs
 separate fresh WordPress requests for 0.1.0→0.2.0, 0.2.0→0.3.0 and the 0.3.0
 no-op. Each request dispatches the real `wp_maybe_auto_update` action; it does
 not construct an update offer or call an updater subclass.
+The first transition injects a terminal error into Core's actual automatic-result
+object while retaining the installed candidate bytes. A fresh request must read
+that failure; the next verified update replaces it and the no-op retains success.
+This exercises reported-failure handling, not an actual fatal error or rollback.
 
 Live HTTP is deliberately not contacted. A `pre_http_request` fixture admits
 the provider's exact GitHub API requests, returns release/repository/commit

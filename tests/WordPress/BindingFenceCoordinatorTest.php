@@ -13,6 +13,118 @@ use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
 use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 
 final class BindingFenceCoordinatorTest extends TestCase {
+	public function test_schema_one_is_read_without_resetting_generation_or_epoch(): void {
+		$database            = new FakeOptionDatabase( 100 );
+		$binding             = $this->binding();
+		$old                 = BindingState::create( $binding, str_repeat( 'a', 64 ), 90, 12, 34 )->to_array();
+		$old['state_schema'] = 1;
+		unset( $old['last_native_outcome'] );
+		$name = $this->option_name( $binding );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Seed the exact schema-1 wire bytes to prove in-place compatibility.
+		$database->seed_option( $name, json_encode( $old, JSON_THROW_ON_ERROR ) );
+		self::assertNull( BindingFenceCoordinator::read_persistent_native_outcome( $database, $binding ) );
+		$next = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'b', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $next['current'] );
+		self::assertSame( 13, $next['current']->binding_generation() );
+		self::assertSame( 35, $next['current']->fence_epoch() );
+		self::assertSame( 2, $next['current']->to_array()['state_schema'] );
+	}
+
+	public function test_invalid_persisted_outcome_never_reinitializes_the_fence(): void {
+		$binding = $this->binding();
+		$base    = array(
+			'outcome'            => 'uncertain',
+			'source'             => 'release_updater',
+			'wordpress_code'     => null,
+			'release_identity'   => 'release:2',
+			'version'            => '2.0.0',
+			'last_observed_step' => null,
+			'recorded_at'        => 100,
+		);
+		foreach ( array(
+			array( 'outcome' => 'invented' ),
+			array( 'source' => 'invented' ),
+			array( 'wordpress_code' => 'copy_failed_copy_dir' ),
+			array(
+				'source'         => 'wordpress',
+				'wordpress_code' => 'secret_orchid',
+			),
+			array( 'version' => 'v2.0.0' ),
+			array( 'last_observed_step' => 'installed_successfully' ),
+			array( 'recorded_at' => 0 ),
+			array( 'message' => 'forbidden' ),
+		) as $mutation ) {
+			$database                   = new FakeOptionDatabase( 100 );
+			$raw                        = BindingState::create( $binding, str_repeat( 'a', 64 ), 90, 12, 34 )->to_array();
+			$raw['last_native_outcome'] = array_merge( $base, $mutation );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Seed hostile persisted record bytes without bypassing the production reader.
+			$database->seed_option( $this->option_name( $binding ), json_encode( $raw, JSON_THROW_ON_ERROR ) );
+			$before = $database->rows();
+			self::assertNull( BindingFenceCoordinator::read_persistent_native_outcome( $database, $binding ) );
+			self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'b', 64 ), 20 )['result'] );
+			self::assertSame( $before, $database->rows() );
+		}
+	}
+
+	public function test_failed_outcome_cas_does_not_release_or_overwrite_the_row(): void {
+		$database = new FakeOptionDatabase( 100 );
+		$binding  = $this->binding();
+		$first    = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $first['current'] );
+		$before = $database->rows();
+		$database->fail_next_write( $this->option_name( $binding ) );
+		$outcome = array(
+			'outcome'            => 'uncertain',
+			'source'             => 'release_updater',
+			'wordpress_code'     => null,
+			'release_identity'   => 'release:2',
+			'version'            => '2.0.0',
+			'last_observed_step' => null,
+		);
+		self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::release_persistent_binding_state( $database, $first['current'], $this->claim( $first['current'] ), $outcome )['result'] );
+		self::assertSame( $before, $database->rows() );
+		self::assertSame( 'verified', BindingFenceCoordinator::verify_persistent_binding_state( $database, $first['current'], $this->claim( $first['current'] ) )['result'] );
+	}
+
+	private function option_name( BindingRecord $binding ): string {
+		$facts = $binding->to_array();
+		return 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
+			array(
+				'network_id'                 => $facts['network_id'],
+				'target_type'                => $facts['target_type'],
+				'installed_package_identity' => $facts['installed_package_identity'],
+			)
+		);
+	}
+	public function test_outcome_survives_release_and_same_binding_claim_but_not_rebinding(): void {
+		$database = new FakeOptionDatabase( 100 );
+		$binding  = $this->binding();
+		$first    = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $first['current'] );
+		$outcome = array(
+			'outcome'            => 'unverified_install_result',
+			'source'             => 'wordpress',
+			'wordpress_code'     => 'copy_failed_copy_dir',
+			'release_identity'   => 'release:2',
+			'version'            => '2.0.0',
+			'last_observed_step' => 'install_result_captured',
+		);
+		self::assertSame( 'released', BindingFenceCoordinator::release_persistent_binding_state( $database, $first['current'], $this->claim( $first['current'] ), $outcome )['result'] );
+		$stored = BindingFenceCoordinator::read_persistent_native_outcome( $database, $binding );
+		self::assertSame( array_merge( $outcome, array( 'recorded_at' => 100 ) ), $stored );
+		$second = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'b', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $second['current'] );
+		self::assertSame( $stored, BindingFenceCoordinator::read_persistent_native_outcome( $database, $binding ) );
+		self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::release_persistent_binding_state( $database, $first['current'], $this->claim( $first['current'] ), $outcome )['result'] );
+		$replacement = BindingRecord::create( array_merge( $this->facts(), array( 'provider_code' => 'gitlab' ) ) );
+		self::assertNull( BindingFenceCoordinator::read_persistent_native_outcome( $database, $replacement ) );
+		$database->set_time( 121 );
+		$third = BindingFenceCoordinator::claim_persistent_binding_state( $database, $replacement, str_repeat( 'c', 64 ), 20 );
+		self::assertInstanceOf( BindingState::class, $third['current'] );
+		self::assertSame( 3, $third['current']->binding_generation() );
+		self::assertNull( BindingFenceCoordinator::read_persistent_native_outcome( $database, $replacement ) );
+		self::assertCount( 1, $database->rows() );
+	}
 
 	public function test_magic_database_proxy_retains_the_complete_lease_lifecycle(): void {
 		$inner    = new FakeOptionDatabase( 100 );

@@ -680,3 +680,10 @@ the `runtime.php` class map (the broker-family files `bootstrap.php` loads by
 path are the only exceptions). A bundled deployment has no autoloader for
 `src/`, so an unlisted class fails at its first use and bypasses the selected-
 root ownership check; `RuntimeClassMapTest` enforces the complete list.
+
+Native outcome source values retain the lowercase `wordpress` wire spelling.
+Exact `CapitalPDangit.MisspelledInText` annotations on the validator, native
+comparison and corresponding assertions preserve that protocol identity; prose
+continues to spell WordPress normally. The retained record uses the existing
+closed native failure vocabulary and screened foreign codes, not a second code
+catalogue. Runtime protocol 9 and binding-state schema 2 are separate boundaries.
