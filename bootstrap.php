@@ -47,7 +47,7 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['package_version'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['php_floor'] )
 			|| 'runtime.php' !== $copy['runtime_file']
-			|| ! in_array( $copy['runtime_protocol'], array( 5, 6, 7, 8, 9, 10 ), true )
+			|| ! in_array( $copy['runtime_protocol'], array( 5, 6, 7, 8, 9, 10, 11 ), true )
 			|| ! is_string( $copy['wordpress_floor'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['wordpress_floor'] )
 		) {
@@ -232,7 +232,7 @@ $ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_br
 	&& is_callable( array( $ran_wp_release_updater_broker, 'diagnostics' ) );
 if ( $ran_wp_release_updater_broker_compatible ) {
 	try {
-		$ran_wp_release_updater_broker_compatible = 10 === $ran_wp_release_updater_broker->protocol_version();
+		$ran_wp_release_updater_broker_compatible = 11 === $ran_wp_release_updater_broker->protocol_version();
 	} catch ( Throwable ) {
 		$ran_wp_release_updater_broker_compatible = false;
 	}
@@ -255,7 +255,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		private array $diagnostics = array( array( 'code' => 'protocol_conflict_inactive' ) );
 
 		public function protocol_version(): int {
-			return 10;
+			return 11;
 		}
 
 		public function register_candidate( string $copy_file ): bool {
@@ -280,7 +280,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		/** @return array<string,mixed> */
 		public function diagnostics(): array {
 			return array(
-				'protocol_version'     => 10,
+				'protocol_version'     => 11,
 				'state'                => 'conflict',
 				'activation_attempted' => false,
 				'candidate_count'      => 0,
@@ -703,7 +703,7 @@ return new class( $ran_wp_release_updater_broker ) {
 					|| ! $this->matches( $value['provider_code'], '/\A[a-z][a-z0-9_-]{0,31}\z/D' )
 					|| ! $this->matches( $value['artifact_filename'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di' )
 					|| ! $this->matches( $value['artifact_sha256'], '/\A[a-f0-9]{64}\z/D' )
-					|| ! $this->matches( $value['package_root'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D' )
+					|| ! is_string( $value['package_root'] ) || ! \RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory::is_valid_name( $value['package_root'] )
 					|| ( 'theme' === $value['target_type'] ? 'style.css' !== $value['main_file'] : ! $this->matches( $value['main_file'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D' ) )
 					|| ! is_string( $value['canonical_update_uri'] )
 					|| \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $value['canonical_update_uri'] ) !== $value['canonical_update_uri']

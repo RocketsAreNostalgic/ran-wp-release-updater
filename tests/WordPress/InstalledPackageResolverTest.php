@@ -27,6 +27,34 @@ final class InstalledPackageResolverTest extends TestCase {
 	protected function tearDown(): void {
 		$this->remove( $this->root ); }
 
+	public function test_installed_folder_boundary_is_191_bytes_for_plugins_and_themes(): void {
+		foreach ( array( 'plugin', 'theme' ) as $type ) {
+			foreach ( array( 100, 101, 191, 192 ) as $length ) {
+				$folder   = str_repeat( 'A', $length );
+				$relative = 'plugin' === $type ? 'plugins/' . $folder . '/main.php' : 'themes/' . $folder . '/style.css';
+				$file     = $this->file( $relative, 'plugin' === $type ? $this->plugin_header() : $this->theme_header() );
+				$result   = $this->resolver()->resolve( $this->declaration( $type, $file ) );
+				if ( $length <= 191 ) {
+					self::assertSame( 'plugin' === $type ? $folder . '/main.php' : $folder, $result['installed_package_identity'] );
+				} else {
+					self::assertSame( 'plugin' === $type ? 'installed_file_invalid' : 'theme_nested_identity_unsupported', $result['code'] );
+				}
+			}
+		}
+	}
+
+	public function test_theme_parent_and_file_names_keep_distinct_shared_boundaries(): void {
+		$parent = str_repeat( 'A', 191 );
+		$parsed = PackageIdentityValidator::parse_header( $this->theme_header( 'Template: ' . $parent ), 'theme' );
+		self::assertSame( 'installed_header_verified', $parsed['code'] );
+		self::assertSame( $parent, $parsed['headers']['Template'] ?? null );
+		self::assertSame( 'installed_header_invalid', PackageIdentityValidator::parse_header( $this->theme_header( 'Template: ' . $parent . 'A' ), 'theme' )['code'] );
+		$admitted = $this->file( 'plugins/ordinary/' . str_repeat( 'A', 100 ) . '.php', $this->plugin_header() );
+		self::assertSame( 'ordinary/' . str_repeat( 'A', 100 ) . '.php', $this->resolver()->resolve( $this->declaration( 'plugin', $admitted ) )['installed_package_identity'] );
+		$file = $this->file( 'plugins/ordinary/' . str_repeat( 'A', 101 ) . '.php', $this->plugin_header() );
+		self::assertSame( 'installed_file_invalid', $this->resolver()->resolve( $this->declaration( 'plugin', $file ) )['code'] );
+	}
+
 	public function test_plugin_roots_mappings_and_passive_file_codes(): void {
 		$plugin   = $this->file( 'plugins/renamed/main.php', $this->plugin_header() );
 		$resolver = $this->resolver();

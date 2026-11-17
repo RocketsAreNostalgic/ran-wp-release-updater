@@ -14,6 +14,9 @@ $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\Dependency\\ArchiveSafety' => 'src/Dependency/ArchiveSafety.php',
 	'RAN\\WPReleaseUpdater\\V1\\Dependency\\FailureText'   => 'src/Dependency/FailureText.php',
 	'RAN\\WPReleaseUpdater\\V1\\Dependency\\TargetWorkingCopy' => 'src/Dependency/TargetWorkingCopy.php',
+	'RAN\\WPReleaseUpdater\\V1\\Dependency\\InvalidRepositoryPathException' => 'src/Dependency/InvalidRepositoryPathException.php',
+	'RAN\\WPReleaseUpdater\\V1\\Dependency\\RepositoryRelativePath' => 'src/Dependency/RepositoryRelativePath.php',
+	'RAN\\WPReleaseUpdater\\V1\\Dependency\\PackageDirectory' => 'src/Dependency/PackageDirectory.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\CanonicalUpdateUri' => 'src/Contract/CanonicalUpdateUri.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\IdentityDescriptor' => 'src/Contract/IdentityDescriptor.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseVersion'  => 'src/Contract/ReleaseVersion.php',
@@ -121,7 +124,7 @@ return new class(
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 			|| ! is_callable( array( $this->broker, 'protocol_version' ) )
 			|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-			|| 10 !== $this->broker->protocol_version()
+			|| 11 !== $this->broker->protocol_version()
 		) {
 			return false;
 		}
@@ -221,7 +224,7 @@ return new class(
 					|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 					|| ! is_callable( array( $this->broker, 'protocol_version' ) )
 					|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-					|| 10 !== $this->broker->protocol_version()
+					|| 11 !== $this->broker->protocol_version()
 				) {
 					return false;
 				}

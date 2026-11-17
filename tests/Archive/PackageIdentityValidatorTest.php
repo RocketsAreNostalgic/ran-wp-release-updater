@@ -24,6 +24,18 @@ final class PackageIdentityValidatorTest extends TestCase {
 		parent::tearDown();
 	}
 
+	public function test_archive_root_uses_the_shared_191_byte_folder_boundary(): void {
+		foreach ( array( 100, 101, 191, 192 ) as $length ) {
+			$root       = str_repeat( 'A', $length );
+			$archive    = $this->archive( array( $root . '/main.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
+			$descriptor = $this->descriptor( $archive, 'plugin', $root . '/main.php' );
+			$policy     = $this->policy( 'plugin', $root, 'main.php', 'Example Plugin' );
+			$result     = ( new PackageIdentityValidator() )->validate( $descriptor, $policy, $archive );
+			self::assertSame( $length <= 191, $result->is_valid(), (string) $length );
+			self::assertSame( $length <= 191 ? 'archive_identity_verified' : 'archive_target_policy_invalid', $result->code() );
+		}
+	}
+
 	public function test_owned_identity_gate_rejects_replacement_during_hashing(): void {
 		$archive    = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$descriptor = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );

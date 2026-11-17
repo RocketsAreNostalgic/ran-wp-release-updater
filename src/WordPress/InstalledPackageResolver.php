@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\WordPress;
 
+use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 
@@ -248,7 +249,7 @@ final class InstalledPackageResolver {
 				return 1 === count( $parts ) ? 'plugin_root_level_unsupported' : 'installed_file_outside_root';
 			}
 			$base = substr( $parts[1], 0, -4 );
-			if ( 1 !== preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $parts[0] ) || ! str_ends_with( $parts[1], '.php' ) || 1 !== preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $base ) ) {
+			if ( ! PackageDirectory::is_valid_name( $parts[0] ) || ! str_ends_with( $parts[1], '.php' ) || 1 !== preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $base ) ) {
 				return 'installed_file_invalid';
 			}
 			return array(
@@ -264,7 +265,7 @@ final class InstalledPackageResolver {
 		if ( 2 !== count( $parts ) ) {
 			return 'theme_nested_identity_unsupported';
 		}
-		if ( 1 !== preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $parts[0] ) ) {
+		if ( ! PackageDirectory::is_valid_name( $parts[0] ) ) {
 			return 'theme_nested_identity_unsupported';
 		}
 		return array(

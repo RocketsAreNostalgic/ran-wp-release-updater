@@ -9,6 +9,29 @@ use RAN\WPReleaseUpdater\V1\Provider\GitHub\ProspectiveReleaseInspection;
 
 final class ProspectiveReleaseInspectionSchemaTest extends TestCase {
 
+	public function test_package_root_uses_the_shared_folder_bound_while_main_file_keeps_its_bound(): void {
+		foreach ( array(
+			100 => true,
+			101 => true,
+			191 => true,
+			192 => false,
+		) as $length => $accepted ) {
+			$facts                 = $this->facts();
+			$facts['package_root'] = str_repeat( 'A', $length );
+			try {
+				$inspection = ProspectiveReleaseInspection::create( $facts );
+				self::assertTrue( $accepted );
+				self::assertSame( $facts['package_root'], $inspection->to_array()['package_root'] );
+			} catch ( \InvalidArgumentException ) {
+				self::assertFalse( $accepted, (string) $length );
+			}
+		}
+		$facts              = $this->facts();
+		$facts['main_file'] = str_repeat( 'A', 101 ) . '.php';
+		$this->expectException( \InvalidArgumentException::class );
+		ProspectiveReleaseInspection::create( $facts );
+	}
+
 	public function test_wire_schema_has_fingerprint_last_and_its_digest_binds_every_fact(): void {
 		$inspection = ProspectiveReleaseInspection::create( $this->facts() );
 		$wire       = $inspection->to_array();

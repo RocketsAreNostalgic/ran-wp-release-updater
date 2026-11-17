@@ -611,3 +611,18 @@ are withheld. A new actual check clears previous request-local reports. V1's key
 reasons and values remain unchanged. This slice adds no transport, offer or admission
 diagnostics. Incompatible runtime generations fail closed in either load order;
 consumer adoption and publication remain separate owner decisions.
+
+
+### Package folder names
+
+Installed plugin/theme folders, archive roots, theme-parent folder names and
+prospective package roots use the shared `PackageDirectory::is_valid_name()` rule:
+1–191 ASCII bytes, beginning with a letter or digit and then letters, digits,
+periods, underscores or hyphens. Names retain their original case and compare
+exactly; the rule does not trim, lowercase or infer a destination.
+
+Every name previously admitted by the 100-byte folder rule remains admitted.
+File-name limits are unchanged, as is the 255-byte installed plugin-identity bound
+including the folder, slash and file name. A maximal folder and maximal file name
+therefore cannot always be combined. Incompatible runtime generations fail closed;
+an older runtime cannot admit the newly supported long folder facts.

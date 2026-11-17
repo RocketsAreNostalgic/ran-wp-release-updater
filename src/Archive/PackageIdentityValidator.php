@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\Archive;
 
+use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
@@ -357,7 +358,7 @@ final class PackageIdentityValidator {
 		if ( $policy['maximum_artifact_bytes'] < 1 || $descriptor->to_array()['artifact_size'] > $policy['maximum_artifact_bytes'] ) {
 			return false;
 		}
-		if ( ( 'plugin' === $policy['target_type'] && '' !== $policy['theme_template'] ) || ( 'theme' === $policy['target_type'] && '' !== $policy['theme_template'] && 1 !== preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $policy['theme_template'] ) ) ) {
+		if ( ( 'plugin' === $policy['target_type'] && '' !== $policy['theme_template'] ) || ( 'theme' === $policy['target_type'] && '' !== $policy['theme_template'] && ! PackageDirectory::is_valid_name( $policy['theme_template'] ) ) ) {
 			return false;
 		}
 		$facts = $descriptor->to_array();
@@ -369,7 +370,7 @@ final class PackageIdentityValidator {
 		if ( ( 'plugin' === $policy['target_type'] && $policy['installed_package_identity'] !== $policy['archive_root'] . '/' . $policy['header_file'] ) || ( 'theme' === $policy['target_type'] && ( $policy['installed_package_identity'] !== $policy['archive_root'] || 'style.css' !== $policy['header_file'] ) ) ) {
 			return false;
 		}
-		if ( ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $policy['archive_root'] ) || ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(?:php|css)\z/D', $policy['header_file'] ) || ( 'plugin' === $policy['target_type'] && ! str_ends_with( $policy['header_file'], '.php' ) ) || ( 'theme' === $policy['target_type'] && 'style.css' !== $policy['header_file'] ) || '' === $policy['metadata_name'] || strlen( $policy['metadata_name'] ) > 500 || 1 === preg_match( '/[\x00-\x1f\x7f]/', $policy['metadata_name'] ) || null === ReleaseVersion::normalize_header( $policy['php_runtime_version'] ) || null === ReleaseVersion::normalize_header( $policy['wordpress_runtime_version'] ) ) {
+		if ( ! PackageDirectory::is_valid_name( $policy['archive_root'] ) || ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(?:php|css)\z/D', $policy['header_file'] ) || ( 'plugin' === $policy['target_type'] && ! str_ends_with( $policy['header_file'], '.php' ) ) || ( 'theme' === $policy['target_type'] && 'style.css' !== $policy['header_file'] ) || '' === $policy['metadata_name'] || strlen( $policy['metadata_name'] ) > 500 || 1 === preg_match( '/[\x00-\x1f\x7f]/', $policy['metadata_name'] ) || null === ReleaseVersion::normalize_header( $policy['php_runtime_version'] ) || null === ReleaseVersion::normalize_header( $policy['wordpress_runtime_version'] ) ) {
 			return false;
 		}
 		return CanonicalUpdateUri::canonicalize_boundaries(
@@ -544,10 +545,7 @@ final class PackageIdentityValidator {
 			$result['Template'] = '';
 		} elseif (
 			'' !== $result['Template']
-			&& 1 !== preg_match(
-				'/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}\z/D',
-				$result['Template']
-			)
+			&& ! PackageDirectory::is_valid_name( $result['Template'] )
 		) {
 			return array(
 				'code'   => 'installed_header_invalid',

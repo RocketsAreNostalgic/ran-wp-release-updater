@@ -10,10 +10,10 @@ Core dependency update. The native-operation refinement below was delivered sepa
 
 | Surface | Required evidence |
 | --- | --- |
-| `bootstrap.php`, `runtime.php`, and 36 PHP files under `src/` | All 38 shipped PHP paths are direct PHPStan level-8 roots. `scanDirectories` is additional discovery, not coverage. |
+| `bootstrap.php`, `runtime.php`, and 39 PHP files under `src/` | All 41 shipped PHP paths are direct PHPStan level-8 roots. `scanDirectories` is additional discovery, not coverage. |
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
-| Generated `src/Dependency/FailureText.php` and `src/Dependency/TargetWorkingCopy.php` | Namespace-only byte parity against the locked `ran/updater-support` source (`composer check:updater-support`) and direct level-8 analysis remain required. Unlike ArchiveSafety these pass the shared ruleset, so they are not PHPCS excluded. Never hand-edit these files. |
+| Generated helpers under `src/Dependency/` except `ArchiveSafety.php` | Namespace-only byte parity against the locked `ran/updater-support` source (`composer check:updater-support`) and direct level-8 analysis remain required. Unlike ArchiveSafety these pass the shared ruleset, so they are not PHPCS excluded. Never hand-edit these files. |
 | Generated `src/Dependency/ArchiveSafety.php` | PHPCS excluded; namespace-only byte parity against the locked `ran/updater-support` source and direct level-8 analysis remain required. Never hand-edit this file. |
 | All `tests/` PHP, including root files and future/nested roots | Owned methods, variables, Yoda conditions, unused parameters and reserved parameter names have no file/root exclusions. Thirty-one PHPUnit lifecycle overrides, twelve unused foreign-stub parameter reports, the existing skin override parameter and native ZipArchive property uses retain exact local exceptions. No test-path exclusions remain. Global-variable prefixing and other fixture-specific exceptions are occurrence-local as listed below. |
 
@@ -698,3 +698,18 @@ bytes. Listing reasons classify existing refusals without changing eligibility.
 The shared strict whole-value screen also protects unchanged sampled tag context;
 no message catalogue or persistent history is added. Native completed-v2 reports
 retain known inspection/acquisition rejections while completed-v1 stays unchanged.
+
+
+## Shared package directory boundary
+
+The exact released updater-support beta.9 supplies PackageDirectory and its two
+repository-path dependencies, vendored with namespace-only parity. All six
+shipped dependency copies are directly analysed; ArchiveSafety alone retains its
+existing PHPCS exclusion. The new copies need no checker exclusions or annotations.
+
+Folder admission now uses the shared 191-byte, case-preserving rule in archive
+policy, installed resolution, theme-parent headers/bindings, prospective inspection,
+native configuration and the public inspection wire. File-name limits and the
+255-byte installed-identity bound remain unchanged. Protocol 11 separates this
+wider wire contract from protocol 10 in both physical load orders. The protocol-10
+fixture preserves the reviewed, unreleased report runtime, not a fabricated release.

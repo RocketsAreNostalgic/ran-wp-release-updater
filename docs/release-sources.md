@@ -99,6 +99,10 @@ The public value path is deliberate. `list()` returns candidate entries carrying
 
 `inspect()` is not a metadata-only call: it downloads and validates the full ZIP, then discards those inspection bytes synchronously before returning. A later `acquire()` performs a fresh download and validation rather than reusing the inspection ZIP. Callers should therefore budget one full ZIP transfer for inspection and another for acquisition.
 
+The returned `package_root` uses the shared 1–191-byte folder-name rule described
+in [Package folder names](integration.md#package-folder-names). The main-file
+constraints remain unchanged.
+
 The fingerprint is opaque. Store and replay it unchanged; do not parse it or build your own equivalent token.
 
 ## Failure codes

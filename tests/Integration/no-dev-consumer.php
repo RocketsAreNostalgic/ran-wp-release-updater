@@ -106,9 +106,14 @@ foreach ($GLOBALS['actions'] as $action) { $action(); }
 $archiveSafety = new ReflectionClass('RAN\\WPReleaseUpdater\\V1\\Dependency\\ArchiveSafety');
 $archiveClass = 'RAN\\WPReleaseUpdater\\V1\\Dependency\\ArchiveSafety';
 $workingCopy = new ReflectionClass('RAN\\WPReleaseUpdater\\V1\\Dependency\\TargetWorkingCopy');
+$directoryClass = 'RAN\\WPReleaseUpdater\\V1\\Dependency\\PackageDirectory';
+$packageDirectory = new ReflectionClass($directoryClass);
+$directoryName = $directoryClass::installation_slug('other', 'src/MiXeD');
+$directoryRejected = false;
+try { $directoryClass::normalize('src/%2e%2e'); } catch (InvalidArgumentException $error) { $directoryRejected = $error->getMessage() === 'The package subdirectory must be a normalized relative path.'; }
 $safe = $archiveClass::normalize_path('package/asset.php');
 $rejected = $archiveClass::normalize_path('../asset.php');
-echo json_encode(array('registrar' => is_object($registrar), 'file' => $archiveSafety->getFileName(), 'working_copy_file' => $workingCopy->getFileName(), 'safe' => $safe, 'rejected' => $rejected), JSON_THROW_ON_ERROR);
+echo json_encode(array('registrar' => is_object($registrar), 'file' => $archiveSafety->getFileName(), 'working_copy_file' => $workingCopy->getFileName(), 'directory_file' => $packageDirectory->getFileName(), 'directory_name' => $directoryName, 'directory_rejected' => $directoryRejected, 'safe' => $safe, 'rejected' => $rejected), JSON_THROW_ON_ERROR);
 PHP;
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 file_put_contents( $root . '/probe.php', $probe );
@@ -145,6 +150,8 @@ if (
 	true !== ( $result['registrar'] ?? false )
 	|| realpath( $installed . '/src/Dependency/ArchiveSafety.php' ) !== ( $result['file'] ?? null )
 	|| realpath( $installed . '/src/Dependency/TargetWorkingCopy.php' ) !== ( $result['working_copy_file'] ?? null )
+	|| realpath( $installed . '/src/Dependency/PackageDirectory.php' ) !== ( $result['directory_file'] ?? null )
+	|| 'MiXeD' !== ( $result['directory_name'] ?? null ) || true !== ( $result['directory_rejected'] ?? null )
 	|| array(
 		'path'      => 'package/asset.php',
 		'directory' => false,

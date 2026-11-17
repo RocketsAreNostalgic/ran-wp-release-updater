@@ -25,6 +25,28 @@ final class ReleaseSourceSchemaTest extends TestCase {
 		self::assertArrayNotHasKey( 'provider_payload', $inspection );
 	}
 
+	public function test_public_inspection_accepts_shared_folder_lengths_and_keeps_file_limits(): void {
+		foreach ( array( 100, 101, 191 ) as $length ) {
+			$facts                 = $this->facts();
+			$facts['package_root'] = str_repeat( 'A', $length );
+			$value                 = ProspectiveReleaseInspection::create( $facts )->to_array();
+			$result                = $this->projection( 'inspect', $this->envelope( 'release_inspected', $value, 'complete' ) );
+			self::assertSame( 'release_inspected', $result['code'], (string) $length );
+			self::assertSame( $facts['package_root'], $result['value']['package_root'] );
+		}
+		foreach ( array(
+			'package_root' => str_repeat( 'A', 192 ),
+			'main_file'    => str_repeat( 'A', 101 ) . '.php',
+		) as $key => $oversized ) {
+			$value = ProspectiveReleaseInspection::create( $this->facts() )->to_array();
+			unset( $value['fingerprint'] );
+			$value[ $key ] = $oversized;
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Bind every malformed fixture fact so the length guard, not an unrelated fingerprint mismatch, must reject it.
+			$value['fingerprint'] = 'v2:' . hash( 'sha256', json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
+			self::assertSame( 'runtime_unavailable', $this->projection( 'inspect', $this->envelope( 'release_inspected', $value, 'complete' ) )['code'] );
+		}
+	}
+
 	public function test_activated_synthetic_callback_can_return_the_exact_valid_listing_shape(): void {
 		$result = $this->projection(
 			'list',
@@ -142,7 +164,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 			$file   = $directory . '/proof.php';
 			$script = '<?php define("FS_METHOD","direct");$GLOBALS["wp_version"]="6.8.0";$GLOBALS["wpdb"]=new stdClass();function add_action(string $h,mixed $c,int $p=10,int $a=1):void{}function add_filter(string $h,mixed $c,int $p=10,int $a=1):void{}'
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
-			. '$root=' . var_export( $root, true ) . ';$mutation=' . var_export( $mutation, true ) . ';$dir=' . var_export( $directory, true ) . ';$path=$dir."/owned.zip";file_put_contents($path,"owned");chmod($path,0600);$stat=lstat($path);$registrar=require $root."/bootstrap.php";$broker=$GLOBALS["ran_wp_release_updater_v1_broker"];$broker->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>10,"wordpress_version"=>"6.8.0"]);$state=(new ReflectionProperty($broker,"selected_runtime_state"))->getValue($broker);$artifact=new \\RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact($path,hash_file("sha256",$path),["dev"=>$stat["dev"],"ino"=>$stat["ino"],"mode"=>$stat["mode"],"nlink"=>$stat["nlink"],"uid"=>$stat["uid"],"gid"=>$stat["gid"],"size"=>$stat["size"],"mtime"=>$stat["mtime"],"ctime"=>$stat["ctime"]]);$facts=' . var_export( ProspectiveReleaseInspection::create( $this->facts() )->to_array(), true ) . ';$payload=["inspection"=>$facts,"artifact"=>$artifact];if("nested"===$mutation){$payload["inspection"]["extra"]=true;}else{$payload["extra"]=true;}$calls=0;$service=new class($payload,$calls){public function __construct(private array $payload,private int &$calls){}public function acquire(string $a,string $b,string $c):array{$this->calls++;return $this->payload;}};$real=new \\RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseSource($service,$state);$public=$registrar->releases("github","plugin","acme/example","99");(new ReflectionProperty($public,"selected"))->setValue($public,$real);$result=$public->acquire("7","v1.2.3",$facts["fingerprint"]);echo json_encode(["result"=>$result,"calls"=>$calls,"exists"=>file_exists($path)]);';
+			. '$root=' . var_export( $root, true ) . ';$mutation=' . var_export( $mutation, true ) . ';$dir=' . var_export( $directory, true ) . ';$path=$dir."/owned.zip";file_put_contents($path,"owned");chmod($path,0600);$stat=lstat($path);$registrar=require $root."/bootstrap.php";$broker=$GLOBALS["ran_wp_release_updater_v1_broker"];$broker->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>11,"wordpress_version"=>"6.8.0"]);$state=(new ReflectionProperty($broker,"selected_runtime_state"))->getValue($broker);$artifact=new \\RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact($path,hash_file("sha256",$path),["dev"=>$stat["dev"],"ino"=>$stat["ino"],"mode"=>$stat["mode"],"nlink"=>$stat["nlink"],"uid"=>$stat["uid"],"gid"=>$stat["gid"],"size"=>$stat["size"],"mtime"=>$stat["mtime"],"ctime"=>$stat["ctime"]]);$facts=' . var_export( ProspectiveReleaseInspection::create( $this->facts() )->to_array(), true ) . ';$payload=["inspection"=>$facts,"artifact"=>$artifact];if("nested"===$mutation){$payload["inspection"]["extra"]=true;}else{$payload["extra"]=true;}$calls=0;$service=new class($payload,$calls){public function __construct(private array $payload,private int &$calls){}public function acquire(string $a,string $b,string $c):array{$this->calls++;return $this->payload;}};$real=new \\RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseSource($service,$state);$public=$registrar->releases("github","plugin","acme/example","99");(new ReflectionProperty($public,"selected"))->setValue($public,$real);$result=$public->acquire("7","v1.2.3",$facts["fingerprint"]);echo json_encode(["result"=>$result,"calls"=>$calls,"exists"=>file_exists($path)]);';
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $file, $script );
 			$output = array();
@@ -224,7 +246,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 			. 'function add_action(string $h,mixed $c,int $p=10,int $a=1):void{} function add_filter(string $h,mixed $c,int $p=10,int $a=1):void{} '
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode a controlled fixture path as a PHP literal for the isolated child script; this is not debug output.
 			. '$registrar=require ' . var_export( $root . '/bootstrap.php', true ) . ';'
-			. '$activation=$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>10,"wordpress_version"=>"6.8.0"]);'
+			. '$activation=$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>11,"wordpress_version"=>"6.8.0"]);'
 			. '$failure=\\RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseFailure::rejected("header_invalid","Version");'
 			. 'echo json_encode([$activation["loaded"],$failure->rejection_reason,$failure->rejection_detail]);';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for isolated runtime fixtures; WordPress helpers would alter the boundary under test.
@@ -248,7 +270,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 			. 'function add_action(string $h,mixed $c,int $p=10,int $a=1):void{} function add_filter(string $h,mixed $c,int $p=10,int $a=1):void{} '
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode a controlled fixture path as a PHP literal for the isolated child script; this is not debug output.
 			. '$registrar=require ' . var_export( $root . '/bootstrap.php', true ) . ';'
-			. '$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>10,"wordpress_version"=>"6.8.0"]);'
+			. '$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>11,"wordpress_version"=>"6.8.0"]);'
 			. '$out=[];foreach([false,true] as $opt){$source=$registrar->releases("github","plugin","acme/example","99","stable",null,52428800,$opt);$source->list();'
 			. '$selected=(new ReflectionProperty($source,"selected"))->getValue($source);'
 			. '(new ReflectionProperty($selected,"service"))->setValue($selected,new class{public function inspect(string $i,string $t):array{throw \\RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseFailure::rejected("header_invalid","Version");}});'
@@ -285,7 +307,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 			. 'function add_action(string $h,mixed $c,int $p=10,int $a=1):void{} function add_filter(string $h,mixed $c,int $p=10,int $a=1):void{} '
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode a controlled fixture path as a PHP literal for the isolated child script; this is not debug output.
 			. '$registrar=require ' . var_export( $root . '/bootstrap.php', true ) . ';'
-			. '$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>10,"wordpress_version"=>"6.8.0"]);'
+			. '$GLOBALS["ran_wp_release_updater_v1_broker"]->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>11,"wordpress_version"=>"6.8.0"]);'
 			. '$source=$registrar->releases("github","plugin","acme/example","99","stable",null,52428800,true);'
 			. '$old=new class{public function release_source(array $d):array{return ["accepted"=>false,"code"=>9===count($d)?"invalid_configuration":"release_source_ready","source_handle"=>null];} public function diagnostics():array{return ["state"=>"active"];}};'
 			. '(new ReflectionProperty($source,"broker"))->setValue($source,$old);'
@@ -403,7 +425,7 @@ final class ReleaseSourceSchemaTest extends TestCase {
 			. 'function add_action(string $h,mixed $c,int $p=10,int $a=1):void{} function add_filter(string $h,mixed $c,int $p=10,int $a=1):void{} '
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 			. '$operation=' . var_export( $operation, true ) . ';$result=' . var_export( $result, true ) . ';$registrar=require ' . var_export( $root . '/bootstrap.php', true ) . ';'
-			. '$broker=$GLOBALS["ran_wp_release_updater_v1_broker"];$activation=$broker->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>10,"wordpress_version"=>"6.8.0"]);'
+			. '$broker=$GLOBALS["ran_wp_release_updater_v1_broker"];$activation=$broker->activate(["php_version"=>PHP_VERSION,"runtime_protocol"=>11,"wordpress_version"=>"6.8.0"]);'
 			. '$source=$registrar->releases("github","plugin","acme/example","99"' . ( $rejection_reasons ? ',"stable",null,52428800,true' : '' ) . ');$property=new ReflectionProperty($source,"selected");'
 			. '$property->setValue($source,new class($result){public function __construct(private array $result){} public function list(array $c=[]):array{return $this->result;} public function inspect(string $i,string $t):array{return $this->result;} public function acquire(string $i,string $t,string $f):array{return $this->result;}});'
 			. '$projected=match($operation){"list"=>$source->list(),"acquire"=>$source->acquire("7","v1.2.3","v2:".str_repeat("a",64)),default=>$source->inspect("7","v1.2.3")};echo json_encode(["activation"=>$activation,"projected"=>$projected]);';

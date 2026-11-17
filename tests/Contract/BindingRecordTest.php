@@ -34,6 +34,18 @@ final class BindingRecordTest extends TestCase {
 			)
 		);
 		self::assertNotSame( BindingRecord::create( $theme )->binding_hash(), BindingRecord::create( array_merge( $theme, array( 'theme_template' => 'parent-theme' ) ) )->binding_hash(), 'theme_template' ); }
+	public function test_theme_template_accepts_the_shared_191_byte_name(): void {
+		$facts = array_replace(
+			$this->facts(),
+			array(
+				'target_type'                => 'theme',
+				'installed_package_identity' => 'child',
+				'theme_template'             => str_repeat( 'A', 191 ),
+			)
+		);
+		self::assertSame( $facts['theme_template'], BindingRecord::create( $facts )->to_array()['theme_template'] );
+	}
+
 	public function test_theme_template_is_closed_to_themes_and_safe_theme_slugs(): void {
 		foreach ( array(
 			array(
@@ -46,7 +58,7 @@ final class BindingRecordTest extends TestCase {
 			),
 			array(
 				'target_type'    => 'theme',
-				'theme_template' => str_repeat( 'a', 101 ),
+				'theme_template' => str_repeat( 'a', 192 ),
 			),
 		) as $invalid ) {
 			try {
