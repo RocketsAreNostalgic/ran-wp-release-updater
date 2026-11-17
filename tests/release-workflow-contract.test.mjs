@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -29,14 +29,10 @@ test('JavaScript audit retains only the approved temporary advisory exception', 
 		/^pnpm audit && pnpm run audit && /
 	);
 	assert.match(ci, /run: pnpm check$/m);
-	const auditConfig = execFileSync(
-		'pnpm',
-		['config', 'get', 'auditConfig', '--json'],
-		{
-			cwd: new URL('..', import.meta.url),
-			encoding: 'utf8',
-		}
-	);
+	const auditConfig = execSync('pnpm config get auditConfig --json', {
+		cwd: new URL('..', import.meta.url),
+		encoding: 'utf8',
+	});
 	assert.deepEqual(JSON.parse(auditConfig || 'null'), {
 		ignoreGhsas: ['GHSA-fc5q-39xc-vjpf'],
 	});
