@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -17,6 +18,25 @@ const config = JSON.parse(
 	)
 );
 const packageConfig = config.packages['.'];
+
+test('JavaScript audit retains only the approved temporary advisory exception', () => {
+	const development = JSON.parse(
+		readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+	);
+	assert.equal(development.scripts.audit, 'pnpm audit --audit-level=high');
+	assert.match(
+		development.scripts.check,
+		/^pnpm audit && pnpm run audit && /
+	);
+	assert.match(ci, /run: pnpm check$/m);
+	const auditConfig = execSync('pnpm config get auditConfig --json', {
+		cwd: new URL('..', import.meta.url),
+		encoding: 'utf8',
+	});
+	assert.deepEqual(JSON.parse(auditConfig || 'null'), {
+		ignoreGhsas: ['GHSA-fc5q-39xc-vjpf'],
+	});
+});
 
 test('source releases use the pinned thin Profile A caller', () => {
 	assert.match(
