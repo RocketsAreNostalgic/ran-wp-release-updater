@@ -10,6 +10,9 @@ namespace {
 
 			public function __construct( public string $code, public string $message ) {
 			}
+			public function get_error_code(): string {
+				return $this->code;
+			}
 		}
 	}
 
@@ -259,6 +262,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$calls         = 0;
 			$binding       = $this->binding();
 			$configuration = array(
+				'installed_directory'        => dirname( __DIR__, 2 ) . '/.workspaces/absent-target',
 				'headers'                    => array(
 					'Author'      => 'Test',
 					'Description' => 'Test',

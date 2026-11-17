@@ -47,7 +47,7 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['package_version'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['php_floor'] )
 			|| 'runtime.php' !== $copy['runtime_file']
-			|| ! in_array( $copy['runtime_protocol'], array( 5, 6, 7 ), true )
+			|| ! in_array( $copy['runtime_protocol'], array( 5, 6, 7, 8 ), true )
 			|| ! is_string( $copy['wordpress_floor'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['wordpress_floor'] )
 		) {
@@ -232,7 +232,7 @@ $ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_br
 	&& is_callable( array( $ran_wp_release_updater_broker, 'diagnostics' ) );
 if ( $ran_wp_release_updater_broker_compatible ) {
 	try {
-		$ran_wp_release_updater_broker_compatible = 7 === $ran_wp_release_updater_broker->protocol_version();
+		$ran_wp_release_updater_broker_compatible = 8 === $ran_wp_release_updater_broker->protocol_version();
 	} catch ( Throwable ) {
 		$ran_wp_release_updater_broker_compatible = false;
 	}
@@ -255,7 +255,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		private array $diagnostics = array( array( 'code' => 'protocol_conflict_inactive' ) );
 
 		public function protocol_version(): int {
-			return 7;
+			return 8;
 		}
 
 		public function register_candidate( string $copy_file ): bool {
@@ -280,7 +280,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		/** @return array<string,mixed> */
 		public function diagnostics(): array {
 			return array(
-				'protocol_version'     => 7,
+				'protocol_version'     => 8,
 				'state'                => 'conflict',
 				'activation_attempted' => false,
 				'candidate_count'      => 0,
@@ -386,12 +386,12 @@ return new class( $ran_wp_release_updater_broker ) {
 	public function __construct( private object $broker ) {
 	}
 
-	public function plugin( string $provider, string $plugin_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800 ): object {
-		return $this->target( 'plugin', $plugin_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
+	public function plugin( string $provider, string $plugin_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $allow_working_copy = false ): object {
+		return $this->target( 'plugin', $plugin_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes, $allow_working_copy );
 	}
 
-	public function theme( string $provider, string $stylesheet_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800 ): object {
-		return $this->target( 'theme', $stylesheet_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
+	public function theme( string $provider, string $stylesheet_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $allow_working_copy = false ): object {
+		return $this->target( 'theme', $stylesheet_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes, $allow_working_copy );
 	}
 
 	public function releases( string $provider, string $package_type, string $repository, string $repository_id, string $channel = 'stable', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $rejection_reasons = false ): object {
@@ -801,7 +801,7 @@ return new class( $ran_wp_release_updater_broker ) {
 		return $this->broker->diagnostics();
 	}
 
-	private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes ): object {
+	private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes, bool $allow_working_copy ): object {
 		$declaration = array(
 			'target_type'              => $type,
 			'installed_file'           => $file,
@@ -817,6 +817,9 @@ return new class( $ran_wp_release_updater_broker ) {
 			'native_mutation_complete' => $this->native_mutation_complete,
 			'descriptor_admission'     => $this->descriptor_admission,
 		);
+		if ( $allow_working_copy ) {
+			$declaration['allow_working_copy'] = true;
+		}
 		return new class( $this->broker, $declaration ) {
 			private int $submission_id = 0;
 			private bool $submitted    = false;

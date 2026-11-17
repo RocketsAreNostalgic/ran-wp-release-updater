@@ -13,6 +13,7 @@ declare(strict_types=1);
 $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\Dependency\\ArchiveSafety' => 'src/Dependency/ArchiveSafety.php',
 	'RAN\\WPReleaseUpdater\\V1\\Dependency\\FailureText'   => 'src/Dependency/FailureText.php',
+	'RAN\\WPReleaseUpdater\\V1\\Dependency\\TargetWorkingCopy' => 'src/Dependency/TargetWorkingCopy.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\CanonicalUpdateUri' => 'src/Contract/CanonicalUpdateUri.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\IdentityDescriptor' => 'src/Contract/IdentityDescriptor.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseVersion'  => 'src/Contract/ReleaseVersion.php',
@@ -120,7 +121,7 @@ return new class(
 			|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 			|| ! is_callable( array( $this->broker, 'protocol_version' ) )
 			|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-			|| 7 !== $this->broker->protocol_version()
+			|| 8 !== $this->broker->protocol_version()
 		) {
 			return false;
 		}
@@ -220,7 +221,7 @@ return new class(
 					|| ( $GLOBALS['ran_wp_release_updater_v1_broker'] ?? null ) !== $this->broker
 					|| ! is_callable( array( $this->broker, 'protocol_version' ) )
 					|| ! is_callable( array( $this->broker, 'diagnostics' ) )
-					|| 7 !== $this->broker->protocol_version()
+					|| 8 !== $this->broker->protocol_version()
 				) {
 					return false;
 				}
@@ -350,7 +351,7 @@ return new class(
 				return false;
 			}
 		}
-		return true;
+		return ( $first['allow_working_copy'] ?? false ) === ( $next['allow_working_copy'] ?? false );
 	}
 	private function deferred_handle(): object {
 		return new class() {

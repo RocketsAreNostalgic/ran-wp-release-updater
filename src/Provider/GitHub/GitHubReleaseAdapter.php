@@ -104,6 +104,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		$native_headers['PluginURI'] = $native_headers['PackageURI'];
 		unset( $native_headers['PackageURI'], $native_headers['Template'] );
 		$configuration  = array(
+			'installed_directory'        => dirname( $declaration['installed_file'] ),
 			'headers'                    => $native_headers,
 			'installed_package_identity' => $identity,
 			'policy'                     => $declaration['update_policy'],
@@ -141,6 +142,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				$declaration['native_mutation_begin'],
 				$declaration['native_mutation_complete'],
 				$declaration['descriptor_admission'],
+				$declaration['allow_working_copy'] ?? false,
 			),
 			'code'   => 'target_composition_failed',
 		);
@@ -162,14 +164,15 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		?callable $operation_guard = null,
 		?callable $native_mutation_begin = null,
 		?callable $native_mutation_complete = null,
-		?callable $descriptor_admission = null
+		?callable $descriptor_admission = null,
+		bool $allow_working_copy = false
 	): ?NativePackageUpdater {
 		try {
 			$adapter = new self( $binding, $credentials, $operation_guard, null === $selected_runtime_state ? null : static fn(): ?string => $selected_runtime_state->liveness_code() );
 		} catch ( InvalidArgumentException ) {
 			return null;
 		}
-		$updater = NativePackageUpdater::from_configuration( $configuration, $binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse, operation_guard: $operation_guard, native_mutation_begin: $native_mutation_begin, native_mutation_complete: $native_mutation_complete, descriptor_admission: $descriptor_admission );
+		$updater = NativePackageUpdater::from_configuration( $configuration, $binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse, operation_guard: $operation_guard, native_mutation_begin: $native_mutation_begin, native_mutation_complete: $native_mutation_complete, descriptor_admission: $descriptor_admission, allow_working_copy: $allow_working_copy );
 		if ( $updater instanceof NativePackageUpdater ) {
 			$updater->register();
 		}

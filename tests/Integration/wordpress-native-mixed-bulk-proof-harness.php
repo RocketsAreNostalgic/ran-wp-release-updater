@@ -31,7 +31,7 @@ $ran_wp_release_updater_test_runtime_manifest = json_decode( (string) file_get_c
 $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(
 	array(
 		'php_version'       => PHP_VERSION,
-		'runtime_protocol'  => 7,
+		'runtime_protocol'  => 8,
 		'wordpress_version' => $GLOBALS['wp_version'],
 	)
 );
@@ -409,6 +409,7 @@ function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, stri
 	);
 	$updater             = NativePackageUpdater::from_configuration(
 		array(
+			'installed_directory'        => ( 'plugin' === $type ? WP_PLUGIN_DIR : get_theme_root( $slug ) ) . '/' . $slug,
 			'headers'                    => $headers,
 			'installed_package_identity' => $identity,
 			'policy'                     => 'manual',

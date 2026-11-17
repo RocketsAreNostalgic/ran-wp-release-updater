@@ -6,7 +6,7 @@ declare(strict_types=1);
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $root = dirname( __DIR__ );
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-$classes = array( 'ArchiveSafety', 'FailureText' );
+$classes = array( 'ArchiveSafety', 'FailureText', 'TargetWorkingCopy' );
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $check = array_slice( $argv ?? array(), 1 ) === array( '--check' );
 if ( ! $check && 0 !== count( array_slice( $argv ?? array(), 1 ) ) ) {

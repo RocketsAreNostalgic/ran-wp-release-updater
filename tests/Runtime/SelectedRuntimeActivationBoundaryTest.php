@@ -38,7 +38,7 @@ echo json_encode(array('protocol' => $broker->protocol_version(), 'state' => $re
 PHP
 		);
 
-		self::assertSame( 7, $result['protocol'] );
+		self::assertSame( 8, $result['protocol'] );
 		self::assertSame( 'active', $result['state'] );
 		self::assertSame( 1, $result['candidates'] );
 	}
@@ -300,7 +300,7 @@ PHP,
 		self::assertSame( 'active', $result['broker_state'] );
 	}
 
-	public function test_guard_only_public_registration_fails_closed_when_beta15_is_selected(): void {
+	public function test_actual_beta15_runtime_refuses_the_current_generation_in_both_load_orders(): void {
 		$new = $this->package_copy( 'guard-new', '1.0.0-beta.14' );
 		$old = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/guard-beta15-' . bin2hex( random_bytes( 6 ) );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create a private extracted-runtime fixture root.
@@ -311,19 +311,28 @@ PHP,
 		$plugin = $old . '/example/example.php';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write the exact installed-plugin fixture header.
 		file_put_contents( $plugin, "<?php\n/*\nPlugin Name: Example\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n*/\n" );
-		$result  = $this->probe(
-			<<<'PHP'
-define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); $r=require $data['new'].'/bootstrap.php'; require $data['old'].'/bootstrap.php'; $r=$r->with_operation_guard(static fn()=>true); $queued=$r->plugin('github',$data['plugin'],'acme/example','123'); $queuedResult=$queued->register(); $broker=$GLOBALS['ran_wp_release_updater_v1_broker']; $activation=$broker->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>7,'wordpress_version'=>'6.8.0']); $immediate=$r->plugin('github',$data['plugin'],'acme/example','123'); $immediateResult=$immediate->register(); echo json_encode(['queued_result'=>$queuedResult,'queued'=>$queued->status(),'activation'=>$activation,'immediate_result'=>$immediateResult,'immediate'=>$immediate->status(),'selected'=>(new ReflectionClass(RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::class))->getFileName()]);
+		foreach ( array( array( $old, $new ), array( $new, $old ) ) as $order ) {
+			$result = $this->probe(
+				<<<'PHP'
+define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); require $data['first'].'/bootstrap.php'; $broker=$GLOBALS['ran_wp_release_updater_v1_broker']; $r=require $data['second'].'/bootstrap.php'; $h=$r->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $activation=$broker->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>8,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status(),'activation'=>$activation,'first'=>$broker->diagnostics(),'second'=>$r->diagnostics(),'runtime_loaded'=>class_exists(RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::class,false)]);
 PHP,
-			array(
-				'new'    => $new,
-				'old'    => $old,
-				'plugin' => $plugin,
-			)
-		);
+				array(
+					'first'  => $order[0],
+					'second' => $order[1],
+					'old'    => $old,
+					'plugin' => $plugin,
+				)
+			);
+			self::assertFalse( $result['registered'] );
+			self::assertFalse( $result['activation']['loaded'] );
+			self::assertSame( 'conflict', $result['first']['state'] );
+			self::assertSame( 'conflict', $result['second']['state'] );
+			self::assertSame( 'protocol_conflict_inactive', $result['status']['code'] );
+			self::assertFalse( $result['runtime_loaded'] );
+		}
 		$control = $this->probe(
 			<<<'PHP'
-define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); $r=require $data['new'].'/bootstrap.php'; $h=$r->with_operation_guard(static fn()=>true)->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>7,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status()]);
+define('WP_PLUGIN_DIR',$data['old']); $GLOBALS['wpdb']=new stdClass(); $r=require $data['new'].'/bootstrap.php'; $h=$r->with_operation_guard(static fn()=>true)->plugin('github',$data['plugin'],'acme/example','123'); $registered=$h->register(); $GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>8,'wordpress_version'=>'6.8.0']); echo json_encode(['registered'=>$registered,'status'=>$h->status()]);
 PHP,
 			array(
 				'new'    => $new,
@@ -333,13 +342,6 @@ PHP,
 		);
 		self::assertTrue( $control['registered'] );
 		self::assertSame( 'target_active', $control['status']['code'] );
-		self::assertSame( $old . '/src/Contract/CanonicalUpdateUri.php', $result['selected'] );
-		self::assertSame( 'target_composition_failed', $result['queued']['code'] );
-		self::assertSame( 'target_composition_failed', $result['immediate']['code'] );
-		self::assertTrue( $result['queued_result'] );
-		self::assertSame( 'inactive', $result['queued']['state'] );
-		self::assertFalse( $result['immediate_result'] );
-		self::assertSame( 'inactive', $result['immediate']['state'] );
 	}
 
 	public function test_incompatible_existing_broker_is_untouched_and_returns_an_inactive_conflict_registrar(): void {
@@ -355,7 +357,7 @@ PHP
 		);
 
 		self::assertTrue( $result['unchanged'] );
-		self::assertSame( 7, $result['protocol'] );
+		self::assertSame( 8, $result['protocol'] );
 		self::assertSame( 'conflict', $result['state'] );
 		self::assertSame( 'protocol_conflict_inactive', $result['code'] );
 		self::assertSame( array( array( 'code' => 'protocol_conflict_inactive' ) ), $result['diagnostics'] );
@@ -570,7 +572,7 @@ PHP
 					'package_version'  => $version,
 					'php_floor'        => '8.2.0',
 					'runtime_file'     => 'runtime.php',
-					'runtime_protocol' => 7,
+					'runtime_protocol' => 8,
 					'wordpress_floor'  => '6.5.0',
 				),
 				JSON_THROW_ON_ERROR

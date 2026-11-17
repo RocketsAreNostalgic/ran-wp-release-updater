@@ -87,6 +87,7 @@ final class RequestProtocolValidator {
 		'runtime_liveness_lost',
 		'runtime_package_identity_invalid',
 		'staged_package_identity_invalid',
+		'target_is_working_copy',
 		'unverified_install_result',
 		'unverified_pre_download',
 		'unverified_pre_download_result',
@@ -248,6 +249,12 @@ final class RequestProtocolValidator {
 			'native_mutation_complete',
 			'descriptor_admission',
 		);
+		if ( array_key_exists( 'allow_working_copy', $value ) ) {
+			if ( true !== $value['allow_working_copy'] ) {
+				return 'declaration_invalid';
+			}
+			$keys[] = 'allow_working_copy';
+		}
 		if (
 			! self::exact_keys( $value, $keys )
 			|| ! in_array( $value['target_type'], array( 'plugin', 'theme' ), true )
