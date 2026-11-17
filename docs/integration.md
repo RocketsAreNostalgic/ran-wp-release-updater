@@ -568,3 +568,46 @@ Prospective inspection already exposes path-free `artifact_identity`,
 `artifact_sha256`, `artifact_size` and `commit_identity`. They describe the freshly
 verified candidate; inspection is not installation authority and exact install
 must freshly reacquire and revalidate it.
+
+
+### Skipped-release reports
+
+A successful public release listing has a sixth field, `diagnostics`, alongside
+`candidates`, `conditional`, `not_modified`, `rate_limit`, and `search_exhausted`.
+It is null when no fresh observation is available (including 304), otherwise:
+
+```text
+{ scanned_count: 0..40, dropped_count: 0..40,
+  drops: [{ release_identity: string|null, tag: string|null, reason: string }],
+  truncated: boolean }
+```
+
+Counts cover records examined and existing listing-rule rejections in the current
+scan. At most eight drops are sampled, in scan order; `truncated` means further
+drops were counted. Duplicates and valid candidates beyond the return cap are not
+drops. `search_exhausted` still describes the bounded release search, independently
+of sample truncation. No extra requests, eligibility changes or stored history are
+introduced. An unexpected oversized provider response yields no diagnostics if its
+observed count cannot fit this bound; its existing candidate handling is unchanged.
+
+Reasons are `release_metadata_invalid`, `release_immutable_invalid`,
+`release_publication_invalid`, `release_page_invalid`, `release_draft`,
+`tag_not_version`, and `prerelease_not_allowed`. Boolean false for immutable remains
+accepted. A missing ZIP or digest remains an inspection failure, not a listing drop.
+Only validated positive numeric GitHub release identities are included. A tag is
+unchanged original context only when the whole value passes `FailureText::strict`
+and fits 120 bytes, with shape `[A-Za-z0-9][A-Za-z0-9._+-]*`; otherwise null.
+The foreign-code `identifier()` rule is unsuitable for numeric-leading tags,
+upper case, `+`, and the 120-byte tag bound. The strict credential screen is retained;
+nothing is truncated, rewritten or redacted. Consumers must escape display context.
+
+`ran_wp_release_updater_check_completed_v2` receives the unchanged v1 completion
+fields plus `search_exhausted` (bool|null), `listing_diagnostics` (the report above
+or null), and `candidate_rejections` (at most eight samples of the same three-key
+shape). It follows v1 and uses the same check ID; there is no second start event.
+Known inspection/acquisition rejection reasons survive an older successful offer.
+Unknown causes do not acquire invented reasons; messages, details, URLs and digests
+are withheld. A new actual check clears previous request-local reports. V1's keys,
+reasons and values remain unchanged. This slice adds no transport, offer or admission
+diagnostics. Incompatible runtime generations fail closed in either load order;
+consumer adoption and publication remain separate owner decisions.

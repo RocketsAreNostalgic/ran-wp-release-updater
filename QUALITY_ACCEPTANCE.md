@@ -687,3 +687,14 @@ comparison and corresponding assertions preserve that protocol identity; prose
 continues to spell WordPress normally. The retained record uses the existing
 closed native failure vocabulary and screened foreign codes, not a second code
 catalogue. Runtime protocol 9 and binding-state schema 2 are separate boundaries.
+
+
+## Skipped-release report boundary
+
+Protocol 10 adds the bounded listing `diagnostics` field; a protocol-9 public
+source requires its former exact five-key listing, so both physical load orders
+fail closed. An immutable fixture preserves the merged, unreleased protocol-9
+bytes. Listing reasons classify existing refusals without changing eligibility.
+The shared strict whole-value screen also protects unchanged sampled tag context;
+no message catalogue or persistent history is added. Native completed-v2 reports
+retain known inspection/acquisition rejections while completed-v1 stays unchanged.

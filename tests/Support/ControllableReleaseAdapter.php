@@ -14,9 +14,9 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 	public array $acquired_paths = array();
 	/** @var array<string,mixed>|null */
 	public ?array $list_response = null;
-	/** @var array<string,IdentityDescriptor|\Throwable> */
+	/** @var array<int|string,IdentityDescriptor|\Throwable> */
 	public array $inspect_outcomes = array();
-	/** @var array<string,TemporaryArtifact|\Throwable> */
+	/** @var array<int|string,TemporaryArtifact|\Throwable> */
 	public array $acquire_outcomes = array();
 	public IdentityDescriptor $inspect_descriptor;
 	public function __construct(

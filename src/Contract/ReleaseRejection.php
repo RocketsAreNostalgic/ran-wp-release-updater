@@ -7,14 +7,15 @@ namespace RAN\WPReleaseUpdater\V1\Contract;
 use RAN\WPReleaseUpdater\V1\Dependency\FailureText;
 
 /**
- * Closed, stable reasons a prospective inspection rejects a published release.
+ * Closed release rejection reasons and bounded public listing observations.
  *
- * The value is true when the reason may carry one short `detail` string.
+ * In REASONS, the value is true when an inspection reason may carry one short `detail` string.
  */
 final class ReleaseRejection {
 
-	public const MAX_DETAIL = 120;
-	public const REASONS    = array(
+	private const LISTING_REASONS = array( 'release_metadata_invalid', 'release_immutable_invalid', 'release_publication_invalid', 'release_page_invalid', 'release_draft', 'tag_not_version', 'prerelease_not_allowed' );
+	public const MAX_DETAIL       = 120;
+	public const REASONS          = array(
 		'release_draft'              => false,
 		'tag_not_version'            => true,
 		'tag_mismatch'               => true,
@@ -45,6 +46,43 @@ final class ReleaseRejection {
 		'header_requires_php_unmet'  => true,
 		'header_requires_wp_unmet'   => true,
 	);
+
+	/** @return array{release_identity:?string,tag:?string,reason:string} */
+	public static function sample( mixed $identity, mixed $tag, string $reason ): array {
+		return array(
+			'release_identity' => is_string( $identity ) && 1 === preg_match( '/\A[1-9][0-9]{0,18}\z/D', $identity ) ? $identity : null,
+			'tag'              => self::screen_tag( $tag ),
+			'reason'           => $reason,
+		);
+	}
+
+	/** Tags may start with a digit and contain upper case or SemVer punctuation; identifier() cannot admit those. */
+	public static function screen_tag( mixed $tag ): ?string {
+		return is_string( $tag ) && 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._+-]{0,119}\z/D', $tag )
+			&& FailureText::strict( $tag, 120 ) === $tag ? $tag : null;
+	}
+
+	/** Validates the bounded, message-free listing report at the public wire boundary. */
+	public static function valid_diagnostics( mixed $value ): bool {
+		if ( null === $value ) {
+			return true;
+		}
+		if ( ! is_array( $value ) || 4 !== count( $value ) || ! is_int( $value['scanned_count'] ?? null )
+			|| ! is_int( $value['dropped_count'] ?? null ) || ! is_array( $value['drops'] ?? null ) || ! is_bool( $value['truncated'] ?? null )
+			|| $value['scanned_count'] < 0 || $value['scanned_count'] > 40 || $value['dropped_count'] < 0 || $value['dropped_count'] > $value['scanned_count']
+			|| ! array_is_list( $value['drops'] ) || count( $value['drops'] ) !== min( 8, $value['dropped_count'] )
+			|| ( $value['dropped_count'] > 8 ) !== $value['truncated'] ) {
+			return false;
+		}
+		foreach ( $value['drops'] as $drop ) {
+			if ( ! is_array( $drop ) || 3 !== count( $drop ) || ! array_key_exists( 'release_identity', $drop ) || ! array_key_exists( 'tag', $drop )
+				|| ! is_string( $drop['reason'] ?? null ) || ! in_array( $drop['reason'], self::LISTING_REASONS, true )
+				|| self::sample( $drop['release_identity'], $drop['tag'], $drop['reason'] ) !== $drop ) {
+				return false;
+			}
+		}
+		return true;
+	}
 
 	public static function valid( string $reason ): bool {
 		return array_key_exists( $reason, self::REASONS );

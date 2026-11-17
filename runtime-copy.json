@@ -1,8 +1,8 @@
 {
-  "package_revision": "00366d5688cae53ecb7cbfca296cd99b1b1a121fd1bcdecf4035da14c3413452",
+  "package_revision": "61689a262626989223475f4826b7fc3a299157a07012dd4b0ad97f5f0e4060bd",
   "package_version": "1.0.0-beta.20",
   "php_floor": "8.2.0",
   "runtime_file": "runtime.php",
-  "runtime_protocol": 9,
+  "runtime_protocol": 10,
   "wordpress_floor": "6.5.0"
 }

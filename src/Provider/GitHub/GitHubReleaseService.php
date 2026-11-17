@@ -11,6 +11,7 @@ use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
+use RAN\WPReleaseUpdater\V1\Contract\ReleaseRejection;
 use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 
@@ -32,6 +33,7 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
  *   conditional:array{etag:?string,last_modified:?string},
  *   not_modified:bool,
  *   rate_limit:array{limited:bool,remaining:?int,reset_at:?int,retry_after:int},
+ *   diagnostics:array{scanned_count:int,dropped_count:int,drops:list<array{release_identity:?string,tag:?string,reason:string}>,truncated:bool}|null,
  *   search_exhausted:bool
  * }
  */
@@ -215,6 +217,12 @@ final class GitHubReleaseService {
 			$seen             = array();
 			$response_bytes   = 0;
 			$search_exhausted = false;
+			$diagnostics      = array(
+				'scanned_count' => 0,
+				'dropped_count' => 0,
+				'drops'         => array(),
+				'truncated'     => false,
+			);
 			$next_conditional = array(
 				'etag'          => null,
 				'last_modified' => null,
@@ -265,7 +273,17 @@ final class GitHubReleaseService {
 
 				$decoded = self::decode_list( $body );
 				foreach ( $decoded as $release ) {
-					$candidate = $this->listed_release( $release );
+					++$diagnostics['scanned_count'];
+					$reason    = '';
+					$candidate = $this->listed_release( $release, $reason );
+					if ( null === $candidate ) {
+						++$diagnostics['dropped_count'];
+						if ( count( $diagnostics['drops'] ) < self::MAX_CANDIDATES ) {
+							$diagnostics['drops'][] = ReleaseRejection::sample( self::provider_identity( $release['id'] ?? null ), $release['tag_name'] ?? null, $reason );
+						} else {
+							$diagnostics['truncated'] = true;
+						}
+					}
 					if (
 					null !== $candidate
 					&& ! isset( $seen[ $candidate['release_identity'] ] )
@@ -306,7 +324,8 @@ final class GitHubReleaseService {
 				$next_conditional,
 				false,
 				$rate_limit,
-				$search_exhausted
+				$search_exhausted,
+				$diagnostics['scanned_count'] <= 40 ? $diagnostics : null
 			);
 		} catch ( ReleaseFailure $failure ) {
 			throw $failure; } catch ( \Throwable $exception ) {
@@ -675,36 +694,35 @@ final class GitHubReleaseService {
 	}
 
 	/** @return ListedRelease|null */
-	private function listed_release( mixed $release ): ?array {
-		if (
-			! is_array( $release )
-			|| ! is_bool( $release['draft'] ?? null )
-			|| ! is_bool( $release['prerelease'] ?? null )
-			|| ! is_bool( $release['immutable'] ?? null )
-			|| $release['draft']
-			|| ! is_string( $release['tag_name'] ?? null )
-			|| ! is_string( $release['published_at'] ?? null )
-		) {
+	private function listed_release( mixed $release, string &$reason = '' ): ?array {
+		$reason = 'release_metadata_invalid';
+		if ( ! is_array( $release ) || ! is_bool( $release['draft'] ?? null ) || ! is_bool( $release['prerelease'] ?? null )
+			|| ! is_string( $release['tag_name'] ?? null ) ) {
 			return null;
 		}
-
+		if ( ! is_bool( $release['immutable'] ?? null ) ) {
+			$reason = 'release_immutable_invalid';
+			return null;
+		}
+		if ( $release['draft'] ) {
+			$reason = 'release_draft';
+			return null;
+		}
 		$release_identity = self::provider_identity( $release['id'] ?? null );
-		$version          = self::version_from_tag( $release['tag_name'] );
-		$prerelease       = $release['prerelease']
-			|| ( is_string( $version ) && ReleaseVersion::is_prerelease( $version ) );
-		if (
-			null === $release_identity
-			|| null === $version
-			|| ( 'stable' === $this->binding['release_channel'] && $prerelease )
-			|| 1 !== preg_match(
-				'/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\z/D',
-				$release['published_at']
-			)
-			|| ! self::valid_release_page(
-				$release['html_url'] ?? null,
-				$this->binding['canonical_repository_locator']
-			)
-		) {
+		if ( null === $release_identity || ! is_string( $release['published_at'] ?? null ) ) {
+			return null;
+		}
+		$version                  = self::version_from_tag( $release['tag_name'] );
+		$prerelease               = $release['prerelease'] || ( is_string( $version ) && ReleaseVersion::is_prerelease( $version ) );
+		$publication_format_valid = 1 === preg_match( '/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\z/D', $release['published_at'] );
+		$reason                   = match ( true ) {
+			null === $version => 'tag_not_version',
+			'stable' === $this->binding['release_channel'] && $prerelease => 'prerelease_not_allowed',
+			! $publication_format_valid => 'release_publication_invalid',
+			! self::valid_release_page( $release['html_url'] ?? null, $this->binding['canonical_repository_locator'] ) => 'release_page_invalid',
+			default => '',
+		};
+		if ( '' !== $reason ) {
 			return null;
 		}
 
@@ -1003,6 +1021,7 @@ final class GitHubReleaseService {
 	 * @param list<ListedRelease> $candidates
 	 * @param array{etag:?string,last_modified:?string} $conditional
 	 * @param array{limited:bool,remaining:?int,reset_at:?int,retry_after:int} $rate_limit
+	 * @param array{scanned_count:int,dropped_count:int,drops:list<array{release_identity:?string,tag:?string,reason:string}>,truncated:bool}|null $diagnostics
 	 * @return ReleaseListing
 	 */
 	private static function listing_result(
@@ -1010,11 +1029,13 @@ final class GitHubReleaseService {
 		array $conditional,
 		bool $not_modified,
 		array $rate_limit,
-		bool $search_exhausted
+		bool $search_exhausted,
+		?array $diagnostics = null
 	): array {
 		return array(
 			'candidates'       => $candidates,
 			'conditional'      => $conditional,
+			'diagnostics'      => $diagnostics,
 			'not_modified'     => $not_modified,
 			'rate_limit'       => $rate_limit,
 			'search_exhausted' => $search_exhausted,

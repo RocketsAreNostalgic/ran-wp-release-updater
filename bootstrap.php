@@ -47,7 +47,7 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['package_version'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['php_floor'] )
 			|| 'runtime.php' !== $copy['runtime_file']
-			|| ! in_array( $copy['runtime_protocol'], array( 5, 6, 7, 8, 9 ), true )
+			|| ! in_array( $copy['runtime_protocol'], array( 5, 6, 7, 8, 9, 10 ), true )
 			|| ! is_string( $copy['wordpress_floor'] )
 			|| ! $ran_wp_release_updater_valid_runtime_version( $copy['wordpress_floor'] )
 		) {
@@ -232,7 +232,7 @@ $ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_br
 	&& is_callable( array( $ran_wp_release_updater_broker, 'diagnostics' ) );
 if ( $ran_wp_release_updater_broker_compatible ) {
 	try {
-		$ran_wp_release_updater_broker_compatible = 9 === $ran_wp_release_updater_broker->protocol_version();
+		$ran_wp_release_updater_broker_compatible = 10 === $ran_wp_release_updater_broker->protocol_version();
 	} catch ( Throwable ) {
 		$ran_wp_release_updater_broker_compatible = false;
 	}
@@ -255,7 +255,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		private array $diagnostics = array( array( 'code' => 'protocol_conflict_inactive' ) );
 
 		public function protocol_version(): int {
-			return 9;
+			return 10;
 		}
 
 		public function register_candidate( string $copy_file ): bool {
@@ -280,7 +280,7 @@ if ( ! $ran_wp_release_updater_broker_compatible ) {
 		/** @return array<string,mixed> */
 		public function diagnostics(): array {
 			return array(
-				'protocol_version'     => 9,
+				'protocol_version'     => 10,
 				'state'                => 'conflict',
 				'activation_attempted' => false,
 				'candidate_count'      => 0,
@@ -595,9 +595,11 @@ return new class( $ran_wp_release_updater_broker ) {
 			}
 
 			private function valid_listing( mixed $value ): bool {
-				if ( ! $this->keys( $value, array( 'candidates', 'conditional', 'not_modified', 'rate_limit', 'search_exhausted' ) )
+				if ( ! $this->keys( $value, array( 'candidates', 'conditional', 'diagnostics', 'not_modified', 'rate_limit', 'search_exhausted' ) )
 					|| ! is_array( $value['candidates'] ) || ! array_is_list( $value['candidates'] ) || count( $value['candidates'] ) > 8
 					|| ! is_bool( $value['not_modified'] ) || ! is_bool( $value['search_exhausted'] )
+					|| ! \RAN\WPReleaseUpdater\V1\Contract\ReleaseRejection::valid_diagnostics( $value['diagnostics'] )
+					|| ( $value['not_modified'] && null !== $value['diagnostics'] )
 					|| ( $value['not_modified'] && array() !== $value['candidates'] )
 					|| ! $this->keys( $value['conditional'], array( 'etag', 'last_modified' ) )
 					|| ! $this->keys( $value['rate_limit'], array( 'limited', 'remaining', 'reset_at', 'retry_after' ) ) ) {
