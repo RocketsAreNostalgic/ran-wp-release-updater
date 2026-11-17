@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.20](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.19...v1.0.0-beta.20) (2026-11-17)
+
+
+### Features
+
+* **native:** refuse to overwrite a version-control working copy ([#185](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/185)) ([cd70732](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/cd707321facc7b40b0289b87f06e41a795a178c1))
+
 ## [1.0.0-beta.19](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.18...v1.0.0-beta.19) (2026-11-13)
 
 
