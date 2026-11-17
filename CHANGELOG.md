@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.0-beta.21](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.20...v1.0.0-beta.21) (2026-11-17)
+
+
+### Features
+
+* **archive:** adopt shared package folder names ([#191](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/191)) ([25191f2](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/25191f262200b54325711348162f16a500060d23))
+* **native:** retain the last update outcome per package ([#187](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/187)) ([e5371fd](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/e5371fdf66f5a3410cfe2d4a92c965eb5b7cf615))
+* **releases:** report skipped release candidates ([#190](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/190)) ([c807f20](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/c807f202a2962d0ed177cff064fa38bd7b6e3ec6))
+
 ## [1.0.0-beta.20](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.19...v1.0.0-beta.20) (2026-11-17)
 
 
