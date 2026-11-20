@@ -702,7 +702,7 @@ retain known inspection/acquisition rejections while completed-v1 stays unchange
 
 ## Shared package directory boundary
 
-The exact released updater-support beta.9 supplies PackageDirectory and its two
+The exact released updater-support beta.10 supplies PackageDirectory and its two
 repository-path dependencies, vendored with namespace-only parity. All six
 shipped dependency copies are directly analysed; ArchiveSafety alone retains its
 existing PHPCS exclusion. The new copies need no checker exclusions or annotations.
