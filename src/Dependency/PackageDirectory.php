@@ -82,6 +82,27 @@ final class PackageDirectory {
 		return strtolower( self::installation_slug( $provider_slug, $subdirectory ) );
 	}
 
+	/**
+	 * Identity: the installed folder is the source-derived name exactly, or its lower-case new-install form.
+	 * The installed folder's case is authoritative and never folded; admission remains is_valid_name().
+	 */
+	public static function installed_folder_matches( string $installed_folder, string $source_name ): bool {
+		return $installed_folder === $source_name || strtolower( $source_name ) === $installed_folder;
+	}
+
+	/**
+	 * Case-insensitive filesystem key: ASCII A-Z folded to a-z, every other byte unchanged.
+	 * Bind it against LOWER(column) in SQL; see the README for that form's collation precondition.
+	 */
+	public static function collision_key( string $name ): string {
+		return strtolower( $name );
+	}
+
+	/** Lock, scope and collision checks: whether two names could be one folder on a case-insensitive filesystem. */
+	public static function names_collide( string $first, string $second ): bool {
+		return self::collision_key( $first ) === self::collision_key( $second );
+	}
+
 	private static function invalid(): InvalidArgumentException {
 		return new InvalidArgumentException( 'The package subdirectory must be a normalized relative path.' );
 	}

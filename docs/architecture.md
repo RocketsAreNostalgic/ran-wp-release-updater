@@ -109,6 +109,11 @@ During development/build, shared archive-safety primitives come from the Compose
 
 The branch updater can use `ran/updater-support` as an ordinary production dependency. This difference reflects their loading/trust models and is not dependency drift that should be normalized away.
 
+Folder-name comparison uses the shared `PackageDirectory` methods (`installed_folder_matches`, `collision_key`, `names_collide`) wherever this package compares folder names. It has no such comparison today, and these places stay exact or outside the folder rule on purpose:
+
+- The archive root against the installed folder is exact, because native staging writes to the staged directory's name. A differently-cased root would create a second folder instead of updating the installed one.
+- Archive entry paths are folded by the archive scanner, and filesystem paths by the installed-package resolver. The archive safety check and the filesystem own those rules, not the folder-name rule.
+
 Shared support is appropriate only for stable, non-trivial correctness/security rules whose semantics genuinely match across packages. Small conveniences or domain policy remain local.
 
 ## Relationship to the branch updater
