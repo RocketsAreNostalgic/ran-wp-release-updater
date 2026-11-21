@@ -2962,8 +2962,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		}
 		private const OFFER_FILTER = 'ran_wp_release_updater_offer_release_v1';
 		/** @return array<string,mixed> */
-		private function offer_release( NativePackageUpdater $updater, string $release_identity = 'release:2', string $tag = 'v2.0.0' ): array {
-			$report = $updater->filter_offer_release( null, 'plugin', 'package/package.php', $release_identity, $tag );
+		private function offer_release( NativePackageUpdater $updater, string $release_identity = 'release:2', string $tag = 'v2.0.0', mixed $older_intended = false ): array {
+			$report = $updater->filter_offer_release( null, 'plugin', 'package/package.php', $release_identity, $tag, $older_intended );
 			self::assertIsArray( $report );
 			return $report;
 		}
@@ -2986,7 +2986,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		public function test_offer_release_installs_an_authorised_equal_release_with_one_fresh_acquisition(): void {
 			list( $updater, $adapter ) = $this->subject( 'automatic', installed_version: '2.0.0' );
 			$updater->register();
-			self::assertContains( self::OFFER_FILTER, array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ) );
+			// WordPress passes the host's sixth argument, the older-release intent, only if it is registered.
+			self::assertSame( 6, array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 4, 1 )[ self::OFFER_FILTER ] ?? null );
 			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
 			self::assertSame(
 				array(
@@ -3069,6 +3070,58 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			list( $unauthorised, $adapter, , $descriptor, $binding ) = $this->subject( installed_version: '2.0.0' );
 			self::assertInstanceOf( \WP_Error::class, $unauthorised->filter_pre_download( false, $this->token( $descriptor, $binding ), null, $this->extra() ) );
 			self::assertSame( 0, $adapter->inspect_calls );
+		}
+		public function test_offer_release_authorises_an_older_release_only_when_the_host_intends_it(): void {
+			// Without the intent, or with anything but true, an older release is refused as before.
+			list( $updater, $adapter, , $descriptor, $binding ) = $this->subject( 'automatic', installed_version: '3.0.0' );
+			foreach ( array( false, 1, '1', 'true', null ) as $not_intended ) {
+				$report = $this->offer_release( $updater, older_intended: $not_intended );
+				$this->assert_refused( 'release_older', $report );
+				self::assertSame( array( '2.0.0', 'older' ), array( $report['version'], $report['relationship'] ) );
+				self::assertNull( $this->supplied( $updater ) );
+			}
+			// An unauthorised older token stays refused at download admission.
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_pre_download( false, $this->token( $descriptor, $binding ), null, $this->extra() ) );
+			// With it, the older release is authorised even on an automatic package, and reported as older.
+			self::assertSame(
+				array(
+					'status'       => 'authorized',
+					'code'         => 'release_authorized',
+					'version'      => '2.0.0',
+					'relationship' => 'older',
+				),
+				$this->offer_release( $updater, older_intended: true )
+			);
+			$entry = $this->supplied( $updater );
+			self::assertIsArray( $entry );
+			self::assertSame( array( '2.0.0', false ), array( $entry['new_version'], $entry['autoupdate'] ) );
+			// The automatic path never installs it.
+			self::assertFalse( $updater->filter_auto_update( true, (object) $entry ) );
+			$calls = $adapter->acquire_calls;
+			$this->complete( $updater, $entry['package'] );
+			self::assertSame( $calls + 1, $adapter->acquire_calls );
+			$outcome = $this->retained_outcome( $updater );
+			self::assertSame( array( 'verified_success', 'release:2', '2.0.0' ), array( $outcome['outcome'], $outcome['release_identity'], $outcome['version'] ) );
+			self::assertSame( array(), $updater->filter_store_update( (object) array( 'response' => array( 'package/package.php' => (object) $entry ) ) )->response );
+			// The intent changes nothing for the same or a newer release.
+			foreach ( array(
+				'2.0.0' => 'same',
+				'1.0.0' => 'newer',
+			) as $installed => $relationship ) {
+				foreach ( array( false, true ) as $intended ) {
+					list( $other ) = $this->subject( installed_version: $installed );
+					self::assertSame( array( 'authorized', 'release_authorized', '2.0.0', $relationship ), array_values( $this->offer_release( $other, older_intended: $intended ) ) );
+				}
+			}
+			// Disabled and forced off still refuse, intent or not.
+			foreach ( array(
+				'disabled'   => 'policy_disabled',
+				'forced-off' => 'policy_forced_off',
+			) as $mode => $code ) {
+				list( $blocked ) = $this->subject( $mode, installed_version: '3.0.0' );
+				$this->assert_refused( $code, $this->offer_release( $blocked, older_intended: true ) );
+				self::assertNull( $this->supplied( $blocked ) );
+			}
 		}
 		public function test_offer_release_answers_only_for_this_live_target(): void {
 			$live            = true;

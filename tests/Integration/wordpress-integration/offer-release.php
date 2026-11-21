@@ -1,8 +1,9 @@
 <?php
 /**
- * Installed proof for ran_wp_release_updater_offer_release_v1: an authorised same-version release
- * installs through WordPress's own upgrader on the active target, and the stored update check row
- * never carries the authorised offer, after success or after a failed install that WordPress restores.
+ * Installed proof for ran_wp_release_updater_offer_release_v1: an authorised same-version release,
+ * or an older release the host says is intended, installs through WordPress's own upgrader on the
+ * active target, and the stored update check row never carries the authorised offer, after success
+ * or after a failed install that WordPress restores.
  */
 
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
@@ -21,8 +22,9 @@ if ( ! is_file( $marker_file ) || is_link( $marker_file ) || "RAN_WP_RELEASE_UPD
 // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 $type = (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_TYPE' );
 // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
-$mode = (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_MODE' );
-if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! in_array( $mode, array( 'success', 'failure' ), true ) ) {
+$mode                                  = (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_MODE' );
+$ran_wp_release_updater_test_direction = (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_DIRECTION' );
+if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! in_array( $mode, array( 'success', 'failure' ), true ) || ! in_array( $ran_wp_release_updater_test_direction, array( 'same', 'older' ), true ) ) {
 	throw new RuntimeException( 'Invalid offer-release scenario.' );
 }
 require_once $source_root . '/bootstrap.php';
@@ -48,24 +50,26 @@ $ran_wp_release_updater_test_slug     = 'offer-target';
 $ran_wp_release_updater_test_uri      = 'https://offer-release.invalid/offer-target/repository';
 $ran_wp_release_updater_test_identity = 'plugin' === $type ? 'offer-target/offer-target.php' : 'offer-target';
 $ran_wp_release_updater_test_option   = 'plugin' === $type ? 'update_plugins' : 'update_themes';
-// The installed copy and the release are the same version with different bytes, as a branch build and its release.
-$ran_wp_release_updater_test_header    = "Version: 2.0.0\nUpdate URI: {$ran_wp_release_updater_test_uri}\nRequires PHP: 8.2\nRequires at least: 6.5\n*/\n";
-$ran_wp_release_updater_test_files     = 'plugin' === $type
-	? array( 'offer-target.php' => "<?php\n/*\nPlugin Name: Offer Target\n{$ran_wp_release_updater_test_header}" )
-	: array(
-		'style.css' => "/*\nTheme Name: Offer Target\n{$ran_wp_release_updater_test_header}",
-		'index.php' => "<?php\n",
-	);
+// The release is 2.0.0. The installed copy is 2.0.0 with different bytes (a branch build), or a newer 3.0.0.
+$ran_wp_release_updater_test_installed = 'older' === $ran_wp_release_updater_test_direction ? '3.0.0' : '2.0.0';
+$ran_wp_release_updater_test_bytes     = static function ( string $name, string $version ) use ( $ran_wp_release_updater_test_uri ): string {
+	$header = "Version: {$version}\nUpdate URI: {$ran_wp_release_updater_test_uri}\nRequires PHP: 8.2\nRequires at least: 6.5\n*/\n";
+	return match ( $name ) {
+		'offer-target.php' => "<?php\n/*\nPlugin Name: Offer Target\n{$header}",
+		'style.css'        => "/*\nTheme Name: Offer Target\n{$header}",
+		default            => "<?php\n",
+	};
+};
 $ran_wp_release_updater_test_directory = ( 'plugin' === $type ? WP_PLUGIN_DIR : get_theme_root() ) . '/offer-target';
 $ran_wp_release_updater_test_archive   = WP_CONTENT_DIR . '/uploads/offer-target-2.0.0.zip';
 $ran_wp_release_updater_test_zip       = new ZipArchive();
 if ( ! wp_mkdir_p( $ran_wp_release_updater_test_directory ) || true !== $ran_wp_release_updater_test_zip->open( $ran_wp_release_updater_test_archive, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
 	throw new RuntimeException( 'The offer-release fixture could not be created.' );
 }
-foreach ( $ran_wp_release_updater_test_files as $ran_wp_release_updater_test_name => $ran_wp_release_updater_test_bytes ) {
+foreach ( 'plugin' === $type ? array( 'offer-target.php' ) : array( 'style.css', 'index.php' ) as $ran_wp_release_updater_test_name ) {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
-	file_put_contents( $ran_wp_release_updater_test_directory . '/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes . "// branch build\n" );
-	$ran_wp_release_updater_test_zip->addFromString( 'offer-target/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes . "// release\n" );
+	file_put_contents( $ran_wp_release_updater_test_directory . '/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes( $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_installed ) . "// installed\n" );
+	$ran_wp_release_updater_test_zip->addFromString( 'offer-target/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes( $ran_wp_release_updater_test_name, '2.0.0' ) . "// release\n" );
 }
 $ran_wp_release_updater_test_zip->close();
 if ( 'plugin' === $type ) {
@@ -116,7 +120,7 @@ $ran_wp_release_updater_test_updater    = NativePackageUpdater::from_configurati
 			'RequiresPHP' => '8.2',
 			'RequiresWP'  => '6.5',
 			'UpdateURI'   => $ran_wp_release_updater_test_uri,
-			'Version'     => '2.0.0',
+			'Version'     => $ran_wp_release_updater_test_installed,
 		),
 		'installed_package_identity' => $ran_wp_release_updater_test_identity,
 		'policy'                     => 'manual',
@@ -183,11 +187,16 @@ set_site_transient(
 	$ran_wp_release_updater_test_option,
 	(object) array(
 		'last_checked' => time(),
-		'checked'      => array( $ran_wp_release_updater_test_identity => '2.0.0' ),
+		'checked'      => array( $ran_wp_release_updater_test_identity => $ran_wp_release_updater_test_installed ),
 		'response'     => array(),
 	)
 );
-$ran_wp_release_updater_test_report = apply_filters( 'ran_wp_release_updater_offer_release_v1', null, $type, $ran_wp_release_updater_test_identity, 'release-offer-' . $type, 'v2.0.0' );
+// Without the host's intent an older release is refused and nothing is supplied; the intent changes nothing for the same version.
+$ran_wp_release_updater_test_unintended = apply_filters( 'ran_wp_release_updater_offer_release_v1', null, $type, $ran_wp_release_updater_test_identity, 'release-offer-' . $type, 'v2.0.0' );
+$ran_wp_release_updater_test_unheld     = null === ( get_site_transient( $ran_wp_release_updater_test_option )->response[ $ran_wp_release_updater_test_identity ] ?? null );
+$ran_wp_release_updater_test_report     = apply_filters( 'ran_wp_release_updater_offer_release_v1', null, $type, $ran_wp_release_updater_test_identity, 'release-offer-' . $type, 'v2.0.0', true );
+// Each answered call inspects; each authorisation also validates one acquisition. The install then downloads once more.
+$ran_wp_release_updater_test_calls = array( $ran_wp_release_updater_test_adapter->list_calls, $ran_wp_release_updater_test_adapter->inspect_calls, $ran_wp_release_updater_test_adapter->acquire_calls );
 // While held, a read carries the offer and a save of that same read never stores it.
 $ran_wp_release_updater_test_read  = get_site_transient( $ran_wp_release_updater_test_option );
 $ran_wp_release_updater_test_entry = $ran_wp_release_updater_test_read->response[ $ran_wp_release_updater_test_identity ] ?? null;
@@ -216,7 +225,7 @@ set_site_transient( $ran_wp_release_updater_test_option, get_site_transient( $ra
 // Registered after the upgrade so it runs after WordPress's restore (10), backup deletion (100) and the updater's finalization.
 add_action(
 	'shutdown',
-	static function () use ( $type, $mode, $ran_wp_release_updater_test_report, $ran_wp_release_updater_test_held, $ran_wp_release_updater_test_result, $ran_wp_release_updater_test_option, $ran_wp_release_updater_test_path, $ran_wp_release_updater_test_before, $ran_wp_release_updater_test_archive, $ran_wp_release_updater_test_adapter, $ran_wp_release_updater_test_updater, $ran_wp_release_updater_test_identity, $source_root ): void {
+	static function () use ( $type, $mode, $ran_wp_release_updater_test_direction, $ran_wp_release_updater_test_installed, $ran_wp_release_updater_test_unintended, $ran_wp_release_updater_test_unheld, $ran_wp_release_updater_test_calls, $ran_wp_release_updater_test_report, $ran_wp_release_updater_test_held, $ran_wp_release_updater_test_result, $ran_wp_release_updater_test_option, $ran_wp_release_updater_test_path, $ran_wp_release_updater_test_before, $ran_wp_release_updater_test_archive, $ran_wp_release_updater_test_adapter, $ran_wp_release_updater_test_updater, $ran_wp_release_updater_test_identity, $source_root ): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture.
 		$after = (string) file_get_contents( $ran_wp_release_updater_test_path );
 		$zip   = new ZipArchive();
@@ -228,16 +237,21 @@ add_action(
 		$raw      = ran_wp_release_updater_test_offer_raw_row( $ran_wp_release_updater_test_option );
 		$active   = 'plugin' === $type ? is_plugin_active( $ran_wp_release_updater_test_identity ) : get_stylesheet() === $ran_wp_release_updater_test_identity;
 		$success  = 'success' === $mode;
+		$older    = 'older' === $ran_wp_release_updater_test_direction;
+		$header   = get_file_data( 'plugin' === $type ? $ran_wp_release_updater_test_path : dirname( $ran_wp_release_updater_test_path ) . '/style.css', array( 'Version' => 'Version' ) )['Version'];
 		$checks   = array(
-			'authorized_same'    => is_array( $ran_wp_release_updater_test_report ) && 'authorized' === $ran_wp_release_updater_test_report['status'] && 'same' === $ran_wp_release_updater_test_report['relationship'],
+			'unintended'         => is_array( $ran_wp_release_updater_test_unintended ) && ( $older ? array( 'refused', 'release_older' ) : array( 'authorized', 'release_authorized' ) ) === array( $ran_wp_release_updater_test_unintended['status'], $ran_wp_release_updater_test_unintended['code'] ) && ( ! $older || $ran_wp_release_updater_test_unheld ),
+			'authorized'         => is_array( $ran_wp_release_updater_test_report ) && 'authorized' === $ran_wp_release_updater_test_report['status'] && $ran_wp_release_updater_test_direction === $ran_wp_release_updater_test_report['relationship'],
 			'held_read_carries'  => $ran_wp_release_updater_test_held['read_carries'],
 			'held_save_clean'    => is_string( $ran_wp_release_updater_test_held['raw_row'] ) && ! ran_wp_release_updater_test_offer_carried( $ran_wp_release_updater_test_held['raw_row'] ),
 			'final_row_clean'    => ! ran_wp_release_updater_test_offer_carried( $raw ),
-			'one_fresh_download' => array( 0, 2, 2 ) === array( $ran_wp_release_updater_test_adapter->list_calls, $ran_wp_release_updater_test_adapter->inspect_calls, $ran_wp_release_updater_test_adapter->acquire_calls ),
+			'authorising_calls'  => array( 0, 2, $older ? 1 : 2 ) === $ran_wp_release_updater_test_calls,
+			'one_fresh_download' => array( 0, 3, $older ? 2 : 3 ) === array( $ran_wp_release_updater_test_adapter->list_calls, $ran_wp_release_updater_test_adapter->inspect_calls, $ran_wp_release_updater_test_adapter->acquire_calls ),
 			'active_preserved'   => $active,
 			'native_origin'      => $source_root . '/src/WordPress/NativePackageUpdater.php' === $origin,
 			'result'             => $success ? false !== $ran_wp_release_updater_test_result && ! is_wp_error( $ran_wp_release_updater_test_result ) : is_wp_error( $ran_wp_release_updater_test_result ),
 			'files'              => $success ? $released === $after && $after !== $ran_wp_release_updater_test_before : $ran_wp_release_updater_test_before === $after,
+			'header_version'     => ( $success ? '2.0.0' : $ran_wp_release_updater_test_installed ) === $header,
 			'outcome'            => is_array( $outcome ) && 'release-offer-' . $type === $outcome['release_identity'] && ( $success ? 'verified_success' === $outcome['outcome'] : 'verified_success' !== $outcome['outcome'] ),
 			'offer_not_supplied' => null === ( get_site_transient( $ran_wp_release_updater_test_option )->response[ $ran_wp_release_updater_test_identity ] ?? null ),
 		);
@@ -245,6 +259,7 @@ add_action(
 			'pass'         => ! in_array( false, $checks, true ),
 			'type'         => $type,
 			'mode'         => $mode,
+			'direction'    => $ran_wp_release_updater_test_direction,
 			'checks'       => $checks,
 			'report'       => $ran_wp_release_updater_test_report,
 			'result_code'  => is_wp_error( $ran_wp_release_updater_test_result ) ? $ran_wp_release_updater_test_result->get_error_code() : null,

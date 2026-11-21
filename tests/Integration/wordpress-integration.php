@@ -1143,30 +1143,34 @@ function ran_wp_release_updater_test_installed_mixed_bulk( string $source, strin
  */
 function ran_wp_release_updater_test_installed_offer_release( string $source, string $wordpress, string $run, mysqli $database, string $socket, array $wp_command, string $password, array &$proofs ): void {
 	global $runtime;
-	foreach ( array( 'plugin', 'theme' ) as $type ) {
-		foreach ( array( 'success', 'failure' ) as $mode ) {
-			$base        = ran_wp_release_updater_test_make_directory( $run . '/offer-' . $type . '-' . $mode );
-			$marker_file = $base . '/RAN_WP_RELEASE_UPDATER_OFFER_RELEASE.marker';
-			ran_wp_release_updater_test_write_file( $marker_file, "RAN_WP_RELEASE_UPDATER_OFFER_RELEASE\n" );
-			$site = ran_wp_release_updater_test_create_site( $wordpress, $base . '/site', $database, $socket );
-			ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, false );
-			ran_wp_release_updater_test_copy_runtime( $source, $site . '/wp-content/plugins/ran-wp-release-updater' );
-			ran_wp_release_updater_test_write_file( $site . '/wp-content/mu-plugins/offer-release-runtime.php', "<?php\nrequire_once WP_PLUGIN_DIR . '/ran-wp-release-updater/bootstrap.php';\n" );
-			$output = $base . '/evidence.json';
-			ran_wp_release_updater_test_command(
-				array_merge( $wp_command, array( '--path=' . $site, 'eval-file', __DIR__ . '/wordpress-integration/offer-release.php' ) ),
-				$site,
-				'offer-release-' . $type . '-' . $mode,
-				array(
-					'RAN_WP_RELEASE_UPDATER_MARKER_FILE'  => $marker_file,
-					'RAN_WP_RELEASE_UPDATER_OFFER_TYPE'   => $type,
-					'RAN_WP_RELEASE_UPDATER_OFFER_MODE'   => $mode,
-					'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' => $output,
-				)
-			);
-			$proof                         = ran_wp_release_updater_test_read_json( $output );
-			$proofs[ $type . '-' . $mode ] = $proof;
-			ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ), 'Installed offer-release ' . $type . '-' . $mode . ' assertions failed.' );
+	foreach ( array( 'same', 'older' ) as $direction ) {
+		foreach ( array( 'plugin', 'theme' ) as $type ) {
+			foreach ( array( 'success', 'failure' ) as $mode ) {
+				$case        = $direction . '-' . $type . '-' . $mode;
+				$base        = ran_wp_release_updater_test_make_directory( $run . '/offer-' . $case );
+				$marker_file = $base . '/RAN_WP_RELEASE_UPDATER_OFFER_RELEASE.marker';
+				ran_wp_release_updater_test_write_file( $marker_file, "RAN_WP_RELEASE_UPDATER_OFFER_RELEASE\n" );
+				$site = ran_wp_release_updater_test_create_site( $wordpress, $base . '/site', $database, $socket );
+				ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, false );
+				ran_wp_release_updater_test_copy_runtime( $source, $site . '/wp-content/plugins/ran-wp-release-updater' );
+				ran_wp_release_updater_test_write_file( $site . '/wp-content/mu-plugins/offer-release-runtime.php', "<?php\nrequire_once WP_PLUGIN_DIR . '/ran-wp-release-updater/bootstrap.php';\n" );
+				$output = $base . '/evidence.json';
+				ran_wp_release_updater_test_command(
+					array_merge( $wp_command, array( '--path=' . $site, 'eval-file', __DIR__ . '/wordpress-integration/offer-release.php' ) ),
+					$site,
+					'offer-release-' . $case,
+					array(
+						'RAN_WP_RELEASE_UPDATER_MARKER_FILE'  => $marker_file,
+						'RAN_WP_RELEASE_UPDATER_OFFER_TYPE'   => $type,
+						'RAN_WP_RELEASE_UPDATER_OFFER_MODE'   => $mode,
+						'RAN_WP_RELEASE_UPDATER_OFFER_DIRECTION' => $direction,
+						'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' => $output,
+					)
+				);
+				$proof           = ran_wp_release_updater_test_read_json( $output );
+				$proofs[ $case ] = $proof;
+				ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ), 'Installed offer-release ' . $case . ' assertions failed.' );
+			}
 		}
 	}
 	unset( $runtime );

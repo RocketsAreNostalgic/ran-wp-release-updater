@@ -190,7 +190,7 @@ final class NativePackageUpdater {
 			add_filter( 'plugins_api', array( $this, 'filter_plugin_information' ), 10, 3 );
 		}
 		add_filter( 'ran_wp_release_updater_check_releases_v1', array( $this, 'filter_check_releases' ), 10, 3 );
-		add_filter( 'ran_wp_release_updater_offer_release_v1', array( $this, 'filter_offer_release' ), 10, 5 );
+		add_filter( 'ran_wp_release_updater_offer_release_v1', array( $this, 'filter_offer_release' ), 10, 6 );
 		add_filter( 'plugin' === $this->target_type ? 'auto_update_plugin' : 'auto_update_theme', array( $this, 'filter_auto_update' ), 10, 2 );
 		add_filter( 'upgrader_package_options', array( $this, 'capture_package_options' ), PHP_INT_MAX, 1 );
 		add_filter( 'upgrader_pre_download', array( $this, 'filter_pre_download' ), PHP_INT_MAX, 4 );
@@ -332,7 +332,8 @@ final class NativePackageUpdater {
 	}
 
 	/**
-	 * Host-requested authorisation of one exact release, the same version as installed or newer, for this request.
+	 * Host-requested authorisation of one exact release for this request: the same version as installed or newer,
+	 * or older only when $older_intended is exactly true, which the host passes after the operator confirmed it.
 	 *
 	 * The release is freshly inspected, bound and validated as discovery validates a candidate. Until a download
 	 * attempt consumes it, reads of the update check supply its offer; saves of the update check never keep it.
@@ -340,7 +341,7 @@ final class NativePackageUpdater {
 	 *
 	 * @return mixed Unchanged $result, or the offer report array for this target.
 	 */
-	public function filter_offer_release( mixed $result, mixed $target_type, mixed $installed_identity, mixed $release_identity, mixed $tag ): mixed {
+	public function filter_offer_release( mixed $result, mixed $target_type, mixed $installed_identity, mixed $release_identity, mixed $tag, mixed $older_intended = false ): mixed {
 		if ( $target_type !== $this->target_type || ! is_string( $installed_identity ) || ! hash_equals( $this->installed_identity, $installed_identity ) ) {
 			return $result;
 		}
@@ -350,7 +351,7 @@ final class NativePackageUpdater {
 		}
 		$previous = $this->status;
 		try {
-			return $this->authorize_release( is_string( $release_identity ) ? $release_identity : '', is_string( $tag ) ? $tag : '' );
+			return $this->authorize_release( is_string( $release_identity ) ? $release_identity : '', is_string( $tag ) ? $tag : '', true === $older_intended );
 		} finally {
 			// Authorising is not a check: native status stays as the last native check left it.
 			$this->status = $previous;
@@ -358,7 +359,7 @@ final class NativePackageUpdater {
 	}
 
 	/** @return array{status:string,code:string,version:string|null,relationship:string|null} */
-	private function authorize_release( string $release_identity, string $tag ): array {
+	private function authorize_release( string $release_identity, string $tag, bool $older_intended ): array {
 		if ( $this->policy_blocked() ) {
 			return $this->offer_report( 'disabled' === $this->policy ? 'policy_disabled' : 'policy_forced_off' );
 		}
@@ -380,8 +381,9 @@ final class NativePackageUpdater {
 		}
 		$version      = $descriptor->to_array()['version'];
 		$relationship = ReleaseVersion::relationship( $version, $this->headers['Version'] );
-		if ( ! in_array( $relationship, array( ReleaseVersion::RELATIONSHIP_NEWER, ReleaseVersion::RELATIONSHIP_SAME ), true ) ) {
-			return $this->offer_report( ReleaseVersion::RELATIONSHIP_OLDER === $relationship ? 'release_older' : 'release_invalid', $version, $relationship );
+		$older        = ReleaseVersion::RELATIONSHIP_OLDER === $relationship;
+		if ( ReleaseVersion::RELATIONSHIP_INVALID === $relationship || ( $older && ! $older_intended ) ) {
+			return $this->offer_report( $older ? 'release_older' : 'release_invalid', $version, $relationship );
 		}
 		if ( ! $this->manual_eligible( $descriptor ) ) {
 			return $this->offer_report( 'candidate_not_eligible', $version, $relationship );
@@ -1248,9 +1250,9 @@ final class NativePackageUpdater {
 		return 'automatic' === $this->policy && $this->manual_eligible( $descriptor ) && true === $facts['publication_immutable'] && true === $facts['provenance_verified']; }
 	private function newer_than_installed( IdentityDescriptor $descriptor ): bool {
 		return ReleaseVersion::RELATIONSHIP_NEWER === ReleaseVersion::relationship( $descriptor->to_array()['version'], $this->headers['Version'] ); }
-	/** Newer, or the same version when the attempt's token is the release authorised for this request. */
+	/** Newer, or any valid version when the attempt's token is the release authorised for this request. */
 	private function download_version_admitted( IdentityDescriptor $descriptor, bool $authorized ): bool {
-		return $this->newer_than_installed( $descriptor ) || ( $authorized && ReleaseVersion::RELATIONSHIP_SAME === ReleaseVersion::relationship( $descriptor->to_array()['version'], $this->headers['Version'] ) ); }
+		return $this->newer_than_installed( $descriptor ) || ( $authorized && ReleaseVersion::RELATIONSHIP_INVALID !== ReleaseVersion::relationship( $descriptor->to_array()['version'], $this->headers['Version'] ) ); }
 	private function information_slug(): string {
 		return 'ran-wp-release-updater-' . substr( hash( 'sha256', $this->target_type . "\0" . $this->installed_identity ), 0, 24 ); }
 	private function matches_item_identity( object $item ): bool {
