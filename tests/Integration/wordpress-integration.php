@@ -197,6 +197,9 @@ try {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Preserve the existing integration report identity for this additional tested scenario.
 		$result['scenarios']['native_mixed_bulk'] = array();
 		ran_wp_release_updater_test_installed_mixed_bulk( $source, $wordpress, $run, $database, $socket, $wp_command, $password, $result['scenarios']['native_mixed_bulk'] );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Preserve the existing integration report identity for this additional tested scenario.
+		$result['scenarios']['native_offer_release'] = array();
+		ran_wp_release_updater_test_installed_offer_release( $source, $wordpress, $run, $database, $socket, $wp_command, $password, $result['scenarios']['native_offer_release'] );
 	}
 	if ( 'automatic-example' === $scenario ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI integration state retains the existing report identity.
@@ -1131,4 +1134,40 @@ function ran_wp_release_updater_test_installed_mixed_bulk( string $source, strin
 		$proofs[ $type . '-' . $mode ] = $proof;
 		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ) && ( $proof['candidate_revision'] ?? null ) === $runtime['package_revision'], 'Installed native mixed-bulk ' . $type . '-' . $mode . ' assertions or candidate identity failed.' );
 	}
+}
+/**
+ * Authorised same-version installs on the active target, after success and after a restored failure.
+ *
+ * @param list<string> $wp_command
+ * @param array<string,array<array-key,mixed>> $proofs
+ */
+function ran_wp_release_updater_test_installed_offer_release( string $source, string $wordpress, string $run, mysqli $database, string $socket, array $wp_command, string $password, array &$proofs ): void {
+	global $runtime;
+	foreach ( array( 'plugin', 'theme' ) as $type ) {
+		foreach ( array( 'success', 'failure' ) as $mode ) {
+			$base        = ran_wp_release_updater_test_make_directory( $run . '/offer-' . $type . '-' . $mode );
+			$marker_file = $base . '/RAN_WP_RELEASE_UPDATER_OFFER_RELEASE.marker';
+			ran_wp_release_updater_test_write_file( $marker_file, "RAN_WP_RELEASE_UPDATER_OFFER_RELEASE\n" );
+			$site = ran_wp_release_updater_test_create_site( $wordpress, $base . '/site', $database, $socket );
+			ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, false );
+			ran_wp_release_updater_test_copy_runtime( $source, $site . '/wp-content/plugins/ran-wp-release-updater' );
+			ran_wp_release_updater_test_write_file( $site . '/wp-content/mu-plugins/offer-release-runtime.php', "<?php\nrequire_once WP_PLUGIN_DIR . '/ran-wp-release-updater/bootstrap.php';\n" );
+			$output = $base . '/evidence.json';
+			ran_wp_release_updater_test_command(
+				array_merge( $wp_command, array( '--path=' . $site, 'eval-file', __DIR__ . '/wordpress-integration/offer-release.php' ) ),
+				$site,
+				'offer-release-' . $type . '-' . $mode,
+				array(
+					'RAN_WP_RELEASE_UPDATER_MARKER_FILE'  => $marker_file,
+					'RAN_WP_RELEASE_UPDATER_OFFER_TYPE'   => $type,
+					'RAN_WP_RELEASE_UPDATER_OFFER_MODE'   => $mode,
+					'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' => $output,
+				)
+			);
+			$proof                         = ran_wp_release_updater_test_read_json( $output );
+			$proofs[ $type . '-' . $mode ] = $proof;
+			ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ), 'Installed offer-release ' . $type . '-' . $mode . ' assertions failed.' );
+		}
+	}
+	unset( $runtime );
 }

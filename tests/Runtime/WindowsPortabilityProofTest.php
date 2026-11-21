@@ -59,7 +59,7 @@ final class WindowsPortabilityProofTest extends TestCase {
 		);
 		self::assertSame( 'target_active', $result['plugin']['code'] );
 		self::assertSame( 'target_active', $result['theme']['code'] );
-		self::assertSame( 23, $result['hooks'] );
+		self::assertSame( 25, $result['hooks'] );
 	}
 
 	public function test_copied_package_bootstrap_verifies_provenance_on_native_paths(): void {
