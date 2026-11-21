@@ -303,9 +303,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			}
 			self::assertSame( 0, $calls );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
-			self::assertCount( 12, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$updater->register();
-			self::assertCount( 12, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
 			$invalid           = $configuration;
 			$invalid['policy'] = 'unsupported';
@@ -316,7 +316,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertNull( GitHubReleaseAdapter::register_from_configuration( $configuration, BindingRecord::create( $facts ), null, new class() {}, array() ) );
 			self::assertSame( 0, $calls );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
-			self::assertCount( 12, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 		}
 
 		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]

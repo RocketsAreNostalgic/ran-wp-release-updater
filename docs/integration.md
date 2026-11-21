@@ -285,6 +285,94 @@ Guarantees:
 - Remote text is never returned; only the finite codes and validated versions
   above.
 
+### Offering one exact release
+
+Native offers are newest-and-newer only. A host that must install one chosen
+release through WordPress's own upgrader, for example the published release of
+the same version as a branch-built copy, a newer release that is not the
+newest, or an older release the operator has deliberately chosen, authorises it
+for the current request with the optional offer filter.
+As with the check filter, no handle method or protocol change is involved, and
+an older elected runtime does not answer.
+
+```text
+$report = apply_filters( 'ran_wp_release_updater_offer_release_v1', null, 'plugin', 'package/package.php', $release_identity, $tag, $older_intended );
+```
+
+Arguments are the unanswered default (`null`), the target type, the installed
+identity, the release identity and tag of the chosen release, and the optional
+`$older_intended` (default `false`). The host must authorise the caller itself.
+
+The same version as installed, or a newer one, is authorised whether or not
+`$older_intended` is passed. An older release is authorised only when
+`$older_intended` is exactly `true`; anything else is refused with
+`release_older`. Pass `true` only after the operator has explicitly confirmed
+installing a release that is not newer, and tell them first:
+
+- database changes made by the newer version are not undone, and the older code
+  runs against them;
+- WordPress's next update check offers the newest release again as an
+  ordinary update;
+- many old releases will still be refused, for example for lacking the manual
+  assurance facts or the expected headers.
+
+Policy is applied as for any install: `disabled` and `forced-off` refuse, and
+the updater adds no further rule for older releases. A host that must restrict
+older installs to particular policies enforces that itself.
+
+Only the matching live target answers; `null` back means unsupported. An
+answering target returns exactly `status` (`authorized` or `refused`), `code`,
+`version` and `relationship` (the last two are `null` when the call stops before
+the release is inspected).
+
+The target inspects the release afresh, binds it, requires the manual assurance
+facts and validates it as discovery validates a candidate: host descriptor
+admission, an exact release identity and tag match, one acquisition,
+archive validation and discard, then admission again. Codes:
+
+| Code | Meaning |
+| --- | --- |
+| `release_authorized` | Authorised for this request |
+| `policy_disabled`, `policy_forced_off` | The target's policy admits no install |
+| `runtime_busy` | A native install is pending or beginning |
+| `filesystem_unavailable`, `discovery_not_admitted` | As for native checks |
+| `release_unavailable` | Inspection or binding failed |
+| `release_older` | The release is older than installed and `$older_intended` is not `true` |
+| `release_invalid` | The installed or release version cannot be compared |
+| `candidate_not_eligible` | The release lacks the manual assurance facts |
+| `candidate_*` and archive validation codes | As reported for a discovery candidate |
+| `offer_token_unavailable`, `runtime_liveness_lost` | No offer could be built, or the runtime was displaced |
+
+Guarantees:
+
+- The authorisation lives only in this request and is never stored. A new call
+  replaces it, whatever its result. Every download attempt for the target
+  consumes it, even one refused before any download, so a second attempt needs
+  a new call, and `refresh()` clears it.
+- While it is held, reads of the `update_plugins` or `update_themes` site
+  transient carry the authorised offer for this target, so
+  `Plugin_Upgrader::upgrade()`, `bulk_upgrade()` and `Theme_Upgrader::upgrade()`
+  find it. The supplied offer is marked not automatic, and automatic update
+  admission stays newer-only, so a same-version or older release is never
+  installed automatically. The report's `relationship` is `same`, `newer` or
+  `older`, so the host can tell which confirmation applied.
+- When WordPress saves that transient, the target removes its entry if it
+  carries any release authorised in this request, including one whose
+  authorisation a later call replaced, until `refresh()`. The offer never
+  reaches the stored row, including after a failed install and on the bulk
+  route. While the authorisation is held, a read replaces this target's entry,
+  so saving that read drops whatever entry the stored row had for the target,
+  such as an ordinary offer for a newer release; the next update check restores
+  it. Code that writes the option directly, bypassing `set_site_transient()`, is
+  not covered.
+- Download admission accepts a release that is not newer only when it is the
+  authorised release.
+  Fresh inspection, the `remote_release_changed` fingerprint check, reacquisition
+  and verification are unchanged. Native checks, discovery and automatic
+  updates stay newer-only.
+- Authorising claims the discovery lease, as a check does, and leaves
+  `status()['native']` as the last native check left it.
+
 The native installer returns `WP_Error` failures using the prefix:
 
 ```text

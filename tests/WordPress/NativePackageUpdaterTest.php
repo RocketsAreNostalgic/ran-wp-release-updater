@@ -1085,7 +1085,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array(), $database->read_option_names() );
 			$updater->register();
 			$updater->register();
-			self::assertCount( 12, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
 		public function test_offer_rechecks_runtime_uri_uses_unique_info_slug_and_default_denies_automatic(): void {
@@ -1897,7 +1897,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$property->setValue( $broker, 'active' );
 			list( $updater, $adapter, $database ) = $this->subject( 'manual', null, 'stable', false, $state );
 			$updater->register();
-			self::assertCount( 12, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
 			foreach ( array( 'stale_global', 'wrong_protocol' ) as $failure ) {
 				if ( 'stale_global' === $failure ) {
@@ -1936,6 +1936,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				self::assertSame( 'source', $updater->filter_source_selection( 'source', 'remote', null, $this->extra() ), $failure );
 				self::assertSame( 'install', $updater->filter_pre_install( 'install', $this->extra() ), $failure );
 				self::assertSame( 'result', $updater->capture_install_package_result( 'result', $this->extra() ), $failure );
+				self::assertNull( $updater->filter_offer_release( null, 'plugin', 'package/package.php', 'release:2', 'v2.0.0' ), $failure );
 				$updater->observe_completion(
 					null,
 					array(
@@ -2231,7 +2232,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
-			self::assertCount( 11, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 12, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$offer = $updater->filter_update(
 				false,
 				array(
@@ -2261,7 +2262,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$stock = new \Theme_Upgrader();
 				$GLOBALS['ran_wp_release_updater_test_doing_action'] = $automatic_action ? 'wp_maybe_auto_update' : null;
 				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', $stock, $extra ) );
-				self::assertCount( 12, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+				self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 				if ( $failed_result ) {
 					$original      = new \WP_Error( 'post_copy_failed', 'Post-copy failure.' );
 					$stock->result = $original;
@@ -2273,11 +2274,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					self::assertNotSame( $original, $outgoing );
 					$bridged = ! $automatic_action && ! $replace_skin;
 					self::assertSame( $bridged ? array() : $original, $stock->result );
-					self::assertSame( $bridged ? 13 : 12, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
+					self::assertSame( $bridged ? 14 : 13, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
 					if ( $bridged ) {
 						self::assertSame(
 							array( 'action', 'upgrader_process_complete', array( $updater, 'restore_theme_error_result' ), PHP_INT_MIN, 2 ),
-							$GLOBALS['ran_wp_release_updater_test_hooks'][12]
+							$GLOBALS['ran_wp_release_updater_test_hooks'][13]
 						);
 					}
 					$stock->skin->result = $outgoing;
@@ -2959,6 +2960,279 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 'failed', $report['status'] );
 			self::assertSame( $calls, $adapter->list_calls );
 		}
+		private const OFFER_FILTER = 'ran_wp_release_updater_offer_release_v1';
+		/** @return array<string,mixed> */
+		private function offer_release( NativePackageUpdater $updater, string $release_identity = 'release:2', string $tag = 'v2.0.0', mixed $older_intended = false ): array {
+			$report = $updater->filter_offer_release( null, 'plugin', 'package/package.php', $release_identity, $tag, $older_intended );
+			self::assertIsArray( $report );
+			return $report;
+		}
+		/**
+		 * The plugin entry a WordPress read of the update check would find for this target, as an array.
+		 *
+		 * @return array<string,mixed>|null
+		 */
+		private function supplied( NativePackageUpdater $updater ): ?array {
+			$transient = $updater->filter_cached_update( (object) array( 'response' => array() ) );
+			self::assertIsObject( $transient );
+			$entry = $transient->response['package/package.php'] ?? null;
+			return is_object( $entry ) ? get_object_vars( $entry ) : null;
+		}
+		/** @param array<string,mixed> $report */
+		private function assert_refused( string $code, array $report ): void {
+			self::assertSame( array( 'status', 'code', 'version', 'relationship' ), array_keys( $report ) );
+			self::assertSame( array( 'refused', $code ), array( $report['status'], $report['code'] ) );
+		}
+		public function test_offer_release_installs_an_authorised_equal_release_with_one_fresh_acquisition(): void {
+			list( $updater, $adapter ) = $this->subject( 'automatic', installed_version: '2.0.0' );
+			$updater->register();
+			// WordPress passes the host's sixth argument, the older-release intent, only if it is registered.
+			self::assertSame( 6, array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 4, 1 )[ self::OFFER_FILTER ] ?? null );
+			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
+			self::assertSame(
+				array(
+					'status'       => 'authorized',
+					'code'         => 'release_authorized',
+					'version'      => '2.0.0',
+					'relationship' => 'same',
+				),
+				$this->offer_release( $updater )
+			);
+			// One inspection and one validated acquisition, with no listing.
+			self::assertSame( array( 0, 1, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			// The read supply and the save-time strip are registered once something is authorised.
+			$registered = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 3, 1 );
+			self::assertSame( 10, $registered['site_transient_update_plugins'] );
+			self::assertSame( PHP_INT_MAX, $registered['pre_set_site_transient_update_plugins'] );
+			$entry = $this->supplied( $updater );
+			self::assertIsArray( $entry );
+			self::assertSame( array( '2.0.0', '2.0.0', false, 'package/package.php' ), array( $entry['version'], $entry['new_version'], $entry['autoupdate'], $entry['plugin'] ) );
+			// An authorised equal release never becomes an automatic update.
+			self::assertFalse( $updater->filter_auto_update( true, (object) $entry ) );
+			$this->complete( $updater, $entry['package'] );
+			self::assertSame( array( 0, 2, 2 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			$outcome = $this->retained_outcome( $updater );
+			self::assertSame( array( 'verified_success', 'release:2', '2.0.0' ), array( $outcome['outcome'], $outcome['release_identity'], $outcome['version'] ) );
+			// The attempt consumed the authorisation: nothing is supplied and a second attempt is refused.
+			self::assertNull( $this->supplied( $updater ) );
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_pre_download( false, $entry['package'], null, $this->extra() ) );
+		}
+		public function test_offer_release_installs_a_chosen_newer_release_that_is_not_the_newest(): void {
+			list( $updater, $adapter ) = $this->subject();
+			$adapter->list_response    = array(
+				'candidates' => array(
+					array(
+						'release_identity' => 'release:3',
+						'tag'              => 'v3.0.0',
+						'version'          => '3.0.0',
+					),
+				),
+			);
+			self::assertSame( array( 'authorized', 'release_authorized', '2.0.0', 'newer' ), array_values( $this->offer_release( $updater ) ) );
+			$entry = $this->supplied( $updater );
+			self::assertIsArray( $entry );
+			$this->complete( $updater, $entry['package'] );
+			self::assertSame( 0, $adapter->list_calls );
+			self::assertSame( 'release:2', $this->retained_outcome( $updater )['release_identity'] );
+		}
+		public function test_offer_release_refuses_with_nothing_supplied(): void {
+			list( $older ) = $this->subject( installed_version: '3.0.0' );
+			$report        = $this->offer_release( $older );
+			$this->assert_refused( 'release_older', $report );
+			self::assertSame( array( '2.0.0', 'older' ), array( $report['version'], $report['relationship'] ) );
+			self::assertNull( $this->supplied( $older ) );
+			list( $mismatch ) = $this->subject();
+			$this->assert_refused( 'candidate_descriptor_mismatch', $this->offer_release( $mismatch, 'release:2', 'v9.9.9' ) );
+			self::assertNull( $this->supplied( $mismatch ) );
+			list( $unavailable, $adapter )          = $this->subject();
+			$adapter->inspect_outcomes['release:7'] = new \RuntimeException( 'Missing release.' );
+			$this->assert_refused( 'release_unavailable', $this->offer_release( $unavailable, 'release:7', 'v7.0.0' ) );
+			self::assertNull( $this->supplied( $unavailable ) );
+			foreach ( array(
+				'disabled'   => 'policy_disabled',
+				'forced-off' => 'policy_forced_off',
+			) as $mode => $code ) {
+				list( $blocked, $adapter ) = $this->subject( $mode, installed_version: '2.0.0' );
+				$this->assert_refused( $code, $this->offer_release( $blocked ) );
+				self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			}
+			list( $denied ) = $this->subject( installed_version: '2.0.0', descriptor_admission: static fn(): bool => false );
+			$this->assert_refused( 'candidate_admission_rejected', $this->offer_release( $denied ) );
+			self::assertNull( $this->supplied( $denied ) );
+			list( $ineligible, $adapter, , $descriptor ) = $this->subject( installed_version: '2.0.0' );
+			$facts                                       = $descriptor->to_array();
+			unset( $facts['fingerprint'] );
+			$facts['assurance_facts']['exact_reacquisition_supported'] = false;
+			$adapter->inspect_descriptor                               = IdentityDescriptor::create( $facts );
+			$this->assert_refused( 'candidate_not_eligible', $this->offer_release( $ineligible ) );
+			self::assertNull( $this->supplied( $ineligible ) );
+			// Without an authorisation an equal release stays refused at download admission.
+			list( $unauthorised, $adapter, , $descriptor, $binding ) = $this->subject( installed_version: '2.0.0' );
+			self::assertInstanceOf( \WP_Error::class, $unauthorised->filter_pre_download( false, $this->token( $descriptor, $binding ), null, $this->extra() ) );
+			self::assertSame( 0, $adapter->inspect_calls );
+		}
+		public function test_offer_release_authorises_an_older_release_only_when_the_host_intends_it(): void {
+			// Without the intent, or with anything but true, an older release is refused as before.
+			list( $updater, $adapter, , $descriptor, $binding ) = $this->subject( 'automatic', installed_version: '3.0.0' );
+			foreach ( array( false, 1, '1', 'true', null ) as $not_intended ) {
+				$report = $this->offer_release( $updater, older_intended: $not_intended );
+				$this->assert_refused( 'release_older', $report );
+				self::assertSame( array( '2.0.0', 'older' ), array( $report['version'], $report['relationship'] ) );
+				self::assertNull( $this->supplied( $updater ) );
+			}
+			// An unauthorised older token stays refused at download admission.
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_pre_download( false, $this->token( $descriptor, $binding ), null, $this->extra() ) );
+			// With it, the older release is authorised even on an automatic package, and reported as older.
+			self::assertSame(
+				array(
+					'status'       => 'authorized',
+					'code'         => 'release_authorized',
+					'version'      => '2.0.0',
+					'relationship' => 'older',
+				),
+				$this->offer_release( $updater, older_intended: true )
+			);
+			$entry = $this->supplied( $updater );
+			self::assertIsArray( $entry );
+			self::assertSame( array( '2.0.0', false ), array( $entry['new_version'], $entry['autoupdate'] ) );
+			// The automatic path never installs it.
+			self::assertFalse( $updater->filter_auto_update( true, (object) $entry ) );
+			$calls = $adapter->acquire_calls;
+			$this->complete( $updater, $entry['package'] );
+			self::assertSame( $calls + 1, $adapter->acquire_calls );
+			$outcome = $this->retained_outcome( $updater );
+			self::assertSame( array( 'verified_success', 'release:2', '2.0.0' ), array( $outcome['outcome'], $outcome['release_identity'], $outcome['version'] ) );
+			self::assertSame( array(), $updater->filter_store_update( (object) array( 'response' => array( 'package/package.php' => (object) $entry ) ) )->response );
+			// The intent changes nothing for the same or a newer release.
+			foreach ( array(
+				'2.0.0' => 'same',
+				'1.0.0' => 'newer',
+			) as $installed => $relationship ) {
+				foreach ( array( false, true ) as $intended ) {
+					list( $other ) = $this->subject( installed_version: $installed );
+					self::assertSame( array( 'authorized', 'release_authorized', '2.0.0', $relationship ), array_values( $this->offer_release( $other, older_intended: $intended ) ) );
+				}
+			}
+			// Disabled and forced off still refuse, intent or not.
+			foreach ( array(
+				'disabled'   => 'policy_disabled',
+				'forced-off' => 'policy_forced_off',
+			) as $mode => $code ) {
+				list( $blocked ) = $this->subject( $mode, installed_version: '3.0.0' );
+				$this->assert_refused( $code, $this->offer_release( $blocked, older_intended: true ) );
+				self::assertNull( $this->supplied( $blocked ) );
+			}
+		}
+		public function test_offer_release_answers_only_for_this_live_target(): void {
+			$live            = true;
+			list( $updater ) = $this->subject(
+				installed_version: '2.0.0',
+				operation_guard: static function () use ( &$live ): bool {
+					return $live;
+				}
+			);
+			self::assertSame( 'keep', $updater->filter_offer_release( 'keep', 'theme', 'package/package.php', 'release:2', 'v2.0.0' ) );
+			self::assertSame( 'keep', $updater->filter_offer_release( 'keep', 'plugin', 'other/other.php', 'release:2', 'v2.0.0' ) );
+			$this->offer_release( $updater );
+			$live = false;
+			self::assertNull( $updater->filter_offer_release( null, 'plugin', 'package/package.php', 'release:2', 'v2.0.0' ) );
+			self::assertNull( $this->supplied( $updater ) );
+			// The unanswered call still replaced the earlier authorisation.
+			$live = true;
+			self::assertNull( $this->supplied( $updater ) );
+		}
+		public function test_offer_release_is_stripped_when_wordpress_saves_the_update_check(): void {
+			list( $updater, , , $descriptor, $binding ) = $this->subject( installed_version: '2.0.0' );
+			$this->offer_release( $updater );
+			$entry = $this->supplied( $updater );
+			self::assertIsArray( $entry );
+			$other  = (object) array( 'package' => 'https://example.test/other.zip' );
+			$stored = (object) array(
+				'last_checked' => 1,
+				'response'     => array(
+					'package/package.php' => (object) $entry,
+					'other/other.php'     => $other,
+				),
+			);
+			self::assertSame( array( 'other/other.php' => $other ), $updater->filter_store_update( $stored )->response );
+			// An ordinary offer for another release is kept.
+			$ordinary = (object) array( 'response' => array( 'package/package.php' => (object) array( 'package' => $this->token( $this->with_release_identity( $descriptor, 'release:3', 'v3.0.0' ), $binding ) ) ) );
+			self::assertArrayHasKey( 'package/package.php', $updater->filter_store_update( $ordinary )->response );
+			self::assertSame( 'not-an-object', $updater->filter_store_update( 'not-an-object' ) );
+			// The strip outlives the attempt that consumed the authorisation, until refresh().
+			$this->prepare_install( $updater, $entry['package'] );
+			$after = (object) array( 'response' => array( 'package/package.php' => (object) $entry ) );
+			self::assertSame( array(), $updater->filter_store_update( $after )->response );
+		}
+		public function test_offer_release_strip_covers_every_release_authorised_in_the_request(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject( installed_version: '2.0.0' );
+			$adapter->inspect_outcomes['release:3']   = $this->with_release_identity( $descriptor, 'release:3', 'v3.0.0' );
+			$this->offer_release( $updater );
+			$first = $this->supplied( $updater );
+			self::assertIsArray( $first );
+			$earlier_read = (object) array( 'response' => array( 'package/package.php' => (object) $first ) );
+			// A refused second call keeps the first release stripped at save.
+			$this->assert_refused( 'candidate_descriptor_mismatch', $this->offer_release( $updater, 'release:2', 'v9.9.9' ) );
+			self::assertSame( array(), $updater->filter_store_update( clone $earlier_read )->response );
+			// So does a second successful authorisation of another release.
+			self::assertSame( 'release_authorized', $this->offer_release( $updater, 'release:3', 'v3.0.0' )['code'] );
+			$second = $this->supplied( $updater );
+			self::assertIsArray( $second );
+			self::assertNotSame( $first['package'], $second['package'] );
+			self::assertSame( array(), $updater->filter_store_update( clone $earlier_read )->response );
+			self::assertSame( array(), $updater->filter_store_update( (object) array( 'response' => array( 'package/package.php' => (object) $second ) ) )->response );
+			// A download is admitted only for the release held now.
+			$refused = $updater->filter_pre_download( false, $first['package'], null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $refused );
+			self::assertSame( 'ran_wp_release_updater_unverified_pre_download', $refused->get_error_code() );
+			$this->offer_release( $updater, 'release:3', 'v3.0.0' );
+			self::assertIsString( $updater->filter_pre_download( false, $second['package'], null, $this->extra() ) );
+			// refresh() ends the strip for both.
+			self::assertTrue( $updater->refresh() );
+			self::assertArrayHasKey( 'package/package.php', $updater->filter_store_update( clone $earlier_read )->response );
+		}
+		public function test_offer_release_lifetime_is_request_local(): void {
+			list( $updater, $adapter, $database ) = $this->subject( installed_version: '2.0.0' );
+			$this->offer_release( $updater );
+			$entry = $this->supplied( $updater );
+			self::assertIsArray( $entry );
+			// A new instance holds nothing.
+			$fresh = NativePackageUpdater::from_configuration( $this->config( 'manual', '2.0.0' ), $this->binding( 'manual' ), $adapter, $database, $this->policy() );
+			self::assertInstanceOf( NativePackageUpdater::class, $fresh );
+			self::assertNull( $this->supplied( $fresh ) );
+			self::assertInstanceOf( \WP_Error::class, $fresh->filter_pre_download( false, $entry['package'], null, $this->extra() ) );
+			// refresh() clears the authorisation and the save-time strip.
+			self::assertTrue( $updater->refresh() );
+			self::assertNull( $this->supplied( $updater ) );
+			$stored = (object) array( 'response' => array( 'package/package.php' => (object) $entry ) );
+			self::assertArrayHasKey( 'package/package.php', $updater->filter_store_update( $stored )->response );
+			// An attempt refused before any download still consumes the authorisation.
+			$this->offer_release( $updater );
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_pre_download( 'not-false', $entry['package'], null, $this->extra() ) );
+			self::assertNull( $this->supplied( $updater ) );
+			// A refused call replaces an earlier authorisation.
+			$this->offer_release( $updater );
+			$this->assert_refused( 'candidate_descriptor_mismatch', $this->offer_release( $updater, 'release:2', 'v9.9.9' ) );
+			self::assertNull( $this->supplied( $updater ) );
+			// A pending install makes the target busy.
+			$this->offer_release( $updater );
+			self::assertIsString( $updater->filter_pre_download( false, $entry['package'], null, $this->extra() ) );
+			$this->assert_refused( 'runtime_busy', $this->offer_release( $updater ) );
+		}
+		public function test_offer_release_still_refuses_a_release_that_changed_before_download(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject( installed_version: '2.0.0' );
+			$this->offer_release( $updater );
+			$entry = $this->supplied( $updater );
+			self::assertIsArray( $entry );
+			$facts = $descriptor->to_array();
+			unset( $facts['fingerprint'] );
+			$facts['commit_identity']    = 'changed';
+			$adapter->inspect_descriptor = IdentityDescriptor::create( $facts );
+			self::assertInstanceOf( \WP_Error::class, $updater->filter_pre_download( false, $entry['package'], null, $this->extra() ) );
+			self::assertContains( 'remote_release_changed', $updater->diagnostics() );
+			self::assertSame( 2, $adapter->inspect_calls );
+			self::assertSame( 1, $adapter->acquire_calls );
+		}
 		/** @return array<string,mixed> */
 		private function retained_outcome( NativePackageUpdater $updater ): array {
 			$record = $updater->status()['last_native_outcome'];
@@ -2967,13 +3241,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			return $record;
 		}
 		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
-		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null, bool $allow_working_copy = false ): array {
+		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null, bool $allow_working_copy = false, string $installed_version = '1.0.0' ): array {
 			$archive_path = $this->archive();
 			$descriptor   = $this->descriptor( $archive_path, $channel, $prerelease );
 			$binding      = $this->binding( $mode, $channel );
 			$adapter      = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
 			$database   ??= new FakeOptionDatabase( 100 );
-			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete, $descriptor_admission, $allow_working_copy );
+			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode, $installed_version ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete, $descriptor_admission, $allow_working_copy );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			return array( $updater, $adapter, $database, $descriptor, $binding );
 		}
@@ -2992,9 +3266,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			return $offer;
 		}
 		/** @return array{archive:string,stage:string} */
-		private function prepare_install( NativePackageUpdater $updater ): array {
-			$offer         = $this->offer( $updater );
-			$owned_archive = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+		private function prepare_install( NativePackageUpdater $updater, ?string $package = null ): array {
+			$package     ??= $this->offer( $updater )['package'];
+			$owned_archive = $updater->filter_pre_download( false, $package, null, $this->extra() );
 			self::assertIsString( $owned_archive );
 			self::assertNull( $updater->filter_pre_unzip_file( null, $owned_archive, '/tmp', array(), 0.0 ) );
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Simulate Core consuming the acquired archive; it may already be absent after extraction. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
@@ -3016,8 +3290,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				'stage'   => $staged_package,
 			);
 		}
-		private function complete( NativePackageUpdater $updater ): void {
-			$this->prepare_install( $updater );
+		private function complete( NativePackageUpdater $updater, ?string $package = null ): void {
+			$this->prepare_install( $updater, $package );
 			$updater->finalize_pending_install();
 			self::assertContains( 'update_completed', $updater->diagnostics() );
 			self::assertNull( $updater->status()['failure_code'] );
@@ -3047,7 +3321,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			return $staged_path;
 		}
 		/** @return array<string,mixed> */
-		private function config( string $mode ): array {
+		private function config( string $mode, string $installed_version = '1.0.0' ): array {
 			return array(
 				'installed_directory'        => $this->temporary_directory . '/installed',
 				'headers'                    => array(
@@ -3058,7 +3332,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					'RequiresPHP' => '8.2',
 					'RequiresWP'  => '6.8',
 					'UpdateURI'   => $this->uri(),
-					'Version'     => '1.0.0',
+					'Version'     => $installed_version,
 				),
 				'installed_package_identity' => 'package/package.php',
 				'policy'                     => $mode,
