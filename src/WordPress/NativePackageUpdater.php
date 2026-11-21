@@ -74,8 +74,10 @@ final class NativePackageUpdater {
 	private ?array $attempt_outcome = null;
 	/** @var array<string,mixed>|null Offer for the one release authorised for this request, held until an attempt consumes it. */
 	private ?array $authorized_offer = null;
-	/** That release's fingerprint. Its entry is stripped whenever WordPress saves the update check, until refresh(). */
+	/** That release's fingerprint, the only one a download may use. */
 	private ?string $authorized_fingerprint = null;
+	/** @var array<string,true> Every fingerprint authorised since refresh(); entries carrying one are stripped whenever WordPress saves the update check. */
+	private array $authorized_fingerprints = array();
 
 
 	/**
@@ -225,10 +227,10 @@ final class NativePackageUpdater {
 		return $transient;
 	}
 
-	/** Removes the authorised release's entry before WordPress saves the update check, so it never outlives the request. */
+	/** Removes any release authorised in this request from the update check before WordPress saves it, so no offer outlives the request. */
 	public function filter_store_update( mixed $transient ): mixed {
-		$descriptor = null === $this->authorized_fingerprint ? null : $this->cached_descriptor( $transient );
-		if ( is_object( $transient ) && is_array( $transient->response ?? null ) && null !== $descriptor && hash_equals( (string) $this->authorized_fingerprint, $descriptor->fingerprint_value() ) ) {
+		$descriptor = array() === $this->authorized_fingerprints ? null : $this->cached_descriptor( $transient );
+		if ( is_object( $transient ) && is_array( $transient->response ?? null ) && null !== $descriptor && isset( $this->authorized_fingerprints[ $descriptor->fingerprint_value() ] ) ) {
 			unset( $transient->response[ $this->installed_identity ] );
 		}
 		return $transient;
@@ -400,7 +402,8 @@ final class NativePackageUpdater {
 		// WordPress adds new_version when it saves a check; a supplied offer is never saved, so it carries its own.
 		$this->authorized_offer       = $this->offer_entry( $descriptor, $token, false ) + array( 'new_version' => $version );
 		$this->authorized_fingerprint = $descriptor->fingerprint_value();
-		$transient                    = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
+		$this->authorized_fingerprints[ $this->authorized_fingerprint ] = true;
+		$transient = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
 		add_filter( 'site_transient_' . $transient, array( $this, 'filter_cached_update' ), 10, 1 );
 		add_filter( 'pre_set_site_transient_' . $transient, array( $this, 'filter_store_update' ), PHP_INT_MAX, 1 );
 		return $this->offer_report( 'release_authorized', $version, $relationship );
@@ -1113,8 +1116,9 @@ final class NativePackageUpdater {
 		if ( $this->native_beginning || null !== $this->native_owner ) {
 			return false;
 		}
-		$this->authorized_offer       = null;
-		$this->authorized_fingerprint = null;
+		$this->authorized_offer        = null;
+		$this->authorized_fingerprint  = null;
+		$this->authorized_fingerprints = array();
 		if ( ! $this->live() ) {
 			$this->clear_pending();
 			return false;

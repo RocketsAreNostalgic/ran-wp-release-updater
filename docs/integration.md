@@ -335,12 +335,14 @@ Guarantees:
   admission stays newer-only, so a same-version release is never installed
   automatically.
 - When WordPress saves that transient, the target removes its entry if it
-  carries the authorised release, until `refresh()`. The offer never reaches the
-  stored row, including after a failed install and on the bulk route. While the
-  authorisation is held, a read replaces this target's entry, so saving that read
-  drops whatever entry the stored row had for the target, such as an ordinary
-  offer for a newer release; the next update check restores it. Code that writes
-  the option directly, bypassing `set_site_transient()`, is not covered.
+  carries any release authorised in this request, including one whose
+  authorisation a later call replaced, until `refresh()`. The offer never
+  reaches the stored row, including after a failed install and on the bulk
+  route. While the authorisation is held, a read replaces this target's entry,
+  so saving that read drops whatever entry the stored row had for the target,
+  such as an ordinary offer for a newer release; the next update check restores
+  it. Code that writes the option directly, bypassing `set_site_transient()`, is
+  not covered.
 - Download admission accepts the same version only for the authorised release.
   Fresh inspection, the `remote_release_changed` fingerprint check, reacquisition
   and verification are unchanged. Native checks, discovery and automatic

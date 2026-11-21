@@ -3111,6 +3111,33 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$after = (object) array( 'response' => array( 'package/package.php' => (object) $entry ) );
 			self::assertSame( array(), $updater->filter_store_update( $after )->response );
 		}
+		public function test_offer_release_strip_covers_every_release_authorised_in_the_request(): void {
+			list( $updater, $adapter, , $descriptor ) = $this->subject( installed_version: '2.0.0' );
+			$adapter->inspect_outcomes['release:3']   = $this->with_release_identity( $descriptor, 'release:3', 'v3.0.0' );
+			$this->offer_release( $updater );
+			$first = $this->supplied( $updater );
+			self::assertIsArray( $first );
+			$earlier_read = (object) array( 'response' => array( 'package/package.php' => (object) $first ) );
+			// A refused second call keeps the first release stripped at save.
+			$this->assert_refused( 'candidate_descriptor_mismatch', $this->offer_release( $updater, 'release:2', 'v9.9.9' ) );
+			self::assertSame( array(), $updater->filter_store_update( clone $earlier_read )->response );
+			// So does a second successful authorisation of another release.
+			self::assertSame( 'release_authorized', $this->offer_release( $updater, 'release:3', 'v3.0.0' )['code'] );
+			$second = $this->supplied( $updater );
+			self::assertIsArray( $second );
+			self::assertNotSame( $first['package'], $second['package'] );
+			self::assertSame( array(), $updater->filter_store_update( clone $earlier_read )->response );
+			self::assertSame( array(), $updater->filter_store_update( (object) array( 'response' => array( 'package/package.php' => (object) $second ) ) )->response );
+			// A download is admitted only for the release held now.
+			$refused = $updater->filter_pre_download( false, $first['package'], null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $refused );
+			self::assertSame( 'ran_wp_release_updater_unverified_pre_download', $refused->get_error_code() );
+			$this->offer_release( $updater, 'release:3', 'v3.0.0' );
+			self::assertIsString( $updater->filter_pre_download( false, $second['package'], null, $this->extra() ) );
+			// refresh() ends the strip for both.
+			self::assertTrue( $updater->refresh() );
+			self::assertArrayHasKey( 'package/package.php', $updater->filter_store_update( clone $earlier_read )->response );
+		}
 		public function test_offer_release_lifetime_is_request_local(): void {
 			list( $updater, $adapter, $database ) = $this->subject( installed_version: '2.0.0' );
 			$this->offer_release( $updater );
