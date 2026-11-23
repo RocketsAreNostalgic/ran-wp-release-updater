@@ -178,6 +178,10 @@ final class ExactInstallInvocation {
 		return $this->recovery->recover_at_shutdown( $this->backup_deleted || $this->restore_pending() || false !== $this->backup_deletion_priority() );
 	}
 
+	public function preserve_backup(): void {
+		$this->recovery->preserve_backup();
+	}
+
 	/** Complete only this instance's scheduled deletion, after ruling out its scheduled restoration. */
 	public function finish_backup(): ?string {
 		$delete = array( $this->upgrader, 'delete_temp_backup' );

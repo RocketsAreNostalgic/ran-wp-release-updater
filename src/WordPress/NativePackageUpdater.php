@@ -548,6 +548,15 @@ final class NativePackageUpdater {
 		) {
 			return $exact->download_failure ?? 'unverified_install_result';
 		}
+		try {
+			$installed_verified = null !== $this->verify_installed_manifest( $descriptor );
+		} catch ( \Throwable ) {
+			$installed_verified = false;
+		}
+		if ( ! $installed_verified ) {
+			$exact->preserve_backup();
+			return 'unverified_install_result';
+		}
 		$failure = $exact->finish_backup();
 		if ( null !== $failure ) {
 			return $failure;
@@ -1368,48 +1377,19 @@ final class NativePackageUpdater {
 				$this->diagnose( 'descriptor_admission_rejected', null, true );
 				return;
 			}
-			$destination               = is_array( $this->pending_install->install_result() ) && is_string( $this->pending_install->install_result()['destination'] ?? null )
-				? $this->pending_install->install_result()['destination']
-				: null;
-			$manifest                  = is_string( $destination ) ? $this->manifest_builder->build( $destination ) : null;
-			$verified                  = $this->verify_current();
-			$archive_manifest_verified = false;
-			if (
-				null !== $verified
-				&& $this->pending_install->receipt() instanceof AcquisitionReceipt
-				&& is_array( $manifest )
-			) {
-				try {
-					AcquisitionReceipt::assert_archive_manifest(
-						$this->pending_install->receipt(),
-						$verified['current'],
-						$descriptor,
-						$verified['now'],
-						$this->manifest_builder->hash( $manifest ),
-						count( $manifest ),
-						$this->manifest_builder->expanded_bytes( $manifest )
-					);
-					$archive_manifest_verified = true;
-					$this->state               = $verified['current'];
-				} catch ( InvalidArgumentException ) {
-					$archive_manifest_verified = false;
-				}
-			}
+			$verified = $this->verify_installed_manifest( $descriptor );
 			if (
 				! $this->pending_install->install_result_captured()
 				|| ( ! $this->pending_install->completion_observed() && ! $this->pending_install->multi_run() )
-				|| ! $archive_manifest_verified
-				|| ! is_string( $destination )
-				|| ! $this->pending_install->staging_verified()
-				|| ! is_array( $manifest )
-				|| ! $this->matches_staged_metadata( $destination )
+				|| null === $verified
 			) {
 				$this->diagnose( 'outcome_uncertain', null );
 				return;
 			}
+			$this->state = $verified;
 			// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
 			if ( 'wordpress' !== ( $this->attempt_outcome['source'] ?? null ) ) {
-				$completed = BindingFenceCoordinator::complete_persistent_install( $this->wpdb, $this->state, $this->claim, $this->pending_install->receipt(), $descriptor, true );
+				$completed = BindingFenceCoordinator::complete_persistent_install( $this->wpdb, $verified, $this->claim, $this->pending_install->receipt(), $descriptor, true );
 				if ( 'completed' === $completed['result'] && $completed['current'] instanceof BindingState ) {
 					$this->state          = $completed['current'];
 					$this->claim          = $this->claim( $this->state );
@@ -1431,6 +1411,32 @@ final class NativePackageUpdater {
 			}
 		}
 	}
+
+	private function verify_installed_manifest( IdentityDescriptor $descriptor ): ?BindingState {
+		$result      = $this->pending_install->install_result();
+		$destination = is_array( $result ) ? ( $result['destination'] ?? null ) : null;
+		$manifest    = is_string( $destination ) ? $this->manifest_builder->build( $destination ) : null;
+		$verified    = $this->verify_current();
+		$receipt     = $this->pending_install->receipt();
+		if ( null === $verified || ! $receipt instanceof AcquisitionReceipt || null === $manifest || ! is_string( $destination ) ) {
+			return null;
+		}
+		try {
+			AcquisitionReceipt::assert_archive_manifest(
+				$receipt,
+				$verified['current'],
+				$descriptor,
+				$verified['now'],
+				$this->manifest_builder->hash( $manifest ),
+				count( $manifest ),
+				$this->manifest_builder->expanded_bytes( $manifest )
+			);
+		} catch ( InvalidArgumentException ) {
+			return null;
+		}
+		return $this->pending_install->staging_verified() && $this->matches_staged_metadata( $destination ) ? $verified['current'] : null;
+	}
+
 	/** @return list<string> */ public function diagnostics(): array {
 		return $this->diagnostics; }
 	/** @return array{candidate_header_version:string|null,candidate_tag:string|null,candidate_validation_code:string|null,candidate_version:string|null,failure_code:string|null,installed_version:string|null,last_check:int|null,offered_release_identity:string|null,offered_version:string|null,relationship:string|null,last_native_outcome:array<string,mixed>|null} */ public function status(): array {

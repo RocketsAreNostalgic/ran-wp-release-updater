@@ -15,13 +15,14 @@ namespace RAN\WPReleaseUpdater\V1\WordPress;
  */
 final class ExactInstallRecovery {
 
-	/** @var array{path:string,source:string,identity:EntryIdentity,digest:string}|null */
+	/** @var array{path:string,source:string,identity:EntryIdentity,digest:string,resolved:string|null,tree:PackageTree}|null */
 	private ?array $backup = null;
 	/** @var OwnedEntry|null */
 	private ?array $maintenance = null;
 	/** @var PackageTree|null */
-	private ?array $incoming      = null;
-	private bool $preserve_backup = false;
+	private ?array $incoming       = null;
+	private bool $preserve_backup  = false;
+	private bool $deletion_started = false;
 
 	private readonly string $destination;
 	private readonly string $group;
@@ -90,9 +91,16 @@ final class ExactInstallRecovery {
 		try {
 			$result = $move( $arguments );
 		} finally {
-			$this->capture_backup( $path, $source, $previous_backup, $source_identity, $digest );
+			$this->capture_backup( $path, $source, $previous_backup, $source_identity, $digest, $source_tree );
 		}
-		return true === $result && null === $this->backup ? self::unverified_backup_source() : $result;
+		if ( $result instanceof \WP_Error ) {
+			return $result;
+		}
+		return true === $result && null !== $this->backup ? true : self::unverified_backup_source();
+	}
+
+	public function preserve_backup(): void {
+		$this->preserve_backup = true;
 	}
 
 	/** @param (\Closure(): (bool|\WP_Error)) $restore */
@@ -123,8 +131,11 @@ final class ExactInstallRecovery {
 	public function delete_backup( \Closure $delete ): bool|\WP_Error {
 		try {
 			$filesystem = $GLOBALS['wp_filesystem'] ?? null;
-			return ! $this->preserve_backup && $filesystem instanceof \WP_Filesystem_Direct && $this->has_owned_backup( $filesystem )
-				? $delete() : false;
+			if ( $this->preserve_backup || ! $filesystem instanceof \WP_Filesystem_Direct || ! $this->has_owned_backup( $filesystem, $this->deletion_started ) ) {
+				return false;
+			}
+			$this->deletion_started = true;
+			return $delete();
 		} catch ( \Throwable ) {
 			return false;
 		}
@@ -148,7 +159,7 @@ final class ExactInstallRecovery {
 			&& $this->parent_identity( dirname( $destination ) ) === $this->parent;
 	}
 
-	private function has_owned_backup( \WP_Filesystem_Direct $filesystem ): bool {
+	private function has_owned_backup( \WP_Filesystem_Direct $filesystem, bool $allow_partial = false ): bool {
 		$backup = $this->backup;
 		if ( null === $backup ) {
 			return false;
@@ -160,11 +171,19 @@ final class ExactInstallRecovery {
 			return false;
 		}
 		$identity = StagedPackageManifest::entry_identity( $effective );
-		// A partial deletion can change the directory contents before Core retries.
-		return null !== $identity
-			&& $identity['dev'] === $backup['identity']['dev']
-			&& $identity['ino'] === $backup['identity']['ino']
-			&& 0040000 === ( $identity['mode'] & 0170000 );
+		if ( null === $identity || $identity['dev'] !== $backup['identity']['dev'] || $identity['ino'] !== $backup['identity']['ino']
+			|| 0040000 !== ( $identity['mode'] & 0170000 )
+		) {
+			return false;
+		}
+		if ( 0 !== $backup['identity']['ino'] ) {
+			return true;
+		}
+		$current = $this->manifest->snapshot( $effective );
+		clearstatcache( true );
+		return null !== $current && realpath( $effective ) === $backup['resolved']
+			&& StagedPackageManifest::entry_identity( $effective ) === $identity
+			&& ( $allow_partial ? self::tree_is_subset( $current, $backup['tree'] ) : hash_equals( $backup['digest'], $this->manifest->tree_digest( $current ) ) );
 	}
 
 	private static function unverified_backup_source(): \WP_Error {
@@ -174,8 +193,9 @@ final class ExactInstallRecovery {
 	/**
 	 * @param EntryIdentity|null $previous_backup
 	 * @param EntryIdentity $source
+	 * @param PackageTree $source_tree
 	 */
-	private function capture_backup( string $path, string $source_parent, ?array $previous_backup, array $source, string $digest ): void {
+	private function capture_backup( string $path, string $source_parent, ?array $previous_backup, array $source, string $digest, array $source_tree ): void {
 		$identity = StagedPackageManifest::entry_identity( $path );
 		if ( null === $identity || 0040000 !== ( $identity['mode'] & 0170000 ) || $identity === $previous_backup ) {
 			return;
@@ -193,11 +213,17 @@ final class ExactInstallRecovery {
 				return;
 			}
 		}
+		$resolved = 0 === $identity['ino'] ? realpath( $path ) : null;
+		if ( false === $resolved ) {
+			return;
+		}
 		$this->backup = array(
 			'path'     => $path,
 			'source'   => $source_parent,
 			'identity' => $identity,
 			'digest'   => $digest,
+			'resolved' => $resolved,
+			'tree'     => $source_tree,
 		);
 	}
 
@@ -297,10 +323,22 @@ final class ExactInstallRecovery {
 		if ( null === $current || StagedPackageManifest::entry_identity( $this->destination ) !== $identity ) {
 			return false;
 		}
-		$incoming_files = $this->incoming['files'] ?? array();
-		$incoming_dirs  = $this->incoming['directories'] ?? array();
-		return array_intersect_key( $incoming_files, $current['files'] ) === $current['files']
-			&& array() === array_diff_key( $current['directories'], $incoming_dirs );
+		return self::tree_is_subset(
+			$current,
+			$this->incoming ?? array(
+				'files'       => array(),
+				'directories' => array(),
+			)
+		);
+	}
+
+	/**
+	 * @param PackageTree $current
+	 * @param PackageTree $expected
+	 */
+	private static function tree_is_subset( array $current, array $expected ): bool {
+		return array_intersect_key( $expected['files'], $current['files'] ) === $current['files']
+			&& array() === array_diff_key( $current['directories'], $expected['directories'] );
 	}
 
 	private function clear_maintenance(): void {
