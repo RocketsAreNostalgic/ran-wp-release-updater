@@ -133,6 +133,8 @@ final class ExactInstallRecovery {
 		try {
 			$backup     = $this->backup;
 			$filesystem = $GLOBALS['wp_filesystem'] ?? null;
+			// Prove the parent before snapshotting the destination so the probe reads the original location, then
+			// prove it again afterwards so a parent swap during that probe cannot admit rollback.
 			if ( null === $backup || ! $filesystem instanceof \WP_Filesystem_Direct
 				|| ! $this->destination_matches( $filesystem, $backup['source'] )
 				|| ! $this->has_owned_backup( $filesystem ) || $this->parent_changed()

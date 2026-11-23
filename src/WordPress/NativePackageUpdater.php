@@ -1444,14 +1444,20 @@ final class NativePackageUpdater {
 	private function installed_destination_matches( string $destination ): bool {
 		$destination = rtrim( $destination, '/\\' );
 		$registered  = rtrim( $this->installed_directory, '/\\' );
-		$normalized  = wp_normalize_path( $destination );
-		if ( wp_normalize_path( $registered ) !== $normalized ) {
+		if ( null !== $this->exact_install && wp_normalize_path( $registered ) !== wp_normalize_path( $destination ) ) {
 			return false;
 		}
 		clearstatcache( true );
 		$resolved = realpath( $destination );
-		return false !== $resolved && realpath( $registered ) === $resolved
-			&& ( null === $this->exact_install || $this->exact_install->destination_has_original_parent( $destination ) );
+		if ( false === $resolved || realpath( $registered ) !== $resolved ) {
+			return false;
+		}
+		if ( null !== $this->exact_install ) {
+			return $this->exact_install->destination_has_original_parent( $destination );
+		}
+		// Hosts register the PHP-resolved package path while Core reports it beneath the unresolved plugin or theme
+		// root, so ordinary installs compare resolved directories but never accept a linked package leaf.
+		return ! is_link( $destination ) && is_dir( $destination );
 	}
 
 	/** @return list<string> */ public function diagnostics(): array {
