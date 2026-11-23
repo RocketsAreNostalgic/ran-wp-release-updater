@@ -8,11 +8,17 @@ use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
 
 /** Exercise the selected runtime, its GitHub HTTP transport and stock WordPress upgraders. */
 function ran_wp_release_updater_test_install_exact( string $type, string $mode, string $direction, string $identity, string $archive, string $main_file, string $installed, string $source_root ): void {
-	$no_target   = apply_filters( 'ran_wp_release_updater_install_exact_release_v1', null, $type, $identity, '301', 'v2.0.0', '2.0.0' );
-	$transient   = 'plugin' === $type ? 'update_plugins' : 'update_themes';
-	$header_file = 'plugin' === $type ? $main_file : dirname( $main_file ) . '/style.css';
-	$backup      = WP_CONTENT_DIR . '/upgrade-temp-backup/' . ( 'plugin' === $type ? 'plugins' : 'themes' ) . '/offer-target';
-	$read_bytes  = static function ( string $path ): string {
+	$no_target           = apply_filters( 'ran_wp_release_updater_install_exact_release_v1', null, $type, $identity, '301', 'v2.0.0', '2.0.0' );
+	$transient           = 'plugin' === $type ? 'update_plugins' : 'update_themes';
+	$header_file         = 'plugin' === $type ? $main_file : dirname( $main_file ) . '/style.css';
+	$backup              = WP_CONTENT_DIR . '/upgrade-temp-backup/' . ( 'plugin' === $type ? 'plugins' : 'themes' ) . '/offer-target';
+	$maintenance         = ABSPATH . '.maintenance';
+	$foreign_maintenance = 'exact-preexisting-maintenance' === $mode;
+	if ( $foreign_maintenance ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Seed a foreign maintenance marker inside the disposable installation.
+		file_put_contents( $maintenance, '<?php $upgrading = 1; // fixture-owned marker' );
+	}
+	$read_bytes = static function ( string $path ): string {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Inspect the exact local package bytes in the disposable installation.
 		$bytes = file_get_contents( $path );
 		if ( ! is_string( $bytes ) ) {
@@ -20,9 +26,9 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		}
 		return $bytes;
 	};
-	$before      = $read_bytes( $main_file );
-	$header      = PackageIdentityValidator::parse_header( $read_bytes( $header_file ), $type );
-	$zip         = new ZipArchive();
+	$before     = $read_bytes( $main_file );
+	$header     = PackageIdentityValidator::parse_header( $read_bytes( $header_file ), $type );
+	$zip        = new ZipArchive();
 	if ( true !== $zip->open( $archive ) ) {
 		throw new RuntimeException( 'The proof could not open the release archive.' );
 	}
@@ -37,6 +43,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'package'         => null,
 		'completions'     => array(),
 		'foreign_restore' => 0,
+		'stdout_bytes'    => 0,
 	);
 	ran_wp_release_updater_test_exact_http( $archive, $mode, $observed );
 	$composition = GitHubReleaseAdapter::compose_from_declaration(
@@ -89,7 +96,16 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		)
 	);
 	$expected_version = 'exact-listed-change' === $mode ? '2.0.1' : '2.0.0';
+	ob_start(
+		static function ( string $bytes ) use ( $observed ): string {
+			$observed->stdout_bytes += strlen( $bytes );
+			return '';
+		}
+	);
+	$caller_level     = ob_get_level();
 	$report           = apply_filters( 'ran_wp_release_updater_install_exact_release_v1', null, $type, $identity, '301', 'v2.0.0', $expected_version, 'exact-refuse' !== $mode && 'older' === $direction );
+	$buffer_preserved = ob_get_level() === $caller_level;
+	$output           = $buffer_preserved ? ob_get_clean() : false;
 	if ( ! is_array( $report ) ) {
 		throw new RuntimeException( 'The exact-install target did not return a report.' );
 	}
@@ -117,30 +133,39 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'exact-failure'       => 'backup_restore_pending',
 		'exact-delete-fail'   => 'backup_cleanup_failed',
 		'exact-interrupted' => 'unexpected_failure',
+		'exact-post-install-throw' => 'unexpected_failure',
+		'exact-preexisting-maintenance' => 'update_completed',
+		'exact-early-refusal' => 'unverified_install_result',
+		'exact-early-lease-fail' => 'lease_release_failed',
 		'exact-commit-fail' => 'install_commit_failed',
 		'exact-archive-fail'  => 'archive_cleanup_failed',
 		'exact-lease-fail'    => 'lease_release_failed',
 		'exact-host-fail'     => 'host_completion_failed',
 		default              => throw new RuntimeException( 'Invalid exact-install scenario.' ),
 	};
-	$pending                  = in_array( $mode, array( 'exact-failure', 'exact-delete-fail', 'exact-interrupted' ), true );
+	$core_pending             = in_array( $mode, array( 'exact-failure', 'exact-delete-fail', 'exact-interrupted' ), true );
+	$orphaned_backup          = 'exact-post-install-throw' === $mode;
+	$pending                  = $core_pending || $orphaned_backup;
 	$refused                  = in_array( $mode, array( 'exact-refuse', 'exact-listed-change' ), true );
 	$changed                  = 'exact-changed' === $mode;
-	$finalized                = ! $pending && ! $refused && ! $changed;
+	$early_refusal            = in_array( $mode, array( 'exact-early-refusal', 'exact-early-lease-fail' ), true );
+	$finalized                = ! $pending && ! $refused && ! $changed && ! $early_refusal;
 	$commit_failed            = 'exact-commit-fail' === $mode;
 	$finalization             = $pending ? null : array(
 		'commit'          => $finalized ? ( $commit_failed ? 'failed' : 'completed' ) : 'not_attempted',
 		'host_completion' => 'exact-host-fail' === $mode ? 'failed' : ( $finalized ? 'completed' : 'not_applicable' ),
-		'lease'           => 'exact-lease-fail' === $mode ? 'failed' : 'released',
+		'lease'           => in_array( $mode, array( 'exact-lease-fail', 'exact-early-lease-fail' ), true ) ? 'failed' : 'released',
 		'archive_cleanup' => 'exact-archive-fail' === $mode ? 'failed' : 'clean',
 	);
-	$success                  = 'exact-success' === $mode;
+	$success                  = in_array( $mode, array( 'exact-success', 'exact-preexisting-maintenance' ), true );
 	$host_completed           = $finalized ? array(
 		array( 'exact-install-proof', $type, $identity, $commit_failed || 'exact-archive-fail' === $mode ? 'uncertain' : 'verified_success' ),
 	) : array();
-	$restoring                = 'exact-failure' === $mode;
+	$core_restoring           = 'exact-failure' === $mode || $early_refusal;
+	$restoring                = $core_restoring || $orphaned_backup;
 	$deleted_early            = $finalized || 'exact-delete-fail' === $mode;
-	$expected_installed_bytes = $refused || $changed ? $before : $release;
+	$keeps_old_bytes          = $refused || $changed || $early_refusal;
+	$expected_installed_bytes = $keeps_old_bytes ? $before : $release;
 	$expected_status          = $success ? 'installed' : ( $pending ? 'pending' : ( $refused ? 'refused' : 'failed' ) );
 	$checks                   = array(
 		'unsupported_default' => null === $no_target,
@@ -156,9 +181,11 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 			'finalization'         => $finalization,
 		) === $report,
 		'offer_removed'       => $offer_absent && null === $stored_offer,
-		'bytes_before'        => $before_shutdown === $expected_installed_bytes && ( $refused || $changed || $before !== $before_shutdown ),
+		'quiet_response'      => $buffer_preserved && '' === $output && 0 === $observed->stdout_bytes,
+		'bytes_before'        => $before_shutdown === $expected_installed_bytes && ( $keeps_old_bytes || $before !== $before_shutdown ),
 		'commit_before'       => $completions_before === $host_completed && ( $success ? 'verified_success' === ( $native_record['outcome'] ?? null ) : 'verified_success' !== ( $native_record['outcome'] ?? null ) ),
-		'shutdown_ownership'  => $pending === $owns_finalizer && $restoring === $owns_restore_hook && $pending === $owns_backup_hook && $backup_present === $pending && ( $deleted_early ? 1 : 0 ) === $deletions_before,
+		'shutdown_ownership'  => $pending === $owns_finalizer && $core_restoring === $owns_restore_hook && ( $core_pending || $early_refusal ) === $owns_backup_hook && $backup_present === $pending && ( $deleted_early ? 1 : 0 ) === $deletions_before,
+		'maintenance_before'  => ( $foreign_maintenance || ( 'plugin' === $type && $orphaned_backup ) ) === is_file( $maintenance ),
 		'private_custody'     => ( $pending || 'exact-archive-fail' === $mode ) ? is_array( $private_before ) && 1 === count( $private_before ) : array() === $private_before,
 	);
 	if ( $finalized ) {
@@ -167,7 +194,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	}
 	add_action(
 		'shutdown',
-		static function () use ( $checks, $type, $mode, $identity, $backup, $restoring, $expected_installed_bytes, $read_bytes, $main_file, $before, $observed, $host_completed, $pending, $updater, $report ): void {
+		static function () use ( $checks, $type, $mode, $identity, $backup, $maintenance, $foreign_maintenance, $restoring, $expected_installed_bytes, $read_bytes, $main_file, $before, $observed, $host_completed, $core_pending, $pending, $updater, $report ): void {
 			$after       = $read_bytes( $main_file );
 			$is_active   = 'plugin' === $type ? is_plugin_active( $identity ) : get_stylesheet() === $identity;
 			$completions = $pending ? array( array( 'exact-install-proof', $type, $identity, 'uncertain' ) ) : $host_completed;
@@ -176,15 +203,17 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 				'rollback_preserved' => ( $restoring ? $before : $expected_installed_bytes ) === $after,
 				'shutdown_cleanup'   => ! is_dir( $backup ) && array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
 				'single_completion'  => $completions === $observed->completions,
-				'backup_deletions'   => ( 'exact-delete-fail' === $mode ? 2 : ( $pending || array() !== $host_completed ? 1 : 0 ) ) === $observed->deletions,
+				'backup_deletions'   => ( 'exact-delete-fail' === $mode ? 2 : ( $core_pending || array() !== $host_completed ? 1 : 0 ) ) === $observed->deletions,
+				'maintenance_after'  => $foreign_maintenance ? '<?php $upgrading = 1; // fixture-owned marker' === $read_bytes( $maintenance ) : ! is_file( $maintenance ),
 				'other_upgrader'     => 1 === $observed->foreign_restore,
 			);
 			$evidence    = array(
-				'pass'      => ! in_array( false, $checks, true ),
-				'checks'    => $checks,
-				'report'    => $report,
-				'outcome'   => $updater->status()['last_native_outcome'],
-				'downloads' => $observed->downloads,
+				'pass'         => ! in_array( false, $checks, true ),
+				'checks'       => $checks,
+				'report'       => $report,
+				'outcome'      => $updater->status()['last_native_outcome'],
+				'downloads'    => $observed->downloads,
+				'stdout_bytes' => $observed->stdout_bytes,
 			);
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact evidence bytes for the disposable integration fixture.
 			file_put_contents( (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' ), json_encode( $evidence, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR ) );
@@ -275,11 +304,38 @@ function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, strin
 		4
 	);
 
-	if ( 'exact-failure' === $mode ) {
+	if ( in_array( $mode, array( 'exact-failure', 'exact-post-install-throw' ), true ) ) {
 		add_filter(
 			'upgrader_post_install',
-			static fn ( mixed $response, array $extra ): mixed => ( $extra[ $type ] ?? null ) === $identity ? new WP_Error( 'exact_fixture_post_copy_failure', 'Injected after the replacement was copied.' ) : $response,
+			static function ( mixed $response, array $extra ) use ( $mode, $type, $identity ): mixed {
+				if ( ( $extra[ $type ] ?? null ) !== $identity ) {
+					return $response;
+				}
+				if ( 'exact-post-install-throw' === $mode ) {
+					throw new RuntimeException( 'Interrupted after copy and before Core schedules recovery.' );
+				}
+				return new WP_Error( 'exact_fixture_post_copy_failure', 'Injected after the replacement was copied.' );
+			},
 			PHP_INT_MAX,
+			2
+		);
+	}
+	if ( in_array( $mode, array( 'exact-early-refusal', 'exact-early-lease-fail' ), true ) ) {
+		add_filter(
+			'upgrader_pre_install',
+			static function ( mixed $response, array $extra ) use ( $mode, $type, $identity ): mixed {
+				if ( ( $extra[ $type ] ?? null ) !== $identity ) {
+					return $response;
+				}
+				if ( 'exact-early-lease-fail' === $mode ) {
+					add_filter(
+						'query',
+						static fn ( string $sql ): string => str_starts_with( $sql, 'UPDATE ' ) && str_contains( $sql, 'ran_wp_release_updater_target_v1_' ) ? $sql . ' AND 1 = 0' : $sql
+					);
+				}
+				return new WP_Error( 'exact_fixture_pre_install_refusal', 'Refused before Core moves the backup.' );
+			},
+			0,
 			2
 		);
 	}

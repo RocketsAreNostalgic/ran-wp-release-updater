@@ -473,8 +473,7 @@ final class NativePackageUpdater {
 		}
 
 		try {
-			$upgrader = $is_plugin ? new \Plugin_Upgrader( new \Bulk_Plugin_Upgrader_Skin() ) : new \Theme_Upgrader( new \Theme_Upgrader_Skin() );
-			$exact    = new ExactInstallInvocation( $upgrader, self::EXACT_TOKEN_PREFIX . bin2hex( random_bytes( 32 ) ), $installed );
+			$exact = ExactInstallInvocation::create( $this->target_type, $this->installed_directory, self::EXACT_TOKEN_PREFIX . bin2hex( random_bytes( 32 ) ), $installed );
 		} catch ( \Throwable ) {
 			return $this->exact_report( 'wordpress_unavailable' );
 		}
@@ -484,7 +483,7 @@ final class NativePackageUpdater {
 		} catch ( \Throwable ) {
 			$code = 'unexpected_failure';
 		} finally {
-			if ( ! $this->pending_install->active() ) {
+			if ( ! $this->pending_install->active() && ! $exact->maintenance_pending() ) {
 				if ( $exact->lease_claimed && null === $exact->finalization ) {
 					$this->clear_pending();
 				}
@@ -534,7 +533,10 @@ final class NativePackageUpdater {
 		}
 
 		$result = $this->run_exact_upgrade( $exact, $this->offer_entry( $descriptor, $exact->token, false ) + array( 'new_version' => $facts['version'] ) );
-		if ( $exact->restore_pending() ) {
+		if ( $exact->maintenance_pending() ) {
+			return 'maintenance_cleanup_failed';
+		}
+		if ( null === $exact->finalization && $exact->restore_pending() ) {
 			return 'backup_restore_pending';
 		}
 		if (
@@ -1216,7 +1218,7 @@ final class NativePackageUpdater {
 	}
 	/** @param array<string,mixed> $hook_extra */
 	public function capture_install_package_result( mixed $result, array $hook_extra ): mixed {
-		if ( ! $this->matches_operation( $hook_extra ) ) {
+		if ( ! $this->matches_operation( $hook_extra ) || null !== $this->exact_install?->finalization ) {
 			return $result;
 		}
 		$this->observe_wordpress_error( $result );
@@ -1263,8 +1265,7 @@ final class NativePackageUpdater {
 		if (
 			$this->theme_error_original instanceof \WP_Error
 			&& $this->theme_error_outgoing instanceof \WP_Error
-			&& $upgrader->skin instanceof \Theme_Upgrader_Skin
-			&& \Theme_Upgrader_Skin::class === get_class( $upgrader->skin )
+			&& $this->matches_theme_skin( $upgrader )
 			&& array() === $upgrader->result
 			&& $upgrader->skin->result === $this->theme_error_outgoing
 		) {
@@ -1319,6 +1320,15 @@ final class NativePackageUpdater {
 		$shutdown = null !== $exact && doing_action( 'shutdown' );
 		if ( ! $this->shutdown_scheduled || ( null !== $exact && ! $exact->backup_deleted && ! $shutdown ) ) {
 			return;
+		}
+		if ( $shutdown ) {
+			try {
+				if ( ! $exact->recover_at_shutdown() ) {
+					$this->diagnose( 'outcome_uncertain', null );
+				}
+			} catch ( \Throwable ) {
+				$this->diagnose( 'outcome_uncertain', null );
+			}
 		}
 		if ( $this->finalizing ) {
 			if ( $shutdown ) {
@@ -1957,9 +1967,7 @@ final class NativePackageUpdater {
 	private function admit_theme_error_bridge( mixed $upgrader, array $hook_extra ): void {
 		if (
 			! $upgrader instanceof \Theme_Upgrader
-			|| \Theme_Upgrader::class !== get_class( $upgrader )
-			|| ! $upgrader->skin instanceof \Theme_Upgrader_Skin
-			|| \Theme_Upgrader_Skin::class !== get_class( $upgrader->skin )
+			|| ! $this->matches_theme_skin( $upgrader )
 			|| ( null === $this->native_owner && $this->exact_install?->upgrader !== $upgrader )
 			|| 'theme' !== $this->target_type
 			|| $this->pending_install->multi_run()
@@ -1978,13 +1986,17 @@ final class NativePackageUpdater {
 			&& ( null !== $this->native_owner || $this->exact_install?->upgrader === $upgrader )
 			&& $this->pending_install->active()
 			&& ! $this->pending_install->multi_run()
-			&& $upgrader->skin instanceof \Theme_Upgrader_Skin
-			&& \Theme_Upgrader_Skin::class === get_class( $upgrader->skin )
+			&& $this->matches_theme_skin( $upgrader )
 			&& function_exists( 'doing_action' )
 			&& ! doing_action( 'wp_maybe_auto_update' )
 			&& null === $this->theme_error_original
 			&& null === $this->theme_error_outgoing
 			&& $upgrader->result === $result;
+	}
+	private function matches_theme_skin( \Theme_Upgrader $upgrader ): bool {
+		return $upgrader->skin instanceof \Theme_Upgrader_Skin
+			&& ( ( \Theme_Upgrader::class === get_class( $upgrader ) && \Theme_Upgrader_Skin::class === get_class( $upgrader->skin ) )
+			|| ( $this->exact_install?->upgrader === $upgrader && $this->exact_install->uses_original_skin() ) );
 	}
 	private function disarm_theme_error_bridge(): void {
 		$this->theme_error_upgrader = null;
@@ -1994,7 +2006,8 @@ final class NativePackageUpdater {
 	private function clear_pending( bool $release = true ): void {
 		$exact    = $this->exact_install;
 		$shutdown = null !== $exact && doing_action( 'shutdown' );
-		if ( ( $this->native_beginning && ( ! $shutdown || ! $this->finalizing ) )
+		if ( null !== $exact?->finalization
+			|| ( $this->native_beginning && ( ! $shutdown || ! $this->finalizing ) )
 			|| ( ! $this->finalizing && ( null !== $this->native_owner || ( null !== $exact && $this->pending_install->staging_verified() ) ) )
 		) {
 			return;

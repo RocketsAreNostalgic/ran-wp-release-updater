@@ -33,11 +33,54 @@ final class ExactInstallInvocation {
 	/** @var Finalization|null */
 	public ?array $finalization = null;
 
-	public function __construct(
+	private function __construct(
 		public readonly \Plugin_Upgrader|\Theme_Upgrader $upgrader,
 		public readonly string $token,
-		public readonly string $installed_version
+		public readonly string $installed_version,
+		private readonly ExactInstallRecovery $recovery,
+		private readonly \WP_Upgrader_Skin $skin
 	) {}
+
+	public static function create( string $target_type, string $directory, string $token, string $installed_version ): self {
+		$recovery = new ExactInstallRecovery( $directory, $target_type );
+		if ( 'plugin' === $target_type ) {
+			$skin     = new class() extends \Bulk_Plugin_Upgrader_Skin {
+				public function flush_output(): void {
+					// The operation buffers progress without flushing the caller's response.
+				}
+			};
+			$upgrader = new class( $skin, $recovery ) extends \Plugin_Upgrader {
+				public function __construct( \Bulk_Plugin_Upgrader_Skin $skin, private readonly ExactInstallRecovery $recovery ) {
+					parent::__construct( $skin );
+				}
+
+				public function move_to_temp_backup_dir( $args ): bool|\WP_Error {
+					return $this->recovery->move_backup( $args, parent::move_to_temp_backup_dir( ... ) );
+				}
+
+				public function maintenance_mode( $enable = false ): void {
+					$this->recovery->maintenance_mode( true === $enable, parent::maintenance_mode( ... ) );
+				}
+			};
+		} else {
+			$skin     = new class() extends \Theme_Upgrader_Skin {
+				public function feedback( $feedback, ...$args ): void {
+					// The stock feedback method calls show_message(), which flushes every buffer.
+					unset( $feedback, $args );
+				}
+			};
+			$upgrader = new class( $skin, $recovery ) extends \Theme_Upgrader {
+				public function __construct( \Theme_Upgrader_Skin $skin, private readonly ExactInstallRecovery $recovery ) {
+					parent::__construct( $skin );
+				}
+
+				public function move_to_temp_backup_dir( $args ): bool|\WP_Error {
+					return $this->recovery->move_backup( $args, parent::move_to_temp_backup_dir( ... ) );
+				}
+			};
+		}
+		return new self( $upgrader, $token, $installed_version, $recovery, $skin );
+	}
 
 	public function run( string $identity ): mixed {
 		$this->wordpress_started = true;
@@ -60,6 +103,18 @@ final class ExactInstallInvocation {
 	/** @phpstan-impure The Core hook graph can change during filesystem cleanup. */
 	public function restore_pending(): bool {
 		return false !== has_action( 'shutdown', array( $this->upgrader, 'restore_temp_backup' ) );
+	}
+
+	public function maintenance_pending(): bool {
+		return $this->recovery->maintenance_pending();
+	}
+
+	public function uses_original_skin(): bool {
+		return $this->upgrader->skin === $this->skin;
+	}
+
+	public function recover_at_shutdown(): bool {
+		return $this->recovery->recover_at_shutdown( $this->backup_deleted || $this->restore_pending() || false !== $this->backup_deletion_priority() );
 	}
 
 	/** Complete only this instance's scheduled deletion, after ruling out its scheduled restoration. */

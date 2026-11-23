@@ -417,6 +417,12 @@ unconfirmed deletion retain WordPress's shutdown callbacks and the updater's
 cleanup fallback. Exact installs with unconfirmed deletion report uncertainty
 and leave the host mutation outcome uncertain.
 
+If installation stops after WordPress moves the backup and before Core
+schedules recovery, the updater restores the backup it observed that
+instance create. It also clears any maintenance marker that the invocation
+created and still owns. The operation buffers native progress without
+flushing the caller's response.
+
 The report carries `status`, `code`, `version`, `relationship`,
 `finalization_pending` and `finalization`. Only `installed` with
 `update_completed` acknowledges a successful finalized install. Other statuses
