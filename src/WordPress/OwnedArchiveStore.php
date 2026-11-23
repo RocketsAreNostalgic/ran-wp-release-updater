@@ -128,13 +128,34 @@ final class OwnedArchiveStore {
 		clearstatcache( true, $path );
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$stat = @lstat( $path );
-		$hash = is_file( $path ) ? hash_file( 'sha256', $path ) : false;
 		if (
 			! is_array( $stat )
+			|| is_link( $path )
 			|| 0100000 !== ( $stat['mode'] & 0170000 )
+			|| 1 !== $stat['nlink']
 			|| $stat['size'] !== $facts['artifact_size']
-			|| ! is_string( $hash )
+		) {
+			return null;
+		}
+
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Hash the verified regular file and recheck native identity; missing or changed files fail closed quietly.
+		$hash = @hash_file( 'sha256', $path );
+		clearstatcache( true, $path );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Re-observe native filesystem identity without following symlinks to reject concurrent replacement during hashing.
+		$after = @lstat( $path );
+		if (
+			! is_string( $hash )
 			|| ! hash_equals( $facts['artifact_sha256'], $hash )
+			|| ! is_array( $after )
+			|| is_link( $path )
+			|| 0100000 !== ( $after['mode'] & 0170000 )
+			|| 1 !== $after['nlink']
+			|| $after['dev'] !== $stat['dev']
+			|| $after['ino'] !== $stat['ino']
+			|| $after['mode'] !== $stat['mode']
+			|| $after['mtime'] !== $stat['mtime']
+			|| $after['ctime'] !== $stat['ctime']
+			|| $after['size'] !== $stat['size']
 		) {
 			return null;
 		}

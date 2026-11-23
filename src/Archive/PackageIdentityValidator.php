@@ -84,8 +84,9 @@ final class PackageIdentityValidator {
 			if ( ! $scan->is_valid() || ! is_string( $root ) ) {
 				return self::rejected( 'archive_root_mismatch' === $scan->failure_code() ? 'archive_root_not_single' : (string) $scan->failure_code() );
 			}
-			$candidate = null;
-			$pending   = null;
+			$candidate      = null;
+			$pending        = null;
+			$expanded_bytes = 0;
 			foreach ( $scan->entries() as $entry ) {
 				$parts            = explode( '/', $entry['path'] );
 				$is_theme_header  = $root . '/style.css' === $entry['path'];
@@ -99,20 +100,26 @@ final class PackageIdentityValidator {
 						? $parts[1]
 						: null
 					);
+				$expected_size    = $entry['directory'] ? 0 : $entry['size'];
+				$entry_identity   = self::stream_entry( $zip, $entry['name'], $expected_size, null !== $header ? self::MAX_HEADER_BYTES : 0 );
+				if (
+					null === $entry_identity
+					|| $entry_identity['size'] > self::MAX_EXPANDED_ARCHIVE_BYTES - $expanded_bytes
+				) {
+					return self::rejected( 'archive_unreadable' );
+				}
+				$expanded_bytes += $entry_identity['size'];
 				if ( null === $header ) {
 					continue;
 				}
-				$contents = self::read_header( $zip, $entry['name'] );
-				$parsed   = is_string( $contents ) ? self::parse_header( $contents, $policy['target_type'] ) : array();
+				$contents = $entry_identity['prefix'];
+				$parsed   = self::parse_header( $contents, $policy['target_type'] );
 				$metadata = isset( $parsed['headers']['Name'] ) ? $parsed['headers']['Name'] : null;
 				if ( 'plugin' === $policy['target_type'] && null === $metadata ) {
-					if ( is_string( $contents ) && 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*Plugin Name:/mi', str_replace( array( "\r\n", "\r" ), "\n", substr( $contents, 0, self::MAX_HEADER_BYTES ) ) ) ) {
+					if ( 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*Plugin Name:/mi', str_replace( array( "\r\n", "\r" ), "\n", substr( $contents, 0, self::MAX_HEADER_BYTES ) ) ) ) {
 						$pending ??= self::header_rejection( $parsed );
 					}
 					continue;
-				}
-				if ( null === $contents ) {
-					return null;
 				}
 				if ( null === $metadata ) {
 					$header_failure = self::header_rejection( $parsed );
@@ -437,11 +444,21 @@ final class PackageIdentityValidator {
 		return is_string( $contents ) ? $contents : null; }
 	/** @return array{sha256:string,size:int}|null */
 	private static function entry_identity( \ZipArchive $zip, string $name, int $expected_size ): ?array {
+		$streamed = self::stream_entry( $zip, $name, $expected_size );
+		return null === $streamed ? null : array(
+			'sha256' => $streamed['sha256'],
+			'size'   => $streamed['size'],
+		);
+	}
+
+	/** @return array{sha256:string,size:int,prefix:string}|null */
+	private static function stream_entry( \ZipArchive $zip, string $name, int $expected_size, int $capture_bytes = 0 ): ?array {
 		$stream = $zip->getStream( $name );
 		if ( ! is_resource( $stream ) ) {
 			return null;
 		} $context = hash_init( 'sha256' );
 		$size      = 0;
+		$prefix    = '';
 		$valid     = true;
 		while ( ! feof( $stream ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read bounded bytes from the already opened native stream; existing type, length and identity checks govern acceptance.
@@ -449,13 +466,18 @@ final class PackageIdentityValidator {
 			if ( ! is_string( $chunk ) || ( '' === $chunk && ! feof( $stream ) ) || strlen( $chunk ) > $expected_size - $size ) {
 				$valid = false;
 				break;
-			} $size += strlen( $chunk );
+			}
+			if ( $capture_bytes > 0 && strlen( $prefix ) < $capture_bytes ) {
+				$prefix .= substr( $chunk, 0, $capture_bytes - strlen( $prefix ) );
+			}
+			$size += strlen( $chunk );
 			hash_update( $context, $chunk );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream owned by this operation; no WordPress filesystem abstraction applies.
 		} fclose( $stream );
 		return $valid && $size === $expected_size ? array(
 			'sha256' => hash_final( $context ),
 			'size'   => $size,
+			'prefix' => $prefix,
 		) : null; }
 	/** @param array{code:string,header?:string} $parsed */
 	private static function archive_header_failure_code( array $parsed ): string {

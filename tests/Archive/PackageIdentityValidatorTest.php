@@ -713,6 +713,99 @@ PHP;
 		);
 	}
 
+	public function test_prospective_inspection_rejects_forged_entry_size_and_unreadable_top_level_php(): void {
+		$header = $this->header( 'Plugin Name', 'Example Plugin' );
+
+		// Forged central-directory uncompressed size on a payload entry must fail closed during prospective inspection.
+		$forged = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $header,
+				'example-plugin/payload.txt'        => str_repeat( 'A', 4096 ),
+			)
+		);
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read local ZIP fixture bytes to modify a central-directory size field.
+		$bytes = file_get_contents( $forged );
+		self::assertIsString( $bytes );
+		$cd_marker = "PK\x01\x02";
+		$offset    = strpos( $bytes, $cd_marker );
+		$patched   = false;
+		while ( false !== $offset ) {
+			$name_len = unpack( 'v', substr( $bytes, $offset + 28, 2 ) );
+			self::assertIsArray( $name_len );
+			$entry_name = substr( $bytes, $offset + 46, (int) $name_len[1] );
+			if ( 'example-plugin/payload.txt' === $entry_name ) {
+				$bytes   = substr_replace( $bytes, pack( 'V', 4 ), $offset + 24, 4 );
+				$patched = true;
+				break;
+			}
+			$offset = strpos( $bytes, $cd_marker, $offset + 4 );
+		}
+		self::assertTrue( $patched );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write modified ZIP fixture bytes directly.
+		file_put_contents( $forged, $bytes );
+		$this->assert_rejected(
+			( new PackageIdentityValidator() )->inspect_prospective( $this->prospective_policy( $forged, 'plugin' ), $forged ),
+			'archive_unreadable'
+		);
+
+		// Unreadable top-level .php file must fail closed rather than being skipped as lacking a plugin header.
+		$unreadable = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $header,
+				'example-plugin/helper.php'         => "<?php\nreturn true;\n",
+			)
+		);
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read local ZIP fixture bytes to set an unsupported compression method.
+		$unreadable_bytes = file_get_contents( $unreadable );
+		self::assertIsString( $unreadable_bytes );
+		$patched_local = false;
+		$patched_cd    = false;
+		$local_offset  = strpos( $unreadable_bytes, "PK\x03\x04" );
+		while ( false !== $local_offset ) {
+			$name_len = unpack( 'v', substr( $unreadable_bytes, $local_offset + 26, 2 ) );
+			self::assertIsArray( $name_len );
+			$entry_name = substr( $unreadable_bytes, $local_offset + 30, (int) $name_len[1] );
+			if ( 'example-plugin/helper.php' === $entry_name ) {
+				$unreadable_bytes = substr_replace( $unreadable_bytes, pack( 'v', 98 ), $local_offset + 8, 2 );
+				$patched_local    = true;
+				break;
+			}
+			$local_offset = strpos( $unreadable_bytes, "PK\x03\x04", $local_offset + 4 );
+		}
+		$cd_offset = strpos( $unreadable_bytes, $cd_marker );
+		while ( false !== $cd_offset ) {
+			$name_len = unpack( 'v', substr( $unreadable_bytes, $cd_offset + 28, 2 ) );
+			self::assertIsArray( $name_len );
+			$entry_name = substr( $unreadable_bytes, $cd_offset + 46, (int) $name_len[1] );
+			if ( 'example-plugin/helper.php' === $entry_name ) {
+				$unreadable_bytes = substr_replace( $unreadable_bytes, pack( 'v', 98 ), $cd_offset + 10, 2 );
+				$patched_cd       = true;
+				break;
+			}
+			$cd_offset = strpos( $unreadable_bytes, $cd_marker, $cd_offset + 4 );
+		}
+		self::assertTrue( $patched_local && $patched_cd );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write unreadable-entry ZIP fixture bytes directly.
+		file_put_contents( $unreadable, $unreadable_bytes );
+		// Prove the archive opens and passes inventory scan cleanly, and only fails when streaming helper.php.
+		$probe = new \ZipArchive();
+		self::assertTrue( $probe->open( $unreadable ) );
+		self::assertTrue( \RAN\WPReleaseUpdater\V1\Archive\ArchiveScanner::scan( $probe )->is_valid() );
+		self::assertFalse( $probe->getStream( 'example-plugin/helper.php' ) );
+		$probe->close();
+		$opened    = false;
+		$validator = new PackageIdentityValidator(
+			static function () use ( &$opened ): void {
+				$opened = true;
+			}
+		);
+		$this->assert_rejected(
+			$validator->inspect_prospective( $this->prospective_policy( $unreadable, 'plugin' ), $unreadable ),
+			'archive_unreadable'
+		);
+		self::assertTrue( $opened );
+	}
+
 	/**
 	 * @param array<string,string> $entries
 	 * @param list<string> $links
