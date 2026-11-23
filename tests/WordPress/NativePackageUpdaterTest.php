@@ -1085,7 +1085,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array(), $database->read_option_names() );
 			$updater->register();
 			$updater->register();
-			self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertContains( array( 'filter', 'ran_wp_release_updater_install_exact_release_v1', array( $updater, 'filter_install_exact_release' ), 10, 7 ), $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
 		public function test_offer_rechecks_runtime_uri_uses_unique_info_slug_and_default_denies_automatic(): void {
@@ -1897,7 +1898,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$property->setValue( $broker, 'active' );
 			list( $updater, $adapter, $database ) = $this->subject( 'manual', null, 'stable', false, $state );
 			$updater->register();
-			self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
 			foreach ( array( 'stale_global', 'wrong_protocol' ) as $failure ) {
 				if ( 'stale_global' === $failure ) {
@@ -2232,7 +2233,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
-			self::assertCount( 12, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$offer = $updater->filter_update(
 				false,
 				array(
@@ -2262,7 +2263,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$stock = new \Theme_Upgrader();
 				$GLOBALS['ran_wp_release_updater_test_doing_action'] = $automatic_action ? 'wp_maybe_auto_update' : null;
 				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', $stock, $extra ) );
-				self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+				self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 				if ( $failed_result ) {
 					$original      = new \WP_Error( 'post_copy_failed', 'Post-copy failure.' );
 					$stock->result = $original;
@@ -2274,11 +2275,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					self::assertNotSame( $original, $outgoing );
 					$bridged = ! $automatic_action && ! $replace_skin;
 					self::assertSame( $bridged ? array() : $original, $stock->result );
-					self::assertSame( $bridged ? 14 : 13, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
+					self::assertSame( $bridged ? 15 : 14, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
 					if ( $bridged ) {
 						self::assertSame(
 							array( 'action', 'upgrader_process_complete', array( $updater, 'restore_theme_error_result' ), PHP_INT_MIN, 2 ),
-							$GLOBALS['ran_wp_release_updater_test_hooks'][13]
+							$GLOBALS['ran_wp_release_updater_test_hooks'][14]
 						);
 					}
 					$stock->skin->result = $outgoing;
@@ -3232,6 +3233,57 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertContains( 'remote_release_changed', $updater->diagnostics() );
 			self::assertSame( 2, $adapter->inspect_calls );
 			self::assertSame( 1, $adapter->acquire_calls );
+		}
+
+		public function test_exact_install_answers_only_once_for_the_matching_live_target(): void {
+			list( $updater, $adapter, $database ) = $this->subject( operation_guard: static fn (): bool => false );
+			self::assertNull( $updater->filter_install_exact_release( null, 'plugin', 'package/package.php', 'release:2', 'v2.0.0', '2.0.0' ) );
+			list( $updater ) = $this->subject( mode: 'disabled', database: $database );
+			self::assertSame( 'keep', $updater->filter_install_exact_release( 'keep', 'plugin', 'package/package.php', 'release:2', 'v2.0.0', '2.0.0' ) );
+			self::assertNull( $updater->filter_install_exact_release( null, 'theme', 'package/package.php', 'release:2', 'v2.0.0', '2.0.0' ) );
+			self::assertNull( $updater->filter_install_exact_release( null, 'plugin', 'other/other.php', 'release:2', 'v2.0.0', '2.0.0' ) );
+			self::assertSame(
+				array(
+					'status'               => 'refused',
+					'code'                 => 'policy_disabled',
+					'version'              => null,
+					'relationship'         => null,
+					'finalization_pending' => false,
+					'finalization'         => null,
+				),
+				$updater->filter_install_exact_release( null, 'plugin', 'package/package.php', 'release:2', 'v2.0.0', '2.0.0' )
+			);
+			self::assertSame( 0, $adapter->inspect_calls );
+			self::assertSame( array(), $database->rows() );
+		}
+
+		public function test_exact_install_requires_a_valid_listed_version_before_claiming_or_inspecting(): void {
+			list( $updater, $adapter, $database ) = $this->subject();
+			$report                               = $updater->filter_install_exact_release( null, 'plugin', 'package/package.php', 'release:2', 'v2.0.0', '2.0.0+unknown' );
+			self::assertIsArray( $report );
+			self::assertSame( 'release_invalid', $report['code'] );
+			self::assertSame( 0, $adapter->inspect_calls );
+			self::assertSame( array(), $database->rows() );
+		}
+
+		public function test_orphaned_exact_install_offer_cannot_be_saved_or_replayed(): void {
+			list( $updater, $adapter ) = $this->subject();
+			$package                   = 'ran-wp-release-updater:exact:v1:' . str_repeat( 'b', 64 );
+			$stored                    = $updater->filter_store_update(
+				(object) array(
+					'response' => array(
+						'package/package.php' => (object) array( 'package' => $package ),
+						'other/other.php'     => (object) array( 'package' => 'another-offer' ),
+					),
+				)
+			);
+			self::assertInstanceOf( \stdClass::class, $stored );
+			self::assertIsArray( $stored->response );
+			self::assertSame( array( 'other/other.php' ), array_keys( $stored->response ) );
+			$reply = $updater->filter_pre_download( false, $package, null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $reply );
+			self::assertSame( 'ran_wp_release_updater_unverified_pre_download', $reply->get_error_code() );
+			self::assertSame( 0, $adapter->acquire_calls );
 		}
 		/** @return array<string,mixed> */
 		private function retained_outcome( NativePackageUpdater $updater ): array {

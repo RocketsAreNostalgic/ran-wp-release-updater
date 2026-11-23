@@ -140,7 +140,7 @@ PHP,
 			)
 		);
 
-		self::assertSame( 13, $result['hooks'], $method );
+		self::assertSame( 14, $result['hooks'], $method );
 		self::assertSame( 0, $result['credentials'], $method );
 		self::assertSame( 0, $result['http'], $method );
 		self::assertSame( 0, $result['database'], $method );

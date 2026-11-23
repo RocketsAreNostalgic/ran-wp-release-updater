@@ -9,8 +9,11 @@ use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 /** Owns the security-sensitive local copy and identity checks for acquired archives. */
 final class OwnedArchiveStore {
 
-	/** @return array{directory:string,path:string}|null */
-	public function copy( string $source, IdentityDescriptor $descriptor ): ?array {
+	/**
+	 * @param (\Closure(string,string): void)|null $on_allocate
+	 * @return array{directory:string,path:string}|null
+	 */
+	public function copy( string $source, IdentityDescriptor $descriptor, ?\Closure $on_allocate = null ): ?array {
 		$facts  = $descriptor->to_array();
 		$before = $this->identity( $source, $descriptor );
 		if ( null === $before ) {
@@ -24,12 +27,17 @@ final class OwnedArchiveStore {
 		}
 
 		$directory = rtrim( sys_get_temp_dir(), '/\\' ) . DIRECTORY_SEPARATOR . 'ran-wp-release-updater-' . $suffix;
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Create the local directory with the specified native permissions; failure follows the existing rejection path.
-		if ( ! @mkdir( $directory, 0700 ) || ! @chmod( $directory, 0700 ) ) {
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create an owned local directory with private permissions or reject the copy.
+		if ( ! @mkdir( $directory, 0700 ) ) {
 			return null;
 		}
-
 		$path = $directory . DIRECTORY_SEPARATOR . 'package.zip';
+		$on_allocate?->__invoke( $path, $directory );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Require the exact native permissions when a restrictive umask changes them.
+		if ( ! @chmod( $directory, 0700 ) ) {
+			$this->remove( $path, $directory );
+			return null;
+		}
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Keep native stream identity and access mode; failed opens follow the existing rejection and cleanup path.
 		$input = @fopen( $source, 'rb' );
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Keep native stream identity and access mode; failed opens follow the existing rejection and cleanup path.

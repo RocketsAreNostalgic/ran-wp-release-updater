@@ -24,7 +24,8 @@ $type = (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_TYPE' );
 // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- This CLI/eval-file fixture variable is local scenario/process state, not a WordPress request global override.
 $mode                                  = (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_MODE' );
 $ran_wp_release_updater_test_direction = (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_DIRECTION' );
-if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! in_array( $mode, array( 'success', 'failure' ), true ) || ! in_array( $ran_wp_release_updater_test_direction, array( 'same', 'older' ), true ) ) {
+$ran_wp_release_updater_test_exact     = str_starts_with( $mode, 'exact-' );
+if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) || ( ! $ran_wp_release_updater_test_exact && ! in_array( $mode, array( 'success', 'failure' ), true ) ) || ! in_array( $ran_wp_release_updater_test_direction, array( 'same', 'older', 'newer' ), true ) ) {
 	throw new RuntimeException( 'Invalid offer-release scenario.' );
 }
 require_once $source_root . '/bootstrap.php';
@@ -47,11 +48,15 @@ require_once dirname( __DIR__, 2 ) . '/Support/ControllableReleaseAdapter.php';
 add_filter( 'filesystem_method', static fn (): string => 'direct' );
 
 $ran_wp_release_updater_test_slug     = 'offer-target';
-$ran_wp_release_updater_test_uri      = 'https://offer-release.invalid/offer-target/repository';
+$ran_wp_release_updater_test_uri      = $ran_wp_release_updater_test_exact ? 'https://github.com/exact-fixture/offer-target' : 'https://offer-release.invalid/offer-target/repository';
 $ran_wp_release_updater_test_identity = 'plugin' === $type ? 'offer-target/offer-target.php' : 'offer-target';
 $ran_wp_release_updater_test_option   = 'plugin' === $type ? 'update_plugins' : 'update_themes';
-// The release is 2.0.0. The installed copy is 2.0.0 with different bytes (a branch build), or a newer 3.0.0.
-$ran_wp_release_updater_test_installed = 'older' === $ran_wp_release_updater_test_direction ? '3.0.0' : '2.0.0';
+// The release is 2.0.0. The installed copy has different bytes in every case.
+$ran_wp_release_updater_test_installed = match ( $ran_wp_release_updater_test_direction ) {
+	'older' => '3.0.0',
+	'newer' => '1.0.0',
+	default => '2.0.0',
+};
 $ran_wp_release_updater_test_bytes     = static function ( string $name, string $version ) use ( $ran_wp_release_updater_test_uri ): string {
 	$header = "Version: {$version}\nUpdate URI: {$ran_wp_release_updater_test_uri}\nRequires PHP: 8.2\nRequires at least: 6.5\n*/\n";
 	return match ( $name ) {
@@ -80,6 +85,23 @@ if ( 'plugin' === $type ) {
 	switch_theme( $ran_wp_release_updater_test_slug );
 }
 $ran_wp_release_updater_test_path = $ran_wp_release_updater_test_directory . '/' . ( 'plugin' === $type ? 'offer-target.php' : 'index.php' );
+if ( $ran_wp_release_updater_test_exact ) {
+	require_once __DIR__ . '/exact-install.php';
+	if ( ! function_exists( 'ran_wp_release_updater_test_install_exact' ) ) {
+		throw new RuntimeException( 'The exact-install proof is unavailable.' );
+	}
+	ran_wp_release_updater_test_install_exact(
+		$type,
+		$mode,
+		$ran_wp_release_updater_test_direction,
+		$ran_wp_release_updater_test_identity,
+		$ran_wp_release_updater_test_archive,
+		$ran_wp_release_updater_test_path,
+		$ran_wp_release_updater_test_installed,
+		$source_root
+	);
+	return;
+}
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local bytes for the disposable integration fixture.
 $ran_wp_release_updater_test_before = (string) file_get_contents( $ran_wp_release_updater_test_path );
 

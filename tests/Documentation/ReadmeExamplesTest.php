@@ -59,20 +59,31 @@ final class ReadmeExamplesTest extends TestCase {
 		$this->assert_release_source_fence( 'plugin', 'fence-list', $examples[4] );
 
 		$integration = $this->php_fences( dirname( __DIR__, 2 ) . '/docs/integration.md' );
-		self::assertCount( 6, $integration, 'Integration guide examples changed without updating their executable proof.' );
+		self::assertCount( 7, $integration, 'Integration guide examples changed without updating their executable proof.' );
 		self::assertStringContainsString( '$registrar->plugin(', $integration[0] );
 		self::assertStringContainsString( '$registrar->theme(', $integration[1] );
 		self::assertStringContainsString( 'EXAMPLE_PLUGIN_GITHUB_TOKEN', $integration[2] );
 		self::assertStringContainsString( '$release_updater->status()', $integration[3] );
-		self::assertStringContainsString( 'with_operation_guard', $integration[4] );
-		self::assertStringContainsString( 'with_descriptor_admission', $integration[5] );
-		self::assertStringContainsString( 'IdentityDescriptor', $integration[5] );
+		self::assertStringContainsString( 'with_operation_guard', $integration[5] );
+		self::assertStringContainsString( 'with_descriptor_admission', $integration[6] );
+		self::assertStringContainsString( 'IdentityDescriptor', $integration[6] );
 		$this->assert_plugin( $integration[0], false );
 		$this->assert_theme( $integration[1] );
 		$this->assert_plugin( $integration[2], true );
 		$this->assert_status_methods( $integration[0], $integration[3] );
-		$this->assert_origin_bound_source( $integration[4] );
-		$this->assert_plugin( $integration[5], false, true );
+		$this->assert_script(
+			'exact-install.php',
+			'function apply_filters(string $hook, mixed ...$args): array { return ["hook"=>$hook,"arguments"=>$args]; }'
+				. '$release_identity="301";$tag="v2.0.0";$listed_version="2.0.0";$older_intended=false;' . "\n"
+				. $integration[4],
+			'echo json_encode($report);',
+			array(
+				'hook'      => 'ran_wp_release_updater_install_exact_release_v1',
+				'arguments' => array( null, 'plugin', 'package/package.php', '301', 'v2.0.0', '2.0.0', false ),
+			)
+		);
+		$this->assert_origin_bound_source( $integration[5] );
+		$this->assert_plugin( $integration[6], false, true );
 	}
 
 	private function assert_origin_bound_source( string $example ): void {
