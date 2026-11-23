@@ -14,6 +14,7 @@ use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
  * @phpstan-type OwnedCopy array{directory:string,path:string,proof:ValidatedPackage}
  * @phpstan-type ArchiveIdentity array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}
  * @phpstan-type Finalization array{commit:string,host_completion:string,lease:string,archive_cleanup:string}
+ * @phpstan-import-type PackageTree from StagedPackageManifest
  */
 final class ExactInstallInvocation {
 
@@ -143,6 +144,11 @@ final class ExactInstallInvocation {
 
 	public function maintenance_pending(): bool {
 		return $this->recovery->maintenance_pending();
+	}
+
+	/** @param PackageTree $staged */
+	public function expect_incoming( array $staged ): void {
+		$this->recovery->expect_incoming( $staged );
 	}
 
 	public function uses_original_skin(): bool {

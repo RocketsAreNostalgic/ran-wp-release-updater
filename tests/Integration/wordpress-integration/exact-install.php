@@ -87,6 +87,9 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	}
 
 	ran_wp_release_updater_test_exact_wordpress_faults( $mode, $type, $identity, $backup, $observed );
+	$recovery_fault         = str_starts_with( $mode, 'exact-recovery-' )
+		? ran_wp_release_updater_test_exact_recovery_fault( substr( $mode, strlen( 'exact-recovery-' ) ), $backup, $main_file, $archive, $maintenance, $observed )
+		: null;
 	$translation            = 'exact-pending-translation' === $mode ? ran_wp_release_updater_test_exact_translation( $type, $observed ) : null;
 	$credentials_refused    = 'exact-credentials-refused' === $mode;
 	$theme_cache_registered = 'theme' === $type && $foreign_maintenance;
@@ -123,6 +126,18 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	$output           = $buffer_preserved ? ob_get_clean() : false;
 	if ( ! is_array( $report ) ) {
 		throw new RuntimeException( 'The exact-install target did not return a report.' );
+	}
+
+	if ( null !== $recovery_fault ) {
+		ran_wp_release_updater_test_exact_recovery_evidence(
+			$recovery_fault,
+			$observed,
+			$before,
+			$read_bytes,
+			$report,
+			$buffer_preserved && '' === $output
+		);
+		return;
 	}
 
 	$before_shutdown   = $read_bytes( $main_file );
@@ -251,6 +266,170 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 				'stdout_bytes' => $observed->stdout_bytes,
 			);
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact evidence bytes for the disposable integration fixture.
+			file_put_contents( (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' ), json_encode( $evidence, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR ) );
+		},
+		PHP_INT_MAX
+	);
+}
+
+/** Interrupt Core after a native backup rename or a successful maintenance marker write. */
+function ran_wp_release_updater_test_exact_recovery_fault( string $kind, string $backup, string $main_file, string $archive, string $maintenance, stdClass $observed ): stdClass {
+	$directory = dirname( $main_file );
+	$files     = array();
+	if ( in_array( $kind, array( 'partial', 'complete', 'foreign-directory' ), true ) ) {
+		$zip = new ZipArchive();
+		if ( true !== $zip->open( $archive ) ) {
+			throw new RuntimeException( 'Could not open the incoming recovery fixture.' );
+		}
+		$names = 'complete' === $kind ? array( 'index.php', 'style.css' ) : array( basename( $main_file ) );
+		foreach ( $names as $name ) {
+			$bytes = $zip->getFromName( 'offer-target/' . $name );
+			if ( ! is_string( $bytes ) ) {
+				throw new RuntimeException( 'The incoming recovery fixture is incomplete.' );
+			}
+			$files[ $name ] = $bytes;
+		}
+		$zip->close();
+	}
+	if ( 'foreign-directory' === $kind ) {
+		$files['foreign.txt'] = 'Unrelated directory contents';
+	}
+	if ( 'foreign-bytes' === $kind ) {
+		$files[ basename( $main_file ) ] = 'Unrelated bytes at the incoming path';
+	}
+	$fault   = (object) array(
+		'kind'        => $kind,
+		'backup'      => $backup,
+		'marker'      => $maintenance,
+		'directory'   => $directory,
+		'main_file'   => $main_file,
+		'files'       => $files,
+		'interrupted' => false,
+	);
+	$replace = static function ( WP_Filesystem_Direct $filesystem ) use ( $fault, $directory, $backup, $kind, $files ): void {
+		if ( 'foreign-file' === $kind ) {
+			if ( ! $filesystem->put_contents( $directory, 'Unrelated replacement file' ) ) {
+				throw new RuntimeException( 'Could not seed the replacement file.' );
+			}
+		} elseif ( 'absent' !== $kind ) {
+			if ( ! $filesystem->mkdir( $directory ) ) {
+				throw new RuntimeException( 'Could not seed the replacement directory.' );
+			}
+			foreach ( $files as $name => $bytes ) {
+				if ( ! $filesystem->put_contents( $directory . '/' . $name, $bytes ) ) {
+					throw new RuntimeException( 'Could not seed the replacement directory contents.' );
+				}
+			}
+			if ( 'symlink' === $kind && ! symlink( $backup . '/index.php', $directory . '/index.php' ) ) {
+				throw new RuntimeException( 'Could not seed the replacement link.' );
+			}
+		}
+		$fault->interrupted = true;
+		throw new RuntimeException( 'Interrupted Core cache invalidation after the backup rename.' );
+	};
+	add_filter(
+		'upgrader_pre_download',
+		static function ( mixed $reply, string $package, WP_Upgrader $upgrader ) use ( $fault, $observed, $backup, $directory, $kind, $maintenance, $replace ): mixed {
+			unset( $package );
+			if ( is_string( $reply ) && $upgrader === $observed->upgrader ) {
+				// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Inject only at the disposable site's successful direct filesystem mutation boundaries.
+				$GLOBALS['wp_filesystem'] = new class( $fault, $backup, $directory, $kind, $maintenance, $replace ) extends WP_Filesystem_Direct {
+					/** @param (Closure(WP_Filesystem_Direct):void) $replace */
+					public function __construct( private stdClass $fault, private string $backup, private string $destination, private string $scenario, private string $marker, private Closure $replace ) {
+						parent::__construct( null );
+					}
+
+					public function dirlist( $path, $include_hidden = true, $recursive = false ) {
+						if ( 'maintenance' !== $this->scenario && ! $this->fault->interrupted && $recursive
+							&& rtrim( $path, '/\\' ) === $this->backup && ! file_exists( $this->destination )
+						) {
+							( $this->replace )( $this );
+						}
+						return parent::dirlist( $path, $include_hidden, $recursive );
+					}
+
+					public function put_contents( $file, $contents, $mode = false ) {
+						$written = parent::put_contents( $file, $contents, $mode );
+						if ( $written && 'maintenance' === $this->scenario && $file === $this->marker ) {
+							$this->fault->interrupted = true;
+							throw new RuntimeException( 'Interrupted after Core wrote the maintenance marker.' );
+						}
+						return $written;
+					}
+				};
+			}
+			return $reply;
+		},
+		PHP_INT_MAX,
+		3
+	);
+	return $fault;
+}
+
+/** @param (Closure(string):string) $read_bytes */
+function ran_wp_release_updater_test_exact_interrupted_destination( stdClass $fault, Closure $read_bytes ): bool {
+	switch ( $fault->kind ) {
+		case 'absent':
+			return ! file_exists( $fault->directory ) && ! is_link( $fault->directory );
+		case 'foreign-file':
+			return is_file( $fault->directory ) && 'Unrelated replacement file' === $read_bytes( $fault->directory );
+		case 'symlink':
+			return is_link( $fault->directory . '/index.php' ) && readlink( $fault->directory . '/index.php' ) === $fault->backup . '/index.php';
+		default:
+			$expected = array_merge( array( '.', '..' ), array_keys( $fault->files ) );
+			sort( $expected, SORT_STRING );
+			if ( ! is_dir( $fault->directory ) || scandir( $fault->directory ) !== $expected ) {
+				return false;
+			}
+			foreach ( $fault->files as $name => $bytes ) {
+				if ( $read_bytes( $fault->directory . '/' . $name ) !== $bytes ) {
+					return false;
+				}
+			}
+			return true;
+	}
+}
+
+/**
+ * @param (Closure(string):string) $read_bytes
+ * @param array<array-key,mixed> $report
+ */
+function ran_wp_release_updater_test_exact_recovery_evidence( stdClass $fault, stdClass $observed, string $before, Closure $read_bytes, array $report, bool $quiet ): void {
+	$maintenance_only = 'maintenance' === $fault->kind;
+	$backup_header    = $fault->backup . '/' . basename( $fault->main_file );
+	$upgrader         = $observed->upgrader;
+	$checks           = array(
+		'interrupted'                       => true === $fault->interrupted,
+		'one_zip_body'                      => 1 === $observed->downloads,
+		'quiet_response'                    => $quiet && 0 === $observed->stdout_bytes,
+		'pending_recovery'                  => 'pending' === $report['status'] && 'unexpected_failure' === $report['code'] && true === $report['finalization_pending'],
+		'core_callbacks_not_yet_registered' => $upgrader instanceof WP_Upgrader
+			&& false === has_action( 'shutdown', array( $upgrader, 'restore_temp_backup' ) )
+			&& false === has_action( 'shutdown', array( $upgrader, 'delete_temp_backup' ) ),
+		'marker_written_before_throw'       => is_file( $fault->marker ),
+		'backup_moved_before_throw'         => $maintenance_only ? ! file_exists( $fault->backup ) : is_file( $backup_header ) && $read_bytes( $backup_header ) === $before,
+		'destination_before_shutdown'       => $maintenance_only ? $read_bytes( $fault->main_file ) === $before : ran_wp_release_updater_test_exact_interrupted_destination( $fault, $read_bytes ),
+	);
+	add_action(
+		'shutdown',
+		static function () use ( $checks, $fault, $observed, $backup_header, $before, $read_bytes, $report, $maintenance_only ): void {
+			$preserve = in_array( $fault->kind, array( 'foreign-directory', 'foreign-bytes', 'foreign-file', 'symlink' ), true );
+			$checks  += array(
+				'destination_after_shutdown' => $preserve
+					? ran_wp_release_updater_test_exact_interrupted_destination( $fault, $read_bytes )
+					: is_file( $fault->main_file ) && $read_bytes( $fault->main_file ) === $before,
+				'backup_after_shutdown'      => $preserve ? is_file( $backup_header ) && $read_bytes( $backup_header ) === $before : ! file_exists( $fault->backup ),
+				'marker_cleaned'             => ! file_exists( $fault->marker ),
+				'private_custody_cleaned'    => array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
+				'completion'                 => ( $maintenance_only ? array() : array( 'uncertain' ) ) === array_column( $observed->completions, 3 ),
+			);
+			$evidence = array(
+				'pass'      => ! in_array( false, $checks, true ),
+				'checks'    => $checks,
+				'report'    => $report,
+				'downloads' => $observed->downloads,
+			);
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact recovery observations inside the disposable integration run.
 			file_put_contents( (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' ), json_encode( $evidence, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR ) );
 		},
 		PHP_INT_MAX

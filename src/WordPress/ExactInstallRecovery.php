@@ -8,20 +8,30 @@ namespace RAN\WPReleaseUpdater\V1\WordPress;
  * Tracks WordPress filesystem changes made before Core can schedule recovery.
  *
  * @internal
- * @phpstan-type EntryIdentity array{dev:int,ino:int,mode:int,ctime:int,mtime:int,size:int}
+ * @phpstan-import-type EntryIdentity from StagedPackageManifest
+ * @phpstan-import-type PackageTree from StagedPackageManifest
  * @phpstan-type OwnedEntry array{path:string,identity:EntryIdentity}
  */
 final class ExactInstallRecovery {
 
-	/** @var OwnedEntry|null */
+	/** @var array{path:string,identity:EntryIdentity,digest:string}|null */
 	private ?array $backup = null;
 	/** @var OwnedEntry|null */
 	private ?array $maintenance = null;
+	/** @var PackageTree|null */
+	private ?array $incoming = null;
 
 	private readonly string $destination;
+	private readonly StagedPackageManifest $manifest;
 
 	public function __construct( string $installed_directory, private readonly string $target_type ) {
 		$this->destination = wp_normalize_path( rtrim( $installed_directory, '/\\' ) );
+		$this->manifest    = new StagedPackageManifest();
+	}
+
+	/** @param PackageTree $incoming */
+	public function expect_incoming( array $incoming ): void {
+		$this->incoming = $incoming;
 	}
 
 	/**
@@ -51,18 +61,42 @@ final class ExactInstallRecovery {
 			return $move( $arguments );
 		}
 
-		$path   = trailingslashit( $content ) . 'upgrade-temp-backup/' . $group . '/' . $slug;
-		$result = $move( $arguments );
-		if ( true === $result ) {
-			$identity = self::entry_identity( $path );
-			if ( null !== $identity && 0040000 === ( $identity['mode'] & 0170000 ) ) {
-				$this->backup = array(
-					'path'     => $path,
-					'identity' => $identity,
-				);
+		$path            = trailingslashit( $content ) . 'upgrade-temp-backup/' . $group . '/' . $slug;
+		$previous_backup = StagedPackageManifest::entry_identity( $path );
+		$source_identity = StagedPackageManifest::entry_identity( $this->destination );
+		$source_tree     = $this->manifest->snapshot( $this->destination );
+		$digest          = null === $source_tree || StagedPackageManifest::entry_identity( $this->destination ) !== $source_identity
+			? null : $this->manifest->tree_digest( $source_tree );
+		$result          = false;
+		try {
+			$result = $move( $arguments );
+			return $result;
+		} finally {
+			if ( null !== $source_identity && null !== $digest ) {
+				$this->capture_backup( $path, $previous_backup, $source_identity, $digest, true === $result );
 			}
 		}
-		return $result;
+	}
+
+	/**
+	 * @param EntryIdentity|null $previous_backup
+	 * @param EntryIdentity $source
+	 */
+	private function capture_backup( string $path, ?array $previous_backup, array $source, string $digest, bool $move_succeeded ): void {
+		$identity = StagedPackageManifest::entry_identity( $path );
+		if ( null === $identity || 0040000 !== ( $identity['mode'] & 0170000 ) || $identity === $previous_backup ) {
+			return;
+		}
+		// A rename retains the source inode even if Core throws in cache invalidation.
+		$renamed = $identity['dev'] === $source['dev'] && $identity['ino'] === $source['ino'];
+		$copied  = $move_succeeded && null === StagedPackageManifest::entry_identity( $this->destination );
+		if ( $renamed || $copied ) {
+			$this->backup = array(
+				'path'     => $path,
+				'identity' => $identity,
+				'digest'   => $digest,
+			);
+		}
 	}
 
 	/** @param (\Closure(bool): void) $toggle */
@@ -77,17 +111,20 @@ final class ExactInstallRecovery {
 			return;
 		}
 		$path = trailingslashit( $root ) . '.maintenance';
-		if ( null !== self::entry_identity( $path ) ) {
+		if ( null !== StagedPackageManifest::entry_identity( $path ) ) {
 			return;
 		}
 
-		$toggle( true );
-		$identity = self::entry_identity( $path );
-		if ( null !== $identity && 0100000 === ( $identity['mode'] & 0170000 ) ) {
-			$this->maintenance = array(
-				'path'     => $path,
-				'identity' => $identity,
-			);
+		try {
+			$toggle( true );
+		} finally {
+			$identity = StagedPackageManifest::entry_identity( $path );
+			if ( null !== $identity && 0100000 === ( $identity['mode'] & 0170000 ) ) {
+				$this->maintenance = array(
+					'path'     => $path,
+					'identity' => $identity,
+				);
+			}
 		}
 	}
 
@@ -101,15 +138,35 @@ final class ExactInstallRecovery {
 				return true;
 			}
 			$backup = $this->backup;
-			// A replaced backup cannot authorize deletion of the installed directory.
-			return self::entry_identity( $backup['path'] ) === $backup['identity']
-				&& ( $GLOBALS['wp_filesystem'] ?? null ) instanceof \WP_Filesystem_Direct
-				&& ( null === self::entry_identity( $this->destination ) || null !== ( new StagedPackageManifest() )->build( $this->destination ) )
+			if ( ! ( ( $GLOBALS['wp_filesystem'] ?? null ) instanceof \WP_Filesystem_Direct )
+				|| StagedPackageManifest::entry_identity( $backup['path'] ) !== $backup['identity']
+			) {
+				return false;
+			}
+			$backup_tree = $this->manifest->snapshot( $backup['path'] );
+			return null !== $backup_tree
+				&& hash_equals( $backup['digest'], $this->manifest->tree_digest( $backup_tree ) )
+				&& $this->destination_is_replaceable()
 				&& true === move_dir( $backup['path'], $this->destination, true )
-				&& null === self::entry_identity( $backup['path'] );
+				&& null === StagedPackageManifest::entry_identity( $backup['path'] );
 		} finally {
 			$this->clear_maintenance();
 		}
+	}
+
+	private function destination_is_replaceable(): bool {
+		$identity = StagedPackageManifest::entry_identity( $this->destination );
+		if ( null === $identity ) {
+			return true;
+		}
+		$current = $this->manifest->snapshot( $this->destination );
+		if ( null === $current || StagedPackageManifest::entry_identity( $this->destination ) !== $identity ) {
+			return false;
+		}
+		$incoming_files = $this->incoming['files'] ?? array();
+		$incoming_dirs  = $this->incoming['directories'] ?? array();
+		return array_intersect_key( $incoming_files, $current['files'] ) === $current['files']
+			&& array() === array_diff_key( $current['directories'], $incoming_dirs );
 	}
 
 	private function clear_maintenance(): void {
@@ -118,30 +175,12 @@ final class ExactInstallRecovery {
 		if ( null === $marker ) {
 			return;
 		}
-		if ( self::entry_identity( $marker['path'] ) !== $marker['identity'] ) {
+		if ( StagedPackageManifest::entry_identity( $marker['path'] ) !== $marker['identity'] ) {
 			$this->maintenance = null;
 			return;
 		}
 		if ( $filesystem instanceof \WP_Filesystem_Direct && $filesystem->delete( $marker['path'] ) ) {
 			$this->maintenance = null;
 		}
-	}
-
-	/**
-	 * @phpstan-impure Re-read current filesystem identity.
-	 * @return EntryIdentity|null
-	 */
-	private static function entry_identity( string $path ): ?array {
-		clearstatcache( true, $path );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Missing entries are expected. Native lstat keeps links and replacements distinct from the WordPress-owned entry.
-		$stat = @lstat( $path );
-		return is_array( $stat ) ? array(
-			'dev'   => $stat['dev'],
-			'ino'   => $stat['ino'],
-			'mode'  => $stat['mode'],
-			'ctime' => $stat['ctime'],
-			'mtime' => $stat['mtime'],
-			'size'  => $stat['size'],
-		) : null;
 	}
 }
