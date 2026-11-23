@@ -766,7 +766,7 @@ PHP;
 			self::assertIsArray( $name_len );
 			$entry_name = substr( $unreadable_bytes, $local_offset + 30, (int) $name_len[1] );
 			if ( 'example-plugin/helper.php' === $entry_name ) {
-				$unreadable_bytes = substr_replace( $unreadable_bytes, pack( 'v', 99 ), $local_offset + 8, 2 );
+				$unreadable_bytes = substr_replace( $unreadable_bytes, pack( 'v', 98 ), $local_offset + 8, 2 );
 				$patched_local    = true;
 				break;
 			}
@@ -778,7 +778,7 @@ PHP;
 			self::assertIsArray( $name_len );
 			$entry_name = substr( $unreadable_bytes, $cd_offset + 46, (int) $name_len[1] );
 			if ( 'example-plugin/helper.php' === $entry_name ) {
-				$unreadable_bytes = substr_replace( $unreadable_bytes, pack( 'v', 99 ), $cd_offset + 10, 2 );
+				$unreadable_bytes = substr_replace( $unreadable_bytes, pack( 'v', 98 ), $cd_offset + 10, 2 );
 				$patched_cd       = true;
 				break;
 			}
@@ -787,10 +787,23 @@ PHP;
 		self::assertTrue( $patched_local && $patched_cd );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write unreadable-entry ZIP fixture bytes directly.
 		file_put_contents( $unreadable, $unreadable_bytes );
+		// Prove the archive opens and passes inventory scan cleanly, and only fails when streaming helper.php.
+		$probe = new \ZipArchive();
+		self::assertTrue( $probe->open( $unreadable ) );
+		self::assertTrue( \RAN\WPReleaseUpdater\V1\Archive\ArchiveScanner::scan( $probe )->is_valid() );
+		self::assertFalse( $probe->getStream( 'example-plugin/helper.php' ) );
+		$probe->close();
+		$opened    = false;
+		$validator = new PackageIdentityValidator(
+			static function () use ( &$opened ): void {
+				$opened = true;
+			}
+		);
 		$this->assert_rejected(
-			( new PackageIdentityValidator() )->inspect_prospective( $this->prospective_policy( $unreadable, 'plugin' ), $unreadable ),
+			$validator->inspect_prospective( $this->prospective_policy( $unreadable, 'plugin' ), $unreadable ),
 			'archive_unreadable'
 		);
+		self::assertTrue( $opened );
 	}
 
 	/**
