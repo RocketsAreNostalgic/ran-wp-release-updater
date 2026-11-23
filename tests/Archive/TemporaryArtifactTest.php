@@ -32,12 +32,13 @@ final class TemporaryArtifactTest extends TestCase {
 	public function test_symlink_swap_is_rejected_before_hashing(): void {
 		$sha256 = hash_file( 'sha256', $this->path );
 		self::assertIsString( $sha256 );
-		$identity = $this->identity();
-		$target   = tempnam( sys_get_temp_dir(), 'ran-core-target-' );
-		$script   = tempnam( sys_get_temp_dir(), 'ran-core-symlink-probe-' );
+		$identity   = $this->identity();
+		$target     = tempnam( sys_get_temp_dir(), 'ran-core-target-' );
+		$script     = tempnam( sys_get_temp_dir(), 'ran-core-symlink-probe-' );
+		$facts_file = tempnam( sys_get_temp_dir(), 'ran-core-symlink-facts-' );
 		self::assertIsString( $target );
 		self::assertIsString( $script );
-		$facts_file = $script . '.json';
+		self::assertIsString( $facts_file );
 		try {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for archive custody and identity fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $target, 'artifact' );
@@ -73,8 +74,15 @@ namespace {
 		$ran_facts['identity']
 	);
 	$GLOBALS['ran_temp_artifact_hash_calls'] = 0;
-	unlink( $ran_facts['path'] );
-	symlink( $ran_facts['target'], $ran_facts['path'] );
+	if ( ! unlink( $ran_facts['path'] ) || ! symlink( $ran_facts['target'], $ran_facts['path'] ) ) {
+		fwrite( STDERR, "Failed to replace fixture with symlink.\n" );
+		exit( 1 );
+	}
+	clearstatcache( true, $ran_facts['path'] );
+	if ( ! is_link( $ran_facts['path'] ) ) {
+		fwrite( STDERR, "Fixture path is not a symlink.\n" );
+		exit( 1 );
+	}
 	$ran_threw                               = false;
 	try {
 		$ran_artifact->inspect( static fn ( string $path ): string => $path );

@@ -10,12 +10,13 @@ use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 final class OwnedArchiveStoreTest extends TestCase {
 
 	public function test_identity_rejects_symlink_before_hashing(): void {
-		$target    = tempnam( sys_get_temp_dir(), 'ran-owned-target-' );
-		$link_path = sys_get_temp_dir() . '/ran-owned-link-' . bin2hex( random_bytes( 8 ) );
-		$script    = tempnam( sys_get_temp_dir(), 'ran-owned-symlink-probe-' );
+		$target     = tempnam( sys_get_temp_dir(), 'ran-owned-target-' );
+		$link_path  = sys_get_temp_dir() . '/ran-owned-link-' . bin2hex( random_bytes( 8 ) );
+		$script     = tempnam( sys_get_temp_dir(), 'ran-owned-symlink-probe-' );
+		$facts_file = tempnam( sys_get_temp_dir(), 'ran-owned-symlink-facts-' );
 		self::assertIsString( $target );
 		self::assertIsString( $script );
-		$facts_file = $script . '.json';
+		self::assertIsString( $facts_file );
 		try {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for archive custody and identity fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $target, 'owned-archive-payload' );
