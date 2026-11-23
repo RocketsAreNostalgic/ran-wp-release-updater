@@ -73,12 +73,17 @@ final class AcquisitionReceiptTest extends TestCase {
 		list( $validator, $descriptor, $state, $package ) = $this->ready();
 		$snapshot = $package->to_array();
 		if ( ! is_string( $snapshot['archive_root'] ?? null )
+			|| ! is_string( $snapshot['author'] ?? null )
+			|| ! is_string( $snapshot['description'] ?? null )
 			|| ! is_string( $snapshot['header_file'] ?? null )
 			|| ! is_int( $snapshot['manifest_entry_count'] ?? null )
 			|| ! is_int( $snapshot['manifest_expanded_bytes'] ?? null )
 			|| ! is_string( $snapshot['manifest_hash'] ?? null )
 			|| ! is_string( $snapshot['metadata_name'] ?? null )
 			|| ! is_string( $snapshot['package_type'] ?? null )
+			|| ! is_string( $snapshot['package_uri'] ?? null )
+			|| ! is_string( $snapshot['requires_php'] ?? null )
+			|| ! is_string( $snapshot['requires_wp'] ?? null )
 			|| ! is_string( $snapshot['descriptor_fingerprint'] ?? null )
 			|| ! is_string( $snapshot['sha256'] ?? null )
 			|| ! is_int( $snapshot['size'] ?? null )

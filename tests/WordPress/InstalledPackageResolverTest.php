@@ -159,7 +159,8 @@ final class InstalledPackageResolverTest extends TestCase {
 			self::fail( 'Verified header result omitted parsed headers.' );
 		}
 		self::assertSame( 'café', $result['headers']['Name'] );
-		self::assertSame( 'installed_header_ambiguous', PackageIdentityValidator::parse_header( $this->plugin_header() . "<?php /* Version: 1.0.0 */\n", 'plugin' )['code'] );
+		self::assertSame( 'installed_header_ambiguous', PackageIdentityValidator::parse_header( str_replace( '*/', "Version: 2.0.0\n*/", $this->plugin_header() ), 'plugin' )['code'] );
+		self::assertSame( 'installed_header_verified', PackageIdentityValidator::parse_header( $this->plugin_header() . "/**\n * Version: 2.0.0\n * Author: Docs\n * Description: Helper\n * Template: ignored\n */\n", 'plugin' )['code'] );
 		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parse_header( "<?php /* Plugin Name: Example */\n", 'plugin' )['code'] );
 		self::assertSame( 'installed_header_invalid', PackageIdentityValidator::parse_header( "<?php /* Plugin Name: bad\x00 */\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n", 'plugin' )['code'] );
 		self::assertSame( 'installed_header_missing', PackageIdentityValidator::parse_header( str_repeat( 'x', 8192 ) . "\nPlugin Name: Example\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example", 'plugin' )['code'] );
@@ -210,7 +211,7 @@ final class InstalledPackageResolverTest extends TestCase {
 		$resolver = $this->resolver();
 		self::assertSame( $resolver->resolve( $this->declaration( 'plugin', $lf ) )['headers'], $resolver->resolve( $this->declaration( 'plugin', $crlf ) )['headers'] ); // H01.
 		self::assertSame( $resolver->resolve( $this->declaration( 'plugin', $lf ) )['headers'], $resolver->resolve( $this->declaration( 'plugin', $cr ) )['headers'] ); // H01 lone CR.
-		self::assertSame( 'installed_header_ambiguous', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/duplicate/main.php', $this->plugin_header() . "Plugin Name: Again\n" ) ) )['code'] ); // H02.
+		self::assertSame( 'installed_header_ambiguous', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/duplicate/main.php', $this->plugin_header( "\nPlugin Name: Again\n" ) ) ) )['code'] ); // H02.
 		self::assertSame( 'installed_header_missing', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/missing/main.php', "<?php\n/* Version: 1.0.0 */" ) ) )['code'] ); // H03.
 		self::assertSame( 'installed_header_invalid', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/invalid-version/main.php', "<?php\n/*\nPlugin Name: Example\nVersion: broken\nUpdate URI: https://github.com/acme/example\n*/\n" ) ) )['code'] );
 		self::assertSame( 'installed_header_verified', PackageIdentityValidator::parse_header( $this->plugin_header() . "\x00", 'plugin' )['code'] );
@@ -243,7 +244,7 @@ final class InstalledPackageResolverTest extends TestCase {
 		self::assertSame( 'installed_file_changed', $resolver->resolve( $this->declaration( 'plugin', $initial_drift ) )['code'] );
 	}
 
-	public function test_installed_headers_permit_absent_requirements_and_reject_post_closing_duplicates(): void {
+	public function test_installed_headers_permit_absent_requirements_and_reject_in_block_duplicates(): void {
 		$resolver = $this->resolver();
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
 			$relative = 'plugin' === $type ? 'plugins/optional/main.php' : 'themes/optional/style.css';
@@ -251,7 +252,11 @@ final class InstalledPackageResolverTest extends TestCase {
 			$file     = $this->file( $relative, $header );
 			self::assertSame( 'installed_identity_verified', $resolver->resolve( $this->declaration( $type, $file ) )['code'] );
 
-			$file = $this->file( str_replace( 'optional', 'duplicate', $relative ), $header . "Version: 1.0.0\n" );
+			$phpdoc = $this->file( str_replace( 'optional', 'phpdoc', $relative ), $header . "/**\n * Version: 9.9.9\n * Author: Docs\n * Description: Helper\n * Template: ignored\n */\n" );
+			self::assertSame( 'installed_identity_verified', $resolver->resolve( $this->declaration( $type, $phpdoc ) )['code'] );
+
+			$duplicate = 'plugin' === $type ? $this->plugin_header( "\nVersion: 1.0.0\n" ) : $this->theme_header( 'Version: 1.0.0' );
+			$file      = $this->file( str_replace( 'optional', 'duplicate', $relative ), $duplicate );
 			self::assertSame( 'installed_header_ambiguous', $resolver->resolve( $this->declaration( $type, $file ) )['code'] );
 		}
 	}
@@ -270,6 +275,32 @@ final class InstalledPackageResolverTest extends TestCase {
 		}
 	}
 
+	public function test_php_requirement_normalizes_distro_suffixes_and_fails_closed_when_unparseable(): void {
+		$requires_82 = $this->file( 'plugins/req-82/main.php', $this->plugin_header( 'Requires PHP: 8.2' ) );
+		$requires_83 = $this->file( 'plugins/req-83/main.php', $this->plugin_header( 'Requires PHP: 8.3' ) );
+		foreach ( array( '8.2.28-0+deb12u1', '8.2.28-1+ubuntu22.04.1+deb.sury.org+1', '8.2.28-1~deb12u1' ) as $php_version ) {
+			$resolver = new InstalledPackageResolver( $this->root . '/plugins', array(), array( $this->root . '/themes' ), $php_version );
+			self::assertSame( 'installed_identity_verified', $resolver->resolve( $this->declaration( 'plugin', $requires_82 ) )['code'], $php_version );
+			self::assertSame( 'installed_requirement_incompatible', $resolver->resolve( $this->declaration( 'plugin', $requires_83 ) )['code'], $php_version );
+		}
+
+		$unparseable = new InstalledPackageResolver( $this->root . '/plugins', array(), array( $this->root . '/themes' ), 'unparseable-php' );
+		self::assertSame( 'installed_requirement_incompatible', $unparseable->resolve( $this->declaration( 'plugin', $requires_82 ) )['code'] );
+	}
+
+	public function test_utf8_bom_and_plugin_template_or_phpdoc_tags_are_handled_safely(): void {
+		$resolver   = $this->resolver();
+		$bom_plugin = $this->file( 'plugins/bom/main.php', "\xEF\xBB\xBF" . $this->plugin_header( 'Template: ../ignored-for-plugin' ) . "/**\n * Version: 9.9.9\n * Author: Doc Author\n * Description: Doc Description\n * Template: ../bad\n */\n" );
+		$bom_theme  = $this->file( 'themes/bom/style.css', "\xEF\xBB\xBF" . $this->theme_header() . "/*\n * Version: 9.9.9\n * Author: Doc Author\n */\n" );
+
+		$plugin_result = $resolver->resolve( $this->declaration( 'plugin', $bom_plugin ) );
+		self::assertSame( 'installed_identity_verified', $plugin_result['code'] );
+		self::assertSame( '', $plugin_result['headers']['Template'] );
+
+		$theme_result = $resolver->resolve( $this->declaration( 'theme', $bom_theme ) );
+		self::assertSame( 'installed_identity_verified', $theme_result['code'] );
+	}
+
 	private function resolver(): InstalledPackageResolver {
 		return new InstalledPackageResolver( $this->root . '/plugins', array(), array( $this->root . '/themes' ) ); }
 	/** @return array<string,mixed> */ private function declaration( string $type, string $file ): array {
@@ -277,8 +308,9 @@ final class InstalledPackageResolverTest extends TestCase {
 			'target_type'    => $type,
 			'installed_file' => $file,
 		); }
-	private function plugin_header( string $suffix = "\n" ): string {
-		return "<?php\n/*\nPlugin Name: Example\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n*/" . $suffix; }
+	private function plugin_header( string $extra = '' ): string {
+		$extra = trim( $extra, "\r\n" );
+		return "<?php\n/*\nPlugin Name: Example\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n" . ( '' === $extra ? '' : $extra . "\n" ) . "*/\n"; }
 	private function theme_header( string $extra = '' ): string {
 		return "/*\nTheme Name: Example\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n" . $extra . "\n*/\n"; }
 	private function file( string $relative, string $contents ): string {

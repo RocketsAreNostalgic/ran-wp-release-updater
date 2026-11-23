@@ -81,6 +81,31 @@ final class RequestBrokerTest extends TestCase {
 	public static function legacy_protocols(): array {
 		return array( array( 4 ), array( 5 ), array( 6 ), array( 7 ) ); }
 
+	public function test_activate_rejects_legacy_runtime_protocol_below_11_and_bootstrap_refuses_non_11_copy(): void {
+		$copy   = $this->copy( 'strict-protocol', '0.1.0-beta.2', 'a' );
+		$result = $this->probe(
+			'require $data["copy"] . "/bootstrap.php"; $broker=$GLOBALS["ran_wp_release_updater_v1_broker"]; $activation=$broker->activate(array("php_version"=>"8.2.0","runtime_protocol"=>6,"wordpress_version"=>"6.8.0")); echo json_encode(array("loaded"=>$activation["loaded"],"state"=>$activation["state"],"codes"=>array_column($activation["diagnostics"],"code")));',
+			array( 'copy' => $copy )
+		);
+		self::assertFalse( $result['loaded'] );
+		self::assertSame( 'inactive', $result['state'] );
+		self::assertSame( array( 'runtime_environment_invalid' ), $result['codes'] );
+
+		$bad_copy = $this->copy( 'non-11-manifest', '0.1.0-beta.2', 'b' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact local manifest bytes for isolated protocol-enforcement fixture.
+		$manifest                     = json_decode( (string) file_get_contents( $bad_copy . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		$manifest['runtime_protocol'] = 6;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact manifest bytes for isolated protocol-enforcement fixture.
+		file_put_contents( $bad_copy . '/runtime-copy.json', json_encode( $manifest, JSON_THROW_ON_ERROR ) );
+		$boot = $this->probe(
+			'$registrar=require $data["copy"] . "/bootstrap.php"; echo json_encode(array("broker_set"=>isset($GLOBALS["ran_wp_release_updater_v1_broker"]),"state"=>$registrar->diagnostics()["state"],"codes"=>array_column($registrar->diagnostics()["diagnostics"],"code")));',
+			array( 'copy' => $bad_copy )
+		);
+		self::assertFalse( $boot['broker_set'] );
+		self::assertSame( 'conflict', $boot['state'] );
+		self::assertSame( array( 'protocol_conflict_inactive' ), $boot['codes'] );
+	}
+
 	public function test_guard_and_mutation_callback_declaration_admission(): void {
 		$broker      = new \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker();
 		$declaration = array(

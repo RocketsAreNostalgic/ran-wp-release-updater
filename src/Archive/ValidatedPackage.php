@@ -17,7 +17,7 @@ final readonly class ValidatedPackage {
 
 	/**
 	 * @internal
-	 * @param array{archive_root:string,header_file:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,metadata_name:string,package_type:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string} $snapshot
+	 * @param array{archive_root:string,author?:string,description?:string,header_file:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,metadata_name:string,package_type:string,package_uri?:string,requires_php?:string,requires_wp?:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string} $snapshot
 	 */
 	public static function ready( array $snapshot ): self {
 		return new self( 'archive_identity_verified', $snapshot );

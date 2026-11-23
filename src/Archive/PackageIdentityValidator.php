@@ -57,7 +57,7 @@ final class PackageIdentityValidator {
 			|| ! is_string( $policy['version'] )
 			|| null === ReleaseVersion::normalize( $policy['version'] )
 			|| ! is_string( $policy['php_runtime_version'] )
-			|| null === ReleaseVersion::normalize_header( $policy['php_runtime_version'] )
+			|| null === ReleaseVersion::normalize_php_version( $policy['php_runtime_version'] )
 			|| ! is_string( $policy['wordpress_runtime_version'] )
 			|| null === ReleaseVersion::normalize_header( $policy['wordpress_runtime_version'] )
 		) {
@@ -116,7 +116,8 @@ final class PackageIdentityValidator {
 				$parsed   = self::parse_header( $contents, $policy['target_type'] );
 				$metadata = isset( $parsed['headers']['Name'] ) ? $parsed['headers']['Name'] : null;
 				if ( 'plugin' === $policy['target_type'] && null === $metadata ) {
-					if ( 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*Plugin Name:/mi', str_replace( array( "\r\n", "\r" ), "\n", substr( $contents, 0, self::MAX_HEADER_BYTES ) ) ) ) {
+					$prefix = str_starts_with( $contents, "\xEF\xBB\xBF" ) ? substr( $contents, 3 ) : $contents;
+					if ( 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*Plugin Name:/mi', str_replace( array( "\r\n", "\r" ), "\n", substr( $prefix, 0, self::MAX_HEADER_BYTES ) ) ) ) {
 						$pending ??= self::header_rejection( $parsed );
 					}
 					continue;
@@ -132,7 +133,7 @@ final class PackageIdentityValidator {
 				$failed    = match ( true ) {
 					CanonicalUpdateUri::canonicalize( $uri ) !== $policy['canonical_update_uri'] => array( 'header_update_uri_mismatch', self::uri_detail( $uri, $policy['canonical_update_uri'] ) ),
 					0 !== ReleaseVersion::compare( $version, $policy['version'] ) => array( 'header_version_mismatch', 'found ' . $version . ', expected ' . $policy['version'] ),
-					null !== $php && ! self::meets_requirement( $policy['php_runtime_version'], $php ) => array( 'header_requires_php_unmet', $php ),
+					null !== $php && ! self::meets_php_requirement( $policy['php_runtime_version'], $php ) => array( 'header_requires_php_unmet', $php ),
 					null !== $wordpress && ! self::meets_requirement( $policy['wordpress_runtime_version'], $wordpress ) => array( 'header_requires_wp_unmet', $wordpress ),
 					null !== $candidate => array( 'header_plugin_ambiguous', null ),
 					default => null,
@@ -207,108 +208,129 @@ final class PackageIdentityValidator {
 			return ValidatedPackage::blocked( 'archive_unreadable' );
 		}
 		try {
-			if ( null !== $this->after_open ) {
-				( $this->after_open )( $archive_path );
-			}
-			if ( ! $this->matches_archive_identity( $archive_path, $descriptor_facts, $identity ) ) {
-				return ValidatedPackage::blocked( 'archive_file_identity_mismatch' );
-			}
-			$scan = ArchiveScanner::scan( $zip, $policy['archive_root'] );
-			if ( ! $scan->is_valid() ) {
-				return ValidatedPackage::blocked( $scan->failure_code() ?? 'archive_path_unsafe' );
-			}
-			$header         = null;
-			$manifest       = array();
-			$manifest_bytes = 0;
-			$expected_path  = $policy['archive_root'] . '/' . $policy['header_file'];
-			foreach ( $scan->entries() as $entry ) {
-				if ( ! $entry['directory'] ) {
-					$relative       = substr( $entry['path'], strlen( $policy['archive_root'] ) + 1 );
-					$entry_identity = self::entry_identity( $zip, $entry['name'], $entry['size'] );
-					if ( '' === $relative || null === $entry_identity ) {
-						return ValidatedPackage::blocked( 'archive_entry_unreadable' );
-					}
-					$manifest[ $relative ] = $entry_identity;
-					$manifest_bytes       += $entry_identity['size'];
-				}
-				if ( ! hash_equals( $expected_path, $entry['path'] ) ) {
-					continue;
-				}
-				if ( $entry['directory'] || null !== $header ) {
-					return ValidatedPackage::blocked( 'archive_header_duplicate' );
-				}
-				$header = self::read_header( $zip, $entry['name'] );
-				if ( null === $header ) {
-					return ValidatedPackage::blocked( 'archive_header_unreadable' );
-				}
-			}
-			if ( ! is_string( $header ) ) {
-				return ValidatedPackage::blocked( 'archive_header_missing' );
-			}
-			$parsed = self::parse_header( $header, $policy['target_type'] );
-			if ( 'installed_header_verified' !== $parsed['code'] ) {
-				return ValidatedPackage::blocked( self::archive_header_failure_code( $parsed ) );
-			}
-			$headers             = $parsed['headers'] ?? array();
-			$name                = $headers['Name'] ?? null;
-			$uri                 = $headers['UpdateURI'] ?? null;
-			$version             = $headers['Version'] ?? null;
-			$template            = $headers['Template'] ?? null;
-			$requires_php        = true === ( $parsed['present']['RequiresPHP'] ?? false )
-				? $headers['RequiresPHP']
-				: false;
-			$requires_word_press = true === ( $parsed['present']['RequiresWP'] ?? false )
-				? $headers['RequiresWP']
-				: false;
-			if ( null === $name || ! hash_equals( $policy['metadata_name'], $name ) ) {
-				return ValidatedPackage::blocked( 'archive_metadata_identity_mismatch' );
-			}
-			if ( null === $template || ! hash_equals( $policy['theme_template'], $template ) ) {
-				return ValidatedPackage::blocked( 'archive_metadata_identity_mismatch' );
-			}
-			if ( null === $uri || null === CanonicalUpdateUri::canonicalize_boundaries(
-				array(
-					'archive_preflight' => $uri,
-					'configuration'     => $policy['configuration_update_uri'],
-					'offer'             => $policy['offer_update_uri'],
-					'staged_package'    => $policy['staged_package_update_uri'],
-				)
-			) ) {
-				return ValidatedPackage::blocked( 'archive_update_uri_mismatch' );
-			}
-			if ( null === $version || 0 !== ReleaseVersion::compare( $version, $descriptor_facts['version'] ) ) {
-				return ValidatedPackage::blocked( 'archive_version_mismatch' );
-			}
-			if ( null === $requires_php || ( is_string( $requires_php ) && ! self::meets_requirement( $policy['php_runtime_version'], $requires_php ) ) ) {
-				return ValidatedPackage::blocked( 'archive_php_requirement_incompatible' );
-			}
-			if ( null === $requires_word_press || ( is_string( $requires_word_press ) && ! self::meets_requirement( $policy['wordpress_runtime_version'], $requires_word_press ) ) ) {
-				return ValidatedPackage::blocked( 'archive_wordpress_requirement_incompatible' );
-			}
-			ksort( $manifest, SORT_STRING );
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
-			$manifest_json = json_encode( $manifest, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
-			return $this->ready(
-				array(
-					'archive_root'            => $policy['archive_root'],
-					'header_file'             => $policy['header_file'],
-					'manifest_entry_count'    => count( $manifest ),
-					'manifest_expanded_bytes' => $manifest_bytes,
-					'manifest_hash'           => hash( 'sha256', $manifest_json ),
-					'metadata_name'           => $name,
-					'package_type'            => $policy['target_type'],
-					'descriptor_fingerprint'  => $descriptor->fingerprint_value(),
-					'sha256'                  => $descriptor_facts['artifact_sha256'],
-					'size'                    => $descriptor_facts['artifact_size'],
-					'update_uri'              => $descriptor_facts['canonical_update_uri'],
-				)
-			);
+			$outcome = $this->validate_opened_archive( $zip, $descriptor, $descriptor_facts, $policy, $archive_path, $identity );
 		} finally {
 			$zip->close();
-			if ( ! $this->matches_archive_identity( $archive_path, $descriptor_facts, $identity ) ) {
-				return ValidatedPackage::blocked( 'archive_file_identity_mismatch' );
+		}
+		if ( ! $this->matches_archive_identity( $archive_path, $descriptor_facts, $identity ) ) {
+			return ValidatedPackage::blocked( 'archive_file_identity_mismatch' );
+		}
+		return $outcome instanceof ValidatedPackage ? $outcome : $this->ready( $outcome );
+	}
+
+	/**
+	 * @param array<string, mixed> $descriptor_facts
+	 * @param array<string, mixed> $policy
+	 * @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity
+	 * @return ValidatedPackage|array{archive_root:string,author:string,description:string,header_file:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,metadata_name:string,package_type:string,package_uri:string,requires_php:string,requires_wp:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string}
+	 */
+	private function validate_opened_archive(
+		\ZipArchive $zip,
+		IdentityDescriptor $descriptor,
+		array $descriptor_facts,
+		array $policy,
+		string $archive_path,
+		array $identity
+	): ValidatedPackage|array {
+		if ( null !== $this->after_open ) {
+			( $this->after_open )( $archive_path );
+		}
+		if ( ! $this->matches_archive_identity( $archive_path, $descriptor_facts, $identity ) ) {
+			return ValidatedPackage::blocked( 'archive_file_identity_mismatch' );
+		}
+		$scan = ArchiveScanner::scan( $zip, $policy['archive_root'] );
+		if ( ! $scan->is_valid() ) {
+			return ValidatedPackage::blocked( $scan->failure_code() ?? 'archive_path_unsafe' );
+		}
+		$header         = null;
+		$manifest       = array();
+		$manifest_bytes = 0;
+		$expected_path  = $policy['archive_root'] . '/' . $policy['header_file'];
+		foreach ( $scan->entries() as $entry ) {
+			if ( ! $entry['directory'] ) {
+				$relative       = substr( $entry['path'], strlen( $policy['archive_root'] ) + 1 );
+				$entry_identity = self::entry_identity( $zip, $entry['name'], $entry['size'] );
+				if ( '' === $relative || null === $entry_identity ) {
+					return ValidatedPackage::blocked( 'archive_entry_unreadable' );
+				}
+				$manifest[ $relative ] = $entry_identity;
+				$manifest_bytes       += $entry_identity['size'];
+			}
+			if ( ! hash_equals( $expected_path, $entry['path'] ) ) {
+				continue;
+			}
+			if ( $entry['directory'] || null !== $header ) {
+				return ValidatedPackage::blocked( 'archive_header_duplicate' );
+			}
+			$header = self::read_header( $zip, $entry['name'] );
+			if ( null === $header ) {
+				return ValidatedPackage::blocked( 'archive_header_unreadable' );
 			}
 		}
+		if ( ! is_string( $header ) ) {
+			return ValidatedPackage::blocked( 'archive_header_missing' );
+		}
+		$parsed = self::parse_header( $header, $policy['target_type'] );
+		if ( 'installed_header_verified' !== $parsed['code'] ) {
+			return ValidatedPackage::blocked( self::archive_header_failure_code( $parsed ) );
+		}
+		$headers             = $parsed['headers'] ?? array();
+		$name                = $headers['Name'] ?? null;
+		$uri                 = $headers['UpdateURI'] ?? null;
+		$version             = $headers['Version'] ?? null;
+		$template            = $headers['Template'] ?? null;
+		$requires_php        = true === ( $parsed['present']['RequiresPHP'] ?? false )
+			? $headers['RequiresPHP']
+			: false;
+		$requires_word_press = true === ( $parsed['present']['RequiresWP'] ?? false )
+			? $headers['RequiresWP']
+			: false;
+		if ( null === $name || ! hash_equals( $policy['metadata_name'], $name ) ) {
+			return ValidatedPackage::blocked( 'archive_metadata_identity_mismatch' );
+		}
+		if ( null === $template || ! hash_equals( $policy['theme_template'], $template ) ) {
+			return ValidatedPackage::blocked( 'archive_metadata_identity_mismatch' );
+		}
+		if ( null === $uri || null === CanonicalUpdateUri::canonicalize_boundaries(
+			array(
+				'archive_preflight' => $uri,
+				'configuration'     => $policy['configuration_update_uri'],
+				'offer'             => $policy['offer_update_uri'],
+				'staged_package'    => $policy['staged_package_update_uri'],
+			)
+		) ) {
+			return ValidatedPackage::blocked( 'archive_update_uri_mismatch' );
+		}
+		if ( null === $version || 0 !== ReleaseVersion::compare( $version, $descriptor_facts['version'] ) ) {
+			return ValidatedPackage::blocked( 'archive_version_mismatch' );
+		}
+		if ( null === $requires_php || ( is_string( $requires_php ) && ! self::meets_php_requirement( $policy['php_runtime_version'], $requires_php ) ) ) {
+			return ValidatedPackage::blocked( 'archive_php_requirement_incompatible' );
+		}
+		if ( null === $requires_word_press || ( is_string( $requires_word_press ) && ! self::meets_requirement( $policy['wordpress_runtime_version'], $requires_word_press ) ) ) {
+			return ValidatedPackage::blocked( 'archive_wordpress_requirement_incompatible' );
+		}
+		ksort( $manifest, SORT_STRING );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
+		$manifest_json = json_encode( $manifest, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
+		return array(
+			'archive_root'            => $policy['archive_root'],
+			'author'                  => $headers['Author'] ?? '',
+			'description'             => $headers['Description'] ?? '',
+			'header_file'             => $policy['header_file'],
+			'manifest_entry_count'    => count( $manifest ),
+			'manifest_expanded_bytes' => $manifest_bytes,
+			'manifest_hash'           => hash( 'sha256', $manifest_json ),
+			'metadata_name'           => $name,
+			'package_type'            => $policy['target_type'],
+			'package_uri'             => $headers['PackageURI'] ?? '',
+			'requires_php'            => $headers['RequiresPHP'] ?? '',
+			'requires_wp'             => $headers['RequiresWP'] ?? '',
+			'descriptor_fingerprint'  => $descriptor->fingerprint_value(),
+			'sha256'                  => $descriptor_facts['artifact_sha256'],
+			'size'                    => $descriptor_facts['artifact_size'],
+			'update_uri'              => $descriptor_facts['canonical_update_uri'],
+		);
 	}
 
 	/** @internal Verify descriptor-bound bytes with a stable stat/hash/post-hash-stat observation. */
@@ -338,7 +360,7 @@ final class PackageIdentityValidator {
 		);
 	}
 
-	/** @param array{archive_root:string,header_file:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,metadata_name:string,package_type:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string} $snapshot */
+	/** @param array{archive_root:string,author:string,description:string,header_file:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,metadata_name:string,package_type:string,package_uri:string,requires_php:string,requires_wp:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string} $snapshot */
 	private function ready( array $snapshot ): ValidatedPackage {
 		$package                          = ValidatedPackage::ready( $snapshot );
 		$this->receipt_proofs[ $package ] = array(
@@ -377,7 +399,7 @@ final class PackageIdentityValidator {
 		if ( ( 'plugin' === $policy['target_type'] && $policy['installed_package_identity'] !== $policy['archive_root'] . '/' . $policy['header_file'] ) || ( 'theme' === $policy['target_type'] && ( $policy['installed_package_identity'] !== $policy['archive_root'] || 'style.css' !== $policy['header_file'] ) ) ) {
 			return false;
 		}
-		if ( ! PackageDirectory::is_valid_name( $policy['archive_root'] ) || ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(?:php|css)\z/D', $policy['header_file'] ) || ( 'plugin' === $policy['target_type'] && ! str_ends_with( $policy['header_file'], '.php' ) ) || ( 'theme' === $policy['target_type'] && 'style.css' !== $policy['header_file'] ) || '' === $policy['metadata_name'] || strlen( $policy['metadata_name'] ) > 500 || 1 === preg_match( '/[\x00-\x1f\x7f]/', $policy['metadata_name'] ) || null === ReleaseVersion::normalize_header( $policy['php_runtime_version'] ) || null === ReleaseVersion::normalize_header( $policy['wordpress_runtime_version'] ) ) {
+		if ( ! PackageDirectory::is_valid_name( $policy['archive_root'] ) || ! preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(?:php|css)\z/D', $policy['header_file'] ) || ( 'plugin' === $policy['target_type'] && ! str_ends_with( $policy['header_file'], '.php' ) ) || ( 'theme' === $policy['target_type'] && 'style.css' !== $policy['header_file'] ) || '' === $policy['metadata_name'] || strlen( $policy['metadata_name'] ) > 500 || 1 === preg_match( '/[\x00-\x1f\x7f]/', $policy['metadata_name'] ) || null === ReleaseVersion::normalize_php_version( $policy['php_runtime_version'] ) || null === ReleaseVersion::normalize_header( $policy['wordpress_runtime_version'] ) ) {
 			return false;
 		}
 		return CanonicalUpdateUri::canonicalize_boundaries(
@@ -489,6 +511,11 @@ final class PackageIdentityValidator {
 			default => 'archive_metadata_identity_mismatch',
 		};
 	}
+	private static function meets_php_requirement( string $runtime_version, string $required_version ): bool {
+		$normalized = ReleaseVersion::normalize_php_version( $runtime_version );
+		return null !== $normalized && self::meets_requirement( $normalized, $required_version );
+	}
+
 	private static function meets_requirement( string $runtime_version, string $required_version ): bool {
 		$comparison = ReleaseVersion::compare( $runtime_version, $required_version );
 		return null !== $comparison && $comparison >= 0; }
@@ -502,29 +529,37 @@ final class PackageIdentityValidator {
 		if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) ) {
 			return array( 'code' => 'installed_header_invalid' );
 		}
-		$contents = str_replace(
+		if ( str_starts_with( $contents, "\xEF\xBB\xBF" ) ) {
+			$contents = substr( $contents, 3 );
+		}
+		$contents   = str_replace(
 			array( "\r\n", "\r" ),
 			"\n",
 			substr( $contents, 0, self::MAX_HEADER_BYTES )
 		);
-		$labels   = array(
+		$name_label = 'theme' === $type ? 'Theme Name' : 'Plugin Name';
+		$scope      = self::header_block( $contents, $name_label );
+		$labels     = array(
 			'Author'      => 'Author',
 			'Description' => 'Description',
-			'Name'        => 'theme' === $type ? 'Theme Name' : 'Plugin Name',
+			'Name'        => $name_label,
 			'PackageURI'  => 'theme' === $type ? 'Theme URI' : 'Plugin URI',
 			'RequiresPHP' => 'Requires PHP',
 			'RequiresWP'  => 'Requires at least',
-			'Template'    => 'Template',
 			'UpdateURI'   => 'Update URI',
 			'Version'     => 'Version',
 		);
-		$result   = array();
-		$present  = array();
+		if ( 'theme' === $type ) {
+			$labels['Template'] = 'Template';
+			ksort( $labels, SORT_STRING );
+		}
+		$result  = array();
+		$present = array();
 		foreach ( $labels as $key => $label ) {
 			$pattern = '/^[ \\t]*(?:<\\?php[ \\t]*)?[\\/*#@ \\t]*'
 				. preg_quote( $label, '/' )
 				. ':[ \\t]*(.*)$/mi';
-			$count   = preg_match_all( $pattern, $contents, $matches );
+			$count   = preg_match_all( $pattern, $scope, $matches );
 			if ( 1 < $count ) {
 				return array(
 					'code'   => 'installed_header_ambiguous',
@@ -549,6 +584,12 @@ final class PackageIdentityValidator {
 			$result[ $key ]  = $value;
 			$present[ $key ] = 1 === $count;
 		}
+		if ( 'plugin' === $type ) {
+			$result['Template']  = '';
+			$present['Template'] = false;
+			ksort( $result, SORT_STRING );
+			ksort( $present, SORT_STRING );
+		}
 		foreach ( array( 'Name', 'Version', 'UpdateURI' ) as $key ) {
 			if ( '' === $result[ $key ] ) {
 				return array(
@@ -563,10 +604,10 @@ final class PackageIdentityValidator {
 				'header' => 'Version',
 			);
 		}
-		if ( 'plugin' === $type ) {
-			$result['Template'] = '';
-		} elseif (
-			'' !== $result['Template']
+		if (
+			'theme' === $type
+			&& isset( $result['Template'] )
+			&& '' !== $result['Template']
 			&& ! PackageDirectory::is_valid_name( $result['Template'] )
 		) {
 			return array(
@@ -579,5 +620,28 @@ final class PackageIdentityValidator {
 			'headers' => $result,
 			'present' => $present,
 		);
+	}
+
+	/**
+	 * Isolates the file header comment block so subsequent PHPDoc/CSS comments do not collide.
+	 */
+	private static function header_block( string $contents, string $name_label ): string {
+		$name_pattern = '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*' . preg_quote( $name_label, '/' ) . ':/mi';
+		if ( 1 > preg_match_all( '/\/\*.*?\*\//s', $contents, $blocks, PREG_OFFSET_CAPTURE ) ) {
+			return $contents;
+		}
+		foreach ( $blocks[0] as $index => $block ) {
+			$text = $block[0];
+			if ( 1 !== preg_match( $name_pattern, $text ) ) {
+				continue;
+			}
+			$has_core_sibling = 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*(?:Version|Update URI):/mi', $text );
+			$has_later_block  = isset( $blocks[0][ $index + 1 ] );
+			if ( $has_core_sibling || $has_later_block ) {
+				return $text;
+			}
+			return $contents;
+		}
+		return $contents;
 	}
 }

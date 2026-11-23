@@ -14,12 +14,6 @@ final class ReleaseSource {
 	public function __construct( private object $service, private SelectedRuntimeState $state, private bool $report_rejection = false ) {
 	}
 
-	private static function direct_filesystem_available(): bool {
-		// @phpstan-ignore phpstanWP.wpConstant.fetch (The sealed runtime must inspect direct-filesystem policy without invoking filesystem negotiation.)
-		return ( defined( 'FS_METHOD' ) && 'direct' === FS_METHOD )
-			|| ( ! defined( 'FS_METHOD' ) && ( ( $GLOBALS['wp_filesystem'] ?? null ) instanceof \WP_Filesystem_Direct ) );
-	}
-
 	/**
 	 * @param array<string,mixed> $conditional Caller-provided conditional request values.
 	 * @return array<string,mixed>
@@ -62,7 +56,7 @@ final class ReleaseSource {
 		if ( null !== $failure ) {
 			return $failure;
 		}
-		if ( ! self::direct_filesystem_available() ) {
+		if ( 'list' !== $method && ! SelectedRuntimeState::direct_filesystem_available() ) {
 			return $this->failure( new ReleaseFailure( 'filesystem_unsupported' ) );
 		}
 		$artifact = null;

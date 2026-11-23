@@ -51,12 +51,15 @@ $ran_wp_release_updater_runtime_files = array(
 );
 
 foreach ( $ran_wp_release_updater_runtime_files as $ran_wp_release_updater_runtime_class => $ran_wp_release_updater_runtime_relative ) {
-	$ran_wp_release_updater_runtime_file = __DIR__ . '/' . $ran_wp_release_updater_runtime_relative;
+	$ran_wp_release_updater_runtime_file     = __DIR__ . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $ran_wp_release_updater_runtime_relative );
+	$ran_wp_release_updater_runtime_expected = realpath( $ran_wp_release_updater_runtime_file );
 	if ( class_exists( $ran_wp_release_updater_runtime_class, false ) || interface_exists( $ran_wp_release_updater_runtime_class, false ) ) {
 		$ran_wp_release_updater_runtime_loaded = ( new ReflectionClass( $ran_wp_release_updater_runtime_class ) )->getFileName();
+		$ran_wp_release_updater_runtime_actual = is_string( $ran_wp_release_updater_runtime_loaded ) ? realpath( $ran_wp_release_updater_runtime_loaded ) : false;
 		if (
-			! is_string( $ran_wp_release_updater_runtime_loaded )
-			|| ! hash_equals( $ran_wp_release_updater_runtime_file, $ran_wp_release_updater_runtime_loaded )
+			! is_string( $ran_wp_release_updater_runtime_expected )
+			|| ! is_string( $ran_wp_release_updater_runtime_actual )
+			|| ! hash_equals( $ran_wp_release_updater_runtime_expected, $ran_wp_release_updater_runtime_actual )
 		) {
 			throw new RuntimeException( 'A lifecycle symbol was loaded outside the selected runtime root.' );
 		}
@@ -66,7 +69,9 @@ foreach ( $ran_wp_release_updater_runtime_files as $ran_wp_release_updater_runti
 }
 
 unset(
+	$ran_wp_release_updater_runtime_actual,
 	$ran_wp_release_updater_runtime_class,
+	$ran_wp_release_updater_runtime_expected,
 	$ran_wp_release_updater_runtime_file,
 	$ran_wp_release_updater_runtime_files,
 	$ran_wp_release_updater_runtime_loaded,

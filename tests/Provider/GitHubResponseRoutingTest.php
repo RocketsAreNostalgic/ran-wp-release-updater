@@ -123,6 +123,38 @@ final class GitHubResponseRoutingTest extends TestCase {
 		$this->assert_failure( fn() => $this->service()->acquire_installed( $descriptor ), 'package_incompatible', 2, null, 'complete' );
 		$this->assert_temporary_paths_absent();
 	}
+
+	public function test_streaming_redirect_truncates_redirect_body_before_following_location(): void {
+		$descriptor = $this->descriptor();
+		$sizes      = array();
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+		$GLOBALS['ran_github_requests'] = array();
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+		$GLOBALS['ran_github_request_callback'] = static function ( string $url, array $args ) use ( &$sizes ): void {
+			if ( isset( $args['filename'] ) && is_string( $args['filename'] ) ) {
+				clearstatcache( true, $args['filename'] );
+				$sizes[ $url ] = is_file( $args['filename'] ) ? filesize( $args['filename'] ) : null;
+			}
+		};
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response( 200, array( 'id' => 99 ) ),
+			$this->response( 302, null, array( 'location' => 'https://objects.githubusercontent.com/repository.zip' ), '<html>302 Found redirect body</html>' ),
+			$this->response( 200, null, array(), 'zip-data' ),
+			$this->response( 200, array( 'id' => 99 ) ),
+		);
+
+		$artifact = $this->service()->acquire_installed( $descriptor );
+		try {
+			self::assertSame( 0, $sizes['https://objects.githubusercontent.com/repository.zip'] ?? null );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Inspect acquired temp artifact bytes directly in test verification.
+			$bytes = $artifact->inspect( static fn ( string $path ): string => (string) file_get_contents( $path ) );
+			self::assertSame( 'zip-data', $bytes );
+		} finally {
+			self::assertTrue( $artifact->discard() );
+		}
+		$this->assert_temporary_paths_absent();
+	}
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'endpoint_failure_provider' )]
 	public function test_endpoint_failures_use_neutral_codes_and_make_no_later_request( string $operation, string $scenario, string $code, int $requests ): void {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.

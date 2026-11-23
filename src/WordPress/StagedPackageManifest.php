@@ -14,7 +14,8 @@ use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
  */
 final class StagedPackageManifest {
 
-	private const MAX_ENTRIES = 10000;
+	private const MAX_ENTRIES     = 10000;
+	private const MAX_DIRECTORIES = 10000;
 
 	/** @return array<string,array{sha256:string,size:int}>|null */
 	public function build( string $root ): ?array {
@@ -30,17 +31,18 @@ final class StagedPackageManifest {
 			return null;
 		}
 
-		$queue        = array(
+		$queue            = array(
 			array(
 				'path'     => $root,
 				'relative' => '',
 				'identity' => $root_identity,
 			),
 		);
-		$manifest     = array();
-		$directories  = array();
-		$total        = 0;
-		$entries_seen = 0;
+		$manifest         = array();
+		$directories      = array();
+		$total            = 0;
+		$files_seen       = 0;
+		$directories_seen = 0;
 		while ( array() !== $queue ) {
 			$next = array_pop( $queue );
 			if ( self::entry_identity( $next['path'] ) !== $next['identity'] ) {
@@ -55,9 +57,6 @@ final class StagedPackageManifest {
 				if ( '.' === $entry || '..' === $entry ) {
 					continue;
 				}
-				if ( ++$entries_seen > self::MAX_ENTRIES ) {
-					return null;
-				}
 				$path     = $next['path'] . DIRECTORY_SEPARATOR . $entry;
 				$relative = '' === $next['relative'] ? $entry : $next['relative'] . '/' . $entry;
 				if ( strlen( $relative ) > PackageIdentityValidator::MAX_ARCHIVE_PATH_BYTES || 0 !== preg_match( '/[\x00-\x1F\x7F]|[\\\\:]/u', $relative ) ) {
@@ -69,6 +68,9 @@ final class StagedPackageManifest {
 				}
 				$type = $stat['mode'] & 0170000;
 				if ( 0040000 === $type ) {
+					if ( ++$directories_seen > self::MAX_DIRECTORIES ) {
+						return null;
+					}
 					$directories[ $relative ] = true;
 					$queue[]                  = array(
 						'path'     => $path,
@@ -76,6 +78,9 @@ final class StagedPackageManifest {
 						'identity' => $stat,
 					);
 					continue;
+				}
+				if ( ++$files_seen > self::MAX_ENTRIES ) {
+					return null;
 				}
 				if ( 0100000 !== $type || $stat['size'] < 0 || $stat['size'] > PackageIdentityValidator::MAX_EXPANDED_ARCHIVE_BYTES - $total ) {
 					return null;

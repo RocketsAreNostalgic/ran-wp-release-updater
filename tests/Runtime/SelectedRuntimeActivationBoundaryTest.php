@@ -184,17 +184,22 @@ PHP,
 		require_once dirname( __DIR__, 2 ) . '/src/Runtime/RequestBroker.php';
 		require_once dirname( __DIR__, 2 ) . '/src/Runtime/SelectedRuntimeState.php';
 		foreach ( array(
-			'6.9-beta1-60740'     => '6.9.0-beta.1',
-			'6.9-beta1'           => '6.9.0-beta.1',
-			'6.9-alpha-60740-src' => '6.9.0-alpha.0',
-			'6.9-RC1-src'         => '6.9.0-rc.1',
-			'6.9-rc1'             => '6.9.0-rc.1',
-			'6.9.1-rc1-src'       => '6.9.1-rc.1',
-			'6.9.3-src'           => '6.9.3-src',
-			'6.9.0-beta.1'        => '6.9.0-beta.1',
+			'6.9-beta1-60740'      => '6.9.0-beta.1',
+			'6.9-beta1'            => '6.9.0-beta.1',
+			'6.9-alpha-60740-src'  => '6.9.0-alpha.0',
+			'6.9-alpha1'           => '6.9.0-alpha.1',
+			'6.9-alpha1-60740'     => '6.9.0-alpha.1',
+			'6.9-alpha1-60740-src' => '6.9.0-alpha.1',
+			'6.9.1-alpha2-src'     => '6.9.1-alpha.2',
+			'6.9-RC1-src'          => '6.9.0-rc.1',
+			'6.9-rc1'              => '6.9.0-rc.1',
+			'6.9.1-rc1-src'        => '6.9.1-rc.1',
+			'6.9.3-src'            => '6.9.3-src',
+			'6.9.0-beta.1'         => '6.9.0-beta.1',
 		) as $input => $expected ) {
 			self::assertSame( $expected, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_word_press_version( $input ), $input );
 		}
+		self::assertNull( \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_word_press_version( '6.9-alpha0' ) );
 		self::assertNull( \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_word_press_version( '6.9-beta1-60740-unsafe' ) );
 		self::assertNull( \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_word_press_version( str_repeat( '1', 101 ) ) );
 	}
@@ -221,23 +226,56 @@ PHP,
 			'beta revision'                  => array( '6.9-beta1-60740' ),
 			'beta package'                   => array( '6.9-beta1' ),
 			'alpha source build'             => array( '6.9-alpha-60740-src' ),
+			'numbered alpha'                 => array( '6.9-alpha1' ),
+			'numbered alpha revision'        => array( '6.9-alpha1-60740' ),
+			'numbered alpha source build'    => array( '6.9-alpha1-60740-src' ),
+			'patch numbered alpha'           => array( '6.9.1-alpha2-src' ),
 			'release candidate source build' => array( '6.9-RC1-src' ),
 			'full SemVer prerelease'         => array( '6.9.0-beta.1' ),
 		);
 	}
 
-	public function test_scheduled_activation_keeps_word_press_release_candidate_below_the_stable_floor(): void {
-		$result = $this->probe(
-			<<<'PHP'
-$GLOBALS['wp_version'] = '6.5-RC1-60740';
+	public function test_scheduled_activation_accepts_debian_and_ubuntu_php_version_suffixes(): void {
+		foreach ( array(
+			'8.2.28-0+deb12u1'                      => 'active',
+			'8.2.28-1+ubuntu22.04.1+deb.sury.org+1' => 'active',
+			'8.2.28-1~deb12u1'                      => 'active',
+			'8.1.29-0+deb12u1'                      => 'inactive',
+			'not-a-php-version'                     => 'inactive',
+		) as $php_version => $expected_state ) {
+			$result = $this->probe(
+				<<<'PHP'
+$registrar = require $data['bootstrap'];
+$activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(array(
+	'php_version'       => $data['php_version'],
+	'runtime_protocol'  => 11,
+	'wordpress_version' => '6.9.0-alpha.1',
+));
+echo json_encode(array('loaded' => $activation['loaded'], 'state' => $activation['state'], 'diagnostics' => $activation['diagnostics']));
+PHP,
+				array( 'php_version' => $php_version )
+			);
+
+			self::assertSame( $expected_state, $result['state'], $php_version );
+			self::assertSame( 'active' === $expected_state, $result['loaded'], $php_version );
+		}
+	}
+
+	public function test_scheduled_activation_keeps_word_press_prereleases_below_the_stable_floor(): void {
+		foreach ( array( '6.5-RC1-60740', '6.5-alpha1', '6.5-alpha1-60740-src' ) as $version ) {
+			$result = $this->probe(
+				<<<'PHP'
+$GLOBALS['wp_version'] = $data['version'];
 $registrar = require $data['bootstrap'];
 do_action('after_setup_theme');
 echo json_encode(array('diagnostics' => $registrar->diagnostics()['diagnostics'], 'state' => $GLOBALS['ran_wp_release_updater_v1_broker']->diagnostics()['state']));
-PHP
-		);
+PHP,
+				array( 'version' => $version )
+			);
 
-		self::assertSame( 'inactive', $result['state'] );
-		self::assertSame( array( array( 'code' => 'runtime_selection_inactive' ) ), $result['diagnostics'] );
+			self::assertSame( 'inactive', $result['state'], $version );
+			self::assertSame( array( array( 'code' => 'runtime_selection_inactive' ) ), $result['diagnostics'], $version );
+		}
 	}
 
 	public function test_scheduled_activation_registers_a_target_on_a_word_press_beta_build(): void {
