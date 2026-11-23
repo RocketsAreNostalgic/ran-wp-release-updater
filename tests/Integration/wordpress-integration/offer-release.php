@@ -76,6 +76,9 @@ foreach ( 'plugin' === $type ? array( 'offer-target.php' ) : array( 'style.css',
 	file_put_contents( $ran_wp_release_updater_test_directory . '/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes( $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_installed ) . "// installed\n" );
 	$ran_wp_release_updater_test_zip->addFromString( 'offer-target/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes( $ran_wp_release_updater_test_name, '2.0.0' ) . "// release\n" );
 }
+if ( 'exact-recovery-verified-directory' === $mode ) {
+	$ran_wp_release_updater_test_zip->addFromString( 'offer-target/verified/nested/readme.txt', 'Verified incoming file' );
+}
 $ran_wp_release_updater_test_zip->close();
 if ( 'plugin' === $type ) {
 	if ( null !== activate_plugin( $ran_wp_release_updater_test_identity ) ) {

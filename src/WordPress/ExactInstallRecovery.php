@@ -11,6 +11,7 @@ namespace RAN\WPReleaseUpdater\V1\WordPress;
  * @phpstan-import-type EntryIdentity from StagedPackageManifest
  * @phpstan-import-type PackageTree from StagedPackageManifest
  * @phpstan-type OwnedEntry array{path:string,identity:EntryIdentity}
+ * @phpstan-type ParentIdentity array{resolved:string,dev:int,ino:int,mode:int}
  */
 final class ExactInstallRecovery {
 
@@ -19,38 +20,50 @@ final class ExactInstallRecovery {
 	/** @var OwnedEntry|null */
 	private ?array $maintenance = null;
 	/** @var PackageTree|null */
-	private ?array $incoming = null;
+	private ?array $incoming          = null;
+	private bool $backup_move_refused = false;
 
 	private readonly string $destination;
 	private readonly StagedPackageManifest $manifest;
+	/** @var ParentIdentity|null */
+	private readonly ?array $parent;
 
 	public function __construct( string $installed_directory, private readonly string $target_type ) {
 		$this->destination = wp_normalize_path( rtrim( $installed_directory, '/\\' ) );
 		$this->manifest    = new StagedPackageManifest();
+		$this->parent      = $this->parent_identity();
 	}
 
-	/** @param PackageTree $incoming */
-	public function expect_incoming( array $incoming ): void {
-		$this->incoming = $incoming;
+	/** @param array<string,array{sha256:string,size:int}> $files */
+	public function expect_incoming( array $files ): void {
+		$directories = array();
+		foreach ( array_keys( $files ) as $path ) {
+			// Only receipt-verified files can establish their enclosing directories.
+			for ( $dir = dirname( (string) $path ); '.' !== $dir && ! isset( $directories[ $dir ] ); $dir = dirname( $dir ) ) {
+				$directories[ $dir ] = true;
+			}
+		}
+		$this->incoming = array(
+			'files'       => $files,
+			'directories' => $directories,
+		);
 	}
 
 	/**
 	 * @param (\Closure(array<string,mixed>): (bool|\WP_Error)) $move
 	 */
 	public function move_backup( mixed $arguments, \Closure $move ): bool|\WP_Error {
-		if ( ! is_array( $arguments ) ) {
-			return false;
-		}
 		$filesystem = $GLOBALS['wp_filesystem'] ?? null;
 		$group      = 'plugin' === $this->target_type ? 'plugins' : 'themes';
 		$slug       = basename( $this->destination );
 		if (
-			! $filesystem instanceof \WP_Filesystem_Direct
+			! is_array( $arguments )
+			|| ! $filesystem instanceof \WP_Filesystem_Direct
 			|| ( $arguments['slug'] ?? null ) !== $slug
 			|| ( $arguments['dir'] ?? null ) !== $group
 			|| ! is_string( $arguments['src'] ?? null )
 		) {
-			return $move( $arguments );
+			return $this->unverified_backup_source();
 		}
 
 		$source  = $filesystem->find_folder( $arguments['src'] );
@@ -58,24 +71,36 @@ final class ExactInstallRecovery {
 		if ( ! is_string( $source ) || '' === $source || ! is_string( $content ) || '' === $content
 			|| ! hash_equals( $this->destination, wp_normalize_path( trailingslashit( $source ) . $slug ) )
 		) {
-			return $move( $arguments );
+			return $this->unverified_backup_source();
 		}
 
 		$path            = trailingslashit( $content ) . 'upgrade-temp-backup/' . $group . '/' . $slug;
 		$previous_backup = StagedPackageManifest::entry_identity( $path );
 		$source_identity = StagedPackageManifest::entry_identity( $this->destination );
 		$source_tree     = $this->manifest->snapshot( $this->destination );
-		$digest          = null === $source_tree || StagedPackageManifest::entry_identity( $this->destination ) !== $source_identity
-			? null : $this->manifest->tree_digest( $source_tree );
-		$result          = false;
+		if ( null === $source_identity || null === $source_tree ) {
+			return $this->unverified_backup_source();
+		}
+		$digest = $this->manifest->tree_digest( $source_tree );
+		if ( $this->parent_changed() || StagedPackageManifest::entry_identity( $this->destination ) !== $source_identity ) {
+			return $this->unverified_backup_source();
+		}
+		$result = false;
 		try {
 			$result = $move( $arguments );
 			return $result;
 		} finally {
-			if ( null !== $source_identity && null !== $digest ) {
-				$this->capture_backup( $path, $previous_backup, $source_identity, $digest, true === $result );
-			}
+			$this->capture_backup( $path, $previous_backup, $source_identity, $digest, true === $result );
 		}
+	}
+
+	public function backup_move_refused(): bool {
+		return $this->backup_move_refused;
+	}
+
+	private function unverified_backup_source(): \WP_Error {
+		$this->backup_move_refused = true;
+		return new \WP_Error( 'ran_wp_release_updater_backup_source_unverified', 'The installed package could not be verified for recovery.' );
 	}
 
 	/**
@@ -146,12 +171,42 @@ final class ExactInstallRecovery {
 			$backup_tree = $this->manifest->snapshot( $backup['path'] );
 			return null !== $backup_tree
 				&& hash_equals( $backup['digest'], $this->manifest->tree_digest( $backup_tree ) )
+				&& ! $this->parent_changed()
 				&& $this->destination_is_replaceable()
+				&& ! $this->parent_changed()
 				&& true === move_dir( $backup['path'], $this->destination, true )
 				&& null === StagedPackageManifest::entry_identity( $backup['path'] );
 		} finally {
 			$this->clear_maintenance();
 		}
+	}
+
+	/** @phpstan-impure The destination parent may change during recovery. */
+	private function parent_changed(): bool {
+		return null === $this->parent || $this->parent_identity() !== $this->parent;
+	}
+
+	/**
+	 * @phpstan-impure Recheck the resolved parent and its native directory identity.
+	 * @return ParentIdentity|null
+	 */
+	private function parent_identity(): ?array {
+		$path = dirname( $this->destination );
+		clearstatcache( true );
+		$identity = StagedPackageManifest::entry_identity( $path );
+		$resolved = realpath( $path );
+		if ( null === $identity || 0040000 !== ( $identity['mode'] & 0170000 ) || false === $resolved
+			|| StagedPackageManifest::entry_identity( $resolved ) !== $identity
+		) {
+			return null;
+		}
+		// Moving a child changes the parent's timestamps and size while preserving its identity.
+		return array(
+			'resolved' => $resolved,
+			'dev'      => $identity['dev'],
+			'ino'      => $identity['ino'],
+			'mode'     => $identity['mode'],
+		);
 	}
 
 	private function destination_is_replaceable(): bool {

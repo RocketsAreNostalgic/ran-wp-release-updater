@@ -14,7 +14,6 @@ use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
  * @phpstan-type OwnedCopy array{directory:string,path:string,proof:ValidatedPackage}
  * @phpstan-type ArchiveIdentity array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}
  * @phpstan-type Finalization array{commit:string,host_completion:string,lease:string,archive_cleanup:string}
- * @phpstan-import-type PackageTree from StagedPackageManifest
  */
 final class ExactInstallInvocation {
 
@@ -59,6 +58,12 @@ final class ExactInstallInvocation {
 					return $this->recovery->move_backup( $args, parent::move_to_temp_backup_dir( ... ) );
 				}
 
+				public function restore_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
+					// Core schedules restoration on WP_Error even when it did not create the backup.
+					// WordPress 6.5 can pass a string to the shutdown action.
+					return $this->recovery->backup_move_refused() ? false : parent::restore_temp_backup( is_array( $temp_backups ) ? $temp_backups : array() );
+				}
+
 				public function maintenance_mode( $enable = false ): void {
 					$this->recovery->maintenance_mode( true === $enable, parent::maintenance_mode( ... ) );
 				}
@@ -77,6 +82,10 @@ final class ExactInstallInvocation {
 
 				public function move_to_temp_backup_dir( $args ): bool|\WP_Error {
 					return $this->recovery->move_backup( $args, parent::move_to_temp_backup_dir( ... ) );
+				}
+
+				public function restore_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
+					return $this->recovery->backup_move_refused() ? false : parent::restore_temp_backup( is_array( $temp_backups ) ? $temp_backups : array() );
 				}
 
 				public function maintenance_mode( $enable = false ): void {
@@ -146,9 +155,9 @@ final class ExactInstallInvocation {
 		return $this->recovery->maintenance_pending();
 	}
 
-	/** @param PackageTree $staged */
-	public function expect_incoming( array $staged ): void {
-		$this->recovery->expect_incoming( $staged );
+	/** @param array<string,array{sha256:string,size:int}> $files */
+	public function expect_incoming( array $files ): void {
+		$this->recovery->expect_incoming( $files );
 	}
 
 	public function uses_original_skin(): bool {

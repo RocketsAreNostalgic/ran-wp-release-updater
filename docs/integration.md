@@ -417,10 +417,13 @@ unconfirmed deletion retain WordPress's shutdown callbacks and the updater's
 cleanup fallback. Exact installs with unconfirmed deletion report uncertainty
 and leave the host mutation outcome uncertain.
 
-If installation stops after WordPress moves the backup and before Core
+Before moving the installed package, the updater verifies that it can take a
+recovery snapshot. A refusal before the move preserves the current installation
+and any pre-existing backup. If installation stops after the move and before Core
 schedules recovery, the updater can identify the backup even if Core throws
-after the rename. It verifies the backup and restores it over an absent or
-empty destination, or over a directory containing only byte-matching entries
+after the rename. It verifies the backup and the destination's original parent
+directory before restoring over an absent or empty destination, or over a
+directory containing only byte-matching files and their enclosing directories
 from the verified incoming package. Other destination contents and the backup
 are preserved. The updater also clears any maintenance marker that the
 invocation created and still owns. The operation buffers native progress without

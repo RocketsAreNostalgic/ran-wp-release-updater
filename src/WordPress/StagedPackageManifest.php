@@ -60,7 +60,7 @@ final class StagedPackageManifest {
 				}
 				$path     = $next['path'] . DIRECTORY_SEPARATOR . $entry;
 				$relative = '' === $next['relative'] ? $entry : $next['relative'] . '/' . $entry;
-				if ( strlen( $relative ) > PackageIdentityValidator::MAX_ARCHIVE_PATH_BYTES || 1 === preg_match( '/[^\x20-\x7E]|[\\\\:]/', $relative ) ) {
+				if ( strlen( $relative ) > PackageIdentityValidator::MAX_ARCHIVE_PATH_BYTES || 0 !== preg_match( '/[\x00-\x1F\x7F]|[\\\\:]/u', $relative ) ) {
 					return null;
 				}
 				$stat = self::entry_identity( $path );

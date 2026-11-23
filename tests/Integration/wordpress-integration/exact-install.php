@@ -276,7 +276,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 function ran_wp_release_updater_test_exact_recovery_fault( string $kind, string $backup, string $main_file, string $archive, string $maintenance, stdClass $observed ): stdClass {
 	$directory = dirname( $main_file );
 	$files     = array();
-	if ( in_array( $kind, array( 'partial', 'complete', 'foreign-directory' ), true ) ) {
+	if ( in_array( $kind, array( 'partial', 'complete', 'foreign-directory', 'parent-matching' ), true ) ) {
 		$zip = new ZipArchive();
 		if ( true !== $zip->open( $archive ) ) {
 			throw new RuntimeException( 'Could not open the incoming recovery fixture.' );
@@ -297,21 +297,72 @@ function ran_wp_release_updater_test_exact_recovery_fault( string $kind, string 
 	if ( 'foreign-bytes' === $kind ) {
 		$files[ basename( $main_file ) ] = 'Unrelated bytes at the incoming path';
 	}
-	$fault   = (object) array(
-		'kind'        => $kind,
-		'backup'      => $backup,
-		'marker'      => $maintenance,
-		'directory'   => $directory,
-		'main_file'   => $main_file,
-		'files'       => $files,
-		'interrupted' => false,
+	$subdirectory = match ( $kind ) {
+		'unverified-directory' => 'unverified-empty',
+		'verified-directory'   => 'verified/nested',
+		default                => null,
+	};
+	$fault = (object) array(
+		'kind'           => $kind,
+		'backup'         => $backup,
+		'marker'         => $maintenance,
+		'directory'      => $directory,
+		'main_file'      => $main_file,
+		'files'          => $files,
+		'subdirectory'   => $subdirectory,
+		'staging_seeded' => false,
+		'backup_error'   => null,
+		'stale_backup'   => 'Unrelated prior backup',
+		'interrupted'    => false,
 	);
-	$replace = static function ( WP_Filesystem_Direct $filesystem ) use ( $fault, $directory, $backup, $kind, $files ): void {
+	if ( 'unicode-source' === $kind ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Seed an existing package file before initializing WordPress filesystem access.
+		if ( false === file_put_contents( $directory . '/résumé.txt', 'Existing UTF-8 filename' ) ) {
+			throw new RuntimeException( 'Could not seed the UTF-8 source filename.' );
+		}
+	}
+	if ( 'unverified-source' === $kind ) {
+		if ( ! symlink( $main_file, $directory . '/old-link.txt' ) ) {
+			throw new RuntimeException( 'Could not seed the unverified source link.' );
+		}
+		$stale_header = $backup . '/' . basename( $main_file );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Seed unrelated backup bytes before initializing WordPress filesystem access.
+		if ( ! wp_mkdir_p( $backup ) || false === file_put_contents( $stale_header, $fault->stale_backup ) ) {
+			throw new RuntimeException( 'Could not seed the unrelated backup.' );
+		}
+		add_filter(
+			'upgrader_install_package_result',
+			static function ( mixed $result ) use ( $fault ): mixed {
+				$fault->backup_error = $result instanceof WP_Error ? $result->get_error_code() : null;
+				return $result;
+			},
+			9,
+			1
+		);
+	}
+	if ( 'unverified-directory' === $kind ) {
+		add_filter(
+			'upgrader_source_selection',
+			static function ( mixed $source, string $remote_source, WP_Upgrader $upgrader ) use ( $fault, $observed ): mixed {
+				unset( $remote_source );
+				if ( is_string( $source ) && $upgrader === $observed->upgrader ) {
+					$fault->staging_seeded = wp_mkdir_p( trailingslashit( $source ) . 'unverified-empty' );
+					if ( ! $fault->staging_seeded ) {
+						throw new RuntimeException( 'Could not seed the unauthenticated staging directory.' );
+					}
+				}
+				return $source;
+			},
+			19,
+			3
+		);
+	}
+	$replace = static function ( WP_Filesystem_Direct $filesystem ) use ( $fault, $directory, $backup, $kind, $files, $subdirectory ): void {
 		if ( 'foreign-file' === $kind ) {
 			if ( ! $filesystem->put_contents( $directory, 'Unrelated replacement file' ) ) {
 				throw new RuntimeException( 'Could not seed the replacement file.' );
 			}
-		} elseif ( 'absent' !== $kind ) {
+		} elseif ( ! in_array( $kind, array( 'absent', 'unicode-source', 'parent-absent', 'parent-replaced' ), true ) ) {
 			if ( ! $filesystem->mkdir( $directory ) ) {
 				throw new RuntimeException( 'Could not seed the replacement directory.' );
 			}
@@ -322,6 +373,9 @@ function ran_wp_release_updater_test_exact_recovery_fault( string $kind, string 
 			}
 			if ( 'symlink' === $kind && ! symlink( $backup . '/index.php', $directory . '/index.php' ) ) {
 				throw new RuntimeException( 'Could not seed the replacement link.' );
+			}
+			if ( null !== $subdirectory && ! wp_mkdir_p( $directory . '/' . $subdirectory ) ) {
+				throw new RuntimeException( 'Could not seed the replacement subdirectory.' );
 			}
 		}
 		$fault->interrupted = true;
@@ -370,7 +424,14 @@ function ran_wp_release_updater_test_exact_recovery_fault( string $kind, string 
 function ran_wp_release_updater_test_exact_interrupted_destination( stdClass $fault, Closure $read_bytes ): bool {
 	switch ( $fault->kind ) {
 		case 'absent':
+		case 'unicode-source':
+		case 'parent-absent':
+		case 'parent-replaced':
 			return ! file_exists( $fault->directory ) && ! is_link( $fault->directory );
+		case 'unverified-directory':
+		case 'verified-directory':
+			$child = $fault->directory . '/' . $fault->subdirectory;
+			return is_dir( $child ) && array( '.', '..' ) === scandir( $child );
 		case 'foreign-file':
 			return is_file( $fault->directory ) && 'Unrelated replacement file' === $read_bytes( $fault->directory );
 		case 'symlink':
@@ -390,38 +451,83 @@ function ran_wp_release_updater_test_exact_interrupted_destination( stdClass $fa
 	}
 }
 
+/** Swap the original parent after the upgrader has captured its backup. */
+function ran_wp_release_updater_test_exact_swap_parent( stdClass $fault ): void {
+	$parent     = dirname( $fault->directory );
+	$old        = $parent . '-original-fixture';
+	$filesystem = new WP_Filesystem_Direct( null );
+	if ( ! $filesystem->move( $parent, $old ) ) {
+		throw new RuntimeException( 'Could not move the original destination parent.' );
+	}
+	if ( 'parent-replaced' === $fault->kind ) {
+		if ( ! $filesystem->mkdir( $parent ) ) {
+			throw new RuntimeException( 'Could not replace the destination parent with another directory.' );
+		}
+		return;
+	}
+	$redirected = $parent . '-redirected-fixture';
+	$slug       = '/' . basename( $fault->directory );
+	if ( ! $filesystem->mkdir( $redirected )
+		|| ( $filesystem->exists( $old . $slug ) && ! $filesystem->move( $old . $slug, $redirected . $slug ) )
+		|| ! symlink( $redirected, $parent )
+	) {
+		throw new RuntimeException( 'Could not replace the destination parent with a symlink.' );
+	}
+}
+
 /**
  * @param (Closure(string):string) $read_bytes
  * @param array<array-key,mixed> $report
  */
 function ran_wp_release_updater_test_exact_recovery_evidence( stdClass $fault, stdClass $observed, string $before, Closure $read_bytes, array $report, bool $quiet ): void {
-	$maintenance_only = 'maintenance' === $fault->kind;
-	$backup_header    = $fault->backup . '/' . basename( $fault->main_file );
-	$upgrader         = $observed->upgrader;
-	$checks           = array(
-		'interrupted'                       => true === $fault->interrupted,
-		'one_zip_body'                      => 1 === $observed->downloads,
-		'quiet_response'                    => $quiet && 0 === $observed->stdout_bytes,
-		'pending_recovery'                  => 'pending' === $report['status'] && 'unexpected_failure' === $report['code'] && true === $report['finalization_pending'],
-		'core_callbacks_not_yet_registered' => $upgrader instanceof WP_Upgrader
-			&& false === has_action( 'shutdown', array( $upgrader, 'restore_temp_backup' ) )
-			&& false === has_action( 'shutdown', array( $upgrader, 'delete_temp_backup' ) ),
-		'marker_written_before_throw'       => is_file( $fault->marker ),
-		'backup_moved_before_throw'         => $maintenance_only ? ! file_exists( $fault->backup ) : is_file( $backup_header ) && $read_bytes( $backup_header ) === $before,
-		'destination_before_shutdown'       => $maintenance_only ? $read_bytes( $fault->main_file ) === $before : ran_wp_release_updater_test_exact_interrupted_destination( $fault, $read_bytes ),
+	$maintenance_only  = 'maintenance' === $fault->kind;
+	$unverified_source = 'unverified-source' === $fault->kind;
+	$unicode_source    = 'unicode-source' === $fault->kind;
+	$parent_swap       = str_starts_with( $fault->kind, 'parent-' );
+	$untouched         = $maintenance_only || $unverified_source;
+	$backup_header     = $fault->backup . '/' . basename( $fault->main_file );
+	$upgrader          = $observed->upgrader;
+	$checks            = array(
+		'interrupted'                 => $unverified_source !== $fault->interrupted,
+		'one_zip_body'                => 1 === $observed->downloads,
+		'quiet_response'              => $quiet && 0 === $observed->stdout_bytes,
+		'pre_move_error'              => ! $unverified_source || 'ran_wp_release_updater_backup_source_unverified' === $fault->backup_error,
+		'pending_recovery'            => 'pending' === $report['status']
+			&& ( $unverified_source ? 'backup_restore_pending' : 'unexpected_failure' ) === $report['code']
+			&& true === $report['finalization_pending'],
+		'core_recovery_callbacks'     => $upgrader instanceof WP_Upgrader
+			&& ( $unverified_source ? 10 : false ) === has_action( 'shutdown', array( $upgrader, 'restore_temp_backup' ) )
+			&& ( $unverified_source ? 100 : false ) === has_action( 'shutdown', array( $upgrader, 'delete_temp_backup' ) ),
+		'marker_written_before_throw' => $unverified_source || is_file( $fault->marker ),
+		'backup_before_shutdown'      => $maintenance_only ? ! file_exists( $fault->backup )
+			: is_file( $backup_header ) && $read_bytes( $backup_header ) === ( $unverified_source ? $fault->stale_backup : $before ),
+		'destination_before_shutdown' => $untouched ? $read_bytes( $fault->main_file ) === $before : ran_wp_release_updater_test_exact_interrupted_destination( $fault, $read_bytes ),
+		'staging_directory_seeded'    => 'unverified-directory' !== $fault->kind || $fault->staging_seeded,
 	);
+	if ( $parent_swap ) {
+		ran_wp_release_updater_test_exact_swap_parent( $fault );
+	}
 	add_action(
 		'shutdown',
-		static function () use ( $checks, $fault, $observed, $backup_header, $before, $read_bytes, $report, $maintenance_only ): void {
-			$preserve = in_array( $fault->kind, array( 'foreign-directory', 'foreign-bytes', 'foreign-file', 'symlink' ), true );
+		static function () use ( $checks, $fault, $observed, $backup_header, $before, $read_bytes, $report, $maintenance_only, $unverified_source, $unicode_source, $parent_swap ): void {
+			$parent   = dirname( $fault->directory );
+			$preserve = $parent_swap || in_array( $fault->kind, array( 'foreign-directory', 'foreign-bytes', 'foreign-file', 'symlink', 'unverified-directory' ), true );
 			$checks  += array(
-				'destination_after_shutdown' => $preserve
+				'destination_after_shutdown'   => $preserve
 					? ran_wp_release_updater_test_exact_interrupted_destination( $fault, $read_bytes )
 					: is_file( $fault->main_file ) && $read_bytes( $fault->main_file ) === $before,
-				'backup_after_shutdown'      => $preserve ? is_file( $backup_header ) && $read_bytes( $backup_header ) === $before : ! file_exists( $fault->backup ),
-				'marker_cleaned'             => ! file_exists( $fault->marker ),
-				'private_custody_cleaned'    => array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
-				'completion'                 => ( $maintenance_only ? array() : array( 'uncertain' ) ) === array_column( $observed->completions, 3 ),
+				'backup_after_shutdown'        => $preserve || $unverified_source
+					? is_file( $backup_header ) && $read_bytes( $backup_header ) === ( $unverified_source ? $fault->stale_backup : $before )
+					: ! file_exists( $fault->backup ),
+				'marker_cleaned'               => ! file_exists( $fault->marker ),
+				'private_custody_cleaned'      => array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
+				'completion'                   => ( $maintenance_only ? array() : array( 'uncertain' ) ) === array_column( $observed->completions, 3 ),
+				'utf8_source_restored'         => ! $unicode_source || 'Existing UTF-8 filename' === $read_bytes( $fault->directory . '/résumé.txt' ),
+				'unverified_source_intact'     => ! $unverified_source || is_link( $fault->directory . '/old-link.txt' ),
+				'original_parent_preserved'    => ! $parent_swap || is_dir( $parent . '-original-fixture' ),
+				'replacement_parent_preserved' => ! $parent_swap || ( 'parent-replaced' === $fault->kind
+					? is_dir( $parent ) && ! is_link( $parent )
+					: is_link( $parent ) && readlink( $parent ) === $parent . '-redirected-fixture' ),
 			);
 			$evidence = array(
 				'pass'      => ! in_array( false, $checks, true ),

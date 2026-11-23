@@ -1122,8 +1122,8 @@ final class NativePackageUpdater {
 			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 
-		$staged     = is_string( $source ) && $this->matches_staged_metadata( $source )
-			? $this->manifest_builder->snapshot( $source )
+		$manifest   = is_string( $source ) && $this->matches_staged_metadata( $source )
+			? $this->manifest_builder->build( $source )
 			: null;
 		$descriptor = $this->descriptor;
 		$verified   = $this->verify_current();
@@ -1136,13 +1136,11 @@ final class NativePackageUpdater {
 			|| ! $this->descriptor_admitted( $descriptor )
 			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
 			|| ! is_string( $source )
-			|| null === $staged
-			|| array() === $staged['files']
+			|| null === $manifest
 		) {
 			return $this->fail_pending( 'staged_package_identity_invalid' );
 		}
 
-		$manifest = $staged['files'];
 		try {
 			AcquisitionReceipt::assert_archive_manifest(
 				$this->pending_install->receipt(),
@@ -1178,7 +1176,7 @@ final class NativePackageUpdater {
 		$this->admit_theme_error_bridge( $upgrader, $hook_extra );
 		$exact = $this->exact_install;
 		if ( null !== $exact && $exact->upgrader === $upgrader ) {
-			$exact->expect_incoming( $staged );
+			$exact->expect_incoming( $manifest );
 		}
 		return $source;
 	}
