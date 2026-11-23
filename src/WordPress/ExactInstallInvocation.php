@@ -59,14 +59,13 @@ final class ExactInstallInvocation {
 				}
 
 				public function restore_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
-					// Core schedules restoration on WP_Error even when it did not create the backup.
 					unset( $temp_backups );
-					return $this->recovery->has_owned_backup() ? parent::restore_temp_backup() : false;
+					return $this->recovery->restore_backup( parent::restore_temp_backup( ... ) );
 				}
 
 				public function delete_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
 					unset( $temp_backups );
-					return $this->recovery->has_owned_backup() ? parent::delete_temp_backup() : false;
+					return $this->recovery->delete_backup( parent::delete_temp_backup( ... ) );
 				}
 
 				public function maintenance_mode( $enable = false ): void {
@@ -91,12 +90,12 @@ final class ExactInstallInvocation {
 
 				public function restore_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
 					unset( $temp_backups );
-					return $this->recovery->has_owned_backup() ? parent::restore_temp_backup() : false;
+					return $this->recovery->restore_backup( parent::restore_temp_backup( ... ) );
 				}
 
 				public function delete_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
 					unset( $temp_backups );
-					return $this->recovery->has_owned_backup() ? parent::delete_temp_backup() : false;
+					return $this->recovery->delete_backup( parent::delete_temp_backup( ... ) );
 				}
 
 				public function maintenance_mode( $enable = false ): void {

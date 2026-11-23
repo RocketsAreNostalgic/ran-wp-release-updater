@@ -15,22 +15,25 @@ namespace RAN\WPReleaseUpdater\V1\WordPress;
  */
 final class ExactInstallRecovery {
 
-	/** @var array{path:string,identity:EntryIdentity,digest:string}|null */
+	/** @var array{path:string,source:string,identity:EntryIdentity,digest:string}|null */
 	private ?array $backup = null;
 	/** @var OwnedEntry|null */
 	private ?array $maintenance = null;
 	/** @var PackageTree|null */
-	private ?array $incoming = null;
+	private ?array $incoming      = null;
+	private bool $preserve_backup = false;
 
 	private readonly string $destination;
+	private readonly string $group;
 	private readonly StagedPackageManifest $manifest;
 	/** @var ParentIdentity|null */
 	private readonly ?array $parent;
 
-	public function __construct( string $installed_directory, private readonly string $target_type ) {
+	public function __construct( string $installed_directory, string $target_type ) {
 		$this->destination = wp_normalize_path( rtrim( $installed_directory, '/\\' ) );
+		$this->group       = 'plugin' === $target_type ? 'plugins' : 'themes';
 		$this->manifest    = new StagedPackageManifest();
-		$this->parent      = $this->parent_identity();
+		$this->parent      = $this->parent_identity( dirname( $this->destination ) );
 	}
 
 	/** @param array<string,array{sha256:string,size:int}> $files */
@@ -53,27 +56,23 @@ final class ExactInstallRecovery {
 	 */
 	public function move_backup( mixed $arguments, \Closure $move ): bool|\WP_Error {
 		$filesystem = $GLOBALS['wp_filesystem'] ?? null;
-		$group      = 'plugin' === $this->target_type ? 'plugins' : 'themes';
 		$slug       = basename( $this->destination );
 		if (
 			! is_array( $arguments )
 			|| ! $filesystem instanceof \WP_Filesystem_Direct
 			|| ( $arguments['slug'] ?? null ) !== $slug
-			|| ( $arguments['dir'] ?? null ) !== $group
+			|| ( $arguments['dir'] ?? null ) !== $this->group
 			|| ! is_string( $arguments['src'] ?? null )
 		) {
 			return self::unverified_backup_source();
 		}
 
-		$source  = $filesystem->find_folder( $arguments['src'] );
-		$content = $filesystem->wp_content_dir();
-		if ( ! is_string( $source ) || '' === $source || ! is_string( $content ) || '' === $content
-			|| ! hash_equals( $this->destination, wp_normalize_path( trailingslashit( $source ) . $slug ) )
-		) {
+		$source = $arguments['src'];
+		$path   = $this->mapped_backup( $filesystem );
+		if ( null === $path || ! $this->destination_matches( $filesystem, $source ) ) {
 			return self::unverified_backup_source();
 		}
 
-		$path            = trailingslashit( $content ) . 'upgrade-temp-backup/' . $group . '/' . $slug;
 		$previous_backup = StagedPackageManifest::entry_identity( $path );
 		$source_identity = StagedPackageManifest::entry_identity( $this->destination );
 		$source_tree     = $this->manifest->snapshot( $this->destination );
@@ -89,16 +88,75 @@ final class ExactInstallRecovery {
 			$result = $move( $arguments );
 			return $result;
 		} finally {
-			$this->capture_backup( $path, $previous_backup, $source_identity, $digest, true === $result );
+			$this->capture_backup( $path, $source, $previous_backup, $source_identity, $digest, true === $result );
 		}
 	}
 
-	public function has_owned_backup(): bool {
+	/** @param (\Closure(): (bool|\WP_Error)) $restore */
+	public function restore_backup( \Closure $restore ): bool|\WP_Error {
+		if ( $this->preserve_backup ) {
+			return false;
+		}
+		// Block deletion during rollback and retain that block if rollback fails.
+		$this->preserve_backup = true;
+		try {
+			$backup     = $this->backup;
+			$filesystem = $GLOBALS['wp_filesystem'] ?? null;
+			if ( null === $backup || ! $filesystem instanceof \WP_Filesystem_Direct
+				|| ! $this->destination_matches( $filesystem, $backup['source'] )
+				|| ! $this->has_owned_backup( $filesystem ) || $this->parent_changed()
+			) {
+				return false;
+			}
+			$result                = $restore();
+			$this->preserve_backup = true !== $result;
+			return $result;
+		} catch ( \Throwable ) {
+			return false;
+		}
+	}
+
+	/** @param (\Closure(): (bool|\WP_Error)) $delete */
+	public function delete_backup( \Closure $delete ): bool|\WP_Error {
+		try {
+			$filesystem = $GLOBALS['wp_filesystem'] ?? null;
+			return ! $this->preserve_backup && $filesystem instanceof \WP_Filesystem_Direct && $this->has_owned_backup( $filesystem )
+				? $delete() : false;
+		} catch ( \Throwable ) {
+			return false;
+		}
+	}
+
+	private function mapped_backup( \WP_Filesystem_Direct $filesystem ): ?string {
+		$content = $filesystem->wp_content_dir();
+		// Core appends the backup suffix directly to wp_content_dir().
+		return is_string( $content ) && '' !== $content
+			? $content . 'upgrade-temp-backup/' . $this->group . '/' . basename( $this->destination )
+			: null;
+	}
+
+	private function destination_matches( \WP_Filesystem_Direct $filesystem, string $source ): bool {
+		$mapped = $filesystem->find_folder( $source );
+		if ( ! is_string( $mapped ) || '' === $mapped || null === $this->parent ) {
+			return false;
+		}
+		$destination = trailingslashit( $mapped ) . basename( $this->destination );
+		return wp_normalize_path( $destination ) === $this->destination
+			&& $this->parent_identity( dirname( $destination ) ) === $this->parent;
+	}
+
+	private function has_owned_backup( \WP_Filesystem_Direct $filesystem ): bool {
 		$backup = $this->backup;
 		if ( null === $backup ) {
 			return false;
 		}
-		$identity = StagedPackageManifest::entry_identity( $backup['path'] );
+		$effective = $this->mapped_backup( $filesystem );
+		if ( null === $effective || wp_normalize_path( $effective ) !== wp_normalize_path( $backup['path'] )
+			|| ( $GLOBALS['wp_filesystem'] ?? null ) !== $filesystem
+		) {
+			return false;
+		}
+		$identity = StagedPackageManifest::entry_identity( $effective );
 		// A partial deletion can change the directory contents before Core retries.
 		return null !== $identity
 			&& $identity['dev'] === $backup['identity']['dev']
@@ -114,7 +172,7 @@ final class ExactInstallRecovery {
 	 * @param EntryIdentity|null $previous_backup
 	 * @param EntryIdentity $source
 	 */
-	private function capture_backup( string $path, ?array $previous_backup, array $source, string $digest, bool $move_succeeded ): void {
+	private function capture_backup( string $path, string $source_parent, ?array $previous_backup, array $source, string $digest, bool $move_succeeded ): void {
 		$identity = StagedPackageManifest::entry_identity( $path );
 		if ( null === $identity || 0040000 !== ( $identity['mode'] & 0170000 ) || $identity === $previous_backup ) {
 			return;
@@ -125,6 +183,7 @@ final class ExactInstallRecovery {
 		if ( $renamed || $copied ) {
 			$this->backup = array(
 				'path'     => $path,
+				'source'   => $source_parent,
 				'identity' => $identity,
 				'digest'   => $digest,
 			);
@@ -166,6 +225,9 @@ final class ExactInstallRecovery {
 
 	public function recover_at_shutdown( bool $core_has_backup_callback ): bool {
 		try {
+			if ( $this->preserve_backup ) {
+				return false;
+			}
 			if ( $core_has_backup_callback || null === $this->backup ) {
 				return true;
 			}
@@ -190,15 +252,14 @@ final class ExactInstallRecovery {
 
 	/** @phpstan-impure The destination parent may change during recovery. */
 	private function parent_changed(): bool {
-		return null === $this->parent || $this->parent_identity() !== $this->parent;
+		return null === $this->parent || $this->parent_identity( dirname( $this->destination ) ) !== $this->parent;
 	}
 
 	/**
 	 * @phpstan-impure Recheck the resolved parent and its native directory identity.
 	 * @return ParentIdentity|null
 	 */
-	private function parent_identity(): ?array {
-		$path = dirname( $this->destination );
+	private function parent_identity( string $path ): ?array {
 		clearstatcache( true );
 		$identity = StagedPackageManifest::entry_identity( $path );
 		$resolved = realpath( $path );

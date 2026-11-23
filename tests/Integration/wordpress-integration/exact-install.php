@@ -96,7 +96,8 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		throw new RuntimeException( 'The exact-install fixture could not register its target.' );
 	}
 
-	ran_wp_release_updater_test_exact_wordpress_faults( $mode, $type, $identity, $backup, $observed );
+	$backup_fault = ran_wp_release_updater_test_exact_backup_fault( $mode, $backup, $main_file );
+	ran_wp_release_updater_test_exact_wordpress_faults( $mode, $type, $identity, $backup, $observed, $backup_fault );
 	$recovery_fault         = str_starts_with( $mode, 'exact-recovery-' )
 		? ran_wp_release_updater_test_exact_recovery_fault( substr( $mode, strlen( 'exact-recovery-' ) ), $backup, $main_file, $archive, $maintenance, $observed )
 		: null;
@@ -170,8 +171,8 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'exact-refuse'        => 'release_older',
 		'exact-listed-change' => 'candidate_descriptor_mismatch',
 		'exact-changed'       => 'remote_release_changed',
-		'exact-failure'       => 'backup_restore_pending',
-		'exact-delete-fail'   => 'backup_cleanup_failed',
+		'exact-failure', 'exact-rollback-error', 'exact-rollback-throw', 'exact-rollback-backup-mapping', 'exact-rollback-destination-mapping', 'exact-rollback-parent' => 'backup_restore_pending',
+		'exact-delete-fail', 'exact-delete-mapping' => 'backup_cleanup_failed',
 		'exact-interrupted' => 'unexpected_failure',
 		'exact-post-install-throw' => 'unexpected_failure',
 		'exact-preexisting-maintenance' => 'update_completed',
@@ -185,7 +186,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'exact-host-fail'     => 'host_completion_failed',
 		default              => throw new RuntimeException( 'Invalid exact-install scenario.' ),
 	};
-	$core_pending             = in_array( $mode, array( 'exact-failure', 'exact-delete-fail', 'exact-interrupted' ), true );
+	$core_pending             = null !== $backup_fault || in_array( $mode, array( 'exact-failure', 'exact-delete-fail', 'exact-interrupted' ), true );
 	$orphaned_backup          = 'exact-post-install-throw' === $mode;
 	$pending                  = $core_pending || $orphaned_backup;
 	$refused                  = in_array( $mode, array( 'exact-refuse', 'exact-listed-change' ), true );
@@ -202,8 +203,8 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	$host_completed           = $finalized ? array(
 		array( 'exact-install-proof', $type, $identity, $commit_failed || 'exact-archive-fail' === $mode ? 'uncertain' : 'verified_success' ),
 	) : array();
-	$core_restoring           = 'exact-failure' === $mode || $early_refusal;
-	$restoring                = $core_restoring || $orphaned_backup;
+	$core_restoring           = 'exact-failure' === $mode || $early_refusal || str_starts_with( $mode, 'exact-rollback-' );
+	$restoring                = 'exact-failure' === $mode || $orphaned_backup;
 	$deleted_early            = $finalized || 'exact-delete-fail' === $mode;
 	$keeps_old_bytes          = $refused || $changed || $early_refusal || $credentials_refused;
 	$expected_installed_bytes = $keeps_old_bytes ? $before : $release;
@@ -255,21 +256,30 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	}
 	add_action(
 		'shutdown',
-		static function () use ( $checks, $type, $mode, $identity, $backup, $maintenance, $foreign_maintenance, $restoring, $expected_installed_bytes, $read_bytes, $main_file, $before, $observed, $host_completed, $core_pending, $pending, $updater, $report, $early_refusal, $stale_file, $stale_bytes ): void {
-			$after       = $read_bytes( $main_file );
+		static function () use ( $checks, $type, $mode, $identity, $backup, $maintenance, $foreign_maintenance, $restoring, $expected_installed_bytes, $read_bytes, $main_file, $before, $observed, $host_completed, $core_pending, $pending, $updater, $report, $early_refusal, $stale_file, $stale_bytes, $backup_fault ): void {
+			$after       = $read_bytes( $backup_fault->installed_file ?? $main_file );
 			$is_active   = 'plugin' === $type ? is_plugin_active( $identity ) : get_stylesheet() === $identity;
 			$completions = $pending ? array( array( 'exact-install-proof', $type, $identity, 'uncertain' ) ) : $host_completed;
 			$checks     += array(
 				'active_preserved'   => $is_active,
 				'rollback_preserved' => ( $restoring ? $before : $expected_installed_bytes ) === $after,
-				'shutdown_cleanup'   => ( $early_refusal || ! is_dir( $backup ) ) && array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
+				'shutdown_cleanup'   => ( $early_refusal || null !== $backup_fault || ! is_dir( $backup ) ) && array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
 				'stale_backup_after' => ! $early_refusal || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
 				'single_completion'  => $completions === $observed->completions,
-				'backup_deletions'   => ( 'exact-delete-fail' === $mode ? 2 : ( ( $core_pending && 'exact-failure' !== $mode ) || array() !== $host_completed ? 1 : 0 ) ) === $observed->deletions,
+				'backup_deletions'   => ( 'exact-delete-fail' === $mode ? 2 : ( ( $core_pending && 'exact-failure' !== $mode && null === $backup_fault ) || array() !== $host_completed ? 1 : 0 ) ) === $observed->deletions,
 				'maintenance_after'  => $foreign_maintenance ? '<?php $upgrading = 1; // fixture-owned marker' === $read_bytes( $maintenance ) : ! is_file( $maintenance ),
 				'other_upgrader'     => 1 === $observed->foreign_restore,
 			);
-			$evidence    = array(
+			if ( null !== $backup_fault ) {
+				$backup_file  = $backup . '/' . basename( $main_file );
+				$foreign_file = $backup_fault->foreign_file;
+				$checks      += array(
+					'owned_backup_preserved'     => is_file( $backup_file ) && $read_bytes( $backup_file ) === $before,
+					'foreign_location_preserved' => null === $foreign_file || ( is_file( $foreign_file ) && $read_bytes( $foreign_file ) === $backup_fault->foreign_bytes ),
+					'rollback_attempts'          => ( in_array( $mode, array( 'exact-rollback-error', 'exact-rollback-throw' ), true ) ? 1 : 0 ) === $backup_fault->attempts,
+				);
+			}
+			$evidence = array(
 				'pass'         => ! in_array( false, $checks, true ),
 				'checks'       => $checks,
 				'report'       => $report,
@@ -282,6 +292,72 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		},
 		PHP_INT_MAX
 	);
+}
+
+/** Set up post-capture failures around Core's real restore and deletion callbacks. */
+function ran_wp_release_updater_test_exact_backup_fault( string $mode, string $backup, string $main_file ): ?stdClass {
+	if ( ! str_starts_with( $mode, 'exact-rollback-' ) && 'exact-delete-mapping' !== $mode ) {
+		return null;
+	}
+	$destination    = dirname( $main_file );
+	$parent         = dirname( $destination );
+	$foreign_root   = WP_CONTENT_DIR . '/exact-callback-fixture';
+	$backup_mapping = match ( $mode ) {
+		// Core concatenates the suffix even when a changed mapping omits the slash.
+		'exact-delete-mapping' => untrailingslashit( WP_CONTENT_DIR ),
+		// On Unix a literal backslash can resolve elsewhere despite matching after normalization.
+		'exact-rollback-backup-mapping' => '/' === DIRECTORY_SEPARATOR
+			? dirname( WP_CONTENT_DIR ) . '\\' . basename( WP_CONTENT_DIR ) . '/'
+			: trailingslashit( $foreign_root ),
+		default => trailingslashit( $foreign_root ),
+	};
+	$foreign_file = match ( $mode ) {
+		'exact-rollback-backup-mapping', 'exact-delete-mapping' => $backup_mapping . 'upgrade-temp-backup/' . basename( dirname( $backup ) ) . '/' . basename( $backup ) . '/' . basename( $main_file ),
+		'exact-rollback-destination-mapping', 'exact-rollback-parent' => $foreign_root . '/' . basename( $destination ) . '/' . basename( $main_file ),
+		default => null,
+	};
+	$fault = (object) array(
+		'active'         => 'exact-delete-mapping' === $mode,
+		'attempts'       => 0,
+		'destination'    => $destination,
+		'parent'         => $parent,
+		'foreign_root'   => $foreign_root,
+		'backup_mapping' => $backup_mapping,
+		'installed_file' => $main_file,
+		'foreign_file'   => $foreign_file,
+		'foreign_bytes'  => "<?php\n// Unrelated callback fixture.\n",
+	);
+	if ( null !== $foreign_file ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Seed unrelated local bytes before initializing WordPress filesystem access.
+		if ( ! wp_mkdir_p( dirname( $foreign_file ) ) || false === file_put_contents( $foreign_file, $fault->foreign_bytes ) ) {
+			throw new RuntimeException( 'Could not prepare the unrelated callback location.' );
+		}
+	}
+	add_action(
+		'shutdown',
+		static function () use ( $fault, $mode, $parent, $main_file, $foreign_root ): void {
+			$fault->active = true;
+			if ( 'exact-rollback-parent' === $mode ) {
+				$original   = $parent . '-callback-original';
+				$filesystem = new WP_Filesystem_Direct( null );
+				if ( ! $filesystem->move( $parent, $original ) || ! symlink( $foreign_root, $parent ) ) {
+					throw new RuntimeException( 'Could not replace the callback destination parent.' );
+				}
+				$fault->installed_file = $original . substr( $main_file, strlen( $parent ) );
+			}
+		},
+		9
+	);
+	if ( 'exact-rollback-backup-mapping' === $mode ) {
+		add_action(
+			'shutdown',
+			static function () use ( $fault ): void {
+				$fault->active = false;
+			},
+			11
+		);
+	}
+	return $fault;
 }
 
 /** Interrupt Core after a native backup rename or a successful maintenance marker write. */
@@ -678,7 +754,7 @@ function ran_wp_release_updater_test_exact_http( string $archive, string $mode, 
 }
 
 /** Observe the exact upgrader and inject failures only at its native boundaries. */
-function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, string $type, string $identity, string $backup, stdClass $observed ): void {
+function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, string $type, string $identity, string $backup, stdClass $observed, ?stdClass $backup_fault ): void {
 	add_filter(
 		'upgrader_pre_download',
 		static function ( mixed $reply, string $package, WP_Upgrader $upgrader, array $extra ) use ( $mode, $type, $identity, $observed ): mixed {
@@ -705,7 +781,7 @@ function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, strin
 		4
 	);
 
-	if ( in_array( $mode, array( 'exact-failure', 'exact-post-install-throw' ), true ) ) {
+	if ( in_array( $mode, array( 'exact-failure', 'exact-post-install-throw' ), true ) || str_starts_with( $mode, 'exact-rollback-' ) ) {
 		add_filter(
 			'upgrader_post_install',
 			static function ( mixed $response, array $extra ) use ( $mode, $type, $identity ): mixed {
@@ -764,17 +840,42 @@ function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, strin
 
 	add_action(
 		'upgrader_process_complete',
-		static function ( WP_Upgrader $upgrader ) use ( $mode, $backup, $observed ): void {
+		static function ( WP_Upgrader $upgrader ) use ( $mode, $backup, $observed, $backup_fault ): void {
 			if ( $upgrader !== $observed->upgrader ) {
 				return;
 			}
-			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Use the real direct filesystem with one test-owned failure at the Core backup deletion boundary.
-			$GLOBALS['wp_filesystem'] = new class( $mode, $backup, $observed ) extends WP_Filesystem_Direct {
-				public function __construct( private string $scenario, private string $backup_path, private stdClass $observation ) {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Inject failures and mapping changes at Core's direct-filesystem callback boundaries.
+			$GLOBALS['wp_filesystem'] = new class( $mode, $backup, $observed, $backup_fault ) extends WP_Filesystem_Direct {
+				public function __construct( private string $scenario, private string $backup_path, private stdClass $observation, private ?stdClass $fault ) {
 					parent::__construct( null );
 				}
 
+				public function wp_content_dir() {
+					if ( null !== $this->fault && $this->fault->active && in_array( $this->scenario, array( 'exact-rollback-backup-mapping', 'exact-delete-mapping' ), true ) ) {
+						return $this->fault->backup_mapping;
+					}
+					return parent::wp_content_dir();
+				}
+
+				public function find_folder( $folder ) {
+					if ( 'exact-rollback-destination-mapping' === $this->scenario && null !== $this->fault && $this->fault->active
+						&& rtrim( wp_normalize_path( $folder ), '/' ) === $this->fault->parent
+					) {
+						return trailingslashit( $this->fault->foreign_root );
+					}
+					return parent::find_folder( $folder );
+				}
+
 				public function delete( $file, $recursive = false, $type = false ) {
+					if ( null !== $this->fault && $this->fault->active && rtrim( $file, '/\\' ) === $this->fault->destination
+						&& in_array( $this->scenario, array( 'exact-rollback-error', 'exact-rollback-throw' ), true )
+					) {
+						++$this->fault->attempts;
+						if ( 'exact-rollback-throw' === $this->scenario ) {
+							throw new RuntimeException( 'Injected exception while Core was clearing the rollback destination.' );
+						}
+						return false;
+					}
 					if ( rtrim( $file, '/\\' ) === $this->backup_path ) {
 						++$this->observation->deletions;
 						if ( 'exact-delete-fail' === $this->scenario && 1 === $this->observation->deletions ) {
