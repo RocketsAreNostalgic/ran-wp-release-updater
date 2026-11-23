@@ -49,7 +49,7 @@ try {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$suite_bytes = '';
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/automatic-example.php', __DIR__ . '/wordpress-integration/automatic-example-http.php', __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
+	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/automatic-example.php', __DIR__ . '/wordpress-integration/automatic-example-http.php', __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-integration/offer-release.php', __DIR__ . '/wordpress-integration/exact-install.php', __DIR__ . '/wordpress-integration/exact-install-stat.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$suite_bytes .= basename( $file ) . "\0" . hash_file( 'sha256', $file ) . "\n";
 	}
@@ -1143,35 +1143,119 @@ function ran_wp_release_updater_test_installed_mixed_bulk( string $source, strin
  */
 function ran_wp_release_updater_test_installed_offer_release( string $source, string $wordpress, string $run, mysqli $database, string $socket, array $wp_command, string $password, array &$proofs ): void {
 	global $runtime;
+	$cases = array(
+		array( 'newer', 'plugin', 'exact-success' ),
+		array( 'newer', 'theme', 'exact-success' ),
+		array( 'same', 'plugin', 'exact-success' ),
+		array( 'same', 'theme', 'exact-success' ),
+		array( 'older', 'plugin', 'exact-success' ),
+		array( 'older', 'theme', 'exact-refuse' ),
+		array( 'same', 'plugin', 'exact-listed-change' ),
+		array( 'same', 'plugin', 'exact-changed' ),
+		array( 'same', 'plugin', 'exact-failure' ),
+		array( 'same', 'theme', 'exact-failure' ),
+		array( 'same', 'plugin', 'exact-delete-fail' ),
+		array( 'same', 'plugin', 'exact-copy-directory-collision' ),
+		array( 'same', 'theme', 'exact-copy-directory-collision' ),
+		array( 'same', 'plugin', 'exact-copy-file-collision' ),
+		array( 'same', 'theme', 'exact-copy-file-collision' ),
+		array( 'same', 'plugin', 'exact-copy-nested' ),
+		array( 'same', 'theme', 'exact-copy-nested' ),
+		array( 'same', 'plugin', 'exact-copy-incoming-directory' ),
+		array( 'same', 'theme', 'exact-copy-incoming-directory' ),
+		array( 'same', 'plugin', 'exact-copy-incoming-file' ),
+		array( 'same', 'theme', 'exact-copy-incoming-file' ),
+		array( 'same', 'plugin', 'exact-copy-incoming-directory-throw' ),
+		array( 'same', 'theme', 'exact-copy-incoming-directory-throw' ),
+		array( 'same', 'plugin', 'exact-copy-incoming-file-throw' ),
+		array( 'same', 'theme', 'exact-copy-incoming-file-throw' ),
+		array( 'same', 'plugin', 'exact-copy-zero-inode-identical' ),
+		array( 'same', 'theme', 'exact-copy-zero-inode-identical' ),
+		array( 'same', 'plugin', 'exact-copy-zero-inode-distinct' ),
+		array( 'same', 'theme', 'exact-copy-zero-inode-distinct' ),
+		array( 'same', 'plugin', 'exact-copy-zero-slug' ),
+		array( 'same', 'theme', 'exact-copy-zero-slug' ),
+		array( 'same', 'plugin', 'exact-rollback-error' ),
+		array( 'same', 'theme', 'exact-rollback-error' ),
+		array( 'same', 'plugin', 'exact-rollback-throw' ),
+		array( 'same', 'theme', 'exact-rollback-throw' ),
+		array( 'same', 'plugin', 'exact-rollback-host-file' ),
+		array( 'same', 'theme', 'exact-rollback-host-file' ),
+		array( 'same', 'plugin', 'exact-rollback-backup-mapping' ),
+		array( 'same', 'theme', 'exact-rollback-backup-mapping' ),
+		array( 'same', 'plugin', 'exact-rollback-destination-mapping' ),
+		array( 'same', 'theme', 'exact-rollback-destination-mapping' ),
+		array( 'same', 'plugin', 'exact-rollback-parent' ),
+		array( 'same', 'theme', 'exact-rollback-parent' ),
+		array( 'same', 'plugin', 'exact-delete-mapping' ),
+		array( 'same', 'theme', 'exact-delete-mapping' ),
+		array( 'same', 'plugin', 'exact-alternate-destination' ),
+		array( 'same', 'theme', 'exact-alternate-destination' ),
+		array( 'same', 'theme', 'exact-interrupted' ),
+		array( 'same', 'plugin', 'exact-post-install-throw' ),
+		array( 'same', 'theme', 'exact-post-install-throw' ),
+		array( 'same', 'plugin', 'exact-preexisting-maintenance' ),
+		array( 'same', 'theme', 'exact-preexisting-maintenance' ),
+		array( 'same', 'plugin', 'exact-pending-translation' ),
+		array( 'same', 'theme', 'exact-pending-translation' ),
+		array( 'same', 'plugin', 'exact-credentials-refused' ),
+		array( 'same', 'plugin', 'exact-recovery-absent' ),
+		array( 'same', 'theme', 'exact-recovery-empty' ),
+		array( 'same', 'theme', 'exact-recovery-partial' ),
+		array( 'same', 'theme', 'exact-recovery-complete' ),
+		array( 'same', 'theme', 'exact-recovery-foreign-directory' ),
+		array( 'same', 'theme', 'exact-recovery-foreign-bytes' ),
+		array( 'same', 'theme', 'exact-recovery-foreign-file' ),
+		array( 'same', 'theme', 'exact-recovery-symlink' ),
+		array( 'same', 'theme', 'exact-recovery-maintenance' ),
+		array( 'same', 'plugin', 'exact-recovery-unverified-source' ),
+		array( 'same', 'theme', 'exact-recovery-unicode-source' ),
+		array( 'same', 'theme', 'exact-recovery-parent-absent' ),
+		array( 'same', 'theme', 'exact-recovery-parent-empty' ),
+		array( 'same', 'theme', 'exact-recovery-parent-matching' ),
+		array( 'same', 'theme', 'exact-recovery-parent-replaced' ),
+		array( 'same', 'theme', 'exact-recovery-unverified-directory' ),
+		array( 'same', 'theme', 'exact-recovery-verified-directory' ),
+		array( 'same', 'plugin', 'exact-early-refusal' ),
+		array( 'same', 'theme', 'exact-early-refusal' ),
+		array( 'same', 'plugin', 'exact-early-lease-fail' ),
+		array( 'same', 'plugin', 'exact-commit-fail' ),
+		array( 'same', 'theme', 'exact-archive-fail' ),
+		array( 'same', 'plugin', 'exact-lease-fail' ),
+		array( 'same', 'theme', 'exact-host-fail' ),
+	);
 	foreach ( array( 'same', 'older' ) as $direction ) {
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
 			foreach ( array( 'success', 'failure' ) as $mode ) {
-				$case        = $direction . '-' . $type . '-' . $mode;
-				$base        = ran_wp_release_updater_test_make_directory( $run . '/offer-' . $case );
-				$marker_file = $base . '/RAN_WP_RELEASE_UPDATER_OFFER_RELEASE.marker';
-				ran_wp_release_updater_test_write_file( $marker_file, "RAN_WP_RELEASE_UPDATER_OFFER_RELEASE\n" );
-				$site = ran_wp_release_updater_test_create_site( $wordpress, $base . '/site', $database, $socket );
-				ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, false );
-				ran_wp_release_updater_test_copy_runtime( $source, $site . '/wp-content/plugins/ran-wp-release-updater' );
-				ran_wp_release_updater_test_write_file( $site . '/wp-content/mu-plugins/offer-release-runtime.php', "<?php\nrequire_once WP_PLUGIN_DIR . '/ran-wp-release-updater/bootstrap.php';\n" );
-				$output = $base . '/evidence.json';
-				ran_wp_release_updater_test_command(
-					array_merge( $wp_command, array( '--path=' . $site, 'eval-file', __DIR__ . '/wordpress-integration/offer-release.php' ) ),
-					$site,
-					'offer-release-' . $case,
-					array(
-						'RAN_WP_RELEASE_UPDATER_MARKER_FILE'  => $marker_file,
-						'RAN_WP_RELEASE_UPDATER_OFFER_TYPE'   => $type,
-						'RAN_WP_RELEASE_UPDATER_OFFER_MODE'   => $mode,
-						'RAN_WP_RELEASE_UPDATER_OFFER_DIRECTION' => $direction,
-						'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' => $output,
-					)
-				);
-				$proof           = ran_wp_release_updater_test_read_json( $output );
-				$proofs[ $case ] = $proof;
-				ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ), 'Installed offer-release ' . $case . ' assertions failed.' );
+				$cases[] = array( $direction, $type, $mode );
 			}
 		}
+	}
+	foreach ( $cases as list( $direction, $type, $mode ) ) {
+		$case        = $direction . '-' . $type . '-' . $mode;
+		$base        = ran_wp_release_updater_test_make_directory( $run . '/offer-' . $case );
+		$marker_file = $base . '/RAN_WP_RELEASE_UPDATER_OFFER_RELEASE.marker';
+		ran_wp_release_updater_test_write_file( $marker_file, "RAN_WP_RELEASE_UPDATER_OFFER_RELEASE\n" );
+		$site = ran_wp_release_updater_test_create_site( $wordpress, $base . '/site', $database, $socket );
+		ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, false );
+		ran_wp_release_updater_test_copy_runtime( $source, $site . '/wp-content/plugins/ran-wp-release-updater' );
+		ran_wp_release_updater_test_write_file( $site . '/wp-content/mu-plugins/offer-release-runtime.php', "<?php\nrequire_once WP_PLUGIN_DIR . '/ran-wp-release-updater/bootstrap.php';\n" );
+		$output = $base . '/evidence.json';
+		ran_wp_release_updater_test_command(
+			array_merge( $wp_command, array( '--path=' . $site, 'eval-file', __DIR__ . '/wordpress-integration/offer-release.php' ) ),
+			$site,
+			'offer-release-' . $case,
+			array(
+				'RAN_WP_RELEASE_UPDATER_MARKER_FILE'     => $marker_file,
+				'RAN_WP_RELEASE_UPDATER_OFFER_TYPE'      => $type,
+				'RAN_WP_RELEASE_UPDATER_OFFER_MODE'      => $mode,
+				'RAN_WP_RELEASE_UPDATER_OFFER_DIRECTION' => $direction,
+				'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT'    => $output,
+			)
+		);
+		$proof           = ran_wp_release_updater_test_read_json( $output );
+		$proofs[ $case ] = $proof;
+		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ), 'Installed offer-release ' . $case . ' assertions failed.' );
 	}
 	unset( $runtime );
 }

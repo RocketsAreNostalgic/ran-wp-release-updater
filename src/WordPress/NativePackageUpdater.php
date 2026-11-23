@@ -7,7 +7,6 @@ namespace RAN\WPReleaseUpdater\V1\WordPress;
 use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
 use InvalidArgumentException;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
-use RAN\WPReleaseUpdater\V1\Archive\ValidatedPackage;
 use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
 use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
@@ -20,7 +19,12 @@ use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 use RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 
-/** The single native WordPress lifecycle owner for a sealed neutral release. */
+/**
+ * The single native WordPress lifecycle owner for a sealed neutral release.
+ *
+ * @phpstan-import-type OwnedCopy from ExactInstallInvocation
+ * @phpstan-import-type Finalization from ExactInstallInvocation
+ */
 final class NativePackageUpdater {
 	private const MAX_DIAGNOSTICS    = 16;
 	private const CONFIGURATION_KEYS = array( 'headers', 'installed_directory', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
@@ -77,7 +81,9 @@ final class NativePackageUpdater {
 	/** That release's fingerprint, the only one a download may use. */
 	private ?string $authorized_fingerprint = null;
 	/** @var array<string,true> Every fingerprint authorised since refresh(); entries carrying one are stripped whenever WordPress saves the update check. */
-	private array $authorized_fingerprints = array();
+	private array $authorized_fingerprints         = array();
+	private const EXACT_TOKEN_PREFIX               = 'ran-wp-release-updater:exact:v1:';
+	private ?ExactInstallInvocation $exact_install = null;
 
 
 	/**
@@ -191,6 +197,7 @@ final class NativePackageUpdater {
 		}
 		add_filter( 'ran_wp_release_updater_check_releases_v1', array( $this, 'filter_check_releases' ), 10, 3 );
 		add_filter( 'ran_wp_release_updater_offer_release_v1', array( $this, 'filter_offer_release' ), 10, 6 );
+		add_filter( 'ran_wp_release_updater_install_exact_release_v1', array( $this, 'filter_install_exact_release' ), 10, 7 );
 		add_filter( 'plugin' === $this->target_type ? 'auto_update_plugin' : 'auto_update_theme', array( $this, 'filter_auto_update' ), 10, 2 );
 		add_filter( 'upgrader_package_options', array( $this, 'capture_package_options' ), PHP_INT_MAX, 1 );
 		add_filter( 'upgrader_pre_download', array( $this, 'filter_pre_download' ), PHP_INT_MAX, 4 );
@@ -229,6 +236,11 @@ final class NativePackageUpdater {
 
 	/** Removes any release authorised in this request from the update check before WordPress saves it, so no offer outlives the request. */
 	public function filter_store_update( mixed $transient ): mixed {
+		$package = $this->cached_package( $transient );
+		if ( is_string( $package ) && str_starts_with( $package, self::EXACT_TOKEN_PREFIX ) ) {
+			unset( $transient->response[ $this->installed_identity ] );
+			return $transient;
+		}
 		$descriptor = array() === $this->authorized_fingerprints ? null : $this->cached_descriptor( $transient );
 		if ( is_object( $transient ) && is_array( $transient->response ?? null ) && null !== $descriptor && isset( $this->authorized_fingerprints[ $descriptor->fingerprint_value() ] ) ) {
 			unset( $transient->response[ $this->installed_identity ] );
@@ -237,9 +249,13 @@ final class NativePackageUpdater {
 	}
 
 	private function cached_descriptor( mixed $transient ): ?IdentityDescriptor {
-		$entry   = is_object( $transient ) && is_array( $transient->response ?? null ) ? ( $transient->response[ $this->installed_identity ] ?? null ) : null;
-		$package = is_object( $entry ) ? ( $entry->package ?? null ) : ( is_array( $entry ) ? ( $entry['package'] ?? null ) : null );
+		$package = $this->cached_package( $transient );
 		return is_string( $package ) ? $this->parse_token( $package ) : null;
+	}
+
+	private function cached_package( mixed $transient ): mixed {
+		$entry = is_object( $transient ) && is_array( $transient->response ?? null ) ? ( $transient->response[ $this->installed_identity ] ?? null ) : null;
+		return is_object( $entry ) ? ( $entry->package ?? null ) : ( is_array( $entry ) ? ( $entry['package'] ?? null ) : null );
 	}
 
 	/**
@@ -251,6 +267,9 @@ final class NativePackageUpdater {
 		unset( $locales );
 		if ( ! hash_equals( $this->installed_identity, $package_identity ) ) {
 			return $update;
+		}
+		if ( null !== $this->exact_install ) {
+			return false;
 		}
 		if ( ! $this->live() ) {
 			return null === $this->operation_guard ? $update : false;
@@ -345,6 +364,9 @@ final class NativePackageUpdater {
 		if ( $target_type !== $this->target_type || ! is_string( $installed_identity ) || ! hash_equals( $this->installed_identity, $installed_identity ) ) {
 			return $result;
 		}
+		if ( null !== $this->exact_install ) {
+			return $this->offer_report( 'runtime_busy' );
+		}
 		$this->authorized_offer = null;
 		if ( ! $this->live() ) {
 			return $result;
@@ -421,6 +443,182 @@ final class NativePackageUpdater {
 		);
 	}
 
+	/** Runs one explicitly selected release through the registered target's native lifecycle. */
+	public function filter_install_exact_release( mixed $result, mixed $target_type, mixed $installed_identity, mixed $release_identity, mixed $tag, mixed $expected_version, mixed $older_intended = false ): mixed {
+		if ( null !== $result || $target_type !== $this->target_type || $installed_identity !== $this->installed_identity || ! $this->live() ) {
+			return $result;
+		}
+		if ( $this->policy_blocked() ) {
+			return $this->exact_report( 'disabled' === $this->policy ? 'policy_disabled' : 'policy_forced_off' );
+		}
+		if ( null !== $this->exact_install || $this->native_beginning || null !== $this->native_owner || $this->pending_install->active() || doing_action( 'shutdown' ) ) {
+			return $this->exact_report( 'runtime_busy' );
+		}
+		if ( ! is_string( $release_identity ) || '' === $release_identity || ! is_string( $tag ) || '' === $tag || ! is_string( $expected_version ) || null === ReleaseVersion::normalize( $expected_version ) ) {
+			return $this->exact_report( 'release_invalid' );
+		}
+		if ( ! $this->direct_filesystem() ) {
+			return $this->exact_report( 'filesystem_unavailable' );
+		}
+		if ( $this->working_copy_blocked() ) {
+			return $this->exact_report( 'target_is_working_copy' );
+		}
+		$installed = $this->bound_package_version( $this->installed_directory );
+		if ( null === $installed || null === ReleaseVersion::normalize_header( $installed ) ) {
+			return $this->exact_report( 'runtime_package_identity_invalid' );
+		}
+		$is_plugin = 'plugin' === $this->target_type;
+		if ( $is_plugin ? ! class_exists( '\\Plugin_Upgrader' ) || ! class_exists( '\\Bulk_Plugin_Upgrader_Skin' ) : ! class_exists( '\\Theme_Upgrader' ) || ! class_exists( '\\Theme_Upgrader_Skin' ) ) {
+			return $this->exact_report( 'wordpress_unavailable' );
+		}
+
+		try {
+			$exact = ExactInstallInvocation::create( $this->target_type, $this->installed_directory, self::EXACT_TOKEN_PREFIX . bin2hex( random_bytes( 32 ) ), $installed );
+		} catch ( \Throwable ) {
+			return $this->exact_report( 'wordpress_unavailable' );
+		}
+		$this->exact_install = $exact;
+		try {
+			$code = $this->install_exact_release( $exact, $release_identity, $tag, $expected_version, true === $older_intended );
+		} catch ( \Throwable ) {
+			$code = 'unexpected_failure';
+		} finally {
+			if ( ! $this->pending_install->active() && ! $exact->maintenance_pending() ) {
+				if ( $exact->lease_claimed && null === $exact->finalization ) {
+					$this->clear_pending();
+				}
+				$this->disarm_exact_install();
+			}
+		}
+		return $this->exact_report( $code, $exact );
+	}
+
+	private function install_exact_release( ExactInstallInvocation $exact, string $release_identity, string $tag, string $expected_version, bool $older_intended ): string {
+		$this->begin_operation();
+		if ( ! $this->claim_discovery() ) {
+			return 'discovery_not_admitted';
+		}
+		$exact->lease_claimed = true;
+		try {
+			$descriptor = $this->adapter->inspect( $release_identity, $tag );
+			BindingRecord::assert_descriptor_binding( $descriptor, $this->binding );
+		} catch ( \Throwable ) {
+			return 'release_unavailable';
+		}
+		$facts             = $descriptor->to_array();
+		$exact->descriptor = $descriptor;
+		if ( $release_identity !== $facts['release_identity'] || $tag !== $facts['tag'] || 0 !== ReleaseVersion::compare( $expected_version, $facts['version'] ) ) {
+			return 'candidate_descriptor_mismatch';
+		}
+		$relationship = ReleaseVersion::relationship( $facts['version'], $exact->installed_version );
+		if ( ! $older_intended && ReleaseVersion::RELATIONSHIP_OLDER === $relationship ) {
+			return 'release_older';
+		}
+		if ( ! $this->manual_eligible( $descriptor ) || ! $this->descriptor_admitted( $descriptor ) ) {
+			return 'candidate_not_eligible';
+		}
+		if ( ! $this->live() || null === $this->verify_current() ) {
+			return 'binding_fence_lost';
+		}
+		$failure = $this->acquire_owned_archive( $descriptor, $exact->archive, $exact );
+		if ( null !== $failure || null === $exact->archive ) {
+			return $failure ?? 'acquisition_identity_invalid';
+		}
+		$exact->archive_identity = $this->archive_store->identity( $exact->archive['path'], $descriptor );
+		if ( null === $exact->archive_identity ) {
+			return 'acquisition_identity_invalid';
+		}
+		if ( ! $this->live() || ! $this->descriptor_admitted( $descriptor ) || null === $this->verify_current() ) {
+			return 'binding_fence_lost';
+		}
+
+		$result = $this->run_exact_upgrade( $exact, $this->offer_entry( $descriptor, $exact->token, false ) + array( 'new_version' => $facts['version'] ) );
+		if ( null === $exact->finalization && $exact->restore_pending() ) {
+			return 'backup_restore_pending';
+		}
+		if ( $exact->maintenance_pending() ) {
+			return 'maintenance_cleanup_failed';
+		}
+		if (
+			! $exact->download_consumed
+			|| ! $this->pending_install->completion_observed()
+			|| ! is_array( $result )
+			|| $result !== $exact->upgrader->result
+			|| $result !== $this->pending_install->install_result()
+		) {
+			return $exact->download_failure ?? 'unverified_install_result';
+		}
+		try {
+			$installed_verified = null !== $this->verify_installed_manifest( $descriptor );
+		} catch ( \Throwable ) {
+			$installed_verified = false;
+		}
+		if ( ! $installed_verified ) {
+			$exact->preserve_backup();
+			return 'unverified_install_result';
+		}
+		$exact->authorize_backup_deletion();
+		$failure = $exact->finish_backup();
+		if ( null !== $failure ) {
+			return $failure;
+		}
+		$this->finalize_pending_install();
+		return 'update_completed';
+	}
+
+	/** @param array<string,mixed> $offer */
+	private function run_exact_upgrade( ExactInstallInvocation $exact, array $offer ): mixed {
+		$transient              = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
+		$hook                   = 'site_transient_' . $transient;
+		$overlay                = function ( mixed $current ) use ( $exact, $offer ): mixed {
+			if ( $exact->download_consumed || doing_action( 'shutdown' ) || ! $this->live() ) {
+				return $current;
+			}
+			$copy             = is_object( $current ) ? get_object_vars( $current ) : array();
+			$copy['response'] = is_array( $copy['response'] ?? null ) ? $copy['response'] : array();
+			$copy['response'][ $this->installed_identity ] = 'plugin' === $this->target_type ? (object) $offer : $offer;
+			return (object) $copy;
+		};
+		$this->authorized_offer = null;
+		add_filter( $hook, $overlay, PHP_INT_MAX, 1 );
+		add_filter( 'pre_set_site_transient_' . $transient, array( $this, 'filter_store_update' ), PHP_INT_MAX, 1 );
+		try {
+			return $exact->run( $this->installed_identity );
+		} finally {
+			remove_filter( $hook, $overlay, PHP_INT_MAX );
+		}
+	}
+
+	/** @return array{status:string,code:string,version:?string,relationship:?string,finalization_pending:bool,finalization:?Finalization} */
+	private function exact_report( string $code, ?ExactInstallInvocation $exact = null ): array {
+		$version      = $exact?->descriptor?->to_array()['version'] ?? null;
+		$finalization = $exact?->finalization;
+		$pending      = null !== $exact && $exact === $this->exact_install;
+		$code         = match ( true ) {
+			'failed' === ( $finalization['archive_cleanup'] ?? null ) => 'archive_cleanup_failed',
+			'failed' === ( $finalization['host_completion'] ?? null ) => 'host_completion_failed',
+			'failed' === ( $finalization['lease'] ?? null )            => 'lease_release_failed',
+			'update_completed' === $code && 'completed' !== ( $finalization['commit'] ?? null ) => 'install_commit_failed',
+			default => $code,
+		};
+		return array(
+			'status'               => 'update_completed' === $code ? 'installed' : ( $pending ? 'pending' : ( $exact?->wordpress_started ? 'failed' : 'refused' ) ),
+			'code'                 => $code,
+			'version'              => $version,
+			'relationship'         => null === $version || null === $exact ? null : ReleaseVersion::relationship( $version, $exact->installed_version ),
+			'finalization_pending' => $pending,
+			'finalization'         => $finalization,
+		);
+	}
+
+	private function disarm_exact_install(): void {
+		if ( $this->exact_install?->lease_claimed && $this->shutdown_scheduled ) {
+			remove_action( 'shutdown', array( $this, 'finalize_pending_install' ), PHP_INT_MAX );
+			$this->shutdown_scheduled = false;
+		}
+		$this->exact_install = null;
+	}
+
 	/**
 	 * Host-requested release check that reports facts and never offers a release.
 	 *
@@ -463,7 +661,7 @@ final class NativePackageUpdater {
 		$reason       = 'unexpected_failure';
 		$check_id     = null;
 		$this->status = self::empty_status();
-		if ( $this->native_beginning || null !== $this->native_owner || $this->pending_install->active() ) {
+		if ( null !== $this->exact_install || $this->native_beginning || null !== $this->native_owner || $this->pending_install->active() ) {
 			return $this->check_report( 'runtime_busy' );
 		}
 		$this->status['installed_version'] = $this->headers['Version'];
@@ -620,7 +818,7 @@ final class NativePackageUpdater {
 	}
 
 	public function filter_plugin_information( mixed $result, string $action, mixed $arguments ): mixed {
-		if ( 'plugin_information' !== $action || ! is_object( $arguments ) || $this->information_slug() !== ( $arguments->slug ?? null ) || $this->policy_blocked() || ! $this->live() ) {
+		if ( 'plugin_information' !== $action || ! is_object( $arguments ) || $this->information_slug() !== ( $arguments->slug ?? null ) || null !== $this->exact_install || $this->policy_blocked() || ! $this->live() ) {
 			return $result;
 		}
 		$this->begin_operation();
@@ -653,6 +851,9 @@ final class NativePackageUpdater {
 		if ( ! is_object( $item ) || ! $this->matches_item_identity( $item ) ) {
 			return $update;
 		}
+		if ( null !== $this->exact_install ) {
+			return false;
+		}
 		if ( ! $this->live() ) {
 			return null === $this->operation_guard ? $update : false;
 		}
@@ -676,9 +877,14 @@ final class NativePackageUpdater {
 	}
 	/** @param array<string,mixed> $hook_extra */
 	public function filter_pre_download( mixed $reply, string $package, mixed $upgrader, array $hook_extra ): mixed {
-		unset( $upgrader );
 		if ( ! $this->matches_target_identity( $hook_extra ) ) {
 			return $reply;
+		}
+		if ( null !== $this->exact_install ) {
+			return $this->exact_pre_download( $this->exact_install, $reply, $package, $upgrader, $hook_extra );
+		}
+		if ( str_starts_with( $package, self::EXACT_TOKEN_PREFIX ) ) {
+			return $this->failure( 'unverified_pre_download', false );
 		}
 		// Every download attempt for this target consumes the authorisation; a later attempt needs a new one.
 		$held                   = null === $this->authorized_offer ? null : $this->authorized_fingerprint;
@@ -708,12 +914,7 @@ final class NativePackageUpdater {
 		if ( ! $this->claim_discovery() ) {
 			return $this->failure( 'binding_fence_lost', false );
 		}
-		$this->attempt_descriptor = $token;
-		$this->attempt_outcome    = array(
-			'outcome'        => 'uncertain',
-			'source'         => 'release_updater',
-			'wordpress_code' => null,
-		);
+		$this->start_native_attempt( $token );
 		if ( $reply instanceof \WP_Error ) {
 			$this->observe_wordpress_error( $reply );
 			$this->clear_pending();
@@ -722,49 +923,17 @@ final class NativePackageUpdater {
 		if ( $working_copy ) {
 			return $this->fail_pending( 'target_is_working_copy' );
 		}
-		try {
-			$fresh = $this->adapter->inspect( $token->release_identity(), $token->to_array()['tag'] );
-			BindingRecord::assert_descriptor_binding( $fresh, $this->binding );
-		} catch ( \Throwable ) {
-			return $this->failure( 'acquisition_failed' );
+		$fresh = $this->refresh_download_binding( $token, $authorized );
+		if ( is_string( $fresh ) ) {
+			return $this->failure( $fresh );
 		}
-		if ( ! $this->live() || ! $this->descriptor_admitted( $fresh ) || ! $this->download_version_admitted( $fresh, $authorized ) ) {
-			return $this->failure( 'unverified_pre_download' );
-		}
-		if ( ! hash_equals( $token->fingerprint_value(), $fresh->fingerprint_value() ) ) {
-			return $this->failure( 'remote_release_changed' );
-		}
-		if ( ! $this->state instanceof BindingState ) {
-			return $this->failure( 'binding_fence_lost' );
-		}
-		$this->descriptor = $fresh;
-		$renewed          = BindingFenceCoordinator::renew_persistent_binding_state( $this->wpdb, $this->state, $this->claim, 3600 );
-		if ( 'renewed' !== $renewed['result'] || ! $renewed['current'] instanceof BindingState ) {
-			return $this->failure( 'binding_fence_lost' );
-		}
-		$this->state = $renewed['current'];
-		$this->claim = $this->claim( $this->state );
-		$owned       = null;
-		$artifact    = null;
-		try {
-			$artifact = $this->adapter->acquire( $fresh );
-			$artifact->inspect(
-				function ( string $path ) use ( $fresh, &$owned ): void {
-					$owned = $this->validated_copy( $path, $fresh );
-				}
-			);
-			if ( ! $artifact->discard() ) {
-				throw new \RuntimeException( 'Acquisition cleanup failed.' );
-			}
-		} catch ( \Throwable ) {
+		$owned   = null;
+		$failure = $this->acquire_owned_archive( $fresh, $owned );
+		if ( null !== $failure || null === $owned ) {
 			if ( is_array( $owned ) ) {
 				$this->archive_store->remove( $owned['path'], $owned['directory'] );
 			}
-			$artifact?->discard();
-			return $this->failure( 'acquisition_failed' );
-		}
-		if ( ! is_array( $owned ) ) {
-			return $this->failure( 'acquisition_identity_invalid' );
+			return $this->failure( $failure ?? 'acquisition_identity_invalid' );
 		}
 		$identity = $this->archive_store->identity( $owned['path'], $fresh );
 		if ( null === $identity ) {
@@ -791,6 +960,130 @@ final class NativePackageUpdater {
 		return $owned['path'];
 	}
 
+	/** @param array<string,mixed> $hook_extra */
+	private function exact_pre_download( ExactInstallInvocation $exact, mixed $reply, string $package, mixed $upgrader, array $hook_extra ): mixed {
+		if ( $exact->upgrader !== $upgrader || $exact->download_consumed ) {
+			return $this->failure( 'unverified_pre_download', false );
+		}
+		$exact->download_consumed = true;
+		$token                    = $exact->descriptor;
+		$owned                    = $exact->archive;
+		$identity                 = $exact->archive_identity;
+		if ( null === $token || null === $owned || null === $identity || ! hash_equals( $exact->token, $package ) || ! $this->matches_operation( $hook_extra ) ) {
+			return $this->exact_download_failure( $exact, 'unverified_pre_download' );
+		}
+		$this->start_native_attempt( $token );
+		if ( $reply instanceof \WP_Error ) {
+			$this->observe_wordpress_error( $reply );
+			return $reply;
+		}
+		if ( false !== $reply || ! $this->direct_filesystem() ) {
+			return $this->exact_download_failure( $exact, 'unverified_pre_download' );
+		}
+		if ( $this->working_copy_blocked() ) {
+			return $this->exact_download_failure( $exact, 'target_is_working_copy' );
+		}
+		if ( ! $this->live() || null === $this->verify_current() ) {
+			return $this->exact_download_failure( $exact, 'binding_fence_lost' );
+		}
+		$fresh = $this->refresh_download_binding( $token, true );
+		if ( is_string( $fresh ) ) {
+			return $this->exact_download_failure( $exact, $fresh );
+		}
+		if ( $this->bound_package_version( $this->installed_directory ) !== $exact->installed_version ) {
+			return $this->exact_download_failure( $exact, 'runtime_package_identity_invalid' );
+		}
+		$verified = $this->verify_current();
+		if ( null === $verified || ! $this->live() ) {
+			return $this->exact_download_failure( $exact, 'binding_fence_lost' );
+		}
+		if ( ! $this->archive_store->same_identity( $owned['path'], $fresh, $identity ) ) {
+			return $this->exact_download_failure( $exact, 'acquisition_identity_invalid' );
+		}
+		try {
+			$receipt = AcquisitionReceipt::issue( $verified['current'], $fresh, $this->validator, $owned['proof'], $verified['now'] );
+		} catch ( \Throwable ) {
+			return $this->exact_download_failure( $exact, 'acquisition_identity_invalid' );
+		}
+		$this->state = $verified['current'];
+		$this->pending_install->begin( $owned['path'], $owned['directory'], $identity, $receipt, multi_run: $upgrader instanceof \Plugin_Upgrader );
+		$exact->archive          = null;
+		$exact->archive_location = null;
+		$exact->archive_identity = null;
+		$this->queued_multi_run  = false;
+		return $owned['path'];
+	}
+
+	private function exact_download_failure( ExactInstallInvocation $exact, string $code ): mixed {
+		$exact->download_failure = $code;
+		return $this->failure( $code );
+	}
+
+	private function start_native_attempt( IdentityDescriptor $descriptor ): void {
+		$this->attempt_descriptor = $descriptor;
+		$this->attempt_outcome    = array(
+			'outcome'        => 'uncertain',
+			'source'         => 'release_updater',
+			'wordpress_code' => null,
+		);
+	}
+
+	private function refresh_download_binding( IdentityDescriptor $token, bool $authorized ): IdentityDescriptor|string {
+		try {
+			$fresh = $this->adapter->inspect( $token->release_identity(), $token->to_array()['tag'] );
+			BindingRecord::assert_descriptor_binding( $fresh, $this->binding );
+		} catch ( \Throwable ) {
+			return 'acquisition_failed';
+		}
+		if ( ! $this->live() || ! $this->descriptor_admitted( $fresh ) || ! $this->download_version_admitted( $fresh, $authorized ) ) {
+			return 'unverified_pre_download';
+		}
+		if ( ! hash_equals( $token->fingerprint_value(), $fresh->fingerprint_value() ) ) {
+			return 'remote_release_changed';
+		}
+		if ( ! $this->state instanceof BindingState ) {
+			return 'binding_fence_lost';
+		}
+		$this->descriptor = $fresh;
+		$renewed          = BindingFenceCoordinator::renew_persistent_binding_state( $this->wpdb, $this->state, $this->claim, 3600 );
+		if ( 'renewed' !== $renewed['result'] || ! $renewed['current'] instanceof BindingState ) {
+			return 'binding_fence_lost';
+		}
+		$this->state = $renewed['current'];
+		$this->claim = $this->claim( $this->state );
+		return $fresh;
+	}
+
+	/** @param OwnedCopy|null $owned */
+	private function acquire_owned_archive( IdentityDescriptor $descriptor, ?array &$owned, ?ExactInstallInvocation $exact = null ): ?string {
+		$artifact    = null;
+		$on_allocate = null === $exact ? null : static function ( string $path, string $directory ) use ( $exact ): void {
+			$exact->archive_location = array(
+				'path'      => $path,
+				'directory' => $directory,
+			);
+		};
+		try {
+			$artifact = $this->adapter->acquire( $descriptor );
+			$artifact->inspect(
+				function ( string $path ) use ( $descriptor, &$owned, $on_allocate ): void {
+					$owned = $this->validated_copy( $path, $descriptor, $on_allocate );
+				}
+			);
+			if ( $artifact->discard() ) {
+				return null === $owned ? 'acquisition_identity_invalid' : null;
+			}
+		} catch ( \Throwable $error ) {
+			if ( null !== $exact && $error instanceof ReleaseFailure && 'failed' === $error->cleanup_status ) {
+				$exact->artifact_cleanup_failed = true;
+			}
+		}
+		if ( null !== $artifact && ! $artifact->discard() && null !== $exact ) {
+			$exact->artifact_cleanup_failed = true;
+		}
+		return 'acquisition_failed';
+	}
+
 	/** @param list<string> $needed_dirs */
 	public function filter_pre_unzip_file( mixed $pre, string $file, string $destination, array $needed_dirs, float $required_space ): mixed {
 		unset( $destination, $needed_dirs, $required_space );
@@ -800,20 +1093,21 @@ final class NativePackageUpdater {
 		if ( ! $this->live() ) {
 			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
-		$verified = $this->verify_current();
+		$descriptor = $this->descriptor;
+		$verified   = $this->verify_current();
 		if (
 			! $this->direct_filesystem()
 			|| null === $verified
-			|| ! $this->descriptor instanceof IdentityDescriptor
-			|| ! $this->descriptor_admitted( $this->descriptor )
+			|| ! $descriptor instanceof IdentityDescriptor
+			|| ! $this->descriptor_admitted( $descriptor )
 			|| ! is_array( $this->pending_install->archive_identity() )
-			|| ! $this->archive_store->same_identity( $file, $this->descriptor, $this->pending_install->archive_identity() )
+			|| ! $this->archive_store->same_identity( $file, $descriptor, $this->pending_install->archive_identity() )
 			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
 		) {
 			return $this->fail_pending( 'archive_changed_before_extraction' );
 		}
 		try {
-			AcquisitionReceipt::assert_fresh( $this->pending_install->receipt(), $verified['current'], $this->descriptor, $verified['now'] );
+			AcquisitionReceipt::assert_fresh( $this->pending_install->receipt(), $verified['current'], $descriptor, $verified['now'] );
 		} catch ( InvalidArgumentException ) {
 			return $this->fail_pending( 'archive_changed_before_extraction' );
 		}
@@ -838,20 +1132,21 @@ final class NativePackageUpdater {
 			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 
-		$manifest = is_string( $source ) && $this->matches_staged_metadata( $source )
+		$manifest   = is_string( $source ) && $this->matches_staged_metadata( $source )
 			? $this->manifest_builder->build( $source )
 			: null;
-		$verified = $this->verify_current();
+		$descriptor = $this->descriptor;
+		$verified   = $this->verify_current();
 		if (
 			! $this->direct_filesystem()
 			|| ! $this->pending_install->active()
 			|| ! $this->pending_install->extraction_admitted()
 			|| null === $verified
-			|| ! $this->descriptor instanceof IdentityDescriptor
-			|| ! $this->descriptor_admitted( $this->descriptor )
+			|| ! $descriptor instanceof IdentityDescriptor
+			|| ! $this->descriptor_admitted( $descriptor )
 			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
 			|| ! is_string( $source )
-			|| ! is_array( $manifest )
+			|| null === $manifest
 		) {
 			return $this->fail_pending( 'staged_package_identity_invalid' );
 		}
@@ -860,7 +1155,7 @@ final class NativePackageUpdater {
 			AcquisitionReceipt::assert_archive_manifest(
 				$this->pending_install->receipt(),
 				$verified['current'],
-				$this->descriptor,
+				$descriptor,
 				$verified['now'],
 				$this->manifest_builder->hash( $manifest ),
 				count( $manifest ),
@@ -874,7 +1169,7 @@ final class NativePackageUpdater {
 		if ( ! $this->pending_install->verify_staging() ) {
 			return $this->fail_pending( 'staged_package_identity_invalid' );
 		}
-		if ( ! $this->live() || ! $this->descriptor_admitted( $this->descriptor ) ) {
+		if ( ! $this->live() || ! $this->descriptor_admitted( $descriptor ) ) {
 			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 		if ( $this->working_copy_blocked() ) {
@@ -889,6 +1184,10 @@ final class NativePackageUpdater {
 			return $this->failure( 'target_is_working_copy' );
 		}
 		$this->admit_theme_error_bridge( $upgrader, $hook_extra );
+		$exact = $this->exact_install;
+		if ( null !== $exact && $exact->upgrader === $upgrader ) {
+			$exact->expect_incoming( $manifest );
+		}
 		return $source;
 	}
 	/** @param array<string,mixed> $hook_extra */
@@ -906,21 +1205,22 @@ final class NativePackageUpdater {
 		if ( $this->working_copy_blocked() ) {
 			return $this->fail_pending( 'target_is_working_copy' );
 		}
-		$verified = $this->verify_current();
+		$descriptor = $this->descriptor;
+		$verified   = $this->verify_current();
 		if (
 			! $this->direct_filesystem()
 			|| ! $this->pending_install->active()
 			|| ! $this->pending_install->extraction_admitted()
 			|| null === $verified
-			|| ! $this->descriptor instanceof IdentityDescriptor
-			|| ! $this->descriptor_admitted( $this->descriptor )
+			|| ! $descriptor instanceof IdentityDescriptor
+			|| ! $this->descriptor_admitted( $descriptor )
 			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
 			|| $response instanceof \WP_Error
 		) {
 			return $this->fail_pending( 'unverified_pre_install' );
 		}
 		try {
-			AcquisitionReceipt::assert_fresh( $this->pending_install->receipt(), $verified['current'], $this->descriptor, $verified['now'] );
+			AcquisitionReceipt::assert_fresh( $this->pending_install->receipt(), $verified['current'], $descriptor, $verified['now'] );
 		} catch ( InvalidArgumentException ) {
 			return $this->fail_pending( 'unverified_pre_install' );
 		}
@@ -932,7 +1232,7 @@ final class NativePackageUpdater {
 	}
 	/** @param array<string,mixed> $hook_extra */
 	public function capture_install_package_result( mixed $result, array $hook_extra ): mixed {
-		if ( ! $this->matches_operation( $hook_extra ) ) {
+		if ( ! $this->matches_operation( $hook_extra ) || null !== $this->exact_install?->finalization ) {
 			return $result;
 		}
 		$this->observe_wordpress_error( $result );
@@ -979,8 +1279,7 @@ final class NativePackageUpdater {
 		if (
 			$this->theme_error_original instanceof \WP_Error
 			&& $this->theme_error_outgoing instanceof \WP_Error
-			&& $upgrader->skin instanceof \Theme_Upgrader_Skin
-			&& \Theme_Upgrader_Skin::class === get_class( $upgrader->skin )
+			&& $this->matches_theme_skin( $upgrader )
 			&& array() === $upgrader->result
 			&& $upgrader->skin->result === $this->theme_error_outgoing
 		) {
@@ -990,7 +1289,12 @@ final class NativePackageUpdater {
 	}
 	/** @param array<string,mixed> $hook_extra */
 	public function observe_completion( mixed $upgrader, array $hook_extra ): void {
-		unset( $upgrader );
+		if ( null !== $this->exact_install ) {
+			$field = 'plugin' === $this->target_type ? 'plugins' : 'themes';
+			if ( $this->exact_install->upgrader !== $upgrader || array( $this->installed_identity ) !== ( $hook_extra[ $field ] ?? array( $hook_extra[ $this->target_type ] ?? null ) ) ) {
+				return;
+			}
+		}
 		if ( ( null !== $this->native_owner || $this->live() ) && $this->matches_completion( $hook_extra ) ) {
 			$this->clear_discovery_snapshot();
 			$this->pending_install->observe_completion();
@@ -1026,75 +1330,67 @@ final class NativePackageUpdater {
 	}
 	/** Finalization is deliberately after Core rollback and backup cleanup. */
 	public function finalize_pending_install(): void {
+		$exact    = $this->exact_install;
+		$shutdown = null !== $exact && doing_action( 'shutdown' );
+		if ( ! $this->shutdown_scheduled || ( null !== $exact && ! $exact->backup_deleted && ! $shutdown ) ) {
+			return;
+		}
+		if ( $shutdown ) {
+			try {
+				if ( ! $exact->recover_at_shutdown() ) {
+					$this->diagnose( 'outcome_uncertain', null );
+				}
+			} catch ( \Throwable ) {
+				$this->diagnose( 'outcome_uncertain', null );
+			}
+		}
 		if ( $this->finalizing ) {
+			if ( $shutdown ) {
+				// The synchronous finalizer was interrupted. There is no second commit or host acknowledgement.
+				$this->native_outcome = 'uncertain';
+				$this->clear_pending();
+				$this->disarm_exact_install();
+			}
 			return;
 		}
 		$this->finalizing = true;
-		if ( null === $this->native_owner && ! $this->live() ) {
-			if ( $this->pending_install->active() ) {
-				$this->diagnose( 'runtime_liveness_lost', null, true );
-			}
-			$this->clear_pending();
-			$this->finalizing = false;
-			return;
-		}
-		if ( ! $this->pending_install->active() ) {
-			$this->clear_pending();
-			$this->finalizing = false;
-			return;
-		}
-
 		try {
-			if ( ! $this->descriptor instanceof IdentityDescriptor ) {
+			if ( null === $this->native_owner && ! $this->live() ) {
+				if ( $this->pending_install->active() ) {
+					$this->diagnose( 'runtime_liveness_lost', null, true );
+				}
+				return;
+			}
+			if ( ! $this->pending_install->active() ) {
+				return;
+			}
+			// An interrupted exact install can still clean up, but only a proved Core return and backup deletion admit a commit.
+			if ( null !== $exact && ! $exact->backup_deleted ) {
 				$this->diagnose( 'outcome_uncertain', null );
 				return;
 			}
-			if ( ! $this->descriptor_admitted( $this->descriptor ) ) {
+			$descriptor = $this->descriptor;
+			if ( ! $descriptor instanceof IdentityDescriptor ) {
+				$this->diagnose( 'outcome_uncertain', null );
+				return;
+			}
+			if ( ! $this->descriptor_admitted( $descriptor ) ) {
 				$this->diagnose( 'descriptor_admission_rejected', null, true );
 				return;
 			}
-			$destination               = is_array( $this->pending_install->install_result() ) && is_string( $this->pending_install->install_result()['destination'] ?? null )
-				? $this->pending_install->install_result()['destination']
-				: null;
-			$manifest                  = is_string( $destination ) ? $this->manifest_builder->build( $destination ) : null;
-			$verified                  = $this->verify_current();
-			$archive_manifest_verified = false;
-			if (
-				null !== $verified
-				&& $this->pending_install->receipt() instanceof AcquisitionReceipt
-				&& is_array( $manifest )
-			) {
-				try {
-					AcquisitionReceipt::assert_archive_manifest(
-						$this->pending_install->receipt(),
-						$verified['current'],
-						$this->descriptor,
-						$verified['now'],
-						$this->manifest_builder->hash( $manifest ),
-						count( $manifest ),
-						$this->manifest_builder->expanded_bytes( $manifest )
-					);
-					$archive_manifest_verified = true;
-					$this->state               = $verified['current'];
-				} catch ( InvalidArgumentException ) {
-					$archive_manifest_verified = false;
-				}
-			}
+			$verified = $this->verify_installed_manifest( $descriptor );
 			if (
 				! $this->pending_install->install_result_captured()
 				|| ( ! $this->pending_install->completion_observed() && ! $this->pending_install->multi_run() )
-				|| ! $archive_manifest_verified
-				|| ! is_string( $destination )
-				|| ! $this->pending_install->staging_verified()
-				|| ! is_array( $manifest )
-				|| ! $this->matches_staged_metadata( $destination )
+				|| null === $verified
 			) {
 				$this->diagnose( 'outcome_uncertain', null );
 				return;
 			}
+			$this->state = $verified;
 			// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
 			if ( 'wordpress' !== ( $this->attempt_outcome['source'] ?? null ) ) {
-				$completed = BindingFenceCoordinator::complete_persistent_install( $this->wpdb, $this->state, $this->claim, $this->pending_install->receipt(), $this->descriptor, true );
+				$completed = BindingFenceCoordinator::complete_persistent_install( $this->wpdb, $verified, $this->claim, $this->pending_install->receipt(), $descriptor, true );
 				if ( 'completed' === $completed['result'] && $completed['current'] instanceof BindingState ) {
 					$this->state          = $completed['current'];
 					$this->claim          = $this->claim( $this->state );
@@ -1103,11 +1399,67 @@ final class NativePackageUpdater {
 					$this->diagnose( 'outcome_uncertain', null );
 				}
 			}
+		} catch ( \Throwable $error ) {
+			if ( null === $exact ) {
+				throw $error;
+			}
+			$this->diagnose( 'outcome_uncertain', null );
 		} finally {
 			$this->clear_pending();
 			$this->finalizing = false;
+			if ( $shutdown ) {
+				$this->disarm_exact_install();
+			}
 		}
 	}
+
+	private function verify_installed_manifest( IdentityDescriptor $descriptor ): ?BindingState {
+		$result      = $this->pending_install->install_result();
+		$destination = is_array( $result ) ? ( $result['destination'] ?? null ) : null;
+		if ( ! is_string( $destination ) || ! $this->installed_destination_matches( $destination ) ) {
+			return null;
+		}
+		$manifest = $this->manifest_builder->build( $destination );
+		$verified = $this->verify_current();
+		$receipt  = $this->pending_install->receipt();
+		if ( null === $verified || ! $receipt instanceof AcquisitionReceipt || null === $manifest ) {
+			return null;
+		}
+		try {
+			AcquisitionReceipt::assert_archive_manifest(
+				$receipt,
+				$verified['current'],
+				$descriptor,
+				$verified['now'],
+				$this->manifest_builder->hash( $manifest ),
+				count( $manifest ),
+				$this->manifest_builder->expanded_bytes( $manifest )
+			);
+		} catch ( InvalidArgumentException ) {
+			return null;
+		}
+		return $this->pending_install->staging_verified() && $this->matches_staged_metadata( $destination ) && $this->installed_destination_matches( $destination ) ? $verified['current'] : null;
+	}
+
+	private function installed_destination_matches( string $destination ): bool {
+		$destination = rtrim( $destination, '/\\' );
+		$registered  = rtrim( $this->installed_directory, '/\\' );
+		if ( null !== $this->exact_install && wp_normalize_path( $registered ) !== wp_normalize_path( $destination ) ) {
+			return false;
+		}
+		clearstatcache( true );
+		$resolved = realpath( $destination );
+		if ( false === $resolved || realpath( $registered ) !== $resolved ) {
+			return false;
+		}
+		if ( null !== $this->exact_install ) {
+			return $this->exact_install->destination_has_original_parent( $destination );
+		}
+		// Hosts register the PHP-resolved package path while Core reports it beneath the unresolved plugin or theme
+		// root, so ordinary installs compare resolved directories but never accept a linked package leaf.
+		return ! is_link( $destination ) && is_dir( $destination );
+	}
+
 	/** @return list<string> */ public function diagnostics(): array {
 		return $this->diagnostics; }
 	/** @return array{candidate_header_version:string|null,candidate_tag:string|null,candidate_validation_code:string|null,candidate_version:string|null,failure_code:string|null,installed_version:string|null,last_check:int|null,offered_release_identity:string|null,offered_version:string|null,relationship:string|null,last_native_outcome:array<string,mixed>|null} */ public function status(): array {
@@ -1115,7 +1467,7 @@ final class NativePackageUpdater {
 			? BindingFenceCoordinator::read_persistent_native_outcome( $this->wpdb, $this->binding ) : null;
 		return array_merge( $this->status, array( 'last_native_outcome' => $outcome ) ); }
 	public function refresh(): bool {
-		if ( $this->native_beginning || null !== $this->native_owner ) {
+		if ( null !== $this->exact_install || $this->native_beginning || null !== $this->native_owner ) {
 			return false;
 		}
 		$this->authorized_offer        = null;
@@ -1148,6 +1500,7 @@ final class NativePackageUpdater {
 		return in_array( $this->policy, array( 'disabled', 'forced-off' ), true );
 	}
 
+	/** @phpstan-impure The runtime and host authority can change during callbacks. */
 	private function live(): bool {
 		$live = ( ! $this->selected_runtime_state instanceof SelectedRuntimeState || $this->selected_runtime_state->broker_is_live() ) && $this->operation_allowed();
 		if ( ! $live ) {
@@ -1238,6 +1591,7 @@ final class NativePackageUpdater {
 				return false;
 			}
 		} return true; }
+	/** @phpstan-impure Admission is a live host decision. */
 	private function descriptor_admitted( IdentityDescriptor $descriptor ): bool {
 		try {
 			return null === $this->descriptor_admission || true === ( $this->descriptor_admission )( $descriptor );
@@ -1274,6 +1628,14 @@ final class NativePackageUpdater {
 		$targets = $extra[ $key ] ?? array( $extra[ $single ] ?? null );
 		return is_array( $targets ) && in_array( $this->installed_identity, $targets, true ); }
 	private function matches_staged_metadata( string $source, ?string $expected_version = null ): bool {
+		$version            = $this->bound_package_version( $source );
+		$expected_version ??= $this->descriptor instanceof IdentityDescriptor
+			? $this->descriptor->to_array()['version']
+			: null;
+		return null !== $version && null !== $expected_version && 0 === ReleaseVersion::compare( $version, $expected_version );
+	}
+
+	private function bound_package_version( string $source ): ?string {
 		$source = rtrim( $source, '/\\' );
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$directory = @lstat( $source );
@@ -1282,7 +1644,7 @@ final class NativePackageUpdater {
 			|| 0040000 !== ( $directory['mode'] & 0170000 )
 			|| ! hash_equals( $this->package_root(), basename( $source ) )
 		) {
-			return false;
+			return null;
 		}
 
 		$header = 'plugin' === $this->target_type ? basename( $this->installed_identity ) : 'style.css';
@@ -1290,30 +1652,25 @@ final class NativePackageUpdater {
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$file = @lstat( $path );
 		if ( ! is_array( $file ) || 0100000 !== ( $file['mode'] & 0170000 ) ) {
-			return false;
+			return null;
 		}
 
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the bounded staged header locally; unreadable content returns the existing metadata rejection.
 		$contents = @file_get_contents( $path, false, null, 0, 8192 );
 		if ( ! is_string( $contents ) ) {
-			return false;
+			return null;
 		}
 
 		$parsed = PackageIdentityValidator::parse_header( $contents, $this->target_type );
 		if ( 'installed_header_verified' !== $parsed['code'] || ! isset( $parsed['headers'] ) ) {
-			return false;
+			return null;
 		}
 
-		$headers            = $parsed['headers'];
-		$expected_version ??= $this->descriptor instanceof IdentityDescriptor
-			? $this->descriptor->to_array()['version']
-			: null;
-
+		$headers = $parsed['headers'];
 		return hash_equals( $this->headers['Name'], $headers['Name'] )
 			&& hash_equals( $this->binding->to_array()['theme_template'], $headers['Template'] )
-			&& is_string( $expected_version )
-			&& 0 === ReleaseVersion::compare( $headers['Version'], $expected_version )
-			&& $this->matches_runtime_uri( $headers['UpdateURI'] );
+			&& $this->matches_runtime_uri( $headers['UpdateURI'] )
+			? $headers['Version'] : null;
 	}
 	private function package_root(): string {
 		return 'plugin' === $this->target_type ? dirname( $this->installed_identity ) : $this->installed_identity; }
@@ -1601,13 +1958,17 @@ final class NativePackageUpdater {
 		} catch ( \Throwable ) {
 			return null; }
 	}
-	/** @return array{directory:string,path:string,proof:ValidatedPackage}|null */ private function validated_copy( string $path, IdentityDescriptor $descriptor ): ?array {
+	/**
+	 * @param (\Closure(string,string): void)|null $on_allocate
+	 * @return OwnedCopy|null
+	 */
+	private function validated_copy( string $path, IdentityDescriptor $descriptor, ?\Closure $on_allocate = null ): ?array {
 		try {
 			$proof = $this->validator->validate( $descriptor, $this->archive_policy, $path );
 		} catch ( \Throwable ) {
 			return null;
 		}
-		$copy = $proof->is_valid() ? $this->archive_store->copy( $path, $descriptor ) : null;
+		$copy = $proof->is_valid() ? $this->archive_store->copy( $path, $descriptor, $on_allocate ) : null;
 		return null === $copy ? null : array_merge( $copy, array( 'proof' => $proof ) ); }
 	/** @return array<string,mixed> */ private function claim( BindingState $state ): array {
 		return array(
@@ -1616,7 +1977,11 @@ final class NativePackageUpdater {
 			'lease_deadline'     => $state->lease_deadline(),
 			'owner_token'        => $state->owner_token(),
 		); }
-	/** @return array{current:BindingState,now:int}|null */ private function verify_current(): ?array {
+	/**
+	 * @phpstan-impure The binding fence is persistent and may change between reads.
+	 * @return array{current:BindingState,now:int}|null
+	 */
+	private function verify_current(): ?array {
 		if ( ! $this->state instanceof BindingState ) {
 			return null;
 		} $verified = BindingFenceCoordinator::verify_persistent_binding_state( $this->wpdb, $this->state, $this->claim );
@@ -1635,10 +2000,8 @@ final class NativePackageUpdater {
 	private function admit_theme_error_bridge( mixed $upgrader, array $hook_extra ): void {
 		if (
 			! $upgrader instanceof \Theme_Upgrader
-			|| \Theme_Upgrader::class !== get_class( $upgrader )
-			|| ! $upgrader->skin instanceof \Theme_Upgrader_Skin
-			|| \Theme_Upgrader_Skin::class !== get_class( $upgrader->skin )
-			|| null === $this->native_owner
+			|| ! $this->matches_theme_skin( $upgrader )
+			|| ( null === $this->native_owner && $this->exact_install?->upgrader !== $upgrader )
 			|| 'theme' !== $this->target_type
 			|| $this->pending_install->multi_run()
 			|| 'update' !== ( $hook_extra['action'] ?? null )
@@ -1653,16 +2016,20 @@ final class NativePackageUpdater {
 	private function can_bridge_theme_error( \WP_Error $result ): bool {
 		$upgrader = $this->theme_error_upgrader;
 		return $upgrader instanceof \Theme_Upgrader
-			&& null !== $this->native_owner
+			&& ( null !== $this->native_owner || $this->exact_install?->upgrader === $upgrader )
 			&& $this->pending_install->active()
 			&& ! $this->pending_install->multi_run()
-			&& $upgrader->skin instanceof \Theme_Upgrader_Skin
-			&& \Theme_Upgrader_Skin::class === get_class( $upgrader->skin )
+			&& $this->matches_theme_skin( $upgrader )
 			&& function_exists( 'doing_action' )
 			&& ! doing_action( 'wp_maybe_auto_update' )
 			&& null === $this->theme_error_original
 			&& null === $this->theme_error_outgoing
 			&& $upgrader->result === $result;
+	}
+	private function matches_theme_skin( \Theme_Upgrader $upgrader ): bool {
+		return $upgrader->skin instanceof \Theme_Upgrader_Skin
+			&& ( ( \Theme_Upgrader::class === get_class( $upgrader ) && \Theme_Upgrader_Skin::class === get_class( $upgrader->skin ) )
+			|| ( $this->exact_install?->upgrader === $upgrader && $this->exact_install->uses_original_skin() ) );
 	}
 	private function disarm_theme_error_bridge(): void {
 		$this->theme_error_upgrader = null;
@@ -1670,12 +2037,17 @@ final class NativePackageUpdater {
 		$this->theme_error_outgoing = null;
 	}
 	private function clear_pending( bool $release = true ): void {
-		if ( $this->native_beginning || ( null !== $this->native_owner && ! $this->finalizing ) ) {
+		$exact    = $this->exact_install;
+		$shutdown = null !== $exact && doing_action( 'shutdown' );
+		if ( null !== $exact?->finalization
+			|| ( $this->native_beginning && ( ! $shutdown || ! $this->finalizing ) )
+			|| ( ! $this->finalizing && ( null !== $this->native_owner || ( null !== $exact && $this->pending_install->staging_verified() ) ) )
+		) {
 			return;
 		}
 		$owner      = $this->native_owner;
-		$archive    = $this->pending_install->archive();
-		$directory  = $this->pending_install->archive_directory();
+		$archive    = $this->pending_install->archive() ?? $exact?->archive_location['path'] ?? null;
+		$directory  = $this->pending_install->archive_directory() ?? $exact?->archive_location['directory'] ?? null;
 		$descriptor = $this->attempt_descriptor;
 		$record     = null === $descriptor || null === $this->attempt_outcome ? null : array_merge(
 			$this->attempt_outcome,
@@ -1692,10 +2064,41 @@ final class NativePackageUpdater {
 		$this->disarm_theme_error_bridge();
 		$this->archive_store->remove( $archive, $directory );
 		clearstatcache();
-		$clean     = ( null === $archive || ( ! file_exists( $archive ) && ! is_link( $archive ) ) )
+		$clean = ( null === $archive || ( ! file_exists( $archive ) && ! is_link( $archive ) ) )
 			&& ( null === $directory || ( ! file_exists( $directory ) && ! is_link( $directory ) ) );
-		$candidate = $this->native_outcome;
-		$outcome   = $clean ? $candidate : 'uncertain';
+		if ( null !== $exact ) {
+			if ( ! $clean && ! $shutdown ) {
+				$store = $this->archive_store;
+				add_action(
+					'shutdown',
+					static function () use ( $store, $archive, $directory ): void {
+						$store->remove( $archive, $directory );
+					},
+					PHP_INT_MAX,
+					0
+				);
+			}
+			$clean                   = $clean && ! $exact->artifact_cleanup_failed;
+			$exact->archive          = null;
+			$exact->archive_location = null;
+			$exact->archive_identity = null;
+		}
+		$candidate        = $this->native_outcome;
+		$outcome          = $clean ? $candidate : 'uncertain';
+		$host             = 'not_applicable';
+		$lease            = 'not_held';
+		$release_fallback = null;
+		if ( null !== $exact && ! $shutdown && $release && $state instanceof BindingState ) {
+			// Keep the exact claim available if a host callback interrupts this request.
+			$release_fallback = function () use ( $state, $claim, $record ): void {
+				try {
+					BindingFenceCoordinator::release_persistent_binding_state( $this->wpdb, $state, $claim, $record );
+				} catch ( \Throwable ) {
+					$this->diagnose( 'outcome_uncertain', null );
+				}
+			};
+			add_action( 'shutdown', $release_fallback, PHP_INT_MAX, 0 );
+		}
 		$this->pending_install->clear();
 		$this->attempt_descriptor = null;
 		$this->attempt_outcome    = null;
@@ -1710,16 +2113,37 @@ final class NativePackageUpdater {
 		if ( null !== $owner && null !== $this->native_mutation_complete ) {
 			try {
 				( $this->native_mutation_complete )( $owner, $this->target_type, $this->installed_identity, $outcome );
+				$host = 'completed';
 			} catch ( \Throwable ) {
 				$outcome = 'uncertain';
+				$host    = 'failed';
 			}
 		}
 		if ( $release && $state instanceof BindingState ) {
 			if ( null !== $record && 'verified_success' === $outcome ) {
 				$record['outcome'] = 'verified_success';
 			}
-			$released = BindingFenceCoordinator::release_persistent_binding_state( $this->wpdb, $state, $claim, $record );
-			$outcome  = 'released' === $released['result'] ? $outcome : 'uncertain';
+			try {
+				$released = BindingFenceCoordinator::release_persistent_binding_state( $this->wpdb, $state, $claim, $record );
+				$lease    = 'released' === $released['result'] ? 'released' : 'failed';
+			} catch ( \Throwable $error ) {
+				if ( null === $exact ) {
+					throw $error;
+				}
+				$lease = 'failed';
+			}
+			$outcome = 'released' === $lease ? $outcome : 'uncertain';
+		}
+		if ( null !== $release_fallback && 'released' === $lease ) {
+			remove_action( 'shutdown', $release_fallback, PHP_INT_MAX );
+		}
+		if ( null !== $exact ) {
+			$exact->finalization = array(
+				'commit'          => 'verified_success' === $candidate ? 'completed' : ( $exact->backup_deleted ? 'failed' : 'not_attempted' ),
+				'host_completion' => $host,
+				'lease'           => $lease,
+				'archive_cleanup' => $clean ? 'clean' : 'failed',
+			);
 		}
 		if ( null !== $owner || 'verified_success' === $candidate ) {
 			$this->diagnose( 'verified_success' === $outcome ? 'update_completed' : 'outcome_uncertain', null );

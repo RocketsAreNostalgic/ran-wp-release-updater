@@ -373,6 +373,89 @@ Guarantees:
 - Authorising claims the discovery lease, as a check does, and leaves
   `status()['native']` as the last native check left it.
 
+### Installing one exact release synchronously
+
+For a flow that must know whether the installation finished before it returns,
+call the optional exact-install filter on the registered target. Load the
+standard WordPress admin filesystem and upgrader APIs first, as for a native
+upgrade. The host authorizes the operator and applies its own mutation policy
+before dispatching the filter. The updater runs the native upgrade itself.
+
+```php
+$report = apply_filters(
+    'ran_wp_release_updater_install_exact_release_v1',
+    null,
+    'plugin',
+    'package/package.php',
+    $release_identity,
+    $tag,
+    $listed_version,
+    $older_intended
+);
+```
+
+For a theme, pass `theme` and its stylesheet slug. Pass the identity, tag and
+version from the same selected listing entry. Only an explicit `true` permits
+an older release, with the same operator confirmation as the offer filter.
+An older elected runtime or an inactive target leaves the `null` default
+unanswered. Treat that as unavailable before attempting a native upgrade.
+
+The updater checks the live installed identity, descriptor, policy and manual
+assurance, acquires the ZIP once, and validates it into private custody.
+WordPress receives the verified copy only for the matching invocation. The
+download hook re-inspects the descriptor, checks its fingerprint and the
+binding fence, and rechecks the copy before issuing the receipt. The offer is
+request-local. The report contains no archive path.
+
+The plugin route uses one-item `Plugin_Upgrader::bulk_upgrade()`. The theme
+route uses `Theme_Upgrader::upgrade()`. After a clean return with matching
+completion evidence, the updater checks that instance for pending restoration
+at shutdown priority 10. It then runs the instance's scheduled backup deletion
+at priority 100. Successful deletion disarms that callback and permits one
+synchronous finalization. Pending restoration, interrupted upgrades and
+unconfirmed deletion retain WordPress's shutdown callbacks and the updater's
+cleanup fallback. Exact installs with unconfirmed deletion report uncertainty
+and leave the host mutation outcome uncertain.
+
+Before moving the installed package, the updater verifies that it can take a
+recovery snapshot. A refusal before the move preserves the current installation
+and any pre-existing backup. Before running Core's restoration or deletion,
+the updater rechecks the backup directory's identity and filesystem mapping.
+Core restoration also requires the original destination parent and mapping.
+A failed or declined restoration preserves the backup through shutdown.
+If installation stops after the move and before Core
+schedules recovery, the updater can identify the backup even if Core throws
+after the rename. It verifies the backup and the destination's original parent
+directory before restoring over an absent or empty destination, or over a
+directory containing only byte-matching files and their enclosing directories
+from the verified incoming package. Other destination contents and the backup
+are preserved. The updater also clears any maintenance marker that the
+invocation created and still owns. The operation buffers native progress without
+flushing the caller's response. WordPress's asynchronous translation callback
+leaves pending language packs for a later update while the exact install is
+running. When the native call returns or throws, the updater removes its
+temporary upgrader filters and leaves scheduled backup recovery in place.
+
+The report carries `status`, `code`, `version`, `relationship`,
+`finalization_pending` and `finalization`. Only `installed` with
+`update_completed` acknowledges a successful finalized install. Other statuses
+are `refused` before WordPress starts, `failed` after it starts, and `pending`
+when updater finalization remains due at shutdown. When cleanup runs in the
+invocation, `finalization` describes that specific invocation.
+
+| Field | Values |
+| --- | --- |
+| `commit` | `completed` when the updater verified the installed package and consumed its persistent receipt, `failed` when that could not be proved after backup deletion, or `not_attempted` |
+| `host_completion` | `completed` when the configured mutation completion callback returned normally, `failed` when it threw, or `not_applicable` |
+| `lease` | `released`, `failed` or `not_held` |
+| `archive_cleanup` | `clean` or `failed` |
+
+A completed commit can accompany a later cleanup or lease failure. Use
+`archive_cleanup_failed`, `host_completion_failed`, `lease_release_failed`
+and `install_commit_failed` to distinguish those outcomes from success. A host
+that persists its own source transition must also verify its own commit
+acknowledgement for this invocation.
+
 The native installer returns `WP_Error` failures using the prefix:
 
 ```text
