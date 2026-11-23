@@ -84,9 +84,19 @@ final class PackageIdentityValidator {
 			if ( ! $scan->is_valid() || ! is_string( $root ) ) {
 				return self::rejected( 'archive_root_mismatch' === $scan->failure_code() ? 'archive_root_not_single' : (string) $scan->failure_code() );
 			}
-			$candidate = null;
-			$pending   = null;
+			$candidate      = null;
+			$pending        = null;
+			$expanded_bytes = 0;
 			foreach ( $scan->entries() as $entry ) {
+				$expected_size  = $entry['directory'] ? 0 : $entry['size'];
+				$entry_identity = self::entry_identity( $zip, $entry['name'], $expected_size );
+				if (
+					null === $entry_identity
+					|| $entry_identity['size'] > self::MAX_EXPANDED_ARCHIVE_BYTES - $expanded_bytes
+				) {
+					return self::rejected( 'archive_unreadable' );
+				}
+				$expanded_bytes  += $entry_identity['size'];
 				$parts            = explode( '/', $entry['path'] );
 				$is_theme_header  = $root . '/style.css' === $entry['path'];
 				$is_plugin_header = 2 === count( $parts )
@@ -103,16 +113,16 @@ final class PackageIdentityValidator {
 					continue;
 				}
 				$contents = self::read_header( $zip, $entry['name'] );
-				$parsed   = is_string( $contents ) ? self::parse_header( $contents, $policy['target_type'] ) : array();
+				if ( null === $contents ) {
+					return null;
+				}
+				$parsed   = self::parse_header( $contents, $policy['target_type'] );
 				$metadata = isset( $parsed['headers']['Name'] ) ? $parsed['headers']['Name'] : null;
 				if ( 'plugin' === $policy['target_type'] && null === $metadata ) {
-					if ( is_string( $contents ) && 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*Plugin Name:/mi', str_replace( array( "\r\n", "\r" ), "\n", substr( $contents, 0, self::MAX_HEADER_BYTES ) ) ) ) {
+					if ( 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*Plugin Name:/mi', str_replace( array( "\r\n", "\r" ), "\n", substr( $contents, 0, self::MAX_HEADER_BYTES ) ) ) ) {
 						$pending ??= self::header_rejection( $parsed );
 					}
 					continue;
-				}
-				if ( null === $contents ) {
-					return null;
 				}
 				if ( null === $metadata ) {
 					$header_failure = self::header_rejection( $parsed );
