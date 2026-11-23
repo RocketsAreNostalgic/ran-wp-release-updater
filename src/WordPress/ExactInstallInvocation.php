@@ -60,8 +60,13 @@ final class ExactInstallInvocation {
 
 				public function restore_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
 					// Core schedules restoration on WP_Error even when it did not create the backup.
-					// WordPress 6.5 can pass a string to the shutdown action.
-					return $this->recovery->backup_move_refused() ? false : parent::restore_temp_backup( is_array( $temp_backups ) ? $temp_backups : array() );
+					unset( $temp_backups );
+					return $this->recovery->has_owned_backup() ? parent::restore_temp_backup() : false;
+				}
+
+				public function delete_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
+					unset( $temp_backups );
+					return $this->recovery->has_owned_backup() ? parent::delete_temp_backup() : false;
 				}
 
 				public function maintenance_mode( $enable = false ): void {
@@ -85,7 +90,13 @@ final class ExactInstallInvocation {
 				}
 
 				public function restore_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
-					return $this->recovery->backup_move_refused() ? false : parent::restore_temp_backup( is_array( $temp_backups ) ? $temp_backups : array() );
+					unset( $temp_backups );
+					return $this->recovery->has_owned_backup() ? parent::restore_temp_backup() : false;
+				}
+
+				public function delete_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
+					unset( $temp_backups );
+					return $this->recovery->has_owned_backup() ? parent::delete_temp_backup() : false;
 				}
 
 				public function maintenance_mode( $enable = false ): void {

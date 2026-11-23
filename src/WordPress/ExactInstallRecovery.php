@@ -20,8 +20,7 @@ final class ExactInstallRecovery {
 	/** @var OwnedEntry|null */
 	private ?array $maintenance = null;
 	/** @var PackageTree|null */
-	private ?array $incoming          = null;
-	private bool $backup_move_refused = false;
+	private ?array $incoming = null;
 
 	private readonly string $destination;
 	private readonly StagedPackageManifest $manifest;
@@ -63,7 +62,7 @@ final class ExactInstallRecovery {
 			|| ( $arguments['dir'] ?? null ) !== $group
 			|| ! is_string( $arguments['src'] ?? null )
 		) {
-			return $this->unverified_backup_source();
+			return self::unverified_backup_source();
 		}
 
 		$source  = $filesystem->find_folder( $arguments['src'] );
@@ -71,7 +70,7 @@ final class ExactInstallRecovery {
 		if ( ! is_string( $source ) || '' === $source || ! is_string( $content ) || '' === $content
 			|| ! hash_equals( $this->destination, wp_normalize_path( trailingslashit( $source ) . $slug ) )
 		) {
-			return $this->unverified_backup_source();
+			return self::unverified_backup_source();
 		}
 
 		$path            = trailingslashit( $content ) . 'upgrade-temp-backup/' . $group . '/' . $slug;
@@ -79,11 +78,11 @@ final class ExactInstallRecovery {
 		$source_identity = StagedPackageManifest::entry_identity( $this->destination );
 		$source_tree     = $this->manifest->snapshot( $this->destination );
 		if ( null === $source_identity || null === $source_tree ) {
-			return $this->unverified_backup_source();
+			return self::unverified_backup_source();
 		}
 		$digest = $this->manifest->tree_digest( $source_tree );
 		if ( $this->parent_changed() || StagedPackageManifest::entry_identity( $this->destination ) !== $source_identity ) {
-			return $this->unverified_backup_source();
+			return self::unverified_backup_source();
 		}
 		$result = false;
 		try {
@@ -94,12 +93,20 @@ final class ExactInstallRecovery {
 		}
 	}
 
-	public function backup_move_refused(): bool {
-		return $this->backup_move_refused;
+	public function has_owned_backup(): bool {
+		$backup = $this->backup;
+		if ( null === $backup ) {
+			return false;
+		}
+		$identity = StagedPackageManifest::entry_identity( $backup['path'] );
+		// A partial deletion can change the directory contents before Core retries.
+		return null !== $identity
+			&& $identity['dev'] === $backup['identity']['dev']
+			&& $identity['ino'] === $backup['identity']['ino']
+			&& 0040000 === ( $identity['mode'] & 0170000 );
 	}
 
-	private function unverified_backup_source(): \WP_Error {
-		$this->backup_move_refused = true;
+	private static function unverified_backup_source(): \WP_Error {
 		return new \WP_Error( 'ran_wp_release_updater_backup_source_unverified', 'The installed package could not be verified for recovery.' );
 	}
 

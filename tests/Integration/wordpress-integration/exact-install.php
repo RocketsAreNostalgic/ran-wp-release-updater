@@ -35,6 +35,16 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	$release = $zip->getFromName( 'offer-target/' . basename( $main_file ) );
 	$zip->close();
 
+	$early_refusal = in_array( $mode, array( 'exact-early-refusal', 'exact-early-lease-fail' ), true );
+	$stale_file    = $backup . '/' . basename( $main_file );
+	$stale_bytes   = $before . "\n// stale backup fixture\n";
+	if ( $early_refusal ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Seed a stale backup before WordPress initializes its filesystem.
+		if ( ! wp_mkdir_p( $backup ) || false === file_put_contents( $stale_file, $stale_bytes ) ) {
+			throw new RuntimeException( 'Could not seed the early refusal backup.' );
+		}
+	}
+
 	$observed = (object) array(
 		'downloads'       => 0,
 		'inspections'     => 0,
@@ -180,7 +190,6 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	$pending                  = $core_pending || $orphaned_backup;
 	$refused                  = in_array( $mode, array( 'exact-refuse', 'exact-listed-change' ), true );
 	$changed                  = 'exact-changed' === $mode;
-	$early_refusal            = in_array( $mode, array( 'exact-early-refusal', 'exact-early-lease-fail' ), true );
 	$finalized                = ! $pending && ! $refused && ! $changed && ! $early_refusal && ! $credentials_refused;
 	$commit_failed            = 'exact-commit-fail' === $mode;
 	$finalization             = $pending ? null : array(
@@ -200,11 +209,11 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	$expected_installed_bytes = $keeps_old_bytes ? $before : $release;
 	$expected_status          = $success ? 'installed' : ( $pending ? 'pending' : ( $refused ? 'refused' : 'failed' ) );
 	$checks                   = array(
-		'unsupported_default' => null === $no_target,
-		'one_zip_body'        => ( $refused ? 0 : 1 ) === $observed->downloads,
-		'fresh_metadata'      => ( $refused || $credentials_refused ? 1 : 2 ) === $observed->inspections,
-		'installed_runtime'   => ( new ReflectionClass( $updater ) )->getFileName() === $source_root . '/src/WordPress/NativePackageUpdater.php',
-		'safe_report'         => array(
+		'unsupported_default'   => null === $no_target,
+		'one_zip_body'          => ( $refused ? 0 : 1 ) === $observed->downloads,
+		'fresh_metadata'        => ( $refused || $credentials_refused ? 1 : 2 ) === $observed->inspections,
+		'installed_runtime'     => ( new ReflectionClass( $updater ) )->getFileName() === $source_root . '/src/WordPress/NativePackageUpdater.php',
+		'safe_report'           => array(
 			'status'               => $expected_status,
 			'code'                 => $expected_code,
 			'version'              => '2.0.0',
@@ -212,13 +221,15 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 			'finalization_pending' => $pending,
 			'finalization'         => $finalization,
 		) === $report,
-		'offer_removed'       => $offer_absent && null === $stored_offer,
-		'quiet_response'      => $buffer_preserved && '' === $output && 0 === $observed->stdout_bytes,
-		'bytes_before'        => $before_shutdown === $expected_installed_bytes && ( $keeps_old_bytes || $before !== $before_shutdown ),
-		'commit_before'       => $completions_before === $host_completed && ( $success ? 'verified_success' === ( $native_record['outcome'] ?? null ) : 'verified_success' !== ( $native_record['outcome'] ?? null ) ),
-		'shutdown_ownership'  => $pending === $owns_finalizer && $core_restoring === $owns_restore_hook && ( $core_pending || $early_refusal ) === $owns_backup_hook && $backup_present === $pending && ( $deleted_early ? 1 : 0 ) === $deletions_before,
-		'maintenance_before'  => ( $foreign_maintenance || $orphaned_backup ) === is_file( $maintenance ),
-		'private_custody'     => ( $pending || 'exact-archive-fail' === $mode ) ? is_array( $private_before ) && 1 === count( $private_before ) : array() === $private_before,
+		'offer_removed'         => $offer_absent && null === $stored_offer,
+		'quiet_response'        => $buffer_preserved && '' === $output && 0 === $observed->stdout_bytes,
+		'bytes_before'          => $before_shutdown === $expected_installed_bytes && ( $keeps_old_bytes || $before !== $before_shutdown ),
+		'commit_before'         => $completions_before === $host_completed && ( $success ? 'verified_success' === ( $native_record['outcome'] ?? null ) : 'verified_success' !== ( $native_record['outcome'] ?? null ) ),
+		'shutdown_ownership'    => $pending === $owns_finalizer && $core_restoring === $owns_restore_hook && ( $core_pending || $early_refusal ) === $owns_backup_hook && ( $deleted_early ? 1 : 0 ) === $deletions_before,
+		'backup_present_before' => ( $pending || $early_refusal ) === $backup_present,
+		'stale_backup_before'   => ! $early_refusal || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
+		'maintenance_before'    => ( $foreign_maintenance || $orphaned_backup ) === is_file( $maintenance ),
+		'private_custody'       => ( $pending || 'exact-archive-fail' === $mode ) ? is_array( $private_before ) && 1 === count( $private_before ) : array() === $private_before,
 	);
 	if ( $observed->upgrader instanceof WP_Upgrader ) {
 		$instance                            = $observed->upgrader;
@@ -244,16 +255,17 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	}
 	add_action(
 		'shutdown',
-		static function () use ( $checks, $type, $mode, $identity, $backup, $maintenance, $foreign_maintenance, $restoring, $expected_installed_bytes, $read_bytes, $main_file, $before, $observed, $host_completed, $core_pending, $pending, $updater, $report ): void {
+		static function () use ( $checks, $type, $mode, $identity, $backup, $maintenance, $foreign_maintenance, $restoring, $expected_installed_bytes, $read_bytes, $main_file, $before, $observed, $host_completed, $core_pending, $pending, $updater, $report, $early_refusal, $stale_file, $stale_bytes ): void {
 			$after       = $read_bytes( $main_file );
 			$is_active   = 'plugin' === $type ? is_plugin_active( $identity ) : get_stylesheet() === $identity;
 			$completions = $pending ? array( array( 'exact-install-proof', $type, $identity, 'uncertain' ) ) : $host_completed;
 			$checks     += array(
 				'active_preserved'   => $is_active,
 				'rollback_preserved' => ( $restoring ? $before : $expected_installed_bytes ) === $after,
-				'shutdown_cleanup'   => ! is_dir( $backup ) && array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
+				'shutdown_cleanup'   => ( $early_refusal || ! is_dir( $backup ) ) && array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
+				'stale_backup_after' => ! $early_refusal || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
 				'single_completion'  => $completions === $observed->completions,
-				'backup_deletions'   => ( 'exact-delete-fail' === $mode ? 2 : ( $core_pending || array() !== $host_completed ? 1 : 0 ) ) === $observed->deletions,
+				'backup_deletions'   => ( 'exact-delete-fail' === $mode ? 2 : ( ( $core_pending && 'exact-failure' !== $mode ) || array() !== $host_completed ? 1 : 0 ) ) === $observed->deletions,
 				'maintenance_after'  => $foreign_maintenance ? '<?php $upgrading = 1; // fixture-owned marker' === $read_bytes( $maintenance ) : ! is_file( $maintenance ),
 				'other_upgrader'     => 1 === $observed->foreign_restore,
 			);

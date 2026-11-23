@@ -419,7 +419,9 @@ and leave the host mutation outcome uncertain.
 
 Before moving the installed package, the updater verifies that it can take a
 recovery snapshot. A refusal before the move preserves the current installation
-and any pre-existing backup. If installation stops after the move and before Core
+and any pre-existing backup. Core's scheduled restoration and deletion run only
+while the backup directory created by that invocation is still in place.
+If installation stops after the move and before Core
 schedules recovery, the updater can identify the backup even if Core throws
 after the rename. It verifies the backup and the destination's original parent
 directory before restoring over an absent or empty destination, or over a
