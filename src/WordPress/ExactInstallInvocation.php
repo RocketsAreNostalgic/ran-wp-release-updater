@@ -77,6 +77,10 @@ final class ExactInstallInvocation {
 				public function move_to_temp_backup_dir( $args ): bool|\WP_Error {
 					return $this->recovery->move_backup( $args, parent::move_to_temp_backup_dir( ... ) );
 				}
+
+				public function maintenance_mode( $enable = false ): void {
+					$this->recovery->maintenance_mode( true === $enable, parent::maintenance_mode( ... ) );
+				}
 			};
 		}
 		return new self( $upgrader, $token, $installed_version, $recovery, $skin );
@@ -85,19 +89,51 @@ final class ExactInstallInvocation {
 	public function run( string $identity ): mixed {
 		$this->wordpress_started = true;
 		$level                   = ob_get_level();
+		$upgrader                = $this->upgrader;
+		$theme_cache_args        = $upgrader instanceof \Theme_Upgrader ? self::theme_cache_action_arguments() : null;
+		// Core's translation upgrader uses its own output-flushing skin. Leave its offers for a later update.
+		$defer_translations = static fn (): bool => false;
+		add_filter( 'async_update_translation', $defer_translations, PHP_INT_MAX, 0 );
 		ob_start();
 		try {
-			if ( $this->upgrader instanceof \Plugin_Upgrader ) {
-				$results = $this->upgrader->bulk_upgrade( array( $identity ) );
+			if ( $upgrader instanceof \Plugin_Upgrader ) {
+				$results = $upgrader->bulk_upgrade( array( $identity ) );
 				return is_array( $results ) && array( $identity ) === array_keys( $results ) ? $results[ $identity ] : false;
 			}
-			$result = $this->upgrader->upgrade( $identity );
-			return true === $result ? $this->upgrader->result : $result;
+			$result = $upgrader->upgrade( $identity );
+			return true === $result ? $upgrader->result : $result;
 		} finally {
+			remove_filter( 'async_update_translation', $defer_translations, PHP_INT_MAX );
+			$this->remove_upgrade_filters( $theme_cache_args );
 			if ( ob_get_level() === $level + 1 ) {
 				ob_end_clean();
 			}
 		}
+	}
+
+	private function remove_upgrade_filters( ?int $theme_cache_args ): void {
+		$upgrader = $this->upgrader;
+		if ( $upgrader instanceof \Plugin_Upgrader ) {
+			remove_filter( 'upgrader_clear_destination', array( $upgrader, 'delete_old_plugin' ), 10 );
+			remove_filter( 'upgrader_source_selection', array( $upgrader, 'check_package' ), 10 );
+			return;
+		}
+
+		remove_filter( 'upgrader_pre_install', array( $upgrader, 'current_before' ), 10 );
+		remove_filter( 'upgrader_post_install', array( $upgrader, 'current_after' ), 10 );
+		remove_filter( 'upgrader_clear_destination', array( $upgrader, 'delete_old_theme' ), 10 );
+		if ( null === $theme_cache_args ) {
+			remove_action( 'upgrader_process_complete', 'wp_clean_themes_cache', 9 );
+		} else {
+			// Theme_Upgrader may remove a pre-existing registration when it removes its own.
+			add_action( 'upgrader_process_complete', 'wp_clean_themes_cache', 9, $theme_cache_args );
+		}
+	}
+
+	private static function theme_cache_action_arguments(): ?int {
+		$hook = $GLOBALS['wp_filter']['upgrader_process_complete'] ?? null;
+		// Check the precise priority slot used by Theme_Upgrader. The callback can have other priorities.
+		return $hook instanceof \WP_Hook ? ( $hook->callbacks[9]['wp_clean_themes_cache']['accepted_args'] ?? null ) : null;
 	}
 
 	/** @phpstan-impure The Core hook graph can change during filesystem cleanup. */

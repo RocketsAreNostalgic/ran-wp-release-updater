@@ -533,11 +533,11 @@ final class NativePackageUpdater {
 		}
 
 		$result = $this->run_exact_upgrade( $exact, $this->offer_entry( $descriptor, $exact->token, false ) + array( 'new_version' => $facts['version'] ) );
-		if ( $exact->maintenance_pending() ) {
-			return 'maintenance_cleanup_failed';
-		}
 		if ( null === $exact->finalization && $exact->restore_pending() ) {
 			return 'backup_restore_pending';
+		}
+		if ( $exact->maintenance_pending() ) {
+			return 'maintenance_cleanup_failed';
 		}
 		if (
 			! $exact->download_consumed

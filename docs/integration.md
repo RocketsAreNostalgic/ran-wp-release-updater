@@ -421,7 +421,10 @@ If installation stops after WordPress moves the backup and before Core
 schedules recovery, the updater restores the backup it observed that
 instance create. It also clears any maintenance marker that the invocation
 created and still owns. The operation buffers native progress without
-flushing the caller's response.
+flushing the caller's response. WordPress's asynchronous translation callback
+leaves pending language packs for a later update while the exact install is
+running. When the native call returns or throws, the updater removes its
+temporary upgrader filters and leaves scheduled backup recovery in place.
 
 The report carries `status`, `code`, `version`, `relationship`,
 `finalization_pending` and `finalization`. Only `installed` with

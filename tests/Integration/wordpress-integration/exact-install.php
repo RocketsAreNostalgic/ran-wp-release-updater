@@ -87,6 +87,12 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	}
 
 	ran_wp_release_updater_test_exact_wordpress_faults( $mode, $type, $identity, $backup, $observed );
+	$translation            = 'exact-pending-translation' === $mode ? ran_wp_release_updater_test_exact_translation( $type, $observed ) : null;
+	$credentials_refused    = 'exact-credentials-refused' === $mode;
+	$theme_cache_registered = 'theme' === $type && $foreign_maintenance;
+	if ( $theme_cache_registered ) {
+		add_action( 'upgrader_process_complete', 'wp_clean_themes_cache', 9, 0 );
+	}
 	set_site_transient(
 		$transient,
 		(object) array(
@@ -102,8 +108,17 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 			return '';
 		}
 	);
-	$caller_level     = ob_get_level();
-	$report           = apply_filters( 'ran_wp_release_updater_install_exact_release_v1', null, $type, $identity, '301', 'v2.0.0', $expected_version, 'exact-refuse' !== $mode && 'older' === $direction );
+	$caller_level = ob_get_level();
+	if ( $credentials_refused ) {
+		add_filter( 'request_filesystem_credentials', '__return_false' );
+	}
+	try {
+		$report = apply_filters( 'ran_wp_release_updater_install_exact_release_v1', null, $type, $identity, '301', 'v2.0.0', $expected_version, 'exact-refuse' !== $mode && 'older' === $direction );
+	} finally {
+		if ( $credentials_refused ) {
+			remove_filter( 'request_filesystem_credentials', '__return_false' );
+		}
+	}
 	$buffer_preserved = ob_get_level() === $caller_level;
 	$output           = $buffer_preserved ? ob_get_clean() : false;
 	if ( ! is_array( $report ) ) {
@@ -135,6 +150,8 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'exact-interrupted' => 'unexpected_failure',
 		'exact-post-install-throw' => 'unexpected_failure',
 		'exact-preexisting-maintenance' => 'update_completed',
+		'exact-pending-translation' => 'update_completed',
+		'exact-credentials-refused' => 'unverified_install_result',
 		'exact-early-refusal' => 'unverified_install_result',
 		'exact-early-lease-fail' => 'lease_release_failed',
 		'exact-commit-fail' => 'install_commit_failed',
@@ -149,7 +166,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	$refused                  = in_array( $mode, array( 'exact-refuse', 'exact-listed-change' ), true );
 	$changed                  = 'exact-changed' === $mode;
 	$early_refusal            = in_array( $mode, array( 'exact-early-refusal', 'exact-early-lease-fail' ), true );
-	$finalized                = ! $pending && ! $refused && ! $changed && ! $early_refusal;
+	$finalized                = ! $pending && ! $refused && ! $changed && ! $early_refusal && ! $credentials_refused;
 	$commit_failed            = 'exact-commit-fail' === $mode;
 	$finalization             = $pending ? null : array(
 		'commit'          => $finalized ? ( $commit_failed ? 'failed' : 'completed' ) : 'not_attempted',
@@ -157,20 +174,20 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'lease'           => in_array( $mode, array( 'exact-lease-fail', 'exact-early-lease-fail' ), true ) ? 'failed' : 'released',
 		'archive_cleanup' => 'exact-archive-fail' === $mode ? 'failed' : 'clean',
 	);
-	$success                  = in_array( $mode, array( 'exact-success', 'exact-preexisting-maintenance' ), true );
+	$success                  = in_array( $mode, array( 'exact-success', 'exact-preexisting-maintenance', 'exact-pending-translation' ), true );
 	$host_completed           = $finalized ? array(
 		array( 'exact-install-proof', $type, $identity, $commit_failed || 'exact-archive-fail' === $mode ? 'uncertain' : 'verified_success' ),
 	) : array();
 	$core_restoring           = 'exact-failure' === $mode || $early_refusal;
 	$restoring                = $core_restoring || $orphaned_backup;
 	$deleted_early            = $finalized || 'exact-delete-fail' === $mode;
-	$keeps_old_bytes          = $refused || $changed || $early_refusal;
+	$keeps_old_bytes          = $refused || $changed || $early_refusal || $credentials_refused;
 	$expected_installed_bytes = $keeps_old_bytes ? $before : $release;
 	$expected_status          = $success ? 'installed' : ( $pending ? 'pending' : ( $refused ? 'refused' : 'failed' ) );
 	$checks                   = array(
 		'unsupported_default' => null === $no_target,
 		'one_zip_body'        => ( $refused ? 0 : 1 ) === $observed->downloads,
-		'fresh_metadata'      => ( $refused ? 1 : 2 ) === $observed->inspections,
+		'fresh_metadata'      => ( $refused || $credentials_refused ? 1 : 2 ) === $observed->inspections,
 		'installed_runtime'   => ( new ReflectionClass( $updater ) )->getFileName() === $source_root . '/src/WordPress/NativePackageUpdater.php',
 		'safe_report'         => array(
 			'status'               => $expected_status,
@@ -185,9 +202,27 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'bytes_before'        => $before_shutdown === $expected_installed_bytes && ( $keeps_old_bytes || $before !== $before_shutdown ),
 		'commit_before'       => $completions_before === $host_completed && ( $success ? 'verified_success' === ( $native_record['outcome'] ?? null ) : 'verified_success' !== ( $native_record['outcome'] ?? null ) ),
 		'shutdown_ownership'  => $pending === $owns_finalizer && $core_restoring === $owns_restore_hook && ( $core_pending || $early_refusal ) === $owns_backup_hook && $backup_present === $pending && ( $deleted_early ? 1 : 0 ) === $deletions_before,
-		'maintenance_before'  => ( $foreign_maintenance || ( 'plugin' === $type && $orphaned_backup ) ) === is_file( $maintenance ),
+		'maintenance_before'  => ( $foreign_maintenance || $orphaned_backup ) === is_file( $maintenance ),
 		'private_custody'     => ( $pending || 'exact-archive-fail' === $mode ) ? is_array( $private_before ) && 1 === count( $private_before ) : array() === $private_before,
 	);
+	if ( $observed->upgrader instanceof WP_Upgrader ) {
+		$instance                            = $observed->upgrader;
+		$checks['temporary_filters_removed'] =
+			false === has_filter( 'upgrader_clear_destination', array( $instance, 'plugin' === $type ? 'delete_old_plugin' : 'delete_old_theme' ) )
+			&& false === has_filter( 'upgrader_source_selection', array( $instance, 'check_package' ) )
+			&& false === has_filter( 'upgrader_pre_install', array( $instance, 'current_before' ) )
+			&& false === has_filter( 'upgrader_post_install', array( $instance, 'current_after' ) );
+	}
+	$checks['theme_cache_hook_preserved'] = ( $theme_cache_registered ? 9 : false ) === has_action( 'upgrader_process_complete', 'wp_clean_themes_cache' );
+	if ( null !== $translation ) {
+		$checks['translation_left_pending'] = array( false ) === $translation->decisions
+			&& in_array( $translation->offer->package, array_column( wp_get_translation_updates(), 'package' ), true )
+			&& remove_filter( 'async_update_translation', $translation->observe, PHP_INT_MAX )
+			&& false === has_filter( 'async_update_translation' );
+	}
+	if ( $credentials_refused ) {
+		$checks['subsequent_theme_update'] = ran_wp_release_updater_test_exact_follow_up_theme( dirname( $archive ), $read_bytes );
+	}
 	if ( $finalized ) {
 		$updater->finalize_pending_install();
 		$checks['duplicate_finalize_noop'] = $native_record === $updater->status()['last_native_outcome'] && $completions_before === $observed->completions;
@@ -220,6 +255,75 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		},
 		PHP_INT_MAX
 	);
+}
+
+/** Present a pending offer to Core's real translation callback after it refreshes its package caches. */
+function ran_wp_release_updater_test_exact_translation( string $type, stdClass $observed ): stdClass {
+	$state          = (object) array(
+		'offer'     => (object) array(
+			'type'       => $type,
+			'slug'       => 'offer-target',
+			'language'   => 'fr_FR',
+			'version'    => '2.0.0',
+			'autoupdate' => true,
+			'package'    => 'https://downloads.wordpress.org/translation/' . $type . '/offer-target/2.0.0/fr_FR.zip',
+		),
+		'decisions' => array(),
+	);
+	$state->observe = static function ( bool $update, stdClass $offer ) use ( $state ): bool {
+		if ( $offer->package === $state->offer->package ) {
+			$state->decisions[] = $update;
+		}
+		return $update;
+	};
+	add_filter( 'automatic_updates_is_vcs_checkout', '__return_false' );
+	add_action( 'upgrader_process_complete', array( Language_Pack_Upgrader::class, 'async_upgrade' ), 20, 1 );
+	add_action(
+		'upgrader_process_complete',
+		static function ( WP_Upgrader $upgrader ) use ( $observed, $state ): void {
+			if ( $upgrader !== $observed->upgrader ) {
+				return;
+			}
+			set_site_transient( 'update_core', (object) array( 'translations' => array( $state->offer ) ) );
+			add_filter( 'async_update_translation', $state->observe, PHP_INT_MAX, 2 );
+		},
+		19,
+		1
+	);
+	return $state;
+}
+
+/** @param (Closure(string):string) $read_bytes */
+function ran_wp_release_updater_test_exact_follow_up_theme( string $archive_directory, Closure $read_bytes ): bool {
+	$slug      = 'follow-up-theme';
+	$directory = get_theme_root() . '/' . $slug;
+	$archive   = $archive_directory . '/follow-up-theme.zip';
+	$before    = "/*\nTheme Name: Follow Up Theme\nVersion: 1.0.0\n*/\n";
+	$after     = str_replace( '1.0.0', '2.0.0', $before );
+	$zip       = new ZipArchive();
+	if ( ! wp_mkdir_p( $directory ) || true !== $zip->open( $archive, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
+		throw new RuntimeException( 'Could not prepare the follow-up theme.' );
+	}
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Seed the exact pre-upgrade bytes inside the disposable WordPress site.
+	file_put_contents( $directory . '/style.css', $before );
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Seed the required classic theme entrypoint in the disposable WordPress site.
+	file_put_contents( $directory . '/index.php', '<?php' );
+	$zip->addFromString( $slug . '/style.css', $after );
+	$zip->addFromString( $slug . '/index.php', '<?php' );
+	$zip->close();
+	set_site_transient( 'update_themes', (object) array( 'response' => array( $slug => array( 'package' => $archive ) ) ) );
+	$skin = new class() extends Theme_Upgrader_Skin {
+		public function feedback( $feedback, ...$args ): void {
+			unset( $feedback, $args );
+		}
+	};
+	ob_start();
+	try {
+		$result = ( new Theme_Upgrader( $skin ) )->upgrade( $slug );
+	} finally {
+		ob_end_clean();
+	}
+	return true === $result && $after === $read_bytes( $directory . '/style.css' );
 }
 
 /** Stream the actual fixture ZIP only at GitHub's asset-body boundary. */
@@ -316,7 +420,7 @@ function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, strin
 				}
 				return new WP_Error( 'exact_fixture_post_copy_failure', 'Injected after the replacement was copied.' );
 			},
-			PHP_INT_MAX,
+			'exact-post-install-throw' === $mode ? 9 : PHP_INT_MAX,
 			2
 		);
 	}
