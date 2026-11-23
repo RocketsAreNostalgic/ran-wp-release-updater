@@ -167,11 +167,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$claim_result = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
 			self::assertInstanceOf( BindingState::class, $claim_result['current'] );
 			self::assertSame( 'claimed', $claim_result['result'] );
-			$state              = $claim_result['current'];
-			$claim              = $this->claim( $state );
-			$destination_parent = sys_get_temp_dir() . '/ran-fake-adapter-destination-' . bin2hex( random_bytes( 8 ) );
+			$state                                = $claim_result['current'];
+			$claim                                = $this->claim( $state );
+			$destination_parent                   = sys_get_temp_dir() . '/ran-fake-adapter-destination-' . bin2hex( random_bytes( 8 ) );
+			$configuration                        = $this->configuration( $target_type, $uri );
+			$configuration['installed_directory'] = $destination_parent . '/fake-release';
 
-			$configuration_mismatch               = $this->configuration( $target_type, $uri );
+			$configuration_mismatch               = $configuration;
 			$configuration_mismatch['update_uri'] = 'https://updates.example.test/owner/other-path';
 			$configuration_package                = $validator->validate( $descriptor, $policy, $archive );
 			self::assertNull( $this->updater( $configuration_mismatch, $binding, $database, $descriptor, $archive, $policy ) );
@@ -181,7 +183,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
 
 			$database->set_time( 121 );
-			$updater = $this->updater( $this->configuration( $target_type, $uri ), $binding, $database, $descriptor, $archive, $policy );
+			$updater = $this->updater( $configuration, $binding, $database, $descriptor, $archive, $policy );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
 			$updater->register();
@@ -239,7 +241,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				'destination',
 				$version,
 				$line_ending,
-				$closing_comment_markers
+				$closing_comment_markers,
+				$destination_parent
 			);
 			self::assertSame( array( 'destination' => $destination ), $updater->capture_install_package_result( array( 'destination' => $destination ), $extra ) );
 			$updater->observe_completion(
@@ -262,7 +265,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		 */
 		private function assert_staged_header_mismatch_does_not_create_destination( string $target_type, string $uri, string $version, IdentityDescriptor $descriptor, BindingRecord $binding, FakeOptionDatabase $database, BindingState $state, array $claim, PackageIdentityValidator $validator, array $policy, string $archive, string $destination_parent ): void {
 			$database->set_time( 121 );
-			$updater = $this->updater( $this->configuration( $target_type, $uri ), $binding, $database, $descriptor, $archive, $policy );
+			$configuration                        = $this->configuration( $target_type, $uri );
+			$configuration['installed_directory'] = $destination_parent . '/fake-release';
+			$updater                              = $this->updater( $configuration, $binding, $database, $descriptor, $archive, $policy );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$identity = 'plugin' === $target_type ? 'fake-release/fake-release.php' : 'fake-release';
 			$extra    = array( 'plugin' === $target_type ? 'plugin' : 'theme' => $identity );
@@ -376,10 +381,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			string $suffix,
 			string $version,
 			string $line_ending = "\n",
-			bool $closing_comment_markers = false
+			bool $closing_comment_markers = false,
+			?string $parent_directory = null
 		): string {
-			$parent = sys_get_temp_dir() . '/ran-phase24-' . $suffix . '-' . bin2hex( random_bytes( 8 ) );
-			$root   = $parent . '/fake-release';
+			$parent_directory ??= sys_get_temp_dir() . '/ran-phase24-' . $suffix . '-' . bin2hex( random_bytes( 8 ) );
+			$root               = $parent_directory . '/fake-release';
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 			self::assertTrue( mkdir( $root, 0700, true ) );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
@@ -395,7 +401,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
 			file_put_contents( $root . '/payload.php', '<?php return true;' );
-			$this->paths[] = $parent;
+			$this->paths[] = $parent_directory;
 			return $root;
 		}
 

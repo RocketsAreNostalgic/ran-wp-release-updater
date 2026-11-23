@@ -182,6 +182,14 @@ final class ExactInstallInvocation {
 		$this->recovery->preserve_backup();
 	}
 
+	public function authorize_backup_deletion(): void {
+		$this->recovery->authorize_backup_deletion();
+	}
+
+	public function destination_has_original_parent( string $destination ): bool {
+		return $this->recovery->destination_has_original_parent( $destination );
+	}
+
 	/** Complete only this instance's scheduled deletion, after ruling out its scheduled restoration. */
 	public function finish_backup(): ?string {
 		$delete = array( $this->upgrader, 'delete_temp_backup' );

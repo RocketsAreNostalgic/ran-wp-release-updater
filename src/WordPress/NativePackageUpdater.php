@@ -557,6 +557,7 @@ final class NativePackageUpdater {
 			$exact->preserve_backup();
 			return 'unverified_install_result';
 		}
+		$exact->authorize_backup_deletion();
 		$failure = $exact->finish_backup();
 		if ( null !== $failure ) {
 			return $failure;
@@ -1415,10 +1416,13 @@ final class NativePackageUpdater {
 	private function verify_installed_manifest( IdentityDescriptor $descriptor ): ?BindingState {
 		$result      = $this->pending_install->install_result();
 		$destination = is_array( $result ) ? ( $result['destination'] ?? null ) : null;
-		$manifest    = is_string( $destination ) ? $this->manifest_builder->build( $destination ) : null;
-		$verified    = $this->verify_current();
-		$receipt     = $this->pending_install->receipt();
-		if ( null === $verified || ! $receipt instanceof AcquisitionReceipt || null === $manifest || ! is_string( $destination ) ) {
+		if ( ! is_string( $destination ) || ! $this->installed_destination_matches( $destination ) ) {
+			return null;
+		}
+		$manifest = $this->manifest_builder->build( $destination );
+		$verified = $this->verify_current();
+		$receipt  = $this->pending_install->receipt();
+		if ( null === $verified || ! $receipt instanceof AcquisitionReceipt || null === $manifest ) {
 			return null;
 		}
 		try {
@@ -1434,7 +1438,20 @@ final class NativePackageUpdater {
 		} catch ( InvalidArgumentException ) {
 			return null;
 		}
-		return $this->pending_install->staging_verified() && $this->matches_staged_metadata( $destination ) ? $verified['current'] : null;
+		return $this->pending_install->staging_verified() && $this->matches_staged_metadata( $destination ) && $this->installed_destination_matches( $destination ) ? $verified['current'] : null;
+	}
+
+	private function installed_destination_matches( string $destination ): bool {
+		$destination = rtrim( $destination, '/\\' );
+		$registered  = rtrim( $this->installed_directory, '/\\' );
+		$normalized  = wp_normalize_path( $destination );
+		if ( wp_normalize_path( $registered ) !== $normalized ) {
+			return false;
+		}
+		clearstatcache( true );
+		$resolved = realpath( $destination );
+		return false !== $resolved && realpath( $registered ) === $resolved
+			&& ( null === $this->exact_install || $this->exact_install->destination_has_original_parent( $destination ) );
 	}
 
 	/** @return list<string> */ public function diagnostics(): array {

@@ -20,9 +20,10 @@ final class ExactInstallRecovery {
 	/** @var OwnedEntry|null */
 	private ?array $maintenance = null;
 	/** @var PackageTree|null */
-	private ?array $incoming       = null;
-	private bool $preserve_backup  = false;
-	private bool $deletion_started = false;
+	private ?array $incoming          = null;
+	private bool $preserve_backup     = false;
+	private bool $deletion_authorized = false;
+	private bool $deletion_started    = false;
 
 	private readonly string $destination;
 	private readonly string $group;
@@ -84,14 +85,25 @@ final class ExactInstallRecovery {
 		if ( isset( $source_tree['files'][ $slug ] ) || isset( $source_tree['directories'][ $slug ] ) ) {
 			return self::unverified_backup_source();
 		}
-		$digest = $this->manifest->tree_digest( $source_tree );
+		$digest          = $this->manifest->tree_digest( $source_tree );
+		$previous_digest = null;
+		if ( null !== $previous_backup && ( 0 === $previous_backup['ino'] || 0 === $source_identity['ino'] ) ) {
+			$previous_tree = $this->manifest->snapshot( $path );
+			if ( null === $previous_tree || StagedPackageManifest::entry_identity( $path ) !== $previous_backup ) {
+				return self::unverified_backup_source();
+			}
+			$previous_digest = $this->manifest->tree_digest( $previous_tree );
+			if ( hash_equals( $digest, $previous_digest ) ) {
+				return self::unverified_backup_source();
+			}
+		}
 		if ( $this->parent_changed() || StagedPackageManifest::entry_identity( $this->destination ) !== $source_identity ) {
 			return self::unverified_backup_source();
 		}
 		try {
 			$result = $move( $arguments );
 		} finally {
-			$this->capture_backup( $path, $source, $previous_backup, $source_identity, $digest, $source_tree );
+			$this->capture_backup( $path, $source, $previous_backup, $previous_digest, $source_identity, $digest, $source_tree );
 		}
 		if ( $result instanceof \WP_Error ) {
 			return $result;
@@ -101,6 +113,14 @@ final class ExactInstallRecovery {
 
 	public function preserve_backup(): void {
 		$this->preserve_backup = true;
+	}
+
+	public function authorize_backup_deletion(): void {
+		$this->deletion_authorized = ! $this->preserve_backup;
+	}
+
+	public function destination_has_original_parent( string $destination ): bool {
+		return ! $this->parent_changed() && $this->parent_identity( dirname( $destination ) ) === $this->parent;
 	}
 
 	/** @param (\Closure(): (bool|\WP_Error)) $restore */
@@ -116,6 +136,7 @@ final class ExactInstallRecovery {
 			if ( null === $backup || ! $filesystem instanceof \WP_Filesystem_Direct
 				|| ! $this->destination_matches( $filesystem, $backup['source'] )
 				|| ! $this->has_owned_backup( $filesystem ) || $this->parent_changed()
+				|| ! $this->destination_is_replaceable() || $this->parent_changed()
 			) {
 				return false;
 			}
@@ -131,7 +152,7 @@ final class ExactInstallRecovery {
 	public function delete_backup( \Closure $delete ): bool|\WP_Error {
 		try {
 			$filesystem = $GLOBALS['wp_filesystem'] ?? null;
-			if ( $this->preserve_backup || ! $filesystem instanceof \WP_Filesystem_Direct || ! $this->has_owned_backup( $filesystem, $this->deletion_started ) ) {
+			if ( ! $this->deletion_authorized || $this->preserve_backup || ! $filesystem instanceof \WP_Filesystem_Direct || ! $this->has_owned_backup( $filesystem, $this->deletion_started ) ) {
 				return false;
 			}
 			$this->deletion_started = true;
@@ -195,9 +216,13 @@ final class ExactInstallRecovery {
 	 * @param EntryIdentity $source
 	 * @param PackageTree $source_tree
 	 */
-	private function capture_backup( string $path, string $source_parent, ?array $previous_backup, array $source, string $digest, array $source_tree ): void {
+	private function capture_backup( string $path, string $source_parent, ?array $previous_backup, ?string $previous_digest, array $source, string $digest, array $source_tree ): void {
 		$identity = StagedPackageManifest::entry_identity( $path );
-		if ( null === $identity || 0040000 !== ( $identity['mode'] & 0170000 ) || $identity === $previous_backup ) {
+		if ( null === $identity || 0040000 !== ( $identity['mode'] & 0170000 ) ) {
+			return;
+		}
+		// Without an inode, only a distinct previous digest can disambiguate identical entry metadata.
+		if ( $identity === $previous_backup && ( 0 !== $identity['ino'] || null === $previous_digest || hash_equals( $digest, $previous_digest ) ) ) {
 			return;
 		}
 		// A rename retains the source inode even if Core throws in cache invalidation.

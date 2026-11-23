@@ -79,8 +79,8 @@ foreach ( 'plugin' === $type ? array( 'offer-target.php' ) : array( 'style.css',
 if ( 'exact-recovery-verified-directory' === $mode ) {
 	$ran_wp_release_updater_test_zip->addFromString( 'offer-target/verified/nested/readme.txt', 'Verified incoming file' );
 }
-if ( 'exact-copy-incoming-directory' === $mode || 'exact-copy-incoming-file' === $mode ) {
-	$ran_wp_release_updater_test_zip->addFromString( 'offer-target/offer-target' . ( 'exact-copy-incoming-directory' === $mode ? '/readme.txt' : '' ), 'Incoming payload for copy fallback' );
+if ( str_starts_with( $mode, 'exact-copy-incoming-' ) ) {
+	$ran_wp_release_updater_test_zip->addFromString( 'offer-target/offer-target' . ( str_starts_with( $mode, 'exact-copy-incoming-directory' ) ? '/readme.txt' : '' ), 'Incoming payload for copy fallback' );
 }
 $ran_wp_release_updater_test_zip->close();
 if ( 'plugin' === $type ) {

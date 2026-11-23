@@ -209,7 +209,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					$reported[] = $outcome;
 				}
 			);
-			$prepared        = $this->prepare_install( $updater );
+			$this->prepare_install( $updater );
 			$updater->observe_automatic_results(
 				array(
 					'plugin' => array(
@@ -223,7 +223,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$updater->finalize_pending_install();
 			$updater->finalize_pending_install();
 			self::assertSame( array( 'uncertain' ), $reported );
-			self::assertFileExists( $prepared['stage'] . '/package.php' );
+			self::assertFileExists( $this->installed_directory() . '/package.php' );
 			self::assertSame( 'plugin_update_fatal_error_rollback_failed', $this->retained_outcome( $updater )['wordpress_code'] );
 			self::assertNotContains( 'update_completed', $updater->diagnostics() );
 		}
@@ -393,7 +393,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			list( $updater ) = $this->subject( allow_working_copy: true );
 			$marker          = $this->working_copy_marker();
 			$this->complete( $updater );
-			self::assertFileExists( $marker );
+			self::assertFileDoesNotExist( $marker );
+			self::assertFileExists( $this->installed_directory() . '/package.php' );
 		}
 
 		public function test_marker_created_by_final_admission_is_checked_before_native_mutation(): void {
@@ -429,7 +430,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		}
 
 		private function working_copy_marker(): string {
-			$directory     = $this->temporary_directory . '/installed';
+			$directory     = $this->installed_directory();
 			$marker        = $directory . '/.git';
 			$this->paths[] = $marker;
 			if ( ! is_dir( $directory ) ) {
@@ -477,7 +478,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$result = $updater->filter_source_selection( $stage, '/tmp', null, $this->extra() );
 			if ( $allow ) {
 				self::assertSame( $stage, $result );
-				$updater->capture_install_package_result( array( 'destination' => $stage ), $this->extra() );
+				$updater->capture_install_package_result( array( 'destination' => $this->install_staged( $stage ) ), $this->extra() );
 				$updater->observe_completion(
 					null,
 					array(
@@ -497,7 +498,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 1, $observed->completions );
 			self::assertSame( 'owner', $observed->owner );
 			self::assertFileDoesNotExist( $archive );
-			self::assertFileExists( $this->temporary_directory . '/installed/.git' );
+			self::assertSame( ! $allow, is_file( $this->installed_directory() . '/.git' ) );
 			self::assertSame( $allow ? 'verified_success' : 'target_is_working_copy', $this->retained_outcome( $updater )['outcome'] );
 			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'b', 64 ), 60 )['result'] );
 		}
@@ -2054,7 +2055,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
 				$staged_package = $this->staged();
 				self::assertSame( $staged_package, $updater->filter_source_selection( $staged_package, '/tmp', null, $this->extra() ) );
-				$updater->capture_install_package_result( array( 'destination' => $staged_package ), $this->extra() );
+				$updater->capture_install_package_result( array( 'destination' => $this->install_staged( $staged_package ) ), $this->extra() );
 				$updater->observe_completion(
 					null,
 					array(
@@ -2135,9 +2136,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
 			$staged_package = $this->staged();
 			self::assertSame( $staged_package, $updater->filter_source_selection( $staged_package, '/tmp', null, $this->extra() ) );
+			$destination = $this->install_staged( $staged_package );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
-			file_put_contents( $staged_package . '/package.php', 'changed' );
-			$updater->capture_install_package_result( array( 'destination' => $staged_package ), $this->extra() );
+			file_put_contents( $destination . '/package.php', 'changed' );
+			$updater->capture_install_package_result( array( 'destination' => $destination ), $this->extra() );
 			$updater->observe_completion(
 				null,
 				array(
@@ -2252,12 +2254,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$owned = $updater->filter_pre_download( false, $offer['package'], null, $extra );
 			self::assertIsString( $owned );
 			self::assertNull( $updater->filter_pre_unzip_file( null, $owned, '/tmp', array(), 0.0 ) );
-			$stage = $this->temporary_directory . '/package';
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create the real staged theme directory for installed-tree verification with native permissions.
-			self::assertTrue( mkdir( $stage, 0700 ) );
-			$this->paths[] = $stage;
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Install the exact validated theme fixture bytes; no WordPress filesystem abstraction applies.
-			file_put_contents( $stage . '/style.css', $contents );
+			$stage = $this->staged( 'style.css', $contents );
 			self::assertTrue( $updater->filter_pre_install( true, $extra ) );
 			if ( $stage_verified ) {
 				$stock = new \Theme_Upgrader();
@@ -2322,11 +2319,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 						self::assertSame( 'foreign-result', $stock->result );
 					}
 				} else {
-					$updater->capture_install_package_result( array( 'destination' => $stage ), $extra );
+					$updater->capture_install_package_result( array( 'destination' => $this->install_staged( $stage, 'style.css' ) ), $extra );
 				}
 				$GLOBALS['ran_wp_release_updater_test_doing_action'] = null;
 			} else {
-				$updater->capture_install_package_result( array( 'destination' => $stage ), $extra );
+				$updater->capture_install_package_result( array( 'destination' => $this->install_staged( $stage, 'style.css' ) ), $extra );
 			}
 			$updater->observe_completion(
 				null,
@@ -2470,12 +2467,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		}
 		public function test_new_pending_install_without_staging_cannot_reuse_the_old_marker(): void {
 			list( $updater ) = $this->subject();
-			$prepared        = $this->prepare_install( $updater );
-			$offer           = $this->offer( $updater );
-			$owned           = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			$this->prepare_install( $updater );
+			$offer = $this->offer( $updater );
+			$owned = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 			self::assertIsString( $owned );
 			self::assertNull( $updater->filter_pre_unzip_file( null, $owned, '/tmp', array(), 0.0 ) );
-			$updater->capture_install_package_result( array( 'destination' => $prepared['stage'] ), $this->extra() );
+			$updater->capture_install_package_result( array( 'destination' => $this->installed_directory() ), $this->extra() );
 			$updater->observe_completion(
 				null,
 				array(
@@ -2566,7 +2563,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertCount( 1, $events );
 			$available = false;
 			self::assertFalse( $updater->refresh() );
-			$updater->capture_install_package_result( array( 'destination' => $prepared['stage'] ), $this->extra() );
+			$updater->capture_install_package_result( array( 'destination' => $this->installed_directory() ), $this->extra() );
 			$updater->finalize_pending_install();
 			$updater->finalize_pending_install();
 			self::assertSame( array( array( 'begin', 'plugin', 'package/package.php' ), array( 'owner', 'plugin', 'package/package.php', 'verified_success' ) ), $events );
@@ -3328,7 +3325,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
 			$staged_package = $this->staged();
 			self::assertSame( $staged_package, $updater->filter_source_selection( $staged_package, '/tmp', null, $this->extra() ) );
-			$updater->capture_install_package_result( array( 'destination' => $staged_package ), $this->extra() );
+			$updater->capture_install_package_result( array( 'destination' => $this->install_staged( $staged_package ) ), $this->extra() );
 			$updater->observe_completion(
 				null,
 				array(
@@ -3362,20 +3359,40 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$archive->close();
 			return $archive_path;
 		}
-		private function staged(): string {
+		private function staged( string $header = 'package.php', ?string $contents = null ): string {
 			$parent_path = $this->temporary_directory . '/ran-native-stage-' . bin2hex( random_bytes( 5 ) );
 			$staged_path = $parent_path . '/package';
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 			mkdir( $staged_path, 0700, true );
+			$this->paths[] = $staged_path;
 			$this->paths[] = $parent_path;
+			$contents    ??= "<?php\n/*\nPlugin Name: Package\nVersion: 2.0.0\nUpdate URI: {$this->uri()}\n*/";
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
-			file_put_contents( $staged_path . '/package.php', "<?php\n/*\nPlugin Name: Package\nVersion: 2.0.0\nUpdate URI: {$this->uri()}\n*/" );
+			file_put_contents( $staged_path . '/' . $header, $contents );
 			return $staged_path;
+		}
+		private function installed_directory(): string {
+			return $this->temporary_directory . '/package';
+		}
+		private function install_staged( string $stage, string $header = 'package.php' ): string {
+			$destination = $this->installed_directory();
+			if ( is_dir( $destination ) ) {
+				$backup = $this->temporary_directory . '/backup-' . bin2hex( random_bytes( 5 ) );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- Model Core moving the old installed directory out of the way, including any hidden marker.
+				self::assertTrue( rename( $destination, $backup ) );
+				$this->paths[] = $backup . '/.git';
+				$this->paths[] = $backup;
+			}
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create the actual registered destination for installed-manifest verification.
+			self::assertTrue( mkdir( $destination, 0700 ) );
+			$this->paths[] = $destination;
+			self::assertTrue( copy( $stage . '/' . $header, $destination . '/' . $header ) );
+			return $destination;
 		}
 		/** @return array<string,mixed> */
 		private function config( string $mode, string $installed_version = '1.0.0' ): array {
 			return array(
-				'installed_directory'        => $this->temporary_directory . '/installed',
+				'installed_directory'        => $this->installed_directory(),
 				'headers'                    => array(
 					'Author'      => 'A',
 					'Description' => 'D',

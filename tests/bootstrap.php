@@ -10,6 +10,14 @@ if ( ! function_exists( 'apply_filters' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wp_normalize_path' ) ) {
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Match the global WordPress helper for local filesystem paths in lifecycle fixtures.
+	function wp_normalize_path( string $path ): string {
+		$path = preg_replace( '|(?<=.)/+|', '/', str_replace( '\\', '/', $path ) ) ?? $path;
+		return ':' === substr( $path, 1, 1 ) ? ucfirst( $path ) : $path;
+	}
+}
+
 spl_autoload_register(
 	static function ( string $class_name ): void {
 		$prefix = 'RAN\\WPReleaseUpdater\\V1\\';

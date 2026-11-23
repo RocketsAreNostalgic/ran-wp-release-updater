@@ -49,7 +49,7 @@ try {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$suite_bytes = '';
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/automatic-example.php', __DIR__ . '/wordpress-integration/automatic-example-http.php', __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-integration/offer-release.php', __DIR__ . '/wordpress-integration/exact-install.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
+	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/automatic-example.php', __DIR__ . '/wordpress-integration/automatic-example-http.php', __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-integration/offer-release.php', __DIR__ . '/wordpress-integration/exact-install.php', __DIR__ . '/wordpress-integration/exact-install-stat.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$suite_bytes .= basename( $file ) . "\0" . hash_file( 'sha256', $file ) . "\n";
 	}
@@ -1165,12 +1165,22 @@ function ran_wp_release_updater_test_installed_offer_release( string $source, st
 		array( 'same', 'theme', 'exact-copy-incoming-directory' ),
 		array( 'same', 'plugin', 'exact-copy-incoming-file' ),
 		array( 'same', 'theme', 'exact-copy-incoming-file' ),
+		array( 'same', 'plugin', 'exact-copy-incoming-directory-throw' ),
+		array( 'same', 'theme', 'exact-copy-incoming-directory-throw' ),
+		array( 'same', 'plugin', 'exact-copy-incoming-file-throw' ),
+		array( 'same', 'theme', 'exact-copy-incoming-file-throw' ),
+		array( 'same', 'plugin', 'exact-copy-zero-inode-identical' ),
+		array( 'same', 'theme', 'exact-copy-zero-inode-identical' ),
+		array( 'same', 'plugin', 'exact-copy-zero-inode-distinct' ),
+		array( 'same', 'theme', 'exact-copy-zero-inode-distinct' ),
 		array( 'same', 'plugin', 'exact-copy-zero-slug' ),
 		array( 'same', 'theme', 'exact-copy-zero-slug' ),
 		array( 'same', 'plugin', 'exact-rollback-error' ),
 		array( 'same', 'theme', 'exact-rollback-error' ),
 		array( 'same', 'plugin', 'exact-rollback-throw' ),
 		array( 'same', 'theme', 'exact-rollback-throw' ),
+		array( 'same', 'plugin', 'exact-rollback-host-file' ),
+		array( 'same', 'theme', 'exact-rollback-host-file' ),
 		array( 'same', 'plugin', 'exact-rollback-backup-mapping' ),
 		array( 'same', 'theme', 'exact-rollback-backup-mapping' ),
 		array( 'same', 'plugin', 'exact-rollback-destination-mapping' ),
@@ -1179,6 +1189,8 @@ function ran_wp_release_updater_test_installed_offer_release( string $source, st
 		array( 'same', 'theme', 'exact-rollback-parent' ),
 		array( 'same', 'plugin', 'exact-delete-mapping' ),
 		array( 'same', 'theme', 'exact-delete-mapping' ),
+		array( 'same', 'plugin', 'exact-alternate-destination' ),
+		array( 'same', 'theme', 'exact-alternate-destination' ),
 		array( 'same', 'theme', 'exact-interrupted' ),
 		array( 'same', 'plugin', 'exact-post-install-throw' ),
 		array( 'same', 'theme', 'exact-post-install-throw' ),

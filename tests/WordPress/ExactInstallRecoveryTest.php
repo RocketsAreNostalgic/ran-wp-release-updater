@@ -21,6 +21,7 @@ $result = $recovery->move_backup(
 		return true;
 	}
 );
+$recovery->authorize_backup_deletion();
 $deleted = $recovery->delete_backup(
 	static fn (): bool => unlink( $backup . '/widget.php' )
 );
@@ -53,6 +54,8 @@ if ( ! mkdir( dirname( $backup ), 0700, true ) || true !== $recovery->move_backu
 }
 $identity = \RAN\WPReleaseUpdater\V1\WordPress\StagedPackageManifest::entry_identity( $backup );
 $would_mutate = static fn (): bool => true;
+$unauthorized = $recovery->delete_backup( $would_mutate );
+$recovery->authorize_backup_deletion();
 $original = $backup . '-original';
 $main = $backup . '/widget.php';
 $extra = $backup . '/extra.txt';
@@ -92,6 +95,7 @@ $matching_retry = $recovery->delete_backup( static fn (): bool => unlink( $main 
 echo json_encode(
 	array(
 		'backup_inode'         => $identity['ino'] ?? null,
+		'unauthorized'         => $unauthorized,
 		'replacement_restored' => $replacement_restored,
 		'replacement_deleted'  => $replacement_deleted,
 		'partial_deleted'      => $partial_deleted,
@@ -108,6 +112,7 @@ PHP;
 		self::assertSame(
 			array(
 				'backup_inode'         => 0,
+				'unauthorized'         => false,
 				'replacement_restored' => false,
 				'replacement_deleted'  => false,
 				'partial_deleted'      => false,
