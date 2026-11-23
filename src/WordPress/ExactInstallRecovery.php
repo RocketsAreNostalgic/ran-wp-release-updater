@@ -79,17 +79,20 @@ final class ExactInstallRecovery {
 		if ( null === $source_identity || null === $source_tree ) {
 			return self::unverified_backup_source();
 		}
+		// Core's copy fallback skips root entries named after the destination.
+		if ( isset( $source_tree['files'][ $slug ] ) || isset( $source_tree['directories'][ $slug ] ) ) {
+			return self::unverified_backup_source();
+		}
 		$digest = $this->manifest->tree_digest( $source_tree );
 		if ( $this->parent_changed() || StagedPackageManifest::entry_identity( $this->destination ) !== $source_identity ) {
 			return self::unverified_backup_source();
 		}
-		$result = false;
 		try {
 			$result = $move( $arguments );
-			return $result;
 		} finally {
-			$this->capture_backup( $path, $source, $previous_backup, $source_identity, $digest, true === $result );
+			$this->capture_backup( $path, $source, $previous_backup, $source_identity, $digest );
 		}
+		return true === $result && null === $this->backup ? self::unverified_backup_source() : $result;
 	}
 
 	/** @param (\Closure(): (bool|\WP_Error)) $restore */
@@ -172,22 +175,30 @@ final class ExactInstallRecovery {
 	 * @param EntryIdentity|null $previous_backup
 	 * @param EntryIdentity $source
 	 */
-	private function capture_backup( string $path, string $source_parent, ?array $previous_backup, array $source, string $digest, bool $move_succeeded ): void {
+	private function capture_backup( string $path, string $source_parent, ?array $previous_backup, array $source, string $digest ): void {
 		$identity = StagedPackageManifest::entry_identity( $path );
 		if ( null === $identity || 0040000 !== ( $identity['mode'] & 0170000 ) || $identity === $previous_backup ) {
 			return;
 		}
 		// A rename retains the source inode even if Core throws in cache invalidation.
-		$renamed = $identity['dev'] === $source['dev'] && $identity['ino'] === $source['ino'];
-		$copied  = $move_succeeded && null === StagedPackageManifest::entry_identity( $this->destination );
-		if ( $renamed || $copied ) {
-			$this->backup = array(
-				'path'     => $path,
-				'source'   => $source_parent,
-				'identity' => $identity,
-				'digest'   => $digest,
-			);
+		$renamed = 0 !== $source['ino'] && $identity['dev'] === $source['dev'] && $identity['ino'] === $source['ino'];
+		if ( ! $renamed ) {
+			if ( null !== StagedPackageManifest::entry_identity( $this->destination ) ) {
+				return;
+			}
+			$copied_tree = $this->manifest->snapshot( $path );
+			if ( null === $copied_tree || ! hash_equals( $digest, $this->manifest->tree_digest( $copied_tree ) )
+				|| StagedPackageManifest::entry_identity( $path ) !== $identity
+			) {
+				return;
+			}
 		}
+		$this->backup = array(
+			'path'     => $path,
+			'source'   => $source_parent,
+			'identity' => $identity,
+			'digest'   => $digest,
+		);
 	}
 
 	/** @param (\Closure(bool): void) $toggle */

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
+use RAN\WPReleaseUpdater\V1\WordPress\StagedPackageManifest;
 
 /** Exercise the selected runtime, its GitHub HTTP transport and stock WordPress upgraders. */
 function ran_wp_release_updater_test_install_exact( string $type, string $mode, string $direction, string $identity, string $archive, string $main_file, string $installed, string $source_root ): void {
@@ -98,6 +99,9 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 
 	$backup_fault = ran_wp_release_updater_test_exact_backup_fault( $mode, $backup, $main_file );
 	ran_wp_release_updater_test_exact_wordpress_faults( $mode, $type, $identity, $backup, $observed, $backup_fault );
+	$copy_fallback          = str_starts_with( $mode, 'exact-copy-' )
+		? ran_wp_release_updater_test_exact_copy_fallback( $mode, $backup, $main_file, $observed )
+		: null;
 	$recovery_fault         = str_starts_with( $mode, 'exact-recovery-' )
 		? ran_wp_release_updater_test_exact_recovery_fault( substr( $mode, strlen( 'exact-recovery-' ) ), $backup, $main_file, $archive, $maintenance, $observed )
 		: null;
@@ -137,6 +141,11 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	$output           = $buffer_preserved ? ob_get_clean() : false;
 	if ( ! is_array( $report ) ) {
 		throw new RuntimeException( 'The exact-install target did not return a report.' );
+	}
+
+	if ( null !== $copy_fallback ) {
+		ran_wp_release_updater_test_exact_copy_evidence( $copy_fallback, $observed, $report, $buffer_preserved && '' === $output );
+		return;
 	}
 
 	if ( null !== $recovery_fault ) {
@@ -288,6 +297,125 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 				'stdout_bytes' => $observed->stdout_bytes,
 			);
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact evidence bytes for the disposable integration fixture.
+			file_put_contents( (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' ), json_encode( $evidence, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR ) );
+		},
+		PHP_INT_MAX
+	);
+}
+
+/** Force both moves through Core's own copy fallback and record the original trees. */
+function ran_wp_release_updater_test_exact_copy_fallback( string $mode, string $backup, string $main_file, stdClass $observed ): stdClass {
+	$destination = dirname( $main_file );
+	$slug        = basename( $destination );
+	$nested      = 'exact-copy-nested' === $mode;
+	$entry       = match ( $mode ) {
+		'exact-copy-directory-collision' => $slug . '/readme.txt',
+		'exact-copy-file-collision'      => $slug,
+		'exact-copy-nested'              => 'nested/' . $slug . '/readme.txt',
+		default => throw new RuntimeException( 'Unexpected copy fallback fixture.' ),
+	};
+	$marker = $destination . '/' . $entry;
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Seed an installed entry before WordPress initializes its filesystem.
+	if ( ! wp_mkdir_p( dirname( $marker ) ) || false === file_put_contents( $marker, 'Installed payload for copy fallback' ) ) {
+		throw new RuntimeException( 'Could not seed the installed copy fallback entry.' );
+	}
+	if ( ! $nested ) {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Seed a pre-existing backup before WordPress initializes its filesystem.
+		if ( ! wp_mkdir_p( $backup ) || false === file_put_contents( $backup . '/prior.txt', 'Pre-existing backup' ) ) {
+			throw new RuntimeException( 'Could not seed the prior copy fallback backup.' );
+		}
+	}
+	$manifest = new StagedPackageManifest();
+	$original = $manifest->snapshot( $destination );
+	$prior    = $manifest->snapshot( $backup );
+	if ( null === $original || ( ! $nested && null === $prior ) ) {
+		throw new RuntimeException( 'Could not read the original copy fallback trees.' );
+	}
+	$state = (object) array(
+		'nested'           => $nested,
+		'destination'      => $destination,
+		'backup'           => $backup,
+		'original'         => $original,
+		'prior'            => $prior,
+		'backup_attempts'  => 0,
+		'restore_attempts' => 0,
+		'wordpress_error'  => null,
+	);
+	add_filter(
+		'upgrader_pre_download',
+		static function ( mixed $reply, string $package, WP_Upgrader $upgrader ) use ( $state, $observed ): mixed {
+			unset( $package );
+			if ( is_string( $reply ) && $upgrader === $observed->upgrader ) {
+				// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Force the disposable site's Core upgrader through its native copy fallback.
+				$GLOBALS['wp_filesystem'] = new class( $state ) extends WP_Filesystem_Direct {
+					public function __construct( private stdClass $state ) {
+						parent::__construct( null );
+					}
+
+					public function move( $source, $destination, $overwrite = false ) {
+						if ( untrailingslashit( $source ) === $this->state->destination && untrailingslashit( $destination ) === $this->state->backup ) {
+							++$this->state->backup_attempts;
+							return false;
+						}
+						if ( untrailingslashit( $source ) === $this->state->backup && untrailingslashit( $destination ) === $this->state->destination ) {
+							++$this->state->restore_attempts;
+							return false;
+						}
+						return parent::move( $source, $destination, $overwrite );
+					}
+				};
+			}
+			return $reply;
+		},
+		PHP_INT_MAX,
+		3
+	);
+	add_filter(
+		'upgrader_install_package_result',
+		static function ( mixed $result ) use ( $state ): mixed {
+			$state->wordpress_error = $result instanceof WP_Error ? $result->get_error_code() : null;
+			return $result;
+		},
+		9,
+		1
+	);
+	return $state;
+}
+
+/** @param array<array-key,mixed> $report */
+function ran_wp_release_updater_test_exact_copy_evidence( stdClass $state, stdClass $observed, array $report, bool $quiet ): void {
+	$manifest  = new StagedPackageManifest();
+	$installed = $manifest->snapshot( $state->destination );
+	$upgrader  = $observed->upgrader;
+	$checks    = array(
+		'quiet_response'            => $quiet && 0 === $observed->stdout_bytes,
+		'one_zip_body'              => 1 === $observed->downloads,
+		'backup_phase_result'       => ( $state->nested ? 'exact_fixture_post_copy_failure' : 'ran_wp_release_updater_backup_source_unverified' ) === $state->wordpress_error,
+		'backup_copy_attempts'      => ( $state->nested ? 1 : 0 ) === $state->backup_attempts,
+		'backup_before_shutdown'    => $manifest->snapshot( $state->backup ) === ( $state->nested ? $state->original : $state->prior ),
+		'installed_before_shutdown' => $state->nested ? null !== $installed && $installed !== $state->original : $installed === $state->original,
+		'rollback_pending'          => 'pending' === $report['status'] && 'backup_restore_pending' === $report['code'] && true === $report['finalization_pending'],
+		'core_callbacks_scheduled'  => $upgrader instanceof WP_Upgrader
+			&& 10 === has_action( 'shutdown', array( $upgrader, 'restore_temp_backup' ) )
+			&& 100 === has_action( 'shutdown', array( $upgrader, 'delete_temp_backup' ) ),
+	);
+	add_action(
+		'shutdown',
+		static function () use ( $checks, $state, $manifest, $observed, $report ): void {
+			$checks  += array(
+				'restore_copy_attempts'    => ( $state->nested ? 1 : 0 ) === $state->restore_attempts,
+				'installed_after_shutdown' => $manifest->snapshot( $state->destination ) === $state->original,
+				'backup_after_shutdown'    => $state->nested ? ! file_exists( $state->backup ) : $manifest->snapshot( $state->backup ) === $state->prior,
+				'private_custody_cleaned'  => array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
+				'completion'               => array( 'uncertain' ) === array_column( $observed->completions, 3 ),
+			);
+			$evidence = array(
+				'pass'      => ! in_array( false, $checks, true ),
+				'checks'    => $checks,
+				'report'    => $report,
+				'downloads' => $observed->downloads,
+			);
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact observations inside the disposable copy fallback run.
 			file_put_contents( (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' ), json_encode( $evidence, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR ) );
 		},
 		PHP_INT_MAX
@@ -781,7 +909,7 @@ function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, strin
 		4
 	);
 
-	if ( in_array( $mode, array( 'exact-failure', 'exact-post-install-throw' ), true ) || str_starts_with( $mode, 'exact-rollback-' ) ) {
+	if ( in_array( $mode, array( 'exact-failure', 'exact-post-install-throw', 'exact-copy-nested' ), true ) || str_starts_with( $mode, 'exact-rollback-' ) ) {
 		add_filter(
 			'upgrader_post_install',
 			static function ( mixed $response, array $extra ) use ( $mode, $type, $identity ): mixed {
@@ -841,7 +969,7 @@ function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, strin
 	add_action(
 		'upgrader_process_complete',
 		static function ( WP_Upgrader $upgrader ) use ( $mode, $backup, $observed, $backup_fault ): void {
-			if ( $upgrader !== $observed->upgrader ) {
+			if ( $upgrader !== $observed->upgrader || str_starts_with( $mode, 'exact-copy-' ) ) {
 				return;
 			}
 			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Inject failures and mapping changes at Core's direct-filesystem callback boundaries.
