@@ -1090,7 +1090,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array(), $database->read_option_names() );
 			$updater->register();
 			$updater->register();
-			self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 15, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertContains( array( 'filter', 'ran_wp_release_updater_install_exact_release_v1', array( $updater, 'filter_install_exact_release' ), 10, 7 ), $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
@@ -1876,7 +1876,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$property->setValue( $broker, 'active' );
 			list( $updater, $adapter, $database ) = $this->subject( 'manual', null, 'stable', false, $state );
 			$updater->register();
-			self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 15, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
 			foreach ( array( 'stale_global', 'wrong_protocol' ) as $failure ) {
 				if ( 'stale_global' === $failure ) {
@@ -2210,7 +2210,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
-			self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$offer = $updater->filter_update(
 				false,
 				array(
@@ -2235,7 +2235,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$stock = new \Theme_Upgrader();
 				$GLOBALS['ran_wp_release_updater_test_doing_action'] = $automatic_action ? 'wp_maybe_auto_update' : null;
 				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', $stock, $extra ) );
-				self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+				self::assertCount( 15, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 				if ( $failed_result ) {
 					$original      = new \WP_Error( 'post_copy_failed', 'Post-copy failure.' );
 					$stock->result = $original;
@@ -2247,11 +2247,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					self::assertNotSame( $original, $outgoing );
 					$bridged = ! $automatic_action && ! $replace_skin;
 					self::assertSame( $bridged ? array() : $original, $stock->result );
-					self::assertSame( $bridged ? 15 : 14, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
+					self::assertSame( $bridged ? 16 : 15, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
 					if ( $bridged ) {
 						self::assertSame(
 							array( 'action', 'upgrader_process_complete', array( $updater, 'restore_theme_error_result' ), PHP_INT_MIN, 2 ),
-							$GLOBALS['ran_wp_release_updater_test_hooks'][14]
+							$GLOBALS['ran_wp_release_updater_test_hooks'][15]
 						);
 					}
 					$stock->skin->result = $outgoing;
@@ -3403,6 +3403,72 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$hooks = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 );
 			self::assertContains( 'update_plugins_updates.example.test', $hooks );
 			self::assertContains( 'update_plugins_Updates.Example.Test', $hooks );
+		}
+
+		public function test_lazy_header_loader_registers_mixed_case_host_and_maps_package_uri(): void {
+			$mixed_uri         = 'https://Updates.Example.Test/owner/package';
+			$config            = $this->config( 'manual' );
+			$config['headers'] = null;
+			$archive_path      = $this->archive();
+			$descriptor        = $this->descriptor( $archive_path );
+			$binding           = $this->binding( 'manual' );
+			$adapter           = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
+			$loader_calls      = 0;
+			$updater           = NativePackageUpdater::from_configuration(
+				$config,
+				$binding,
+				$adapter,
+				new FakeOptionDatabase( 100 ),
+				$this->policy(),
+				header_loader: static function () use ( $mixed_uri, &$loader_calls ): array {
+					++$loader_calls;
+					return array(
+						'code'    => 'installed_header_verified',
+						'headers' => array(
+							'Author'      => 'Installed Author',
+							'Description' => 'Installed Description',
+							'Name'        => 'Package',
+							'PackageURI'  => 'https://homepage.example.test/package',
+							'RequiresPHP' => '8.2',
+							'RequiresWP'  => '6.5',
+							'Template'    => '',
+							'UpdateURI'   => $mixed_uri,
+							'Version'     => '1.0.0',
+						),
+					);
+				}
+			);
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
+
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Reset controlled hook capture state used by this fixture.
+			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
+			$updater->register();
+			self::assertSame( 0, $loader_calls );
+			$hooks = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 );
+			self::assertContains( 'update_plugins_updates.example.test', $hooks );
+			self::assertContains( 'plugins_update_check_locales', $hooks );
+			self::assertNotContains( 'update_plugins_Updates.Example.Test', $hooks );
+
+			self::assertSame( array( 'en_US' ), $updater->prepare_update_check_routing( array( 'en_US' ) ) );
+			self::assertSame( 1, $loader_calls );
+			$hooks_after = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 );
+			self::assertContains( 'update_plugins_Updates.Example.Test', $hooks_after );
+
+			$offer = $updater->filter_update(
+				false,
+				array(
+					'Version'   => '1.0.0',
+					'UpdateURI' => $mixed_uri,
+				),
+				'package/package.php',
+				array()
+			);
+			self::assertIsArray( $offer );
+			$slug = $offer['slug'];
+			self::assertIsString( $slug );
+			$info = $updater->filter_plugin_information( false, 'plugin_information', (object) array( 'slug' => $slug ) );
+			self::assertInstanceOf( \stdClass::class, $info );
+			self::assertSame( 'https://homepage.example.test/package', $info->homepage );
 		}
 
 		public function test_begin_native_mutation_failure_after_owner_assignment_completes_owner_and_clears_state(): void {

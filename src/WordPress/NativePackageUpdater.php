@@ -56,6 +56,7 @@ final class NativePackageUpdater {
 	);
 
 	private bool $registered                            = false;
+	private bool $raw_host_hook_registered              = false;
 	private ?IdentityDescriptor $descriptor             = null;
 	private ?string $lock_token                         = null;
 	private bool $lock_owned                            = false;
@@ -315,13 +316,8 @@ final class NativePackageUpdater {
 		$prefix        = 'plugin' === $this->target_type ? 'update_plugins_' : 'update_themes_';
 		$canonical_key = strtolower( $host );
 		add_filter( $prefix . $canonical_key, array( $this, 'filter_update' ), 10, 4 );
-		if ( is_array( $this->headers ) ) {
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
-			$raw_host = parse_url( $this->headers['UpdateURI'], PHP_URL_HOST );
-			if ( is_string( $raw_host ) && '' !== $raw_host && $raw_host !== $canonical_key && 0 === strcasecmp( $raw_host, $canonical_key ) ) {
-				add_filter( $prefix . $raw_host, array( $this, 'filter_update' ), 10, 4 );
-			}
-		}
+		$this->register_raw_host_hook();
+		add_filter( 'plugin' === $this->target_type ? 'plugins_update_check_locales' : 'themes_update_check_locales', array( $this, 'prepare_update_check_routing' ), 10, 1 );
 		if ( null !== $this->descriptor_admission || $this->policy_blocked() ) {
 			add_filter( 'site_transient_update_' . ( 'plugin' === $this->target_type ? 'plugins' : 'themes' ), array( $this, 'filter_cached_update' ), 10, 1 );
 		}
@@ -341,6 +337,33 @@ final class NativePackageUpdater {
 		add_action( 'upgrader_process_complete', array( $this, 'observe_completion' ), 10, 2 );
 		add_action( 'automatic_updates_complete', array( $this, 'observe_automatic_results' ), 10, 1 );
 		$this->registered = true;
+	}
+
+	/** Ensures lazy headers and any mixed-case raw-host update filter are ready before Core dispatches host-specific update hooks. */
+	public function prepare_update_check_routing( mixed $locales ): mixed {
+		if ( $this->live() ) {
+			$this->ensure_headers_loaded();
+		}
+		return $locales;
+	}
+
+	private function register_raw_host_hook(): void {
+		if ( $this->raw_host_hook_registered || ! is_array( $this->headers ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
+		$canonical_host = parse_url( $this->update_uri, PHP_URL_HOST );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
+		$raw_host = parse_url( $this->headers['UpdateURI'], PHP_URL_HOST );
+		if ( ! is_string( $canonical_host ) || '' === $canonical_host || ! is_string( $raw_host ) || '' === $raw_host ) {
+			return;
+		}
+		$canonical_key = strtolower( $canonical_host );
+		if ( $raw_host !== $canonical_key && 0 === strcasecmp( $raw_host, $canonical_key ) ) {
+			$prefix = 'plugin' === $this->target_type ? 'update_plugins_' : 'update_themes_';
+			add_filter( $prefix . $raw_host, array( $this, 'filter_update' ), 10, 4 );
+			$this->raw_host_hook_registered = true;
+		}
 	}
 
 	public function filter_cached_update( mixed $transient ): mixed {
@@ -1725,7 +1748,9 @@ final class NativePackageUpdater {
 			'Author'      => is_string( $headers['Author'] ?? null ) ? $headers['Author'] : '',
 			'Description' => is_string( $headers['Description'] ?? null ) ? $headers['Description'] : '',
 			'Name'        => is_string( $headers['Name'] ?? null ) ? $headers['Name'] : '',
-			'PluginURI'   => is_string( $headers['PluginURI'] ?? null ) ? $headers['PluginURI'] : '',
+			'PluginURI'   => is_string( $headers['PluginURI'] ?? null ) && '' !== $headers['PluginURI']
+				? $headers['PluginURI']
+				: ( is_string( $headers['PackageURI'] ?? null ) ? $headers['PackageURI'] : '' ),
 			'RequiresPHP' => is_string( $headers['RequiresPHP'] ?? null ) ? $headers['RequiresPHP'] : '',
 			'RequiresWP'  => is_string( $headers['RequiresWP'] ?? null ) ? $headers['RequiresWP'] : '',
 			'UpdateURI'   => is_string( $headers['UpdateURI'] ?? null ) ? $headers['UpdateURI'] : '',
@@ -1766,6 +1791,9 @@ final class NativePackageUpdater {
 		$this->binding_hash                     = $binding_hash;
 		$this->archive_policy['metadata_name']  = $normalized_headers['Name'];
 		$this->archive_policy['theme_template'] = $template;
+		if ( $this->registered ) {
+			$this->register_raw_host_hook();
+		}
 		return true;
 	}
 

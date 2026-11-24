@@ -169,7 +169,7 @@ PHP
 		self::assertSame( 'target_active', $result['duplicate']['code'] );
 		self::assertSame( 'target_declaration_conflict', $result['conflict']['code'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 14, $result['hooks'] );
+		self::assertSame( 15, $result['hooks'] );
 		self::assertSame( 0, $result['calls'] );
 	}
 
@@ -189,7 +189,7 @@ PHP
 		self::assertSame( 'target_active', $result['theme']['code'] );
 		self::assertFalse( $result['deferred_refresh'] );
 		self::assertSame( 3, $result['logical'] );
-		self::assertSame( 27, $result['hooks'] );
+		self::assertSame( 29, $result['hooks'] );
 		self::assertSame( 0, $result['calls'] );
 		self::assertSame(
 			array(
@@ -210,7 +210,7 @@ PHP
 		self::assertSame( 'target_active', $result['first']['code'] );
 		self::assertSame( 'target_active', $result['second']['code'] );
 		self::assertSame( 'declaration_deferred_operation_started', $result['late']['code'] );
-		self::assertSame( 30, $result['hooks'] );
+		self::assertSame( 32, $result['hooks'] );
 		self::assertSame( 3, $result['logical'] );
 	}
 
@@ -233,7 +233,7 @@ PHP
 			$result['late_diagnostics']
 		);
 		self::assertSame( 1, $result['runs'] );
-		self::assertSame( 15, $result['hooks'] );
+		self::assertSame( 16, $result['hooks'] );
 	}
 
 	public function test_c03_declaration_after_the_installer_cutoff_is_deferred_even_when_core_fails_early(): void {
@@ -252,7 +252,7 @@ PHP
 			),
 			$result['diagnostics']
 		);
-		self::assertSame( 15, $result['hooks'] );
+		self::assertSame( 16, $result['hooks'] );
 	}
 
 	public function test_c04_fresh_request_declaration_is_not_deferred_by_a_prior_request_cutoff(): void {
@@ -306,7 +306,7 @@ PHP
 		self::assertSame( 'target_active', $result['first'] );
 		self::assertSame( array_fill( 0, 6, 'target_declaration_conflict' ), $result['conflicts'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 14, $result['hooks'] );
+		self::assertSame( 15, $result['hooks'] );
 		self::assertSame( 0, $result['calls'] );
 	}
 
@@ -326,7 +326,7 @@ PHP
 		self::assertSame( 0, $result['calls'] );
 		self::assertSame( 0, $result['static'] );
 		self::assertSame( 0, $result['array'] );
-		self::assertSame( 84, $result['hooks'] );
+		self::assertSame( 90, $result['hooks'] );
 	}
 
 	public function test_network_callback_matrix_is_read_once_and_does_not_use_blog_identity(): void {
@@ -349,7 +349,7 @@ PHP,
 			self::assertSame( 'runtime_active', $result['activation'], $name );
 			self::assertSame( in_array( $name, array( 'absent', 'one' ), true ) ? 'target_active' : 'runtime_environment_invalid', $result['target'], $name );
 			self::assertSame( 'absent' === $name ? 0 : 1, $result['calls'], $name );
-			self::assertSame( in_array( $name, array( 'absent', 'one' ), true ) ? 14 : 0, $result['hooks'], $name );
+			self::assertSame( in_array( $name, array( 'absent', 'one' ), true ) ? 15 : 0, $result['hooks'], $name );
 		}
 	}
 
@@ -365,7 +365,7 @@ PHP
 		self::assertSame( 'target_active', $result['status'] );
 		self::assertSame( 'target_active', $result['duplicate'] );
 		self::assertSame( 1, $result['calls'] );
-		self::assertSame( 14, $result['hooks'] );
+		self::assertSame( 15, $result['hooks'] );
 	}
 
 	public function test_logical_and_real_installed_aliases_share_one_target_handle_and_hook_set(): void {
@@ -378,7 +378,7 @@ PHP
 		self::assertSame( 'target_active', $result['first'] );
 		self::assertSame( 'target_active', $result['second'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 14, $result['hooks'] );
+		self::assertSame( 15, $result['hooks'] );
 		self::assertTrue( $result['one_handle'] );
 	}
 
@@ -392,7 +392,7 @@ PHP
 		self::assertSame( 'repository_locator_invalid', $result['rejected'] );
 		self::assertSame( 'target_active', $result['accepted'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 14, $result['hooks'] );
+		self::assertSame( 15, $result['hooks'] );
 		self::assertSame( 0, $result['calls'] );
 	}
 
@@ -453,7 +453,7 @@ PHP,
 				$result['diagnostics'],
 				$fault
 			);
-			self::assertSame( 14, $result['hooks'], $fault );
+			self::assertSame( 15, $result['hooks'], $fault );
 		}
 	}
 

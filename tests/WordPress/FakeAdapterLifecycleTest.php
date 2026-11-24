@@ -333,7 +333,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 
 		/** @return list<string> */
 		private function expected_target_hooks( string $target_type ): array {
-			$hooks = array( 'plugin' === $target_type ? 'update_plugins_updates.example.test' : 'update_themes_updates.example.test' );
+			$hooks = array(
+				'plugin' === $target_type ? 'update_plugins_updates.example.test' : 'update_themes_updates.example.test',
+				'plugin' === $target_type ? 'plugins_update_check_locales' : 'themes_update_check_locales',
+			);
 			if ( 'plugin' === $target_type ) {
 				$hooks[] = 'plugins_api';
 			}
