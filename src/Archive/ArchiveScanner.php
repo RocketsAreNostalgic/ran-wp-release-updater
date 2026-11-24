@@ -120,7 +120,10 @@ final class ArchiveScanner {
 				return null;
 			}
 		} else {
-			if ( 0 !== preg_match( '/[\p{M}\x{1100}-\x{11FF}\x{F900}-\x{FAFF}\x{2F800}-\x{2FA1F}]/u', $path ) ) {
+			// Without ext-intl, fail closed on combining marks, Hangul Jamo, CJK Compatibility
+			// Ideographs, canonical singletons / composition exclusions, and Kirat Rai compositions
+			// whose NFC/NFD equivalence cannot be normalized safely without \Normalizer.
+			if ( 0 !== preg_match( '/[\p{M}\x{0374}\x{037E}\x{0387}\x{0958}-\x{095F}\x{09DC}-\x{09DF}\x{0A33}\x{0A36}\x{0A59}-\x{0A5B}\x{0A5E}\x{0B5C}\x{0B5D}\x{0F43}\x{0F4D}\x{0F52}\x{0F57}\x{0F5C}\x{0F69}\x{1100}-\x{11FF}\x{1F71}\x{1F73}\x{1F75}\x{1F77}\x{1F79}\x{1F7B}\x{1F7D}\x{1FBB}\x{1FBE}\x{1FC9}\x{1FCB}\x{1FD3}\x{1FDB}\x{1FE3}\x{1FEB}\x{1FEE}\x{1FEF}\x{1FF9}\x{1FFB}\x{1FFD}\x{2000}\x{2001}\x{2126}\x{212A}\x{212B}\x{2329}\x{232A}\x{2ADC}\x{F900}-\x{FAFF}\x{FB1D}-\x{FB4E}\x{16D63}\x{16D67}-\x{16D6A}\x{1D15E}-\x{1D164}\x{1D1BB}-\x{1D1C0}\x{2F800}-\x{2FA1F}]/u', $path ) ) {
 				return null;
 			}
 			$normalized = $path;

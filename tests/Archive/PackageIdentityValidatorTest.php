@@ -1084,7 +1084,9 @@ PHP;
 			array(
 				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
 				'example-plugin/assets/ümlaut.png'  => 'png-bytes',
+				'example-plugin/assets/café.txt'    => 'nfc-latin',
 				'example-plugin/assets/画像.svg'      => '<svg/>',
+				'example-plugin/assets/한국어.txt'     => 'nfc-hangul',
 				'example-plugin/ресурсы/файл.txt'   => 'text-bytes',
 			)
 		);
@@ -1186,6 +1188,38 @@ PHP;
 					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
 					"example-plugin/assets/caf\xc3\xa9" => 'file',
 					"example-plugin/assets/cafe\xcc\x81/sub.txt" => 'child',
+				),
+				'archive_path_unsafe',
+			),
+			'unicode canonical singleton semicolon duplicate' => array(
+				array(
+					'example-plugin/example-plugin.php'    => $this->header( 'Plugin Name', 'Example Plugin' ),
+					'example-plugin/assets/a;b.txt'        => 'ascii-semicolon',
+					"example-plugin/assets/a\u{037E}b.txt" => 'greek-question-mark',
+				),
+				class_exists( \Normalizer::class ) ? 'archive_path_duplicate' : 'archive_path_unsafe',
+			),
+			'unicode canonical singleton greek oxia duplicate' => array(
+				array(
+					'example-plugin/example-plugin.php'  => $this->header( 'Plugin Name', 'Example Plugin' ),
+					"example-plugin/assets/\u{03AC}.txt" => 'tonos',
+					"example-plugin/assets/\u{1F71}.txt" => 'oxia',
+				),
+				class_exists( \Normalizer::class ) ? 'archive_path_duplicate' : 'archive_path_unsafe',
+			),
+			'unicode canonical singleton angle bracket duplicate' => array(
+				array(
+					'example-plugin/example-plugin.php'    => $this->header( 'Plugin Name', 'Example Plugin' ),
+					"example-plugin/assets/a\u{2329}b.txt" => 'tech-angle',
+					"example-plugin/assets/a\u{3008}b.txt" => 'cjk-angle',
+				),
+				class_exists( \Normalizer::class ) ? 'archive_path_duplicate' : 'archive_path_unsafe',
+			),
+			'unicode canonical singleton file parent collision' => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					'example-plugin/assets/a;b'         => 'file',
+					"example-plugin/assets/a\u{037E}b/child.txt" => 'child',
 				),
 				'archive_path_unsafe',
 			),
