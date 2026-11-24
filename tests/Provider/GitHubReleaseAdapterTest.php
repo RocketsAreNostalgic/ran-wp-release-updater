@@ -175,7 +175,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 
 	use PHPUnit\Framework\TestCase;
 	use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
-	use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
+	use RAN\WPReleaseUpdater\V1\WordPress\WordPressUpdaterLock;
 	use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 	use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 	use RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubCredentialResolver;
@@ -229,7 +229,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				}
 			);
 
-			$adapter = new GitHubReleaseAdapter( binding_record: $this->binding(), credentials: $resolver );
+			$adapter = new GitHubReleaseAdapter( target_binding: $this->binding(), credentials: $resolver );
 
 			self::assertInstanceOf( GitHubReleaseAdapter::class, $adapter );
 			self::assertInstanceOf( ReleaseAdapter::class, $adapter );
@@ -296,7 +296,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			);
 
 			self::assertNotNull( $updater );
-			foreach ( array( BindingRecord::class, GitHubCredentialResolver::class, GitHubReleaseAdapter::class, '\\RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePackageUpdater' ) as $class ) {
+			foreach ( array( WordPressUpdaterLock::class, GitHubCredentialResolver::class, GitHubReleaseAdapter::class, '\\RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePackageUpdater' ) as $class ) {
 				$class_file = ( new \ReflectionClass( $class ) )->getFileName();
 				self::assertIsString( $class_file );
 				self::assertSame( $root, dirname( $class_file, str_contains( $class, 'Provider\\GitHub' ) ? 4 : 3 ), $class );
@@ -310,10 +310,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$invalid           = $configuration;
 			$invalid['policy'] = 'unsupported';
 			self::assertNull( GitHubReleaseAdapter::register_from_configuration( $invalid, $binding, null, new class() {}, array() ) );
-			$facts = $binding->to_array();
-			unset( $facts['binding_hash'] );
+			$facts                  = $binding;
 			$facts['provider_code'] = 'gitlab';
-			self::assertNull( GitHubReleaseAdapter::register_from_configuration( $configuration, BindingRecord::create( $facts ), null, new class() {}, array() ) );
+			self::assertNull( GitHubReleaseAdapter::register_from_configuration( $configuration, $facts, null, new class() {}, array() ) );
 			self::assertSame( 0, $calls );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
 			self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
@@ -3057,35 +3056,35 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			);
 		}
 
+		/** @return array<string,mixed> */
 		private function binding(
 			string $channel = 'stable',
 			string $target_type = 'plugin',
 			string $repository_identity = '99',
 			int $maximum_artifact_bytes = 52428800
-		): BindingRecord {
-			return BindingRecord::create(
-				array(
-					'canonical_repository_locator' => 'owner/repository',
-					'canonical_update_uri'         => 'https://github.com/owner/repository',
-					'installed_package_identity'   => 'plugin' === $target_type
-						? 'repository/repository.php'
-						: 'repository',
-					'maximum_artifact_bytes'       => $maximum_artifact_bytes,
-					'network_id'                   => 1,
-					'php_runtime_version'          => '8.2.0',
-					'provider_code'                => 'github',
-					'release_channel'              => $channel,
-					'stable_repository_identity'   => $repository_identity,
-					'target_type'                  => $target_type,
-					'theme_template'               => '',
-					'update_policy'                => 'automatic',
-					'wordpress_runtime_version'    => '6.8.0',
-				)
+		): array {
+			return array(
+				'canonical_repository_locator' => 'owner/repository',
+				'canonical_update_uri'         => 'https://github.com/owner/repository',
+				'installed_package_identity'   => 'plugin' === $target_type
+					? 'repository/repository.php'
+					: 'repository',
+				'maximum_artifact_bytes'       => $maximum_artifact_bytes,
+				'network_id'                   => 1,
+				'php_runtime_version'          => '8.2.0',
+				'provider_code'                => 'github',
+				'release_channel'              => $channel,
+				'stable_repository_identity'   => $repository_identity,
+				'target_type'                  => $target_type,
+				'theme_template'               => '',
+				'update_policy'                => 'automatic',
+				'wordpress_runtime_version'    => '6.8.0',
 			);
 		}
 
+		/** @param array<string,mixed> $binding */
 		private function service(
-			BindingRecord $binding,
+			array $binding,
 			?GitHubCredentialResolver $credentials = null
 		): GitHubReleaseService {
 			return new GitHubReleaseService( $this->service_configuration( $binding ), $credentials, liveness_guard: null );
@@ -3146,18 +3145,20 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			);
 		}
 
-		/** @return array<string,mixed> */
-		private function service_configuration( BindingRecord $binding ): array {
-			$facts = $binding->to_array();
+		/**
+		 * @param array<string,mixed> $binding
+		 * @return array<string,mixed>
+		 */
+		private function service_configuration( array $binding ): array {
 			return array(
-				'canonical_repository_locator' => $facts['canonical_repository_locator'],
-				'canonical_update_uri'         => $facts['canonical_update_uri'],
-				'maximum_artifact_bytes'       => $facts['maximum_artifact_bytes'],
-				'php_runtime_version'          => $facts['php_runtime_version'],
-				'release_channel'              => $facts['release_channel'],
-				'stable_repository_identity'   => $facts['stable_repository_identity'],
-				'target_type'                  => $facts['target_type'],
-				'wordpress_runtime_version'    => $facts['wordpress_runtime_version'],
+				'canonical_repository_locator' => $binding['canonical_repository_locator'],
+				'canonical_update_uri'         => $binding['canonical_update_uri'],
+				'maximum_artifact_bytes'       => $binding['maximum_artifact_bytes'],
+				'php_runtime_version'          => $binding['php_runtime_version'],
+				'release_channel'              => $binding['release_channel'],
+				'stable_repository_identity'   => $binding['stable_repository_identity'],
+				'target_type'                  => $binding['target_type'],
+				'wordpress_runtime_version'    => $binding['wordpress_runtime_version'],
 			);
 		}
 

@@ -30,23 +30,35 @@ $provider_after = (int) ( $GLOBALS['ran_updater_http_calls'] ?? 0 );
 
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $network_id = get_current_network_id();
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-$key = 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
-	array(
-		'network_id'                 => $network_id,
-		'target_type'                => 'plugin',
-		'installed_package_identity' => 'ran-network-target/main.php',
-	)
-);
 global $wpdb;
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-$raw = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->base_prefix}options WHERE option_name = %s LIMIT 1", $key ) );
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-$state = is_string( $raw ) ? json_decode( $raw, true ) : null;
+$ran_wp_release_updater_test_legacy_rows = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->base_prefix}options WHERE option_name LIKE 'ran\\_wp\\_release\\_updater\\_target\\_v1\\_%'" );
+$ran_wp_release_updater_test_lock_mode   = (string) getenv( 'RAN_UPDATER_NETWORK_LOCK_MODE' );
+$ran_wp_release_updater_test_lock        = new \RAN\WPReleaseUpdater\V1\WordPress\WordPressUpdaterLock( $wpdb );
+$ran_wp_release_updater_test_lock_token  = null;
+if ( in_array( $ran_wp_release_updater_test_lock_mode, array( 'hold', 'contend', 'after' ), true ) ) {
+	$ran_wp_release_updater_test_lock_token = $ran_wp_release_updater_test_lock->acquire();
+}
+$ran_wp_release_updater_test_shared_options_table = $wpdb->base_prefix . 'options';
+$ran_wp_release_updater_test_lock_row             = $wpdb->get_row(
+	$wpdb->prepare(
+		'SELECT option_value, autoload FROM %i WHERE option_name = %s',
+		$ran_wp_release_updater_test_shared_options_table,
+		\RAN\WPReleaseUpdater\V1\WordPress\WordPressUpdaterLock::OPTION_NAME
+	),
+	ARRAY_A
+);
+$ran_wp_release_updater_test_subsite_lock_rows    = 0;
+if ( $wpdb->options !== $ran_wp_release_updater_test_shared_options_table ) {
+	$ran_wp_release_updater_test_subsite_lock_rows = (int) $wpdb->get_var(
+		$wpdb->prepare(
+			'SELECT COUNT(*) FROM %i WHERE option_name = %s',
+			$wpdb->options,
+			\RAN\WPReleaseUpdater\V1\WordPress\WordPressUpdaterLock::OPTION_NAME
+		)
+	);
+}
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $diagnostics = $broker->diagnostics();
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-$provider_suppressed = 0 === ( $provider_after - $provider_before );
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $native_callbacks = ran_wp_release_updater_test_native_callbacks( 'update_plugins_github.com' );
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -57,15 +69,16 @@ $proof = array(
 	'logical_target_count'            => $diagnostics['logical_target_count'] ?? null,
 	'native_callback_count'           => count( $native_callbacks ),
 	'provider_callback_delta'         => $provider_after - $provider_before,
-	'suppressed_provider'             => $provider_suppressed,
-	'option'                          => array(
-		'name'                => $key,
-		'present'             => is_array( $state ),
-		'network_id'          => is_array( $state ) ? ( $state['binding']['network_id'] ?? null ) : null,
-		'owner_token_present' => is_array( $state ) && is_string( $state['owner_token'] ?? null ) && '' !== $state['owner_token'],
-		'owner_token_sha256'  => is_array( $state ) && is_string( $state['owner_token'] ?? null ) ? hash( 'sha256', $state['owner_token'] ) : null,
-		'lease_deadline'      => is_array( $state ) ? ( $state['lease_deadline'] ?? null ) : null,
-		'fence_epoch'         => is_array( $state ) ? ( $state['fence_epoch'] ?? null ) : null,
+	'legacy_target_row_count'         => $ran_wp_release_updater_test_legacy_rows,
+	'lock'                            => array(
+		'mode'              => $ran_wp_release_updater_test_lock_mode,
+		'acquired'          => is_string( $ran_wp_release_updater_test_lock_token ),
+		'present'           => is_array( $ran_wp_release_updater_test_lock_row ),
+		'autoload'          => is_array( $ran_wp_release_updater_test_lock_row ) ? ( $ran_wp_release_updater_test_lock_row['autoload'] ?? null ) : null,
+		'subsite_lock_rows' => $ran_wp_release_updater_test_subsite_lock_rows,
+		'token_sha256'      => is_array( $ran_wp_release_updater_test_lock_row ) && is_string( $ran_wp_release_updater_test_lock_row['option_value'] ?? null )
+			? hash( 'sha256', $ran_wp_release_updater_test_lock_row['option_value'] )
+			: null,
 	),
 	'status'                          => $handle->status(),
 );
@@ -81,6 +94,11 @@ if ( is_string( $release ) && '' !== $release ) {
 	}
 	if ( ! is_file( $release ) ) {
 		throw new RuntimeException( 'Timed out waiting for deterministic network release.' );
+	}
+}
+if ( is_string( $ran_wp_release_updater_test_lock_token ) ) {
+	if ( ! $ran_wp_release_updater_test_lock->release( $ran_wp_release_updater_test_lock_token ) ) {
+		throw new RuntimeException( 'Could not release multisite auto_updater.lock.' );
 	}
 }
 

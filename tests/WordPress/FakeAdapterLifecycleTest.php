@@ -37,12 +37,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 
 	use PHPUnit\Framework\TestCase;
 	use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
-	use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
-	use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 	use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
-	use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 	use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
-	use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
 	use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 
 	/** Exercises updater seams only; Core backup, rollback, and activation remain out of scope. */
@@ -166,27 +162,20 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$package = $validator->validate( $descriptor, $policy, $archive );
 			self::assertTrue( $package->is_valid() );
 
-			$binding      = $this->binding( $target_type, $uri, $channel );
-			$database     = new FakeOptionDatabase( 100 );
-			$claim_result = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 20 );
-			self::assertInstanceOf( BindingState::class, $claim_result['current'] );
-			self::assertSame( 'claimed', $claim_result['result'] );
-			$state                                = $claim_result['current'];
-			$claim                                = $this->claim( $state );
+			$binding                              = $this->binding( $target_type, $uri, $channel );
+			$database                             = new FakeOptionDatabase();
 			$destination_parent                   = sys_get_temp_dir() . '/ran-fake-adapter-destination-' . bin2hex( random_bytes( 8 ) );
 			$configuration                        = $this->configuration( $target_type, $uri );
 			$configuration['installed_directory'] = $destination_parent . '/fake-release';
 
 			$configuration_mismatch               = $configuration;
 			$configuration_mismatch['update_uri'] = 'https://updates.example.test/owner/other-path';
-			$configuration_package                = $validator->validate( $descriptor, $policy, $archive );
 			self::assertNull( $this->updater( $configuration_mismatch, $binding, $database, $descriptor, $archive, $policy ) );
 			self::assertDirectoryDoesNotExist( $destination_parent );
 
-			$this->assert_staged_header_mismatch_does_not_create_destination( $target_type, $uri, $version, $descriptor, $binding, $database, $state, $claim, $validator, $policy, $archive, $destination_parent );
+			$this->assert_staged_header_mismatch_does_not_create_destination( $target_type, $uri, $version, $descriptor, $binding, $database, $policy, $archive, $destination_parent );
 			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
 
-			$database->set_time( 121 );
 			$updater = $this->updater( $configuration, $binding, $database, $descriptor, $archive, $policy );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
@@ -264,11 +253,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		}
 
 		/**
-		 * @param array<string,mixed> $claim
+		 * @param array<string,mixed> $binding
 		 * @param array<string,mixed> $policy
 		 */
-		private function assert_staged_header_mismatch_does_not_create_destination( string $target_type, string $uri, string $version, IdentityDescriptor $descriptor, BindingRecord $binding, FakeOptionDatabase $database, BindingState $state, array $claim, PackageIdentityValidator $validator, array $policy, string $archive, string $destination_parent ): void {
-			$database->set_time( 121 );
+		private function assert_staged_header_mismatch_does_not_create_destination( string $target_type, string $uri, string $version, IdentityDescriptor $descriptor, array $binding, FakeOptionDatabase $database, array $policy, string $archive, string $destination_parent ): void {
 			$configuration                        = $this->configuration( $target_type, $uri );
 			$configuration['installed_directory'] = $destination_parent . '/fake-release';
 			$updater                              = $this->updater( $configuration, $binding, $database, $descriptor, $archive, $policy );
@@ -293,13 +281,15 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$staged = $this->tree( $target_type, 'https://updates.example.test/owner/other-path', 'staged-header-mismatch', $version );
 			self::assertInstanceOf( \WP_Error::class, $updater->filter_source_selection( $staged, sys_get_temp_dir(), null, $extra ) );
 			self::assertDirectoryDoesNotExist( $destination_parent );
+			self::assertSame( array(), $database->rows() );
 		}
 
 		/**
 		 * @param array<string,mixed> $configuration
+		 * @param array<string,mixed> $binding
 		 * @param array<string,mixed> $policy
 		 */
-		private function updater( array $configuration, BindingRecord $binding, FakeOptionDatabase $database, IdentityDescriptor $descriptor, string $archive, array $policy ): ?NativePackageUpdater {
+		private function updater( array $configuration, array $binding, FakeOptionDatabase $database, IdentityDescriptor $descriptor, string $archive, array $policy ): ?NativePackageUpdater {
 			$adapter = new class( $descriptor, $archive ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter { public function __construct( private IdentityDescriptor $descriptor, private string $archive ) {} public function list_releases( array $conditional = array() ): array {
 					$facts = $this->descriptor->to_array();
 					return array(
@@ -464,23 +454,22 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 		}
 
-		private function binding( string $target_type, string $uri, string $channel ): BindingRecord {
-			return BindingRecord::create(
-				array(
-					'canonical_repository_locator' => 'owner/fake-release',
-					'canonical_update_uri'         => $uri,
-					'installed_package_identity'   => 'plugin' === $target_type ? 'fake-release/fake-release.php' : 'fake-release',
-					'maximum_artifact_bytes'       => 52428800,
-					'network_id'                   => 1,
-					'php_runtime_version'          => '8.2',
-					'provider_code'                => 'fake',
-					'release_channel'              => $channel,
-					'stable_repository_identity'   => 'fake:repository',
-					'target_type'                  => $target_type,
-					'theme_template'               => '',
-					'update_policy'                => 'manual',
-					'wordpress_runtime_version'    => '6.8',
-				)
+		/** @return array<string,mixed> */
+		private function binding( string $target_type, string $uri, string $channel ): array {
+			return array(
+				'canonical_repository_locator' => 'owner/fake-release',
+				'canonical_update_uri'         => $uri,
+				'installed_package_identity'   => 'plugin' === $target_type ? 'fake-release/fake-release.php' : 'fake-release',
+				'maximum_artifact_bytes'       => 52428800,
+				'network_id'                   => 1,
+				'php_runtime_version'          => '8.2',
+				'provider_code'                => 'fake',
+				'release_channel'              => $channel,
+				'stable_repository_identity'   => 'fake:repository',
+				'target_type'                  => $target_type,
+				'theme_template'               => '',
+				'update_policy'                => 'manual',
+				'wordpress_runtime_version'    => '6.8',
 			);
 		}
 
@@ -514,16 +503,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					'target_type'                => $target_type,
 					'version'                    => $version,
 				)
-			);
-		}
-
-		/** @return array<string,mixed> */
-		private function claim( BindingState $state ): array {
-			return array(
-				'binding_generation' => $state->binding_generation(),
-				'binding_hash'       => $state->binding()->binding_hash(),
-				'lease_deadline'     => $state->lease_deadline(),
-				'owner_token'        => $state->owner_token(),
 			);
 		}
 

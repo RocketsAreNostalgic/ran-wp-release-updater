@@ -2,12 +2,7 @@
 
 declare(strict_types=1);
 
-use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
-use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
-use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
-use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
-use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
-use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
+use RAN\WPReleaseUpdater\V1\WordPress\WordPressUpdaterLock;
 use RAN\WPReleaseUpdater\V1\Tests\Support\MysqliOptionDatabase;
 
 require_once dirname( __DIR__ ) . '/bootstrap.php';
@@ -73,59 +68,82 @@ try {
 	$mysqli->query( 'CREATE DATABASE proof' );
 	$mysqli->select_db( 'proof' );
 	$mysqli->query( 'CREATE TABLE options (option_name varchar(191) NOT NULL PRIMARY KEY, option_value longtext NOT NULL, autoload varchar(20) NOT NULL) ENGINE=InnoDB' );
-	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$binding = BindingRecord::create( ran_wp_release_updater_test_binding_facts() );
+
+	// 1. Cold concurrent acquire race: exactly one winner, zero 1062 errors, 'off' autoload, fractional token.
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$cold = ran_wp_release_updater_test_workers( 'cold', $data );
-	ran_wp_release_updater_test_assert_one_claim( $cold, 'cold claim' );
+	ran_wp_release_updater_test_assert_one_winner( $cold, 'cold acquire' );
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$winner = ran_wp_release_updater_test_claimed( $cold );
-	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$winner_state = BindingState::rehydrate( $winner['state'] );
-	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	list( $descriptor, $receipt ) = ran_wp_release_updater_test_mint_receipt( $root . '/receipt.zip', $winner_state );
-	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$target                             = ran_wp_release_updater_test_target_name( $binding );
-	$ran_wp_release_updater_rows_result = $mysqli->query( 'SELECT option_name, autoload FROM options ORDER BY option_name' );
+	$winner                             = ran_wp_release_updater_test_winner( $cold );
+	$ran_wp_release_updater_rows_result = $mysqli->query( 'SELECT option_name, option_value, autoload FROM options ORDER BY option_name' );
 	if ( ! $ran_wp_release_updater_rows_result instanceof mysqli_result ) {
 		throw new RuntimeException( 'MySQL option observation did not return rows.' );
 	}
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$rows = $ran_wp_release_updater_rows_result->fetch_all( MYSQLI_ASSOC );
-	if ( 1 !== count( $rows ) || 'no' !== $rows[0]['autoload'] ) {
-		throw new RuntimeException( 'Option was not one non-autoload row.' );
+	if (
+		1 !== count( $rows )
+		|| WordPressUpdaterLock::OPTION_NAME !== $rows[0]['option_name']
+		|| 'off' !== $rows[0]['autoload']
+		|| $winner['token'] !== $rows[0]['option_value']
+		|| 1 !== preg_match( '/\A[0-9]+\.[0-9]{27}\z/D', (string) $rows[0]['option_value'] )
+	) {
+		throw new RuntimeException( 'Lock option was not one non-autoloaded fractional auto_updater.lock row.' );
 	}
-	$mysqli->query( "UPDATE options SET option_value = JSON_SET(option_value, '$.lease_deadline', 1) WHERE option_name = '" . $mysqli->real_escape_string( $target ) . "'" );
-	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$takeover = ran_wp_release_updater_test_workers( 'takeover', $data );
-	ran_wp_release_updater_test_assert_one_claim( $takeover, 'expired takeover' );
-	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$new = ran_wp_release_updater_test_claimed( $takeover );
-	if ( $winner['owner'] === $new['owner'] || $new['epoch'] <= $winner['epoch'] ) {
-		throw new RuntimeException( 'Takeover did not install a new owner and target fence epoch.' );
-	}
+
+	// 2. Corrupt lock row must fail closed without overwriting.
+	$mysqli->query( "UPDATE options SET option_value = 'corrupt-lock-value' WHERE option_name = 'auto_updater.lock'" );
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$database = new MysqliOptionDatabase( ran_wp_release_updater_test_connect_proof(), 'options' );
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$stale = BindingFenceCoordinator::verify_persistent_binding_state( $database, $winner_state, ran_wp_release_updater_test_claim( $winner['state'] ) );
-	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$completion = BindingFenceCoordinator::complete_persistent_install( $database, $winner_state, ran_wp_release_updater_test_claim( $winner['state'] ), $receipt, $descriptor );
-	if ( 'binding_fence_lost' !== $stale['result'] || 'binding_fence_lost' !== $completion['result'] ) {
-		throw new RuntimeException( 'Stale writer or completion was not fenced.' );
+	$lock = new WordPressUpdaterLock( $database );
+	if ( null !== $lock->acquire() || null !== $lock->current_token() ) {
+		throw new RuntimeException( 'Corrupt lock row did not fail closed.' );
 	}
-	ran_wp_release_updater_test_assert_final_rows( $database, $binding, $new );
-	ran_wp_release_updater_test_prove_outcome_fence( $database, $binding, $new );
+
+	// 3. Stale expiry takeover race (>3600s): exactly one winner, zero deprecated BINARY warnings.
+	$ran_wp_release_updater_stale_timestamp = (string) ( time() - WordPressUpdaterLock::STALE_SECONDS - 10 );
+	$mysqli->query( "UPDATE options SET option_value = '" . $mysqli->real_escape_string( $ran_wp_release_updater_stale_timestamp ) . "' WHERE option_name = 'auto_updater.lock'" );
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+	$takeover = ran_wp_release_updater_test_workers( 'takeover', $data );
+	ran_wp_release_updater_test_assert_one_winner( $takeover, 'expired takeover' );
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+	$new = ran_wp_release_updater_test_winner( $takeover );
+	if ( $winner['token'] === $new['token'] ) {
+		throw new RuntimeException( 'Takeover did not install a distinct lock token.' );
+	}
+
+	// 4. Stale writer cannot verify or release the successor's lock.
+	if ( $lock->verify( $winner['token'] ) || $lock->release( $winner['token'] ) ) {
+		throw new RuntimeException( 'Stale writer was not fenced from successor lock.' );
+	}
+	if ( ! $lock->verify( $new['token'] ) ) {
+		throw new RuntimeException( 'Successor lock did not remain intact after stale writer attempt.' );
+	}
+
+	// 5. Exact-token release deletes the row cleanly with zero MySQL warnings.
+	if ( ! $lock->release( $new['token'] ) ) {
+		throw new RuntimeException( 'Exact-token release failed.' );
+	}
+	$ran_wp_release_updater_after_result = $mysqli->query( 'SELECT option_name FROM options' );
+	if ( ! $ran_wp_release_updater_after_result instanceof mysqli_result || array() !== $ran_wp_release_updater_after_result->fetch_all( MYSQLI_ASSOC ) ) {
+		throw new RuntimeException( 'Lock row was not removed after exact-token release.' );
+	}
+	ran_wp_release_updater_test_assert_no_deprecated_warnings( $database->warnings(), 'parent' );
+
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 	echo json_encode(
 		array(
-			'mysqld_binary'     => $mysqld,
-			'transport'         => 'unix_socket_skip_networking',
-			'native_outcome'    => 'retained_and_fenced',
-			'cold_claims'       => $cold,
-			'expired_takeover'  => $takeover,
-			'non_autoload_rows' => $rows,
-			'stale_writer'      => $stale['result'],
-			'stale_completion'  => $completion['result'],
+			'mysqld_binary'    => $mysqld,
+			'transport'        => 'unix_socket_skip_networking',
+			'lock_option'      => WordPressUpdaterLock::OPTION_NAME,
+			'autoload'         => $rows[0]['autoload'],
+			'cold_acquire'     => $cold,
+			'expired_takeover' => $takeover,
+			'corrupt_blocked'  => true,
+			'stale_fenced'     => true,
+			'released_clean'   => true,
+			'parent_warnings'  => $database->warnings(),
 		),
 		JSON_THROW_ON_ERROR
 	) . PHP_EOL;
@@ -143,42 +161,35 @@ try {
 
 /** @param list<string> $argv */
 function ran_wp_release_updater_test_worker( array $argv ): void {
-	$start_at = (int) $argv[4];
+	$start_at = (int) $argv[3];
 	while ( hrtime( true ) < $start_at ) {
 		usleep( 1000 );
 	}
 	$database = new MysqliOptionDatabase( ran_wp_release_updater_test_connect_proof(), 'options' );
-	$binding  = BindingRecord::create( ran_wp_release_updater_test_binding_facts() );
-	$owner    = $argv[2];
-	$result   = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, $owner, 30 );
-	$epoch    = 0;
-	$target   = $database->get_var( $database->prepare( "SELECT option_value FROM {$database->options} WHERE option_name = %s LIMIT 1", ran_wp_release_updater_test_target_name( $binding ) ) );
-	if ( is_string( $target ) ) {
-		$epoch = json_decode( $target, true, 16, JSON_THROW_ON_ERROR )['fence_epoch'];
-	}
+	$lock     = new WordPressUpdaterLock( $database );
+	$token    = $lock->acquire();
+	ran_wp_release_updater_test_assert_no_deprecated_warnings( $database->warnings(), $argv[2] );
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 	echo json_encode(
 		array(
-			'owner'  => $owner,
-			'result' => $result['result'],
-			'state'  => $result['current']?->to_array(),
-			'epoch'  => $epoch,
+			'worker'   => $argv[2],
+			'acquired' => is_string( $token ),
+			'token'    => $token,
+			'warnings' => $database->warnings(),
 		),
 		JSON_THROW_ON_ERROR
 	) . PHP_EOL;
 }
 
-/** @return list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> */
+/** @return list<array{worker:string,acquired:bool,token:?string,warnings:list<array{level:string,code:int,message:string}>}> */
 function ran_wp_release_updater_test_workers( string $scenario, string $data ): array {
 	$processes = array();
 	$start_at  = hrtime( true ) + 500000000;
-	$owners    = 'takeover' === $scenario
-		? array( str_repeat( 'c', 64 ), str_repeat( 'd', 64 ) )
-		: array( str_repeat( 'a', 64 ), str_repeat( 'b', 64 ) );
-	foreach ( $owners as $owner ) {
-		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Independent PHP workers must race against the same isolated MySQL server to prove CAS ownership.
+	$workers   = array( $scenario . '-1', $scenario . '-2' );
+	foreach ( $workers as $worker ) {
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Independent PHP workers must race against the same isolated MySQL server to prove lock mutual exclusion.
 		$process     = proc_open(
-			array( PHP_BINARY, __FILE__, '--worker', $owner, $scenario, (string) $start_at ),
+			array( PHP_BINARY, __FILE__, '--worker', $worker, (string) $start_at ),
 			array(
 				0 => array( 'pipe', 'r' ),
 				1 => array( 'pipe', 'w' ),
@@ -209,8 +220,45 @@ function ran_wp_release_updater_test_workers( string $scenario, string $data ): 
 		if ( 0 !== $exit ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new RuntimeException( 'Worker failed with exit ' . $exit . '; stdout: ' . substr( $out, 0, 4096 ) . '; stderr: ' . substr( $err, 0, 4096 ) );
-		} $results[] = json_decode( trim( $out ), true, 32, JSON_THROW_ON_ERROR ); }
+		}
+		$results[] = json_decode( trim( $out ), true, 32, JSON_THROW_ON_ERROR );
+	}
 	return $results;
+}
+
+/** @param list<array{worker:string,acquired:bool,token:?string,warnings:list<array{level:string,code:int,message:string}>}> $results */
+function ran_wp_release_updater_test_assert_one_winner( array $results, string $label ): void {
+	$winners = array_values( array_filter( $results, static fn ( array $item ): bool => true === $item['acquired'] && is_string( $item['token'] ) ) );
+	$losers  = array_values( array_filter( $results, static fn ( array $item ): bool => false === $item['acquired'] && null === $item['token'] ) );
+	if ( 1 !== count( $winners ) || 1 !== count( $losers ) ) {
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
+		throw new RuntimeException( 'Expected one winner and one loser for ' . $label . '.' );
+	}
+}
+
+/**
+ * @param list<array{worker:string,acquired:bool,token:?string,warnings:list<array{level:string,code:int,message:string}>}> $results
+ * @return array{worker:string,acquired:bool,token:string,warnings:list<array{level:string,code:int,message:string}>}
+ */
+function ran_wp_release_updater_test_winner( array $results ): array {
+	foreach ( $results as $item ) {
+		if ( true === $item['acquired'] && is_string( $item['token'] ) ) {
+			return $item;
+		}
+	}
+	throw new RuntimeException( 'No winning worker found.' );
+}
+
+/** @param list<array{level:string,code:int,message:string}> $warnings */
+function ran_wp_release_updater_test_assert_no_deprecated_warnings( array $warnings, string $label ): void {
+	foreach ( $warnings as $warning ) {
+		// Ignore duplicate-key notes from INSERT IGNORE (1062); reject any SQL syntax or deprecation warning (e.g. 1287).
+		if ( 1062 === $warning['code'] ) {
+			continue;
+		}
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
+		throw new RuntimeException( 'Unexpected MySQL warning in ' . $label . ': [' . $warning['code'] . '] ' . $warning['message'] );
+	}
 }
 
 function ran_wp_release_updater_test_create_isolated_root(): string {
@@ -291,171 +339,20 @@ function ran_wp_release_updater_test_connect_proof(): mysqli {
 	}
 	return $mysqli;
 }
+
 function ran_wp_release_updater_test_resolve_mysqld(): string {
 	$configured = getenv( 'RAN_UPDATER_MYSQLD_BIN' );
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_shell_exec -- Fixed command discovers mysqld on PATH; the result must name an executable file before the isolated server starts.
 	$candidate = is_string( $configured ) && '' !== $configured ? $configured : trim( (string) shell_exec( 'command -v mysqld 2>/dev/null' ) );
 	if ( ! is_file( $candidate ) || ! is_executable( $candidate ) ) {
 		throw new RuntimeException( 'Real MySQL CAS proof requires RAN_UPDATER_MYSQLD_BIN to name an executable mysqld binary, or mysqld on PATH; it will not use a running server.' );
-	} return $candidate; }
-/** @param list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> $results */
-function ran_wp_release_updater_test_assert_one_claim( array $results, string $label ): void {
-	$winners = array_values( array_filter( $results, static fn ( array $result ): bool => 'claimed' === $result['result'] ) );
-	$losers  = array_values( array_filter( $results, static fn ( array $result ): bool => 'binding_fence_lost' === $result['result'] ) );
-	if ( 2 !== count( $results ) || 1 !== count( $winners ) || 1 !== count( $losers ) || null === $winners[0]['state'] || $winners[0]['owner'] === $losers[0]['owner'] ) {
-		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
-		throw new RuntimeException( $label . ' did not have one owner and one binding_fence_lost non-owner.' );
-	} }
-/**
- * @param list<array{owner:string,result:string,state:array<string,mixed>|null,epoch:int}> $results
- * @return array{owner:string,result:string,state:array<string,mixed>,epoch:int}
- */
-function ran_wp_release_updater_test_claimed( array $results ): array {
-	foreach ( $results as $result ) {
-		if ( 'claimed' === $result['result'] ) {
-			if ( null === $result['state'] ) {
-				throw new RuntimeException( 'Claim winner omitted its state.' );
-			}
-			return $result;
-		}
-	} throw new RuntimeException( 'Missing claim winner.' ); }
-/** @param array{owner:string,result:string,state:array<string,mixed>|null,epoch:int} $winner */
-function ran_wp_release_updater_test_assert_final_rows( MysqliOptionDatabase $database, BindingRecord $binding, array $winner ): void {
-	$target = $database->get_var( $database->prepare( "SELECT option_value FROM {$database->options} WHERE option_name = %s LIMIT 1", ran_wp_release_updater_test_target_name( $binding ) ) );
-	if ( ! is_string( $target ) || null === $winner['state'] ) {
-		throw new RuntimeException( 'Final coordinator row is missing.' );
-	} if ( json_decode( $target, true, 64, JSON_THROW_ON_ERROR ) !== $winner['state'] ) {
-		throw new RuntimeException( 'Final self-contained state does not match the selected winner.' );
-	} }
-/** @param array<string,mixed> $winner */
-function ran_wp_release_updater_test_prove_outcome_fence( MysqliOptionDatabase $database, BindingRecord $binding, array $winner ): void {
-	$current  = BindingState::rehydrate( $winner['state'] );
-	$draft    = array(
-		'outcome'            => 'unverified_install_result',
-		'source'             => 'wordpress',
-		'wordpress_code'     => 'copy_failed_copy_dir',
-		'release_identity'   => 'release:2',
-		'version'            => '2.0.0',
-		'last_observed_step' => 'install_result_captured',
-	);
-	$released = BindingFenceCoordinator::release_persistent_binding_state( $database, $current, ran_wp_release_updater_test_claim( $current->to_array() ), $draft );
-	$fresh    = new MysqliOptionDatabase( ran_wp_release_updater_test_connect_proof(), 'options' );
-	$stored   = BindingFenceCoordinator::read_persistent_native_outcome( $fresh, $binding );
-	if ( 'released' !== $released['result'] || null === $stored || ! is_int( $stored['recorded_at'] ) || array_merge( $draft, array( 'recorded_at' => $stored['recorded_at'] ) ) !== $stored ) {
-		throw new RuntimeException( 'Native outcome was not atomically released and readable from a fresh connection.' );
 	}
-	$next  = BindingFenceCoordinator::claim_persistent_binding_state( $fresh, $binding, str_repeat( 'e', 64 ), 30 );
-	$stale = BindingFenceCoordinator::release_persistent_binding_state( $database, $current, ran_wp_release_updater_test_claim( $current->to_array() ), array_merge( $draft, array( 'outcome' => 'uncertain' ) ) );
-	if ( 'claimed' !== $next['result'] || 'binding_fence_lost' !== $stale['result'] || BindingFenceCoordinator::read_persistent_native_outcome( $fresh, $binding ) !== $stored ) {
-		throw new RuntimeException( 'A later claim lost the native outcome or admitted a stale overwrite.' );
-	}
+	return $candidate;
 }
 
-function ran_wp_release_updater_test_target_name( BindingRecord $binding ): string {
-	$facts = $binding->to_array();
-	return 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
-		array(
-			'network_id'                 => $facts['network_id'],
-			'target_type'                => $facts['target_type'],
-			'installed_package_identity' => $facts['installed_package_identity'],
-		)
-	); }
-/**
- * @param array<string,mixed> $state
- * @return array<string,mixed>
- */
-function ran_wp_release_updater_test_claim( array $state ): array {
-	return array(
-		'binding_generation' => $state['binding_generation'],
-		'binding_hash'       => $state['binding']['binding_hash'],
-		'lease_deadline'     => $state['lease_deadline'],
-		'owner_token'        => $state['owner_token'],
-	); }
-/** @return array<string,mixed> */
-function ran_wp_release_updater_test_binding_facts(): array {
-	return array(
-		'canonical_repository_locator' => 'fixture/repository',
-		'canonical_update_uri'         => 'https://example.invalid/fixture/repository',
-		'installed_package_identity'   => 'x/x.php',
-		'maximum_artifact_bytes'       => 52_428_800,
-		'network_id'                   => 1,
-		'php_runtime_version'          => '8.2',
-		'provider_code'                => 'fixture',
-		'release_channel'              => 'stable',
-		'stable_repository_identity'   => 'fixture-repository:1',
-		'target_type'                  => 'plugin',
-		'theme_template'               => '',
-		'update_policy'                => 'manual',
-		'wordpress_runtime_version'    => '6.8',
-	); }
-/** @return array<string,mixed> */
-function ran_wp_release_updater_test_descriptor_facts(): array {
-	return array(
-		'artifact_filename'          => 'x.zip',
-		'artifact_identity'          => 'fixture-asset:1',
-		'artifact_sha256'            => str_repeat( 'a', 64 ),
-		'artifact_size'              => 1,
-		'assurance_facts'            => array(
-			'exact_artifact_identity'       => true,
-			'exact_commit_identity'         => true,
-			'exact_reacquisition_supported' => true,
-			'exact_release_identity'        => true,
-			'provenance_verified'           => true,
-			'publication_immutable'         => true,
-			'repository_identity_stable'    => true,
-			'trusted_digest_source'         => true,
-		),
-		'canonical_update_uri'       => 'https://example.invalid/fixture/repository',
-		'channel'                    => 'stable',
-		'commit_identity'            => 'fixture-commit:1',
-		'installed_package_identity' => 'x/x.php',
-		'prerelease'                 => false,
-		'provider_code'              => 'fixture',
-		'release_identity'           => 'fixture-release:42',
-		'repository_identity'        => 'fixture-repository:1',
-		'repository_locator'         => 'fixture/repository',
-		'tag'                        => 'v1',
-		'target_type'                => 'plugin',
-		'version'                    => '1.0.0',
-	); }
-/** @return array{IdentityDescriptor,AcquisitionReceipt} */
-function ran_wp_release_updater_test_mint_receipt( string $path, \RAN\WPReleaseUpdater\V1\WordPress\BindingState $state ): array {
-	$zip = new ZipArchive();
-	if ( true !== $zip->open( $path, ZipArchive::CREATE | ZipArchive::OVERWRITE ) || ! $zip->addFromString( 'x/x.php', "<?php\n/*\nPlugin Name: Fixture\nVersion: 1.0.0\nUpdate URI: https://example.invalid/fixture/repository\n*/" ) ) {
-		throw new RuntimeException( 'Could not create proof receipt fixture.' );
-	} $zip->close();
-	$facts                    = ran_wp_release_updater_test_descriptor_facts();
-	$facts['artifact_sha256'] = hash_file( 'sha256', $path );
-	$facts['artifact_size']   = filesize( $path );
-	$descriptor               = IdentityDescriptor::create( $facts );
-	$validator                = new PackageIdentityValidator();
-	$package                  = $validator->validate(
-		$descriptor,
-		array(
-			'archive_root'               => 'x',
-			'configuration_update_uri'   => 'https://example.invalid/fixture/repository',
-			'header_file'                => 'x.php',
-			'installed_package_identity' => 'x/x.php',
-			'maximum_artifact_bytes'     => 52_428_800,
-			'metadata_name'              => 'Fixture',
-			'offer_update_uri'           => 'https://example.invalid/fixture/repository',
-			'php_runtime_version'        => '8.2',
-			'provider_code'              => 'fixture',
-			'repository_identity'        => 'fixture-repository:1',
-			'repository_locator'         => 'fixture/repository',
-			'staged_package_update_uri'  => 'https://example.invalid/fixture/repository',
-			'target_type'                => 'plugin',
-			'theme_template'             => '',
-			'wordpress_runtime_version'  => '6.8',
-		),
-		$path
-	);
-	if ( ! $package->is_valid() ) {
-		throw new RuntimeException( 'Could not validate proof receipt fixture.' );
-	} return array( $descriptor, AcquisitionReceipt::issue( $state, $descriptor, $validator, $package, time() ) ); }
 /** @param list<string> $command */
 function ran_wp_release_updater_test_run( array $command, string $cwd ): void {
-	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Run the isolated proof command with explicit argv, pipe capture and exit-status observation.
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_proc_open -- Initialize the dedicated isolated mysqld data directory with explicit argv.
 	$process = proc_open(
 		$command,
 		array(
@@ -467,37 +364,51 @@ function ran_wp_release_updater_test_run( array $command, string $cwd ): void {
 		$cwd
 	);
 	if ( ! is_resource( $process ) ) {
-		throw new RuntimeException( 'Could not initialize isolated MySQL.' );
+		throw new RuntimeException( 'Could not start isolated MySQL command.' );
+	}
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
-	} fclose( $pipes[0] );
-	$stdout = stream_get_contents( $pipes[1] );
-	$stderr = stream_get_contents( $pipes[2] );
+	fclose( $pipes[0] );
+	$out = stream_get_contents( $pipes[1] );
+	$err = stream_get_contents( $pipes[2] );
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $pipes[1] );
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the native stream owned by this fixture; WordPress filesystem abstractions do not own process or file handles.
 	fclose( $pipes[2] );
-	if ( 0 !== proc_close( $process ) ) {
+	$exit = proc_close( $process );
+	if ( 0 !== $exit ) {
 		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
-		throw new RuntimeException( 'MySQL initialization failed: ' . $stdout . $stderr );
-	} }
-/**
- * @param resource $server
- */
+		throw new RuntimeException( 'Command failed with exit ' . $exit . '; stdout: ' . substr( (string) $out, 0, 2048 ) . '; stderr: ' . substr( (string) $err, 0, 2048 ) );
+	}
+}
+
+/** @param resource $server */
 function ran_wp_release_updater_test_stop_server( $server ): void {
-	proc_terminate( $server, 15 ); for ( $attempt = 0; $attempt < 100; ++$attempt ) {
-		$status = proc_get_status( $server );
-		if ( ! $status['running'] ) {
-			proc_close( $server );
-			return;
-		} usleep( 50000 );
-	} proc_terminate( $server, 9 );
-	proc_close( $server ); }
+	$status = proc_get_status( $server );
+	if ( $status['running'] ) {
+		proc_terminate( $server );
+	}
+	$deadline = microtime( true ) + 10;
+	while ( proc_get_status( $server )['running'] && microtime( true ) < $deadline ) {
+		usleep( 50000 );
+	}
+	if ( proc_get_status( $server )['running'] ) {
+		proc_terminate( $server, 9 );
+	}
+	proc_close( $server );
+}
+
 function ran_wp_release_updater_test_remove_tree( string $path ): void {
 	if ( ! is_dir( $path ) ) {
 		return;
-	} $iterator = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $path, FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST );
+	}
+	$iterator = new RecursiveIteratorIterator(
+		new RecursiveDirectoryIterator( $path, FilesystemIterator::SKIP_DOTS ),
+		RecursiveIteratorIterator::CHILD_FIRST
+	);
 	foreach ( $iterator as $entry ) {
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir, WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
-		$entry->isDir() ? rmdir( $entry->getPathname() ) : unlink( $entry->getPathname() );
-	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
-	} rmdir( $path ); }
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown removes disposable isolated MySQL files.
+		$entry->isLink() || ! $entry->isDir() ? @unlink( $entry->getPathname() ) : @rmdir( $entry->getPathname() );
+	}
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown removes disposable isolated MySQL root.
+	@rmdir( $path );
+}

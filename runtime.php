@@ -21,7 +21,6 @@ $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\IdentityDescriptor' => 'src/Contract/IdentityDescriptor.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseVersion'  => 'src/Contract/ReleaseVersion.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseRejection' => 'src/Contract/ReleaseRejection.php',
-	'RAN\\WPReleaseUpdater\\V1\\Contract\\BindingRecord'   => 'src/Contract/BindingRecord.php',
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\ValidatedPackage' => 'src/Archive/ValidatedPackage.php',
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact' => 'src/Archive/TemporaryArtifact.php',
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\ArchiveScanResult' => 'src/Archive/ArchiveScanResult.php',
@@ -29,9 +28,7 @@ $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\Archive\\PackageIdentityValidator' => 'src/Archive/PackageIdentityValidator.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\InstalledPackageResolver' => 'src/WordPress/InstalledPackageResolver.php',
 	'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseAdapter'  => 'src/Contract/ReleaseAdapter.php',
-	'RAN\\WPReleaseUpdater\\V1\\WordPress\\BindingState'   => 'src/WordPress/BindingState.php',
-	'RAN\\WPReleaseUpdater\\V1\\WordPress\\BindingFenceCoordinator' => 'src/WordPress/BindingFenceCoordinator.php',
-	'RAN\\WPReleaseUpdater\\V1\\Contract\\AcquisitionReceipt' => 'src/Contract/AcquisitionReceipt.php',
+	'RAN\\WPReleaseUpdater\\V1\\WordPress\\WordPressUpdaterLock' => 'src/WordPress/WordPressUpdaterLock.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\OwnedArchiveStore' => 'src/WordPress/OwnedArchiveStore.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\StagedPackageManifest' => 'src/WordPress/StagedPackageManifest.php',
 	'RAN\\WPReleaseUpdater\\V1\\WordPress\\PendingInstallState' => 'src/WordPress/PendingInstallState.php',
@@ -185,11 +182,16 @@ return new class(
 		$type     = $d['target_type'];
 		$headers  = $resolved['headers'];
 		$identity = $resolved['installed_package_identity'];
-		$key      = \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
-			array(
-				'network_id'                 => $this->network_id,
-				'target_type'                => $type,
-				'installed_package_identity' => $identity,
+		$key      = hash(
+			'sha256',
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
+			json_encode(
+				array(
+					'network_id'                 => $this->network_id,
+					'target_type'                => $type,
+					'installed_package_identity' => $identity,
+				),
+				JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 			)
 		);
 		if ( isset( $this->targets[ $key ] ) ) {

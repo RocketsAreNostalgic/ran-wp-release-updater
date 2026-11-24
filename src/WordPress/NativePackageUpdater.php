@@ -8,8 +8,6 @@ use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
 use InvalidArgumentException;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Archive\ValidatedPackage;
-use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
-use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
@@ -25,11 +23,36 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
  *
  * @phpstan-import-type OwnedCopy from ExactInstallInvocation
  * @phpstan-import-type Finalization from ExactInstallInvocation
+ * @phpstan-type TargetBinding array{canonical_repository_locator:string,canonical_update_uri:string,installed_package_identity:string,maximum_artifact_bytes:int,network_id:int,php_runtime_version:string,provider_code:string,release_channel:string,stable_repository_identity:string,target_type:string,theme_template:string,update_policy:string,wordpress_runtime_version:string}
  */
 final class NativePackageUpdater {
-	private const MAX_DIAGNOSTICS    = 16;
-	private const CONFIGURATION_KEYS = array( 'headers', 'installed_directory', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
-	private const HEADER_KEYS        = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
+	private const MAX_DIAGNOSTICS     = 16;
+	private const CONFIGURATION_KEYS  = array( 'headers', 'installed_directory', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
+	private const HEADER_KEYS         = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
+	private const TARGET_BINDING_KEYS = array(
+		'canonical_repository_locator',
+		'canonical_update_uri',
+		'installed_package_identity',
+		'maximum_artifact_bytes',
+		'network_id',
+		'php_runtime_version',
+		'provider_code',
+		'release_channel',
+		'stable_repository_identity',
+		'target_type',
+		'theme_template',
+		'update_policy',
+		'wordpress_runtime_version',
+	);
+	private const DESCRIPTOR_PAIRS    = array(
+		'installed_package_identity' => 'installed_package_identity',
+		'target_type'                => 'target_type',
+		'provider_code'              => 'provider_code',
+		'channel'                    => 'release_channel',
+		'canonical_update_uri'       => 'canonical_update_uri',
+		'repository_locator'         => 'canonical_repository_locator',
+		'repository_identity'        => 'stable_repository_identity',
+	);
 	/** @var array<string,mixed>|null */
 	private ?array $listing_diagnostics = null;
 	private ?bool $search_exhausted     = null;
@@ -38,9 +61,9 @@ final class NativePackageUpdater {
 
 	private bool $registered                            = false;
 	private ?IdentityDescriptor $descriptor             = null;
-	private ?BindingState $state                        = null;
-	private mixed $claim                                = null;
-	private bool $lease_held                            = false;
+	private ?string $lock_token                         = null;
+	private bool $lock_owned                            = false;
+	private bool $lock_multi_run                        = false;
 	private bool $queued_multi_run                      = false;
 	private bool $shutdown_scheduled                    = false;
 	/** @var list<string> */ private array $diagnostics = array();
@@ -57,12 +80,15 @@ final class NativePackageUpdater {
 		'offered_version'           => null,
 		'relationship'              => null,
 	);
-	/** @var array{claim:array<string,mixed>,descriptor:IdentityDescriptor,installed:string}|null */
+	/** @var array{outcome:string,source:string,wordpress_code:string|null,release_identity:string,version:string,last_observed_step:string|null,recorded_at:int}|null */
+	private ?array $last_native_outcome = null;
+	/** @var array{descriptor:IdentityDescriptor,installed:string}|null */
 	private ?array $discovery_snapshot = null;
 	private int $discovery_epoch       = 0;
 	private OwnedArchiveStore $archive_store;
 	private StagedPackageManifest $manifest_builder;
 	private PendingInstallState $pending_install;
+	private WordPressUpdaterLock $updater_lock;
 	private ?\Closure $operation_guard;
 	private ?\Closure $native_mutation_begin;
 	private ?\Closure $native_mutation_complete;
@@ -91,7 +117,8 @@ final class NativePackageUpdater {
 
 	/**
 	 * @param array<string,string> $headers
-	 * @param array<string,mixed> $archive_policy
+	 * @param TargetBinding        $target_binding
+	 * @param array<string,mixed>  $archive_policy
 	 */
 	private function __construct(
 		private string $target_type,
@@ -100,9 +127,10 @@ final class NativePackageUpdater {
 		private string $update_uri,
 		private string $policy,
 		private array $headers,
-		private BindingRecord $binding,
+		private array $target_binding,
+		private string $binding_hash,
 		private ReleaseAdapter $adapter,
-		private object $wpdb,
+		object $wpdb,
 		private array $archive_policy,
 		private PackageIdentityValidator $validator,
 		private ?SelectedRuntimeState $selected_runtime_state = null,
@@ -116,6 +144,7 @@ final class NativePackageUpdater {
 		$this->archive_store            = new OwnedArchiveStore();
 		$this->manifest_builder         = new StagedPackageManifest();
 		$this->pending_install          = new PendingInstallState();
+		$this->updater_lock             = new WordPressUpdaterLock( $wpdb );
 		$this->operation_guard          = null === $operation_guard ? null : \Closure::fromCallable( $operation_guard );
 		$this->native_mutation_begin    = null === $native_mutation_begin ? null : \Closure::fromCallable( $native_mutation_begin );
 		$this->native_mutation_complete = null === $native_mutation_complete ? null : \Closure::fromCallable( $native_mutation_complete );
@@ -124,11 +153,12 @@ final class NativePackageUpdater {
 
 	/**
 	 * @param array<string,mixed> $configuration
+	 * @param array<string,mixed> $target_binding
 	 * @param array<string,mixed> $archive_policy
 	 */
 	public static function from_configuration(
 		array $configuration,
-		BindingRecord $binding,
+		array $target_binding,
 		ReleaseAdapter $adapter,
 		object $wpdb,
 		array $archive_policy,
@@ -144,9 +174,12 @@ final class NativePackageUpdater {
 		if ( ( null === $native_mutation_begin ) !== ( null === $native_mutation_complete ) || ( null === $operation_guard && null !== $native_mutation_begin ) ) {
 			return null;
 		}
-		$binding_facts = $binding->to_array();
+		$binding_facts = self::normalize_target_binding( $target_binding );
+		if ( null === $binding_facts ) {
+			return null;
+		}
 		if (
-			! self::valid_configuration( $configuration, $binding )
+			! self::valid_configuration( $configuration, $binding_facts )
 			|| $configuration['policy'] !== $binding_facts['update_policy']
 			|| ! array_key_exists( 'theme_template', $archive_policy )
 			|| ! is_string( $archive_policy['theme_template'] )
@@ -158,6 +191,10 @@ final class NativePackageUpdater {
 		if ( ! is_string( $uri ) ) {
 			return null;
 		}
+		$binding_hash = self::compute_binding_hash( $binding_facts );
+		if ( null === $binding_hash ) {
+			return null;
+		}
 		return new self(
 			$configuration['target_type'],
 			$configuration['installed_directory'],
@@ -165,7 +202,8 @@ final class NativePackageUpdater {
 			$uri,
 			$configuration['policy'],
 			$configuration['headers'],
-			$binding,
+			$binding_facts,
+			$binding_hash,
 			$adapter,
 			$wpdb,
 			$archive_policy,
@@ -178,6 +216,89 @@ final class NativePackageUpdater {
 			$descriptor_admission,
 			$allow_working_copy
 		);
+	}
+
+	/**
+	 * @internal Validates and orders target binding facts.
+	 * @return TargetBinding|null
+	 */
+	public static function normalize_target_binding( mixed $value ): ?array {
+		if ( ! self::exact_keys( $value, self::TARGET_BINDING_KEYS ) || ! is_array( $value ) ) {
+			return null;
+		}
+		if (
+			! in_array( $value['target_type'], array( 'plugin', 'theme' ), true )
+			|| ! IdentityDescriptor::is_bounded_opaque_identity( $value['installed_package_identity'], 255 )
+			|| ! is_int( $value['maximum_artifact_bytes'] )
+			|| $value['maximum_artifact_bytes'] < 1
+			|| ! is_int( $value['network_id'] )
+			|| $value['network_id'] < 1
+			|| ! IdentityDescriptor::is_provider_code( $value['provider_code'] )
+			|| ! IdentityDescriptor::is_bounded_opaque_identity( $value['canonical_repository_locator'], 255 )
+			|| ! IdentityDescriptor::is_bounded_opaque_identity( $value['stable_repository_identity'] )
+			|| ! is_string( $value['canonical_update_uri'] )
+			|| CanonicalUpdateUri::canonicalize( $value['canonical_update_uri'] ) !== $value['canonical_update_uri']
+			|| ! in_array( $value['release_channel'], array( 'stable', 'prerelease' ), true )
+			|| ! self::valid_theme_template( $value['target_type'], $value['theme_template'] )
+			|| ! in_array( $value['update_policy'], array( 'disabled', 'forced-off', 'manual', 'automatic' ), true )
+			|| ! IdentityDescriptor::is_bounded_opaque_identity( $value['php_runtime_version'], 64 )
+			|| ! IdentityDescriptor::is_bounded_opaque_identity( $value['wordpress_runtime_version'], 64 )
+		) {
+			return null;
+		}
+		return array(
+			'canonical_repository_locator' => $value['canonical_repository_locator'],
+			'canonical_update_uri'         => $value['canonical_update_uri'],
+			'installed_package_identity'   => $value['installed_package_identity'],
+			'maximum_artifact_bytes'       => $value['maximum_artifact_bytes'],
+			'network_id'                   => $value['network_id'],
+			'php_runtime_version'          => $value['php_runtime_version'],
+			'provider_code'                => $value['provider_code'],
+			'release_channel'              => $value['release_channel'],
+			'stable_repository_identity'   => $value['stable_repository_identity'],
+			'target_type'                  => $value['target_type'],
+			'theme_template'               => $value['theme_template'],
+			'update_policy'                => $value['update_policy'],
+			'wordpress_runtime_version'    => $value['wordpress_runtime_version'],
+		);
+	}
+
+	/**
+	 * @internal Asserts a release descriptor matches the bound target facts.
+	 * @param TargetBinding $binding
+	 */
+	public static function assert_descriptor_binding( IdentityDescriptor $descriptor, array $binding ): IdentityDescriptor {
+		$facts = $descriptor->to_array();
+		foreach ( self::DESCRIPTOR_PAIRS as $descriptor_key => $binding_key ) {
+			if ( ! hash_equals( (string) $facts[ $descriptor_key ], (string) $binding[ $binding_key ] ) ) {
+				throw new InvalidArgumentException( 'The descriptor binding is invalid.' );
+			}
+		}
+		if ( $facts['artifact_size'] > $binding['maximum_artifact_bytes'] ) {
+			throw new InvalidArgumentException( 'The descriptor exceeds the target artifact limit.' );
+		}
+		return $descriptor;
+	}
+
+	/** @param TargetBinding $facts */
+	private static function compute_binding_hash( array $facts ): ?string {
+		try {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
+			return hash( 'sha256', json_encode( $facts, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
+		} catch ( \JsonException ) {
+			return null;
+		}
+	}
+
+	private static function valid_theme_template( string $target_type, mixed $value ): bool {
+		return is_string( $value )
+			&& (
+				( 'plugin' === $target_type && '' === $value )
+				|| (
+					'theme' === $target_type
+					&& ( '' === $value || PackageDirectory::is_valid_name( $value ) )
+				)
+			);
 	}
 
 	public function register(): void {
@@ -318,11 +439,6 @@ final class NativePackageUpdater {
 			$check_id = $this->start_check_observation();
 			return $update;
 		}
-		if ( ! $this->claim_discovery() ) {
-			$reason   = 'discovery_not_admitted';
-			$check_id = $this->start_check_observation();
-			return $update;
-		}
 		$descriptor = $this->discover(
 			$installed,
 			$reason,
@@ -360,7 +476,7 @@ final class NativePackageUpdater {
 			'requires_php'                        => $headers['RequiresPHP'],
 			'version'                             => $descriptor->to_array()['version'],
 			'autoupdate'                          => $autoupdate,
-			'ran_wp_release_updater_binding_hash' => $this->binding->binding_hash(),
+			'ran_wp_release_updater_binding_hash' => $this->binding_hash,
 			'plugin' === $this->target_type ? 'plugin' : 'theme' => $this->installed_identity,
 		);
 	}
@@ -409,54 +525,42 @@ final class NativePackageUpdater {
 		if ( ! $this->direct_filesystem() ) {
 			return $this->offer_report( 'filesystem_unavailable' );
 		}
-		$claimed_here = ! ( $this->lease_held && null !== $this->verify_current() );
-		if ( ! $this->claim_discovery() ) {
-			return $this->offer_report( 'discovery_not_admitted' );
-		}
-		$authorized = false;
 		try {
-			try {
-				$descriptor = $this->adapter->inspect( $release_identity, $tag );
-				BindingRecord::assert_descriptor_binding( $descriptor, $this->binding );
-			} catch ( \Throwable ) {
-				return $this->offer_report( 'release_unavailable' );
-			}
-			$version      = $descriptor->to_array()['version'];
-			$relationship = ReleaseVersion::relationship( $version, $this->installed_version() );
-			$older        = ReleaseVersion::RELATIONSHIP_OLDER === $relationship;
-			if ( ReleaseVersion::RELATIONSHIP_INVALID === $relationship || ( $older && ! $older_intended ) ) {
-				return $this->offer_report( $older ? 'release_older' : 'release_invalid', $version, $relationship );
-			}
-			if ( ! $this->manual_eligible( $descriptor ) ) {
-				return $this->offer_report( 'candidate_not_eligible', $version, $relationship );
-			}
-			$candidate = array(
-				'release_identity' => $release_identity,
-				'tag'              => $tag,
-				'version'          => $version,
-			);
-			$reason    = '';
-			if ( true !== $this->admit_candidate( $descriptor, $candidate, $reason ) ) {
-				return $this->offer_report( $this->status['candidate_validation_code'] ?? $reason, $version, $relationship );
-			}
-			$token = $this->token( $descriptor );
-			if ( null === $token || ! $this->live() ) {
-				return $this->offer_report( null === $token ? 'offer_token_unavailable' : 'runtime_liveness_lost', $version, $relationship );
-			}
-			// WordPress adds new_version when it saves a check; a supplied offer is never saved, so it carries its own.
-			$this->authorized_offer       = $this->offer_entry( $descriptor, $token, false ) + array( 'new_version' => $version );
-			$this->authorized_fingerprint = $descriptor->fingerprint_value();
-			$this->authorized_fingerprints[ $this->authorized_fingerprint ] = true;
-			$transient = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
-			add_filter( 'site_transient_' . $transient, array( $this, 'filter_cached_update' ), 10, 1 );
-			add_filter( 'pre_set_site_transient_' . $transient, array( $this, 'filter_store_update' ), PHP_INT_MAX, 1 );
-			$authorized = true;
-			return $this->offer_report( 'release_authorized', $version, $relationship );
-		} finally {
-			if ( ! $authorized && $claimed_here ) {
-				$this->clear_pending();
-			}
+			$descriptor = $this->adapter->inspect( $release_identity, $tag );
+			self::assert_descriptor_binding( $descriptor, $this->target_binding );
+		} catch ( \Throwable ) {
+			return $this->offer_report( 'release_unavailable' );
 		}
+		$version      = $descriptor->to_array()['version'];
+		$relationship = ReleaseVersion::relationship( $version, $this->installed_version() );
+		$older        = ReleaseVersion::RELATIONSHIP_OLDER === $relationship;
+		if ( ReleaseVersion::RELATIONSHIP_INVALID === $relationship || ( $older && ! $older_intended ) ) {
+			return $this->offer_report( $older ? 'release_older' : 'release_invalid', $version, $relationship );
+		}
+		if ( ! $this->manual_eligible( $descriptor ) ) {
+			return $this->offer_report( 'candidate_not_eligible', $version, $relationship );
+		}
+		$candidate = array(
+			'release_identity' => $release_identity,
+			'tag'              => $tag,
+			'version'          => $version,
+		);
+		$reason    = '';
+		if ( true !== $this->admit_candidate( $descriptor, $candidate, $reason ) ) {
+			return $this->offer_report( $this->status['candidate_validation_code'] ?? $reason, $version, $relationship );
+		}
+		$token = $this->token( $descriptor );
+		if ( null === $token || ! $this->live() ) {
+			return $this->offer_report( null === $token ? 'offer_token_unavailable' : 'runtime_liveness_lost', $version, $relationship );
+		}
+		// WordPress adds new_version when it saves a check; a supplied offer is never saved, so it carries its own.
+		$this->authorized_offer       = $this->offer_entry( $descriptor, $token, false ) + array( 'new_version' => $version );
+		$this->authorized_fingerprint = $descriptor->fingerprint_value();
+		$this->authorized_fingerprints[ $this->authorized_fingerprint ] = true;
+		$transient = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
+		add_filter( 'site_transient_' . $transient, array( $this, 'filter_cached_update' ), 10, 1 );
+		add_filter( 'pre_set_site_transient_' . $transient, array( $this, 'filter_store_update' ), PHP_INT_MAX, 1 );
+		return $this->offer_report( 'release_authorized', $version, $relationship );
 	}
 
 	/** @return array{status:string,code:string,version:string|null,relationship:string|null} */
@@ -521,13 +625,14 @@ final class NativePackageUpdater {
 
 	private function install_exact_release( ExactInstallInvocation $exact, string $release_identity, string $tag, string $expected_version, bool $older_intended ): string {
 		$this->begin_operation();
-		if ( ! $this->claim_discovery() ) {
-			return 'discovery_not_admitted';
+		if ( ! $this->acquire_mutation_lock( false ) ) {
+			return 'binding_fence_lost';
 		}
 		$exact->lease_claimed = true;
+		$this->schedule_finalization();
 		try {
 			$descriptor = $this->adapter->inspect( $release_identity, $tag );
-			BindingRecord::assert_descriptor_binding( $descriptor, $this->binding );
+			self::assert_descriptor_binding( $descriptor, $this->target_binding );
 		} catch ( \Throwable ) {
 			return 'release_unavailable';
 		}
@@ -543,7 +648,7 @@ final class NativePackageUpdater {
 		if ( ! $this->manual_eligible( $descriptor ) || ! $this->descriptor_admitted( $descriptor ) ) {
 			return 'candidate_not_eligible';
 		}
-		if ( ! $this->live() || null === $this->verify_current() ) {
+		if ( ! $this->live() || ! $this->verify_mutation_lock() ) {
 			return 'binding_fence_lost';
 		}
 		$failure = $this->acquire_owned_archive( $descriptor, $exact->archive, $exact );
@@ -554,7 +659,7 @@ final class NativePackageUpdater {
 		if ( null === $exact->archive_identity ) {
 			return 'acquisition_identity_invalid';
 		}
-		if ( ! $this->live() || ! $this->descriptor_admitted( $descriptor ) || null === $this->verify_current() ) {
+		if ( ! $this->live() || ! $this->descriptor_admitted( $descriptor ) || ! $this->verify_mutation_lock() ) {
 			return 'binding_fence_lost';
 		}
 
@@ -575,7 +680,7 @@ final class NativePackageUpdater {
 			return $exact->download_failure ?? 'unverified_install_result';
 		}
 		try {
-			$installed_verified = null !== $this->verify_installed_manifest( $descriptor );
+			$installed_verified = $this->verify_installed_manifest( $descriptor );
 		} catch ( \Throwable ) {
 			$installed_verified = false;
 		}
@@ -704,9 +809,6 @@ final class NativePackageUpdater {
 			if ( ! $this->direct_filesystem() ) {
 				$reason   = 'filesystem_unavailable';
 				$check_id = $this->start_check_observation();
-			} elseif ( ! $this->claim_discovery() ) {
-				$reason   = 'discovery_not_admitted';
-				$check_id = $this->start_check_observation();
 			} else {
 				// Always discover afresh: a native snapshot must not answer, so every check is observed.
 				$this->discovery_snapshot = null;
@@ -783,7 +885,7 @@ final class NativePackageUpdater {
 		$this->listing_diagnostics  = null;
 		$this->search_exhausted     = null;
 		$this->candidate_rejections = array();
-		$facts                      = $this->binding->to_array();
+		$facts                      = $this->target_binding;
 		if ( ! function_exists( 'do_action' ) || ! function_exists( 'get_current_blog_id' ) ) {
 			return null;
 		}
@@ -792,7 +894,7 @@ final class NativePackageUpdater {
 			'stable_repository_identity' => 191,
 			'installed_package_identity' => 255,
 		) as $key => $limit ) {
-			if ( ! is_string( $facts[ $key ] ) || strlen( $facts[ $key ] ) > $limit ) {
+			if ( strlen( $facts[ $key ] ) > $limit ) {
 				return null;
 			}
 		}
@@ -816,7 +918,7 @@ final class NativePackageUpdater {
 				'provider_code'       => $facts['provider_code'],
 				'repository_identity' => $facts['stable_repository_identity'],
 				'channel'             => $facts['release_channel'],
-				'binding_hash'        => $this->binding->binding_hash(),
+				'binding_hash'        => $this->binding_hash,
 			)
 		);
 		return $check_id;
@@ -855,7 +957,7 @@ final class NativePackageUpdater {
 		$previous_rejections          = $this->candidate_rejections;
 		try {
 			$this->begin_operation();
-			if ( ! $this->direct_filesystem() || ! $this->claim_discovery() ) {
+			if ( ! $this->direct_filesystem() ) {
 				return $result;
 			}
 			$descriptor = $this->discover( $this->installed_version() );
@@ -956,14 +1058,14 @@ final class NativePackageUpdater {
 		if ( false !== $reply && ! $reply instanceof \WP_Error ) {
 			return $this->failure( 'unverified_pre_download_result', false );
 		}
-		$this->clear_pending( false );
+		$this->clear_pending();
 		$working_copy = $this->working_copy_blocked();
 		$token        = $this->parse_token( $package );
 		$authorized   = $token instanceof IdentityDescriptor && null !== $held && hash_equals( $held, $token->fingerprint_value() );
 		if ( ! $this->direct_filesystem() || ! $token instanceof IdentityDescriptor || ! $this->descriptor_admitted( $token ) || ! $this->download_version_admitted( $token, $authorized ) || ! $this->manual_eligible( $token ) ) {
 			return $reply instanceof \WP_Error ? $reply : $this->failure( $working_copy ? 'target_is_working_copy' : 'unverified_pre_download', false );
 		}
-		if ( ! $this->claim_discovery() ) {
+		if ( ! $this->acquire_mutation_lock( $queued_multi_run ) ) {
 			return $this->failure( 'binding_fence_lost', false );
 		}
 		$this->start_native_attempt( $token );
@@ -977,7 +1079,7 @@ final class NativePackageUpdater {
 		}
 		$fresh = $this->refresh_download_binding( $token, $authorized );
 		if ( is_string( $fresh ) ) {
-			return $this->failure( $fresh );
+			return $this->fail_pending( $fresh );
 		}
 		$owned   = null;
 		$failure = $this->acquire_owned_archive( $fresh, $owned );
@@ -985,29 +1087,27 @@ final class NativePackageUpdater {
 			if ( is_array( $owned ) ) {
 				$this->archive_store->remove( $owned['path'], $owned['directory'] );
 			}
-			return $this->failure( $failure ?? 'acquisition_identity_invalid' );
+			return $this->fail_pending( $failure ?? 'acquisition_identity_invalid' );
 		}
 		$identity = $this->archive_store->identity( $owned['path'], $fresh );
 		if ( null === $identity ) {
 			$this->archive_store->remove( $owned['path'], $owned['directory'] );
-			return $this->failure( 'acquisition_identity_invalid' );
+			return $this->fail_pending( 'acquisition_identity_invalid' );
 		}
-		$verified = $this->verify_current();
-		if ( null === $verified || ! $this->live() ) {
+		if ( ! $this->verify_mutation_lock() || ! $this->live() ) {
 			$this->archive_store->remove( $owned['path'], $owned['directory'] );
-			return $this->failure( 'binding_fence_lost' );
+			return $this->fail_pending( 'binding_fence_lost' );
 		}
 		try {
 			if ( ! $this->validator->verify_archive_identity( $fresh, $owned['path'] ) ) {
 				throw new InvalidArgumentException( 'The owned archive identity changed.' );
 			}
-			$receipt = AcquisitionReceipt::issue( $verified['current'], $fresh, $this->validator, $owned['proof'], $verified['now'] );
+			$proof = $this->validator->consume_receipt_proof( $owned['proof'], $fresh );
 		} catch ( \Throwable ) {
 			$this->archive_store->remove( $owned['path'], $owned['directory'] );
-			return $this->failure( 'acquisition_identity_invalid' );
+			return $this->fail_pending( 'acquisition_identity_invalid' );
 		}
-		$this->state = $verified['current'];
-		$this->pending_install->begin( $owned['path'], $owned['directory'], $identity, $receipt, multi_run: $queued_multi_run );
+		$this->pending_install->begin( $owned['path'], $owned['directory'], $identity, $proof, multi_run: $queued_multi_run );
 		$this->schedule_finalization();
 		return $owned['path'];
 	}
@@ -1035,7 +1135,7 @@ final class NativePackageUpdater {
 		if ( $this->working_copy_blocked() ) {
 			return $this->exact_download_failure( $exact, 'target_is_working_copy' );
 		}
-		if ( ! $this->live() || null === $this->verify_current() ) {
+		if ( ! $this->live() || ! $this->verify_mutation_lock() ) {
 			return $this->exact_download_failure( $exact, 'binding_fence_lost' );
 		}
 		$fresh = $this->refresh_download_binding( $token, true );
@@ -1045,20 +1145,18 @@ final class NativePackageUpdater {
 		if ( $this->bound_package_version( $this->installed_directory, true ) !== $exact->installed_version ) {
 			return $this->exact_download_failure( $exact, 'runtime_package_identity_invalid' );
 		}
-		$verified = $this->verify_current();
-		if ( null === $verified || ! $this->live() ) {
+		if ( ! $this->verify_mutation_lock() || ! $this->live() ) {
 			return $this->exact_download_failure( $exact, 'binding_fence_lost' );
 		}
 		if ( ! $this->archive_store->same_identity( $owned['path'], $fresh, $identity ) ) {
 			return $this->exact_download_failure( $exact, 'acquisition_identity_invalid' );
 		}
 		try {
-			$receipt = AcquisitionReceipt::issue( $verified['current'], $fresh, $this->validator, $owned['proof'], $verified['now'] );
+			$proof = $this->validator->consume_receipt_proof( $owned['proof'], $fresh );
 		} catch ( \Throwable ) {
 			return $this->exact_download_failure( $exact, 'acquisition_identity_invalid' );
 		}
-		$this->state = $verified['current'];
-		$this->pending_install->begin( $owned['path'], $owned['directory'], $identity, $receipt, multi_run: $upgrader instanceof \Plugin_Upgrader );
+		$this->pending_install->begin( $owned['path'], $owned['directory'], $identity, $proof, multi_run: $upgrader instanceof \Plugin_Upgrader );
 		$exact->archive          = null;
 		$exact->archive_location = null;
 		$exact->archive_identity = null;
@@ -1083,9 +1181,12 @@ final class NativePackageUpdater {
 	private function refresh_download_binding( IdentityDescriptor $token, bool $authorized ): IdentityDescriptor|string {
 		try {
 			$fresh = $this->adapter->inspect( $token->release_identity(), $token->to_array()['tag'] );
-			BindingRecord::assert_descriptor_binding( $fresh, $this->binding );
+			self::assert_descriptor_binding( $fresh, $this->target_binding );
 		} catch ( \Throwable ) {
 			return 'acquisition_failed';
+		}
+		if ( $this->attempt_descriptor !== $token || ! $this->verify_mutation_lock() ) {
+			return 'binding_fence_lost';
 		}
 		if ( ! $this->live() || ! $this->descriptor_admitted( $fresh ) || ! $this->download_version_admitted( $fresh, $authorized ) ) {
 			return 'unverified_pre_download';
@@ -1093,16 +1194,7 @@ final class NativePackageUpdater {
 		if ( ! hash_equals( $token->fingerprint_value(), $fresh->fingerprint_value() ) ) {
 			return 'remote_release_changed';
 		}
-		if ( ! $this->state instanceof BindingState ) {
-			return 'binding_fence_lost';
-		}
 		$this->descriptor = $fresh;
-		$renewed          = BindingFenceCoordinator::renew_persistent_binding_state( $this->wpdb, $this->state, $this->claim, 3600 );
-		if ( 'renewed' !== $renewed['result'] || ! $renewed['current'] instanceof BindingState ) {
-			return 'binding_fence_lost';
-		}
-		$this->state = $renewed['current'];
-		$this->claim = $this->claim( $this->state );
 		return $fresh;
 	}
 
@@ -1146,24 +1238,17 @@ final class NativePackageUpdater {
 			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 		$descriptor = $this->descriptor;
-		$verified   = $this->verify_current();
 		if (
 			! $this->direct_filesystem()
-			|| null === $verified
+			|| ! $this->verify_mutation_lock()
 			|| ! $descriptor instanceof IdentityDescriptor
 			|| ! $this->descriptor_admitted( $descriptor )
 			|| ! is_array( $this->pending_install->archive_identity() )
 			|| ! $this->archive_store->same_identity( $file, $descriptor, $this->pending_install->archive_identity() )
-			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
+			|| ! $this->pending_install->matches_descriptor( $descriptor )
 		) {
 			return $this->fail_pending( 'archive_changed_before_extraction' );
 		}
-		try {
-			AcquisitionReceipt::assert_fresh( $this->pending_install->receipt(), $verified['current'], $descriptor, $verified['now'] );
-		} catch ( InvalidArgumentException ) {
-			return $this->fail_pending( 'archive_changed_before_extraction' );
-		}
-		$this->state = $verified['current'];
 		if ( ! $this->live() || ! $this->pending_install->admit_extraction() ) {
 			return $this->fail_pending( 'archive_changed_before_extraction' );
 		}
@@ -1188,36 +1273,25 @@ final class NativePackageUpdater {
 			? $this->manifest_builder->build( $source )
 			: null;
 		$descriptor = $this->descriptor;
-		$verified   = $this->verify_current();
 		if (
 			! $this->direct_filesystem()
 			|| ! $this->pending_install->active()
 			|| ! $this->pending_install->extraction_admitted()
-			|| null === $verified
+			|| ! $this->verify_mutation_lock()
 			|| ! $descriptor instanceof IdentityDescriptor
 			|| ! $this->descriptor_admitted( $descriptor )
-			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
 			|| ! is_string( $source )
 			|| null === $manifest
+			|| ! $this->pending_install->matches_archive_manifest(
+				$descriptor,
+				$this->manifest_builder->hash( $manifest ),
+				count( $manifest ),
+				$this->manifest_builder->expanded_bytes( $manifest )
+			)
 		) {
 			return $this->fail_pending( 'staged_package_identity_invalid' );
 		}
 
-		try {
-			AcquisitionReceipt::assert_archive_manifest(
-				$this->pending_install->receipt(),
-				$verified['current'],
-				$descriptor,
-				$verified['now'],
-				$this->manifest_builder->hash( $manifest ),
-				count( $manifest ),
-				$this->manifest_builder->expanded_bytes( $manifest )
-			);
-		} catch ( InvalidArgumentException ) {
-			return $this->fail_pending( 'staged_package_identity_invalid' );
-		}
-
-		$this->state = $verified['current'];
 		if ( ! $this->pending_install->verify_staging() ) {
 			return $this->fail_pending( 'staged_package_identity_invalid' );
 		}
@@ -1259,25 +1333,18 @@ final class NativePackageUpdater {
 			return $this->fail_pending( 'target_is_working_copy' );
 		}
 		$descriptor = $this->descriptor;
-		$verified   = $this->verify_current();
 		if (
 			! $this->direct_filesystem()
 			|| ! $this->pending_install->active()
 			|| ! $this->pending_install->extraction_admitted()
-			|| null === $verified
+			|| ! $this->verify_mutation_lock()
 			|| ! $descriptor instanceof IdentityDescriptor
 			|| ! $this->descriptor_admitted( $descriptor )
-			|| ! $this->pending_install->receipt() instanceof AcquisitionReceipt
+			|| ! $this->pending_install->matches_descriptor( $descriptor )
 			|| $response instanceof \WP_Error
 		) {
 			return $this->fail_pending( 'unverified_pre_install' );
 		}
-		try {
-			AcquisitionReceipt::assert_fresh( $this->pending_install->receipt(), $verified['current'], $descriptor, $verified['now'] );
-		} catch ( InvalidArgumentException ) {
-			return $this->fail_pending( 'unverified_pre_install' );
-		}
-		$this->state = $verified['current'];
 		if ( ! $this->live() ) {
 			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
@@ -1321,6 +1388,9 @@ final class NativePackageUpdater {
 		if ( ! $this->pending_install->capture_install_result( $result ) ) {
 			return $this->fail_pending( 'unverified_install_result' );
 		}
+		if ( $this->pending_install->multi_run() && $this->lock_owned && $this->lock_multi_run && null !== $this->lock_token ) {
+			$this->updater_lock->mark_multi_run_settled( $this->lock_token );
+		}
 		return $result;
 	}
 
@@ -1355,15 +1425,24 @@ final class NativePackageUpdater {
 	}
 	/** @param array<string,mixed> $results */
 	public function observe_automatic_results( array $results ): void {
-		if ( null === $this->attempt_outcome || ! is_array( $this->pending_install->install_result() ) || ( null === $this->native_owner && ! $this->live() ) ) {
-			return;
-		}
-		$field   = 'plugin' === $this->target_type ? 'plugin' : 'theme';
-		$entries = $results[ $this->target_type ] ?? array();
-		foreach ( is_array( $entries ) ? $entries : array() as $entry ) {
-			if ( is_object( $entry ) && is_object( $entry->item ?? null ) && ( $entry->item->$field ?? null ) === $this->installed_identity ) {
-				$this->observe_wordpress_error( $entry->result ?? null );
+		if ( null !== $this->attempt_outcome && is_array( $this->pending_install->install_result() ) && ( null !== $this->native_owner || $this->live() ) ) {
+			$field   = 'plugin' === $this->target_type ? 'plugin' : 'theme';
+			$entries = $results[ $this->target_type ] ?? array();
+			foreach ( is_array( $entries ) ? $entries : array() as $entry ) {
+				if ( is_object( $entry ) && is_object( $entry->item ?? null ) && ( $entry->item->$field ?? null ) === $this->installed_identity ) {
+					$this->observe_wordpress_error( $entry->result ?? null );
+				}
 			}
+		}
+		if (
+			null === $this->exact_install
+			&& null === $this->native_mutation_begin
+			&& ! $this->lock_owned
+			&& null !== $this->lock_token
+			&& $this->shutdown_scheduled
+			&& $this->pending_install->active()
+		) {
+			$this->finalize_pending_install();
 		}
 	}
 	private function observe_wordpress_error( mixed $result ): void {
@@ -1431,27 +1510,18 @@ final class NativePackageUpdater {
 				$this->diagnose( 'descriptor_admission_rejected', null, true );
 				return;
 			}
-			$verified = $this->verify_installed_manifest( $descriptor );
 			if (
 				! $this->pending_install->install_result_captured()
 				|| ( ! $this->pending_install->completion_observed() && ! $this->pending_install->multi_run() )
-				|| null === $verified
+				|| ! $this->verify_installed_manifest( $descriptor )
 			) {
 				$this->diagnose( 'outcome_uncertain', null );
 				return;
 			}
-			$this->state = $verified;
 			// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
 			if ( 'wordpress' !== ( $this->attempt_outcome['source'] ?? null ) ) {
-				$completed = BindingFenceCoordinator::complete_persistent_install( $this->wpdb, $verified, $this->claim, $this->pending_install->receipt(), $descriptor, true );
-				if ( 'completed' === $completed['result'] && $completed['current'] instanceof BindingState ) {
-					$this->state          = $completed['current'];
-					$this->claim          = $this->claim( $this->state );
-					$this->native_outcome = 'verified_success';
-					$this->sync_installed_headers( $descriptor );
-				} else {
-					$this->diagnose( 'outcome_uncertain', null );
-				}
+				$this->native_outcome = 'verified_success';
+				$this->sync_installed_headers( $descriptor );
 			}
 		} catch ( \Throwable $error ) {
 			if ( null === $exact ) {
@@ -1461,39 +1531,40 @@ final class NativePackageUpdater {
 		} finally {
 			$this->clear_pending();
 			$this->finalizing = false;
+			if ( null === $exact && $this->shutdown_scheduled ) {
+				if ( function_exists( 'remove_action' ) ) {
+					remove_action( 'shutdown', array( $this, 'finalize_pending_install' ), PHP_INT_MAX );
+				}
+				$this->shutdown_scheduled = false;
+			}
 			if ( $shutdown ) {
 				$this->disarm_exact_install();
 			}
 		}
 	}
 
-	private function verify_installed_manifest( IdentityDescriptor $descriptor ): ?BindingState {
+	private function verify_installed_manifest( IdentityDescriptor $descriptor ): bool {
 		$result      = $this->pending_install->install_result();
 		$destination = is_array( $result ) ? ( $result['destination'] ?? null ) : null;
 		if ( ! is_string( $destination ) || ! $this->installed_destination_matches( $destination ) ) {
-			return null;
+			return false;
 		}
 		$manifest_root = $this->registered_plugin_symlink_target( $destination ) ?? $destination;
 		$manifest      = $this->manifest_builder->build( $manifest_root );
-		$verified      = $this->verify_current();
-		$receipt       = $this->pending_install->receipt();
-		if ( null === $verified || ! $receipt instanceof AcquisitionReceipt || null === $manifest ) {
-			return null;
+		if ( ! $this->verify_mutation_lock() || null === $manifest ) {
+			return false;
 		}
-		try {
-			AcquisitionReceipt::assert_archive_manifest(
-				$receipt,
-				$verified['current'],
+		if (
+			! $this->pending_install->matches_archive_manifest(
 				$descriptor,
-				$verified['now'],
 				$this->manifest_builder->hash( $manifest ),
 				count( $manifest ),
 				$this->manifest_builder->expanded_bytes( $manifest )
-			);
-		} catch ( InvalidArgumentException ) {
-			return null;
+			)
+		) {
+			return false;
 		}
-		return $this->pending_install->staging_verified() && $this->matches_staged_metadata( $destination, null, true ) && $this->installed_destination_matches( $destination ) ? $verified['current'] : null;
+		return $this->pending_install->staging_verified() && $this->matches_staged_metadata( $destination, null, true ) && $this->installed_destination_matches( $destination );
 	}
 
 	private function installed_destination_matches( string $destination ): bool {
@@ -1519,8 +1590,9 @@ final class NativePackageUpdater {
 		return $this->diagnostics; }
 	/** @return array{candidate_header_version:string|null,candidate_tag:string|null,candidate_validation_code:string|null,candidate_version:string|null,failure_code:string|null,installed_version:string|null,last_check:int|null,offered_release_identity:string|null,offered_version:string|null,relationship:string|null,last_native_outcome:array<string,mixed>|null} */ public function status(): array {
 		$outcome = ! $this->selected_runtime_state instanceof SelectedRuntimeState || $this->selected_runtime_state->broker_is_live()
-			? BindingFenceCoordinator::read_persistent_native_outcome( $this->wpdb, $this->binding ) : null;
-		return array_merge( $this->status, array( 'last_native_outcome' => $outcome ) ); }
+			? $this->last_native_outcome : null;
+		return array_merge( $this->status, array( 'last_native_outcome' => $outcome ) );
+	}
 	public function refresh(): bool {
 		if ( null !== $this->exact_install || $this->native_beginning || null !== $this->native_owner ) {
 			return false;
@@ -1582,14 +1654,14 @@ final class NativePackageUpdater {
 			return false;
 		}
 		$this->native_beginning = true;
-		$receipt                = $this->pending_install->receipt();
+		$proof                  = $this->pending_install->archive_proof();
 		try {
 			$owner = ( $this->native_mutation_begin )( $this->target_type, $this->installed_identity );
 			if ( ! is_string( $owner ) || 1 !== preg_match( '/\A[^\x00-\x20\x7f]{1,191}\z/D', $owner ) ) {
 				return false;
 			}
 			$this->native_owner = $owner;
-			return $this->pending_install->staging_verified() && $receipt === $this->pending_install->receipt() && null !== $this->verify_current();
+			return $this->live() && $this->pending_install->staging_verified() && $proof === $this->pending_install->archive_proof() && $this->verify_mutation_lock();
 		} catch ( \Throwable ) {
 			return false;
 		} finally {
@@ -1603,8 +1675,11 @@ final class NativePackageUpdater {
 		}
 	}
 
-	/** @param array<string,mixed> $configuration */
-	private static function valid_configuration( array $configuration, BindingRecord $binding ): bool {
+	/**
+	 * @param array<string,mixed> $configuration
+	 * @param TargetBinding       $facts
+	 */
+	private static function valid_configuration( array $configuration, array $facts ): bool {
 		if ( ! self::exact_keys( $configuration, self::CONFIGURATION_KEYS ) || ! is_string( $configuration['installed_directory'] ) || ! is_array( $configuration['headers'] ) || ! self::exact_keys( $configuration['headers'], self::HEADER_KEYS ) || ! is_string( $configuration['update_uri'] ) || ! in_array( $configuration['policy'], array( 'disabled', 'forced-off', 'manual', 'automatic' ), true ) || ! self::valid_native_identity( $configuration['target_type'], $configuration['installed_package_identity'] ) ) {
 			return false;
 		}
@@ -1617,7 +1692,6 @@ final class NativePackageUpdater {
 				return false;
 			}
 		}
-		$facts = $binding->to_array();
 		if ( $configuration['target_type'] !== $facts['target_type'] || ! hash_equals( $configuration['installed_package_identity'], $facts['installed_package_identity'] ) || null === ReleaseVersion::normalize_header( $configuration['headers']['Version'] ) ) {
 			return false;
 		}
@@ -1634,12 +1708,13 @@ final class NativePackageUpdater {
 	private function matches_runtime_uri( string $runtime_uri ): bool {
 		return CanonicalUpdateUri::canonicalize_boundaries(
 			array(
-				'archive_preflight' => $this->binding->to_array()['canonical_update_uri'],
+				'archive_preflight' => $this->target_binding['canonical_update_uri'],
 				'configuration'     => $this->update_uri,
 				'offer'             => $runtime_uri,
 				'staged_package'    => $this->headers['UpdateURI'],
 			)
-		) === $this->update_uri; }
+		) === $this->update_uri;
+	}
 	private function manual_eligible( IdentityDescriptor $descriptor ): bool {
 		$facts = $descriptor->to_array()['assurance_facts'];
 		foreach ( array( 'exact_artifact_identity', 'exact_commit_identity', 'exact_reacquisition_supported', 'exact_release_identity', 'repository_identity_stable', 'trusted_digest_source' ) as $fact ) {
@@ -1810,7 +1885,7 @@ final class NativePackageUpdater {
 
 		$headers = $parsed['headers'];
 		return hash_equals( $this->headers['Name'], $headers['Name'] )
-			&& hash_equals( $this->binding->to_array()['theme_template'], $headers['Template'] )
+			&& hash_equals( $this->target_binding['theme_template'], $headers['Template'] )
 			&& $this->matches_runtime_uri( $headers['UpdateURI'] )
 			? $headers['Version'] : null;
 	}
@@ -1824,30 +1899,37 @@ final class NativePackageUpdater {
 		add_action( 'shutdown', array( $this, 'finalize_pending_install' ), PHP_INT_MAX, 0 );
 		$this->shutdown_scheduled = true;
 	}
-	private function claim_discovery(): bool {
-		if ( $this->lease_held && null !== $this->verify_current() ) {
+	private function acquire_mutation_lock( bool $multi_run ): bool {
+		if ( null !== $this->native_mutation_begin ) {
 			return true;
 		}
-		$this->clear_discovery_snapshot();
-		$this->lease_held = false;
-		$this->state      = null;
-		$this->claim      = null;
-		try {
-			$owner = bin2hex( random_bytes( 32 ) );
-		} catch ( \Throwable ) {
-			return false; }
-		$claimed = BindingFenceCoordinator::claim_persistent_binding_state( $this->wpdb, $this->binding, $owner, 600 );
-		if ( 'claimed' !== $claimed['result'] || ! $claimed['current'] instanceof BindingState ) {
+		if ( function_exists( 'doing_action' ) && doing_action( 'wp_maybe_auto_update' ) ) {
+			$token = $this->updater_lock->current_token();
+			if ( null === $token ) {
+				return false;
+			}
+			$this->lock_token     = $token;
+			$this->lock_owned     = false;
+			$this->lock_multi_run = false;
+			return true;
+		}
+		$token = $multi_run ? $this->updater_lock->acquire_multi_run() : $this->updater_lock->acquire();
+		if ( null === $token ) {
 			return false;
 		}
-		$this->state      = $claimed['current'];
-		$this->claim      = $this->claim( $this->state );
-		$this->lease_held = true;
-		$this->schedule_finalization();
+		$this->lock_token     = $token;
+		$this->lock_owned     = true;
+		$this->lock_multi_run = $multi_run;
 		return true;
 	}
+	/** @phpstan-impure The updater lock row in wp_options may change between reads. */
+	private function verify_mutation_lock(): bool {
+		if ( null !== $this->native_mutation_begin ) {
+			return true;
+		}
+		return null !== $this->lock_token && $this->updater_lock->verify( $this->lock_token );
+	}
 	/**
-	 * claim_discovery() has established the current binding fence before discovery.
 	 * @param (\Closure(): void)|null $on_discovery
 	 */
 	private function discover( string $installed, string &$reason = '', ?\Closure $on_discovery = null ): ?IdentityDescriptor {
@@ -1865,7 +1947,6 @@ final class NativePackageUpdater {
 			$on_discovery();
 		}
 		$this->clear_discovery_snapshot();
-		$discovery_claim = $this->claim;
 		$discovery_epoch = $this->discovery_epoch;
 		try {
 			$listed     = $this->adapter->list_releases();
@@ -1914,7 +1995,7 @@ final class NativePackageUpdater {
 			$reason   = 'candidate_rejected';
 			try {
 				$descriptor = $this->adapter->inspect( $candidate['release_identity'], $candidate['tag'] );
-				BindingRecord::assert_descriptor_binding( $descriptor, $this->binding );
+				self::assert_descriptor_binding( $descriptor, $this->target_binding );
 			} catch ( ReleaseFailure $failure ) {
 				$this->retain_candidate_rejection( $candidate, $failure->rejection_reason );
 				$reason                                    = 'candidate_inspection_failed';
@@ -1939,9 +2020,8 @@ final class NativePackageUpdater {
 			$facts                                    = $descriptor->to_array();
 			$this->status['candidate_header_version'] = $facts['version'];
 			$this->descriptor                         = $descriptor;
-			if ( $this->native_discovery_reuse && is_array( $discovery_claim ) && null !== $this->verify_current() && $this->live() && $this->discovery_epoch === $discovery_epoch && $this->claim === $discovery_claim ) {
+			if ( $this->native_discovery_reuse && $this->live() && $this->discovery_epoch === $discovery_epoch ) {
 				$this->discovery_snapshot = array(
-					'claim'      => $discovery_claim,
 					'descriptor' => $descriptor,
 					'installed'  => $normalized_installed,
 				);
@@ -2030,7 +2110,7 @@ final class NativePackageUpdater {
 			&& in_array( $failure->cleanup_status, array( 'not_applicable', 'complete' ), true );
 	}
 	private function reusable_discovery( string $installed ): ?IdentityDescriptor {
-		if ( ! $this->live() || ! $this->native_discovery_reuse || ! is_array( $this->discovery_snapshot ) || ! is_array( $this->claim ) || $this->discovery_snapshot['installed'] !== $installed || $this->discovery_snapshot['claim'] !== $this->claim ) {
+		if ( ! $this->live() || ! $this->native_discovery_reuse || ! is_array( $this->discovery_snapshot ) || $this->discovery_snapshot['installed'] !== $installed ) {
 			return null;
 		}
 		$descriptor = $this->discovery_snapshot['descriptor'];
@@ -2056,7 +2136,7 @@ final class NativePackageUpdater {
 		$this->status['offered_version']          = null; }
 	private function token( IdentityDescriptor $descriptor ): ?string {
 		$value = array(
-			'binding_hash' => $this->binding->binding_hash(),
+			'binding_hash' => $this->binding_hash,
 			'descriptor'   => $descriptor->to_array(),
 			'schema'       => 1,
 		);
@@ -2094,11 +2174,11 @@ final class NativePackageUpdater {
 			if ( ! self::exact_keys( $value, array( 'binding_hash', 'descriptor', 'schema' ) ) || 1 !== $value['schema'] ) {
 				return null;
 			}
-			if ( ! is_string( $value['binding_hash'] ) || ! hash_equals( $this->binding->binding_hash(), $value['binding_hash'] ) ) {
+			if ( ! is_string( $value['binding_hash'] ) || ! hash_equals( $this->binding_hash, $value['binding_hash'] ) ) {
 				return null;
 			}
 			$descriptor = IdentityDescriptor::rehydrate( $value['descriptor'] );
-			BindingRecord::assert_descriptor_binding( $descriptor, $this->binding );
+			self::assert_descriptor_binding( $descriptor, $this->target_binding );
 			return $descriptor;
 		} catch ( \Throwable ) {
 			return null; }
@@ -2120,25 +2200,6 @@ final class NativePackageUpdater {
 		$copy = $this->archive_store->copy( $path, $descriptor, $on_allocate );
 		return null === $copy ? null : array_merge( $copy, array( 'proof' => $proof ) );
 	}
-	/** @return array<string,mixed> */ private function claim( BindingState $state ): array {
-		return array(
-			'binding_generation' => $state->binding_generation(),
-			'binding_hash'       => $state->binding()->binding_hash(),
-			'lease_deadline'     => $state->lease_deadline(),
-			'owner_token'        => $state->owner_token(),
-		); }
-	/**
-	 * @phpstan-impure The binding fence is persistent and may change between reads.
-	 * @return array{current:BindingState,now:int}|null
-	 */
-	private function verify_current(): ?array {
-		if ( ! $this->state instanceof BindingState ) {
-			return null;
-		} $verified = BindingFenceCoordinator::verify_persistent_binding_state( $this->wpdb, $this->state, $this->claim );
-		return 'verified' === $verified['result'] && $verified['current'] instanceof BindingState && is_int( $verified['now'] ?? null ) ? array(
-			'current' => $verified['current'],
-			'now'     => $verified['now'],
-		) : null; }
 	/**
 	 * Related to https://core.trac.wordpress.org/ticket/27365, which concerns
 	 * updater error returns rather than this Theme_Upgrader result-array read.
@@ -2205,11 +2266,13 @@ final class NativePackageUpdater {
 				'release_identity'   => $descriptor->release_identity(),
 				'version'            => $descriptor->to_array()['version'],
 				'last_observed_step' => $this->pending_install->last_observed_step(),
+				'recorded_at'        => time(),
 			)
 		);
 		$release    = $release || null !== $record;
-		$state      = $this->state;
-		$claim      = $this->claim;
+		$lock_token = $this->lock_token;
+		$lock_owned = $this->lock_owned;
+		$lock_multi = $this->lock_multi_run;
 		$this->clear_discovery_snapshot();
 		$this->disarm_theme_error_bridge();
 		$this->archive_store->remove( $archive, $directory );
@@ -2238,11 +2301,15 @@ final class NativePackageUpdater {
 		$host             = 'not_applicable';
 		$lease            = 'not_held';
 		$release_fallback = null;
-		if ( null !== $exact && ! $shutdown && $release && $state instanceof BindingState ) {
-			// Keep the exact claim available if a host callback interrupts this request.
-			$release_fallback = function () use ( $state, $claim, $record ): void {
+		if ( null !== $exact && ! $shutdown && $release && $lock_owned && null !== $lock_token ) {
+			// Keep the exact lock token available if a host callback interrupts this request.
+			$release_fallback = function () use ( $lock_token, $lock_multi ): void {
 				try {
-					BindingFenceCoordinator::release_persistent_binding_state( $this->wpdb, $state, $claim, $record );
+					if ( $lock_multi ) {
+						$this->updater_lock->release_multi_run( $lock_token );
+					} else {
+						$this->updater_lock->release( $lock_token );
+					}
 				} catch ( \Throwable ) {
 					$this->diagnose( 'outcome_uncertain', null );
 				}
@@ -2255,11 +2322,11 @@ final class NativePackageUpdater {
 		$this->native_owner       = null;
 		$this->native_outcome     = 'uncertain';
 		if ( $release ) {
-			$this->state      = null;
-			$this->claim      = null;
-			$this->lease_held = false;
+			$this->lock_token     = null;
+			$this->lock_owned     = false;
+			$this->lock_multi_run = false;
 		}
-		// Finish private cleanup and the consumer callback before committing the final record.
+		// Finish private cleanup and the consumer callback before releasing the updater lock.
 		if ( null !== $owner && null !== $this->native_mutation_complete ) {
 			try {
 				( $this->native_mutation_complete )( $owner, $this->target_type, $this->installed_identity, $outcome );
@@ -2269,13 +2336,12 @@ final class NativePackageUpdater {
 				$host    = 'failed';
 			}
 		}
-		if ( $release && $state instanceof BindingState ) {
-			if ( null !== $record && 'verified_success' === $outcome ) {
-				$record['outcome'] = 'verified_success';
-			}
+		if ( $release && $lock_owned && null !== $lock_token ) {
 			try {
-				$released = BindingFenceCoordinator::release_persistent_binding_state( $this->wpdb, $state, $claim, $record );
-				$lease    = 'released' === $released['result'] ? 'released' : 'failed';
+				$released = $lock_multi
+					? $this->updater_lock->release_multi_run( $lock_token )
+					: $this->updater_lock->release( $lock_token );
+				$lease    = $released ? 'released' : 'failed';
 			} catch ( \Throwable $error ) {
 				if ( null === $exact ) {
 					throw $error;
@@ -2286,6 +2352,14 @@ final class NativePackageUpdater {
 		}
 		if ( null !== $release_fallback && 'released' === $lease ) {
 			remove_action( 'shutdown', $release_fallback, PHP_INT_MAX );
+		}
+		if ( null !== $record ) {
+			if ( 'verified_success' === $outcome ) {
+				$record['outcome'] = 'verified_success';
+			} elseif ( 'verified_success' === $candidate ) {
+				$record['outcome'] = 'uncertain';
+			}
+			$this->last_native_outcome = $record;
 		}
 		if ( null !== $exact ) {
 			$exact->finalization = array(

@@ -83,7 +83,6 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			$catalog
 		);
 		self::assertStringNotContainsString( 'new GitHubCredentialResolver', $catalog );
-		self::assertStringNotContainsString( 'BindingRecord::create', $catalog );
 		self::assertStringNotContainsString( "'archive_root'", $catalog );
 		self::assertStringNotContainsString( "'configuration_update_uri'", $catalog );
 	}
@@ -95,13 +94,11 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			'RAN\\WPReleaseUpdater\\V1\\Contract\\CanonicalUpdateUri',
 			'RAN\\WPReleaseUpdater\\V1\\Contract\\IdentityDescriptor',
 			'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseVersion',
-			'RAN\\WPReleaseUpdater\\V1\\Contract\\BindingRecord',
 			'RAN\\WPReleaseUpdater\\V1\\Contract\\ReleaseAdapter',
 			'RAN\\WPReleaseUpdater\\V1\\Archive\\ValidatedPackage',
 			'RAN\\WPReleaseUpdater\\V1\\Archive\\TemporaryArtifact',
 			'RAN\\WPReleaseUpdater\\V1\\Archive\\PackageIdentityValidator',
-			'RAN\\WPReleaseUpdater\\V1\\WordPress\\BindingFenceCoordinator',
-			'RAN\\WPReleaseUpdater\\V1\\Contract\\AcquisitionReceipt',
+			'RAN\\WPReleaseUpdater\\V1\\WordPress\\WordPressUpdaterLock',
 			'RAN\\WPReleaseUpdater\\V1\\WordPress\\NativePackageUpdater',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\GitHubCredentialResolver',
 			'RAN\\WPReleaseUpdater\\V1\\Provider\\GitHub\\ProspectiveReleaseInspection',

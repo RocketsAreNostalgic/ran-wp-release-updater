@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\WordPress;
 
-use RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt;
+use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 
-/** Constrains the mutable state of one admitted native install operation. */
+/**
+ * Constrains the mutable state of one admitted native install operation.
+ *
+ * @phpstan-type ArchiveProof array{descriptor_fingerprint:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,sha256:string,size:int,update_uri:string}
+ */
 final class PendingInstallState {
 
 	private bool $active               = false;
@@ -15,21 +19,25 @@ final class PendingInstallState {
 	private ?string $archive           = null;
 	private ?string $archive_directory = null;
 	/** @var array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null */
-	private ?array $archive_identity      = null;
-	private ?AcquisitionReceipt $receipt  = null;
+	private ?array $archive_identity = null;
+	/** @var ArchiveProof|null */
+	private ?array $archive_proof         = null;
 	private bool $install_result_captured = false;
 	private mixed $install_result         = null;
 	private bool $completion_observed     = false;
 	private bool $multi_run               = false;
 
-	/** @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity */
-	public function begin( string $archive, string $directory, array $identity, AcquisitionReceipt $receipt, bool $multi_run ): void {
+	/**
+	 * @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity
+	 * @param ArchiveProof                                                  $archive_proof
+	 */
+	public function begin( string $archive, string $directory, array $identity, array $archive_proof, bool $multi_run ): void {
 		$this->clear();
 		$this->active            = true;
 		$this->archive           = $archive;
 		$this->archive_directory = $directory;
 		$this->archive_identity  = $identity;
-		$this->receipt           = $receipt;
+		$this->archive_proof     = $archive_proof;
 		$this->multi_run         = $multi_run;
 	}
 
@@ -40,7 +48,7 @@ final class PendingInstallState {
 		$this->archive                 = null;
 		$this->archive_directory       = null;
 		$this->archive_identity        = null;
-		$this->receipt                 = null;
+		$this->archive_proof           = null;
 		$this->install_result_captured = false;
 		$this->install_result          = null;
 		$this->completion_observed     = false;
@@ -48,28 +56,63 @@ final class PendingInstallState {
 	}
 
 	public function active(): bool {
-		return $this->active; }
+		return $this->active;
+	}
 	public function archive(): ?string {
-		return $this->archive; }
+		return $this->archive;
+	}
 	public function archive_directory(): ?string {
-		return $this->archive_directory; }
+		return $this->archive_directory;
+	}
 	/** @return array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null */
 	public function archive_identity(): ?array {
-		return $this->archive_identity; }
-	public function receipt(): ?AcquisitionReceipt {
-		return $this->receipt; }
+		return $this->archive_identity;
+	}
+	/** @return ArchiveProof|null */
+	public function archive_proof(): ?array {
+		return $this->archive_proof;
+	}
 	public function extraction_admitted(): bool {
-		return $this->extraction_admitted; }
+		return $this->extraction_admitted;
+	}
 	public function install_result_captured(): bool {
-		return $this->install_result_captured; }
+		return $this->install_result_captured;
+	}
 	public function install_result(): mixed {
-		return $this->install_result; }
+		return $this->install_result;
+	}
 	public function completion_observed(): bool {
-		return $this->completion_observed; }
+		return $this->completion_observed;
+	}
 	public function multi_run(): bool {
-		return $this->multi_run; }
+		return $this->multi_run;
+	}
 	public function staging_verified(): bool {
-		return $this->staging_verified; }
+		return $this->staging_verified;
+	}
+
+	public function matches_descriptor( IdentityDescriptor $descriptor ): bool {
+		if ( null === $this->archive_proof ) {
+			return false;
+		}
+		$facts = $descriptor->to_array();
+		return hash_equals( $this->archive_proof['descriptor_fingerprint'], $descriptor->fingerprint_value() )
+			&& hash_equals( $this->archive_proof['sha256'], $facts['artifact_sha256'] )
+			&& $this->archive_proof['size'] === $facts['artifact_size']
+			&& hash_equals( $this->archive_proof['update_uri'], $facts['canonical_update_uri'] );
+	}
+
+	public function matches_archive_manifest( IdentityDescriptor $descriptor, string $manifest_hash, int $entry_count, int $expanded_bytes ): bool {
+		if ( null === $this->archive_proof || ! $this->matches_descriptor( $descriptor ) ) {
+			return false;
+		}
+		return 1 === preg_match( '/\A[a-f0-9]{64}\z/D', $manifest_hash )
+			&& $entry_count > 0
+			&& $expanded_bytes >= 0
+			&& hash_equals( $this->archive_proof['manifest_hash'], $manifest_hash )
+			&& $this->archive_proof['manifest_entry_count'] === $entry_count
+			&& $this->archive_proof['manifest_expanded_bytes'] === $expanded_bytes;
+	}
 
 	/** Last observed evidence only; this does not assert that a stage succeeded. */
 	public function last_observed_step(): ?string {
@@ -84,7 +127,7 @@ final class PendingInstallState {
 	}
 
 	public function admit_extraction(): bool {
-		if ( ! $this->active || null === $this->archive || null === $this->archive_identity || null === $this->receipt ) {
+		if ( ! $this->active || null === $this->archive || null === $this->archive_identity || null === $this->archive_proof ) {
 			return false;
 		}
 		$this->extraction_admitted = true;

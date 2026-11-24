@@ -46,17 +46,11 @@ The package does not introduce a generic updater base class, public provider reg
 
 `NativePackageUpdater` owns the package's native plugin/theme hooks and callback lifecycle. It does not own provider authority and it does not replace WordPress Core as installer.
 
-`BindingFenceCoordinator` owns the persistent binding/fence boundary used to prevent stale or competing writers from claiming the same target operation. It coordinates durable ownership state; it is not the complete release-update orchestrator.
+`WordPressUpdaterLock` aligns standalone release-update mutations on WordPress Core's `auto_updater.lock` contract using fractional tokens, `'off'` autoload, `INSERT IGNORE` acquisition, and exact-token `CAST(option_value AS BINARY)` deletion. Read-only discovery writes no database lock. When a host supplies `native_mutation_begin` and `native_mutation_complete`, the host owns `auto_updater.lock`; during standalone `wp_maybe_auto_update`, the updater reuses and verifies Core's active `auto_updater.lock` without deleting it.
 
-`RequestBroker` is the single request-local broker for declarations and physical-runtime selection. It does not replace the durable fence coordinator.
+`RequestBroker` is the single request-local broker for declarations and physical-runtime selection. It does not replace the mutation lock.
 
-The selected runtime captures the current network ID at activation. Its target
-fence identifies the network, target type, and installed package identity, not
-the current blog. Main-site and subsite observations of the same target on one
-network therefore share that fence. Different network IDs have independent
-fences: this is not an installation-wide mutex for the shared plugin or theme
-files. A host coordinating mutations across networks must supply its own
-installation-wide exclusion and recovery policy.
+The selected runtime captures the current network ID at activation. Target registration keys include the network, target type, and installed package identity rather than the current blog, while standalone mutation locking uses the site's `auto_updater.lock` option row. A host coordinating mutations across networks supplies its own installation-wide exclusion and recovery policy.
 
 The runtime and its callbacks are request-local. Capturing a network ID does not
 bind host credentials or authorization to that origin, or follow later context

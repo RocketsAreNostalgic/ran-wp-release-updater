@@ -336,9 +336,9 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 		foreach ( array(
 			array( 'tests/Integration/wordpress-integration.php', 'WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound', '$unrelated_new_global = true;' ),
 			array( 'src/Provider/GitHub/GitHubReleaseService.php', 'WordPress.Security.EscapeOutput.ExceptionNotEscaped', 'throw new \\RuntimeException( $unreviewed_message );' ),
-			array( 'src/Contract/BindingRecord.php', 'WordPress.WP.AlternativeFunctions.json_encode_json_encode', 'json_encode( array() );' ),
+			array( 'src/WordPress/NativePackageUpdater.php', 'WordPress.WP.AlternativeFunctions.json_encode_json_encode', 'json_encode( array() );' ),
 			array( 'bootstrap.php', 'WordPress.WP.AlternativeFunctions.parse_url_parse_url', 'parse_url( "https://example.test/" );' ),
-			array( 'src/WordPress/BindingFenceCoordinator.php', 'WordPress.DB.PreparedSQL.NotPrepared', '$wpdb->query( $unprepared_sql );' ),
+			array( 'src/WordPress/WordPressUpdaterLock.php', 'WordPress.DB.PreparedSQL.NotPrepared', '$wpdb->query( $unprepared_sql );' ),
 			array( 'src/WordPress/NativePackageUpdater.php', 'WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode', 'base64_encode( "unrelated" );' ),
 			array( 'src/Runtime/RuntimeCopySelector.php', 'WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents', 'file_get_contents( "/tmp/unrelated" );' ),
 		) as list( $path, $diagnostic, $probe ) ) {
@@ -494,7 +494,6 @@ final class ProductionAnalysisCoverageTest extends TestCase {
 
 	public function test_exact_negative_contract_annotations_do_not_hide_the_next_occurrence(): void {
 		$cases = array(
-			array( 'Contract/AcquisitionReceiptTest.php', 'argument.type', '<?php /** @param array<mixed> $d */ function ran_negative_probe(int $a, string $b, bool $c, array $d, object $e): void {}', 'ran_negative_probe(array(), array(), array(), 1, "wrong", 6);' ),
 			array( 'Archive/PackageIdentityValidatorTest.php', 'expr.resultUnused', '<?php $object = new stdClass();', 'clone $object;' ),
 			array( 'Integration/real-mysql-cas-proof.php', 'function.alreadyNarrowedType', '<?php', 'if (is_array(array())) { echo 1; }' ),
 			array( 'Architecture/ProductionAnalysisCoverageTest.php', 'phpstanApi.constructor', '<?php', 'new \\PHPStan\\File\\FileExcluder(new \\PHPStan\\File\\FileHelper(__DIR__), array());' ),
