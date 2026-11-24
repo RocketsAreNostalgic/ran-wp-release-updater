@@ -46,7 +46,7 @@ if ( 'runtime_active' !== ( $activation['code'] ?? null ) ) {
 require_once dirname( __DIR__, 2 ) . '/Support/ControllableReleaseAdapter.php';
 add_filter( 'filesystem_method', static fn (): string => 'direct' );
 
-$ran_wp_release_updater_test_slug     = 'exact-copy-zero-slug' === $mode ? '0' : 'offer-target';
+$ran_wp_release_updater_test_slug     = 'offer-target';
 $ran_wp_release_updater_test_uri      = $ran_wp_release_updater_test_exact ? 'https://github.com/exact-fixture/offer-target' : 'https://offer-release.invalid/offer-target/repository';
 $ran_wp_release_updater_test_identity = 'plugin' === $type ? $ran_wp_release_updater_test_slug . '/offer-target.php' : $ran_wp_release_updater_test_slug;
 $ran_wp_release_updater_test_option   = 'plugin' === $type ? 'update_plugins' : 'update_themes';
@@ -74,12 +74,6 @@ foreach ( 'plugin' === $type ? array( 'offer-target.php' ) : array( 'style.css',
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
 	file_put_contents( $ran_wp_release_updater_test_directory . '/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes( $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_installed ) . "// installed\n" );
 	$ran_wp_release_updater_test_zip->addFromString( $ran_wp_release_updater_test_slug . '/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes( $ran_wp_release_updater_test_name, '2.0.0' ) . "// release\n" );
-}
-if ( 'exact-recovery-verified-directory' === $mode ) {
-	$ran_wp_release_updater_test_zip->addFromString( 'offer-target/verified/nested/readme.txt', 'Verified incoming file' );
-}
-if ( str_starts_with( $mode, 'exact-copy-incoming-' ) ) {
-	$ran_wp_release_updater_test_zip->addFromString( 'offer-target/offer-target' . ( str_starts_with( $mode, 'exact-copy-incoming-directory' ) ? '/readme.txt' : '' ), 'Incoming payload for copy fallback' );
 }
 $ran_wp_release_updater_test_zip->close();
 if ( 'plugin' === $type ) {

@@ -3649,6 +3649,123 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				}
 			}
 		}
+
+		public function test_post_update_cache_file_does_not_fail_installed_package_verification(): void {
+			list( $updater ) = $this->subject();
+			$prepared        = $this->prepare_install( $updater );
+			$cache_dir       = $prepared['destination'] . '/cache';
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Simulate a post-update hook creating a cache directory before shutdown.
+			self::assertTrue( mkdir( $cache_dir, 0700, true ) );
+			$cache_file = $cache_dir . '/routes.php';
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Simulate a post-update hook writing a cache file before shutdown.
+			file_put_contents( $cache_file, "<?php return array('cached' => true);\n" );
+			$this->paths[] = $cache_file;
+			$this->paths[] = $cache_dir;
+
+			$updater->finalize_pending_install();
+
+			self::assertContains( 'update_completed', $updater->diagnostics() );
+			self::assertNull( $updater->status()['failure_code'] );
+			self::assertSame( 'verified_success', $this->retained_outcome( $updater )['outcome'] );
+		}
+
+		public function test_installed_version_mismatch_fails_lightweight_installed_package_verification(): void {
+			list( $updater ) = $this->subject();
+			$prepared        = $this->prepare_install( $updater );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Simulate rolled-back or stale installed header version before shutdown.
+			file_put_contents(
+				$prepared['destination'] . '/package.php',
+				"<?php\n/*\nPlugin Name: Package\nVersion: 1.0.0\nUpdate URI: {$this->uri()}\n*/"
+			);
+
+			$updater->finalize_pending_install();
+
+			self::assertContains( 'outcome_uncertain', $updater->diagnostics() );
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
+			self::assertSame( 'uncertain', $this->retained_outcome( $updater )['outcome'] );
+		}
+
+		public function test_staged_package_verification_checks_header_identity_without_tree_hashing(): void {
+			list( $updater ) = $this->subject();
+			$offer           = $this->offer( $updater );
+			$owned_archive   = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $owned_archive );
+			self::assertNull( $updater->filter_pre_unzip_file( null, $owned_archive, '/tmp', array(), 0.0 ) );
+			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
+
+			$bad_stage = $this->staged(
+				'package.php',
+				"<?php\n/*\nPlugin Name: Package\nVersion: 1.9.9\nUpdate URI: {$this->uri()}\n*/"
+			);
+			$rejected  = $updater->filter_source_selection( $bad_stage, '/tmp', null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $rejected );
+			self::assertSame( 'ran_wp_release_updater_staged_package_identity_invalid', $rejected->get_error_code() );
+
+			$offer_two         = $this->offer( $updater );
+			$owned_archive_two = $updater->filter_pre_download( false, $offer_two['package'], null, $this->extra() );
+			self::assertIsString( $owned_archive_two );
+			self::assertNull( $updater->filter_pre_unzip_file( null, $owned_archive_two, '/tmp', array(), 0.0 ) );
+			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
+			$stage = $this->staged();
+			$extra = $stage . '/runtime-generated.txt';
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Prove source selection checks package header/identity without walking the full directory tree.
+			file_put_contents( $extra, 'generated-during-staging' );
+			$this->paths[] = $extra;
+			self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', null, $this->extra() ) );
+			$updater->finalize_pending_install();
+		}
+
+		public function test_exact_install_invocation_uses_native_word_press_upgraders_without_subclasses(): void {
+			$script = <<<'PHP'
+<?php
+declare(strict_types=1);
+require $argv[1];
+class WP_Upgrader_Skin {}
+class Bulk_Plugin_Upgrader_Skin extends WP_Upgrader_Skin {
+	public function flush_output(): void {}
+}
+class Theme_Upgrader_Skin extends WP_Upgrader_Skin {
+	public function feedback( $feedback, ...$args ): void { unset( $feedback, $args ); }
+}
+class WP_Upgrader {
+	public mixed $result = null;
+	public function __construct( public WP_Upgrader_Skin $skin ) {}
+}
+class Plugin_Upgrader extends WP_Upgrader {}
+class Theme_Upgrader extends WP_Upgrader {}
+
+$plugin = \RAN\WPReleaseUpdater\V1\WordPress\ExactInstallInvocation::create( 'plugin', 'token-p', '1.0.0' );
+$theme  = \RAN\WPReleaseUpdater\V1\WordPress\ExactInstallInvocation::create( 'theme', 'token-t', '1.0.0' );
+echo json_encode(
+	array(
+		'plugin_class' => get_class( $plugin->upgrader ),
+		'theme_class'  => get_class( $theme->upgrader ),
+		'plugin_skin'  => $plugin->uses_original_skin(),
+		'theme_skin'   => $theme->uses_original_skin(),
+	),
+	JSON_THROW_ON_ERROR
+);
+PHP;
+			$file   = tempnam( $this->temporary_directory, 'ran-exact-upgrader-' );
+			self::assertIsString( $file );
+			$this->paths[] = $file;
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write isolated subprocess script for native WP_Upgrader class verification.
+			file_put_contents( $file, $script );
+			$output = array();
+			$status = 0;
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run minimal WordPress upgrader stubs in an isolated PHP process.
+			exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $file ) . ' ' . escapeshellarg( dirname( __DIR__ ) . '/bootstrap.php' ), $output, $status );
+			self::assertSame( 0, $status, implode( "\n", $output ) );
+			self::assertSame(
+				array(
+					'plugin_class' => 'Plugin_Upgrader',
+					'theme_class'  => 'Theme_Upgrader',
+					'plugin_skin'  => true,
+					'theme_skin'   => true,
+				),
+				json_decode( implode( "\n", $output ), true, 64, JSON_THROW_ON_ERROR )
+			);
+		}
 		/** @return array<string,mixed> */
 		private function retained_outcome( NativePackageUpdater $updater ): array {
 			$record = $updater->status()['last_native_outcome'];
