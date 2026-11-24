@@ -277,7 +277,12 @@ PHP;
 	private function synthetic_catalog_entry(): string {
 		return <<<'PHP'
 	'synthetic' => array(
-	'native' => static function( array $d, array $resolved, array $headers, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
+	'native' => static function( array $d, array $resolved, \Closure $header_loader, string $identity, int $networkId, mixed $selectedRuntimeState ): array {
+		$loaded = $header_loader();
+		if ( 'installed_header_verified' !== ( $loaded['code'] ?? null ) || ! is_array( $loaded['headers'] ?? null ) ) {
+			return array( 'native' => null, 'code' => is_string( $loaded['code'] ?? null ) ? $loaded['code'] : 'installed_header_invalid' );
+		}
+		$headers = $loaded['headers'];
 		$uri = \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( 'https://synthetic.invalid/' . $d['repository_locator'] );
 		if ( $uri !== \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $headers['UpdateURI'] ) ) {
 			return array( 'native' => null, 'code' => 'installed_update_uri_mismatch' );

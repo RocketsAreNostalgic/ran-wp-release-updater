@@ -4,36 +4,17 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\WordPress;
 
+use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
+use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
 use RAN\WPReleaseUpdater\V1\Dependency\PluginFileIdentifier;
 use RAN\WPReleaseUpdater\V1\Dependency\RuntimeVersion;
 use RAN\WPReleaseUpdater\V1\Dependency\WordPressHeaders;
-use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
-use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 
-/** @internal Resolves one stable, WordPress-registered installed target. */
+/** @internal Resolves one WordPress-registered installed target and lazily reads its headers. */
 final class InstalledPackageResolver {
 
 	private const MAX_HEADER_BYTES = WordPressHeaders::MAX_BYTES;
-
-	/** @var null|\Closure(string):void Tests inject a deterministic race by Reflection. */
-	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
-	private ?\Closure $before_first_stat = null;
-
-	/** @var null|\Closure(string):void Tests inject a deterministic race by Reflection. */
-	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
-	private ?\Closure $after_first_read = null;
-
-	/** @var (\Closure(resource,int):(string|false))|null Tests inject bounded read failures by Reflection. */
-	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
-	private ?\Closure $read = null;
-
-	/** @var null|\Closure(resource):bool Tests inject lock and rewind failures by Reflection. */
-	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
-	private ?\Closure $lock = null;
-	/** @var null|\Closure(resource):bool Tests inject rewind failures by Reflection. */
-	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
-	private ?\Closure $rewind = null;
 
 	/**
 	 * @param array<string,mixed> $plugin_paths Registered logical-to-physical plugin paths.
@@ -48,17 +29,19 @@ final class InstalledPackageResolver {
 	}
 
 	/**
+	 * Resolves and validates the installed path and package identity without reading file bytes.
+	 *
 	 * @param array<string,mixed> $declaration Target declaration.
 	 * @return array<string,mixed>
 	 */
-	public function resolve( array $declaration ): array {
+	public function resolve_location( array $declaration ): array {
 		$file = $declaration['installed_file'] ?? null;
 		$type = $declaration['target_type'] ?? null;
 		if ( ! is_string( $file ) || ! in_array( $type, array( 'plugin', 'theme' ), true ) || ! $this->valid_path( $file ) ) {
 			return array( 'code' => 'installed_file_invalid' );
 		}
 
-		$file = str_replace( '\\', '/', $file );
+		$file = self::normalize_path( $file );
 		clearstatcache( true, $file );
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$initial = @lstat( $file );
@@ -72,7 +55,7 @@ final class InstalledPackageResolver {
 			return array( 'code' => 'installed_file_not_regular' );
 		}
 
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Resolve the actual local path for containment and repeat-observation checks; failure is rejected without emitting warnings.
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Resolve the actual local path for containment checks; failure is rejected without emitting warnings.
 		$real = @realpath( $file );
 		if ( ! is_string( $real ) ) {
 			return array( 'code' => 'installed_file_unreadable' );
@@ -89,27 +72,66 @@ final class InstalledPackageResolver {
 			return array( 'code' => 'installed_file_outside_root' );
 		}
 
-		$identity_root = 'plugin' === $type ? rtrim( str_replace( '\\', '/', $this->plugin_directory ), '/' ) : $root['logical'];
+		$identity_root = 'plugin' === $type ? self::untrailingslash_path( $this->plugin_directory ) : $root['logical'];
 		$identity      = $this->identity( $type, $root['file'], $identity_root );
 		if ( is_string( $identity ) ) {
 			return array( 'code' => $identity );
 		}
-		$captured = $this->capture( $file, $initial );
-		if ( is_string( $captured ) ) {
-			return array( 'code' => $captured );
-		}
 
+		return array(
+			'archive_root'               => $identity['root'],
+			'code'                       => 'installed_location_verified',
+			'file'                       => $file,
+			'header_file'                => $identity['file'],
+			'installed_package_identity' => $identity['identity'],
+		);
+	}
+
+	/**
+	 * Reads and strictly validates local package headers on demand.
+	 *
+	 * Delegates extraction to WordPress Core's get_file_data() when loaded, falling back to
+	 * a single bounded read and WordPressHeaders::parse() in standalone contexts.
+	 *
+	 * @return array{code:string,headers?:array<string,string>}
+	 */
+	public function read_headers( string $file, string $type ): array {
+		if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) ) {
+			return array( 'code' => 'installed_header_invalid' );
+		}
 		clearstatcache( true, $file );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
-		$last = @lstat( $file );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Resolve the actual local path for containment and repeat-observation checks; failure is rejected without emitting warnings.
-		$last_real = @realpath( $file );
-		$last_root = is_string( $last_real ) ? $this->root_for( $type, $file, $last_real ) : null;
-		if ( ! $this->same_stat( $initial, $last ) || $real !== $last_real || ! is_array( $last_root ) || $root !== $last_root ) {
-			return array( 'code' => 'installed_file_changed' );
+		if ( is_link( $file ) ) {
+			return array( 'code' => 'installed_file_symlink' );
+		}
+		if ( ! is_file( $file ) || ! is_readable( $file ) ) {
+			return array( 'code' => 'installed_file_unreadable' );
 		}
 
-		$header_result = PackageIdentityValidator::parse_header( $captured[0], $type );
+		if ( function_exists( 'get_file_data' ) ) {
+			$labels = array(
+				'Author'      => 'Author',
+				'Description' => 'Description',
+				'Name'        => 'theme' === $type ? 'Theme Name' : 'Plugin Name',
+				'PackageURI'  => 'theme' === $type ? 'Theme URI' : 'Plugin URI',
+				'RequiresPHP' => 'Requires PHP',
+				'RequiresWP'  => 'Requires at least',
+				'UpdateURI'   => 'Update URI',
+				'Version'     => 'Version',
+			);
+			if ( 'theme' === $type ) {
+				$labels['Template'] = 'Template';
+			}
+			$extracted     = get_file_data( $file, $labels );
+			$header_result = PackageIdentityValidator::validate_extracted_headers( $extracted, $type );
+		} else {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Single bounded local header read when WordPress get_file_data() is unavailable.
+			$contents = @file_get_contents( $file, false, null, 0, self::MAX_HEADER_BYTES );
+			if ( ! is_string( $contents ) ) {
+				return array( 'code' => 'installed_file_unreadable' );
+			}
+			$header_result = PackageIdentityValidator::parse_header( $contents, $type );
+		}
+
 		if ( 'installed_header_verified' !== $header_result['code'] || ! isset( $header_result['headers'] ) ) {
 			return array( 'code' => $header_result['code'] );
 		}
@@ -119,12 +141,45 @@ final class InstalledPackageResolver {
 		}
 
 		return array(
-			'archive_root'               => $identity['root'],
-			'code'                       => 'installed_identity_verified',
-			'header_file'                => $identity['file'],
-			'headers'                    => $headers,
-			'installed_package_identity' => $identity['identity'],
+			'code'    => 'installed_header_verified',
+			'headers' => $headers,
 		);
+	}
+
+	/**
+	 * @param array<string,mixed> $declaration Target declaration.
+	 * @return array<string,mixed>
+	 */
+	public function resolve( array $declaration ): array {
+		$location = $this->resolve_location( $declaration );
+		if ( 'installed_location_verified' !== ( $location['code'] ?? null ) ) {
+			return $location;
+		}
+		$type          = is_string( $declaration['target_type'] ?? null ) ? $declaration['target_type'] : '';
+		$header_result = $this->read_headers( $location['file'], $type );
+		if ( 'installed_header_verified' !== $header_result['code'] || ! isset( $header_result['headers'] ) ) {
+			return array( 'code' => $header_result['code'] );
+		}
+
+		return array(
+			'archive_root'               => $location['archive_root'],
+			'code'                       => 'installed_identity_verified',
+			'header_file'                => $location['header_file'],
+			'headers'                    => $header_result['headers'],
+			'installed_package_identity' => $location['installed_package_identity'],
+		);
+	}
+
+	private static function normalize_path( string $path ): string {
+		if ( function_exists( 'wp_normalize_path' ) ) {
+			return wp_normalize_path( $path );
+		}
+		return str_replace( '\\', '/', $path );
+	}
+
+	private static function untrailingslash_path( string $path ): string {
+		$normalized = self::normalize_path( $path );
+		return function_exists( 'untrailingslashit' ) ? untrailingslashit( $normalized ) : rtrim( $normalized, '/' );
 	}
 
 	private function valid_path( string $path ): bool {
@@ -151,11 +206,12 @@ final class InstalledPackageResolver {
 		$roots = array();
 		if ( 'plugin' === $type ) {
 			$this->add_root( $roots, $this->plugin_directory, $this->plugin_directory );
+			$plugin_root = self::untrailingslash_path( $this->plugin_directory );
 			foreach ( $this->plugin_paths as $logical => $actual ) {
 				if ( ! is_string( $logical ) || ! is_string( $actual ) ) {
 					continue;
 				}
-				if ( $this->inside( rtrim( str_replace( '\\', '/', $logical ), '/' ), rtrim( str_replace( '\\', '/', $this->plugin_directory ), '/' ) ) ) {
+				if ( $this->inside( self::untrailingslash_path( $logical ), $plugin_root ) ) {
 					$this->add_root( $roots, $logical, $actual, true );
 				}
 			}
@@ -205,17 +261,17 @@ final class InstalledPackageResolver {
 
 	/** @param array<string,array{logical:string,real:string,explicit:bool}> $roots */
 	private function add_root( array &$roots, string $logical, string $actual, bool $explicit = false ): void {
-		$logical = rtrim( str_replace( '\\', '/', $logical ), '/' );
-		$actual  = rtrim( str_replace( '\\', '/', $actual ), '/' );
+		$logical = self::untrailingslash_path( $logical );
+		$actual  = self::untrailingslash_path( $actual );
 		if ( ! $this->valid_path( $logical ) || ! $this->valid_path( $actual ) ) {
 			return;
 		}
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Resolve the actual local path for containment and repeat-observation checks; failure is rejected without emitting warnings.
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Resolve the actual local path for containment checks; failure is rejected without emitting warnings.
 		$real = @realpath( $actual );
 		if ( ! is_string( $real ) || ! is_dir( $real ) ) {
 			return;
 		}
-		$real                             = str_replace( '\\', '/', $real );
+		$real                             = self::normalize_path( $real );
 		$roots[ $logical . "\0" . $real ] = array(
 			'logical'  => $logical,
 			'real'     => $real,
@@ -224,8 +280,8 @@ final class InstalledPackageResolver {
 	}
 
 	private function inside( string $path, string $root ): bool {
-		$path = str_replace( '\\', '/', $path );
-		$root = str_replace( '\\', '/', $root );
+		$path = self::normalize_path( $path );
+		$root = self::normalize_path( $root );
 		if ( 'Windows' === PHP_OS_FAMILY ) {
 			$path = strtolower( $path );
 			$root = strtolower( $root );
@@ -278,58 +334,6 @@ final class InstalledPackageResolver {
 		);
 	}
 
-	/**
-	 * @param array<int|string,int> $initial Initial file metadata.
-	 * @return string|array{0:string,1:array<int|string,int>}
-	 */
-	private function capture( string $file, array $initial ): string|array {
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Keep native stream identity and access mode; failed opens follow the existing rejection and cleanup path.
-		$stream = @fopen( $file, 'rb' );
-		if ( ! is_resource( $stream ) ) {
-			return 'installed_file_unreadable';
-		}
-
-		try {
-			if ( null !== $this->before_first_stat ) {
-				( $this->before_first_stat )( $file );
-			}
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
-			$first = @fstat( $stream );
-			if ( ! $this->same_stat( $initial, $first ) ) {
-				return 'installed_file_changed';
-			}
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Take the nonblocking shared lock on this exact descriptor; failure returns the existing unreadable result.
-			$locked = null === $this->lock ? @flock( $stream, LOCK_SH | LOCK_NB ) : ( $this->lock )( $stream );
-			if ( ! $locked ) {
-				return 'installed_file_unreadable';
-			}
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read bounded bytes from the already opened native stream; existing type, length and identity checks govern acceptance.
-			$one = null === $this->read ? fread( $stream, self::MAX_HEADER_BYTES ) : ( $this->read )( $stream, 1 );
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Rewind this exact locked descriptor for the second observation; failure rejects the capture.
-			$rewound = null === $this->rewind ? -1 !== @fseek( $stream, 0 ) : ( $this->rewind )( $stream );
-			if ( ! is_string( $one ) || ! $rewound ) {
-				return 'installed_file_unreadable';
-			}
-			if ( null !== $this->after_first_read ) {
-				( $this->after_first_read )( $file );
-			}
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read bounded bytes from the already opened native stream; existing type, length and identity checks govern acceptance.
-			$two = null === $this->read ? fread( $stream, self::MAX_HEADER_BYTES ) : ( $this->read )( $stream, 2 );
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
-			$last = @fstat( $stream );
-			if ( ! is_string( $two ) ) {
-				return 'installed_file_unreadable';
-			}
-			if ( $one !== $two || ! $this->same_stat( $initial, $last ) ) {
-				return 'installed_file_changed';
-			}
-			return array( $one, $last );
-		} finally {
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream owned by this operation; no WordPress filesystem abstraction applies.
-			fclose( $stream );
-		}
-	}
-
 	/** @param array<string,string> $headers */
 	private function requirements_incompatible( array $headers ): bool {
 		if ( null === ReleaseVersion::normalize_header( $headers['Version'] ) ) {
@@ -346,21 +350,5 @@ final class InstalledPackageResolver {
 		$wordpress  = is_string( $raw_wp ) ? RuntimeVersion::wordpress( $raw_wp ) : null;
 		$comparison = is_string( $wordpress ) ? ReleaseVersion::compare( $wordpress, $headers['RequiresWP'] ) : null;
 		return '' !== $headers['RequiresWP'] && ( null === ReleaseVersion::normalize_header( $headers['RequiresWP'] ) || null === $comparison || $comparison < 0 );
-	}
-
-	/**
-	 * @param array<int|string,int> $one Initial file metadata.
-	 * @phpstan-assert-if-true =array<mixed> $two
-	 */
-	private function same_stat( array $one, mixed $two ): bool {
-		if ( ! is_array( $two ) ) {
-			return false;
-		}
-		foreach ( array( 'dev', 'ino', 'mode', 'size', 'mtime', 'ctime' ) as $key ) {
-			if ( ( $one[ $key ] ?? null ) !== ( $two[ $key ] ?? null ) ) {
-				return false;
-			}
-		}
-		return true;
 	}
 }

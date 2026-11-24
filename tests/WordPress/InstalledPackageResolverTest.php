@@ -220,28 +220,6 @@ final class InstalledPackageResolverTest extends TestCase {
 		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Seed the controlled WordPress global state observed by this fixture and its native callbacks.
 		$GLOBALS['wp_version'] = '6.9-beta1-60740';
 		self::assertSame( 'installed_requirement_incompatible', $resolver->resolve( $this->declaration( 'plugin', $this->file( 'plugins/requires-newer-wordpress/main.php', $this->plugin_header( "\nRequires at least: 6.10\n" ) ) ) )['code'] );
-		$changed  = $this->file( 'plugins/changed/main.php', $this->plugin_header() );
-		$property = new \ReflectionProperty( InstalledPackageResolver::class, 'after_first_read' );
-		$property->setValue(
-			$resolver,
-			static function ( string $file ): void {
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
-				file_put_contents( $file, "<?php\n/* Plugin Name: Changed\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n*/\n" );
-			}
-		);
-		self::assertSame( 'installed_file_changed', $resolver->resolve( $this->declaration( 'plugin', $changed ) )['code'] ); // R01.
-		$initial_drift = $this->file( 'plugins/initial-drift/main.php', $this->plugin_header() );
-		$before        = new \ReflectionProperty( InstalledPackageResolver::class, 'before_first_stat' );
-		$before->setValue(
-			$resolver,
-			static function ( string $file ): void {
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- Move the real fixture entry to exercise replacement identity; an abstract filesystem would change the scenario.
-				rename( $file, $file . '.old' );
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
-				file_put_contents( $file, "<?php\n/* Plugin Name: Replacement\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/example\n*/\n" );
-			}
-		);
-		self::assertSame( 'installed_file_changed', $resolver->resolve( $this->declaration( 'plugin', $initial_drift ) )['code'] );
 	}
 
 	public function test_installed_headers_permit_absent_requirements_and_reject_in_block_duplicates(): void {
@@ -261,18 +239,103 @@ final class InstalledPackageResolverTest extends TestCase {
 		}
 	}
 
-	public function test_deterministic_capture_failures_are_unreadable(): void {
-		$file = $this->file( 'plugins/capture/main.php', $this->plugin_header() );
-		foreach ( array(
-			'lock'   => static fn (): bool => false,
-			'rewind' => static fn (): bool => false,
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read the native stream directly to preserve bounded reads and injected failure behavior.
-			'read'   => static fn ( mixed $stream, int $read ): string|false => 2 === $read ? false : fread( $stream, 8192 ),
-		) as $property => $seam ) {
-			$resolver = $this->resolver();
-			( new \ReflectionProperty( InstalledPackageResolver::class, $property ) )->setValue( $resolver, $seam );
-			self::assertSame( 'installed_file_unreadable', $resolver->resolve( $this->declaration( 'plugin', $file ) )['code'] );
-		}
+	public function test_resolve_location_defers_header_reads_until_read_headers_is_called(): void {
+		$resolver = $this->resolver();
+		$file     = $this->file( 'plugins/lazy/main.php', "<?php\n/* Missing required headers */\n" );
+		$location = $resolver->resolve_location( $this->declaration( 'plugin', $file ) );
+		self::assertSame( 'installed_location_verified', $location['code'] );
+		self::assertSame( 'lazy/main.php', $location['installed_package_identity'] );
+		self::assertSame( 'installed_header_missing', $resolver->read_headers( $file, 'plugin' )['code'] );
+	}
+
+	public function test_read_headers_uses_wordpress_get_file_data_and_strict_post_validation_when_loaded(): void {
+		$plugin     = $this->file( 'plugins/wp-stub/main.php', $this->plugin_header( "Requires PHP: 8.2\nRequires at least: 6.5" ) );
+		$invalid    = $this->file( 'plugins/wp-bad/main.php', $this->plugin_header() );
+		$script     = $this->root . '/wp-header-probe.php';
+		$facts_file = $this->root . '/wp-header-facts.json';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Encode exact fixture facts for an isolated process; WordPress JSON filters must not alter fixture bytes.
+		$encoded = json_encode(
+			array(
+				'bootstrap' => dirname( __DIR__ ) . '/bootstrap.php',
+				'invalid'   => $invalid,
+				'plugin'    => $plugin,
+				'plugins'   => $this->root . '/plugins',
+				'themes'    => $this->root . '/themes',
+			),
+			JSON_THROW_ON_ERROR
+		);
+		$fixture = <<<'PHP'
+<?php
+$GLOBALS['ran_wp_stub_calls'] = array( 'get_file_data' => 0, 'wp_normalize_path' => 0, 'untrailingslashit' => 0 );
+function wp_normalize_path( string $path ): string {
+	++$GLOBALS['ran_wp_stub_calls']['wp_normalize_path'];
+	$path = str_replace( '\\', '/', $path );
+	return (string) preg_replace( '|(?<=.)/+|', '/', $path );
+}
+function untrailingslashit( string $value ): string {
+	++$GLOBALS['ran_wp_stub_calls']['untrailingslashit'];
+	return rtrim( $value, '/\\' );
+}
+function get_file_data( string $file, array $default_headers, string $context = '' ): array {
+	++$GLOBALS['ran_wp_stub_calls']['get_file_data'];
+	unset( $default_headers, $context );
+	if ( str_contains( $file, 'wp-bad' ) ) {
+		return array(
+			'Name'        => 'Bad',
+			'Version'     => 'not-a-version',
+			'UpdateURI'   => 'https://github.com/acme/example',
+			'Author'      => '',
+			'Description' => '',
+			'PluginURI'   => '',
+			'RequiresWP'  => '',
+			'RequiresPHP' => '',
+			'Template'    => '',
+		);
+	}
+	return array(
+		'Name'        => 'Example',
+		'Version'     => '1.0.0',
+		'UpdateURI'   => 'https://github.com/acme/example',
+		'Author'      => 'Acme',
+		'Description' => 'Desc',
+		'PluginURI'   => '',
+		'RequiresWP'  => '6.5',
+		'RequiresPHP' => '8.2',
+		'Template'    => '',
+	);
+}
+$ran_facts             = json_decode( (string) file_get_contents( $argv[1] ), true, 64, JSON_THROW_ON_ERROR );
+$GLOBALS['wp_version'] = '6.8.0';
+require $ran_facts['bootstrap'];
+$ran_resolver = new \RAN\WPReleaseUpdater\V1\WordPress\InstalledPackageResolver( $ran_facts['plugins'], array(), array( $ran_facts['themes'] ), '8.2.0' );
+$ran_ok       = $ran_resolver->resolve( array( 'target_type' => 'plugin', 'installed_file' => $ran_facts['plugin'] ) );
+$ran_bad      = $ran_resolver->read_headers( $ran_facts['invalid'], 'plugin' );
+echo json_encode(
+	array(
+		'bad'   => $ran_bad['code'],
+		'calls' => $GLOBALS['ran_wp_stub_calls'],
+		'ok'    => $ran_ok['code'],
+		'name'  => $ran_ok['headers']['Name'] ?? null,
+	),
+	JSON_THROW_ON_ERROR
+);
+PHP;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write isolated subprocess script for WordPress helper delegation verification.
+		file_put_contents( $script, $fixture );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact fixture input bytes for the native subprocess.
+		file_put_contents( $facts_file, $encoded );
+		$output = array();
+		$status = 0;
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
+		exec( escapeshellarg( PHP_BINARY ) . ' -n ' . escapeshellarg( $script ) . ' ' . escapeshellarg( $facts_file ), $output, $status );
+		self::assertSame( 0, $status, implode( "\n", $output ) );
+		$result = json_decode( implode( "\n", $output ), true, 64, JSON_THROW_ON_ERROR );
+		self::assertSame( 'installed_identity_verified', $result['ok'] );
+		self::assertSame( 'Example', $result['name'] );
+		self::assertSame( 'installed_header_invalid', $result['bad'] );
+		self::assertSame( 2, $result['calls']['get_file_data'] );
+		self::assertGreaterThan( 0, $result['calls']['wp_normalize_path'] );
+		self::assertGreaterThan( 0, $result['calls']['untrailingslashit'] );
 	}
 
 	public function test_php_requirement_normalizes_distro_suffixes_and_fails_closed_when_unparseable(): void {

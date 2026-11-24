@@ -548,7 +548,7 @@ PHP;
 			self::addToAssertionCount( 1 ); }
 	}
 
-	public function test_archive_manifest_is_canonical_across_zip_entry_order(): void {
+	public function test_archive_validation_succeeds_across_zip_entry_order(): void {
 		$header         = $this->header( 'Plugin Name', 'Example Plugin' );
 		$first          = $this->archive(
 			array(
@@ -568,9 +568,11 @@ PHP;
 		$second_package = $validator->validate( $this->descriptor( $second, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $second );
 		self::assertTrue( $first_package->is_valid() );
 		self::assertTrue( $second_package->is_valid() );
-		self::assertSame( $first_package->to_array()['manifest_hash'], $second_package->to_array()['manifest_hash'] );
-		self::assertSame( 2, $first_package->to_array()['manifest_entry_count'] );
-		self::assertSame( strlen( $header ) + strlen( '<?php return true;' ), $first_package->to_array()['manifest_expanded_bytes'] );
+		self::assertSame( 'example-plugin', $first_package->to_array()['archive_root'] );
+		self::assertSame( $first_package->to_array()['archive_root'], $second_package->to_array()['archive_root'] );
+		self::assertSame( $first_package->to_array()['header_file'], $second_package->to_array()['header_file'] );
+		self::assertSame( $first_package->to_array()['metadata_name'], $second_package->to_array()['metadata_name'] );
+		self::assertSame( $first_package->to_array()['update_uri'], $second_package->to_array()['update_uri'] );
 	}
 
 	public function test_rejects_duplicate_semantic_headers(): void {
@@ -1284,7 +1286,7 @@ PHP;
 		$policy_large['maximum_artifact_bytes'] = $large_limit;
 		$validated                              = $validator->validate( $descriptor, $policy_large, $archive );
 		self::assertTrue( $validated->is_valid() );
-		self::assertSame( $expanded, $validator->consume_receipt_proof( $validated, $descriptor )['manifest_expanded_bytes'] );
+		self::assertSame( $descriptor->to_array()['artifact_sha256'], $validator->consume_receipt_proof( $validated, $descriptor )['sha256'] );
 
 		$zip = new \ZipArchive();
 		self::assertTrue( $zip->open( $archive ) );

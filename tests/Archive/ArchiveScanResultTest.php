@@ -18,12 +18,11 @@ final class ArchiveScanResultTest extends TestCase {
 				'compressed_size' => 10,
 			),
 		);
-		$result  = ArchiveScanResult::ready( root: 'plugin', entries: $entries, expanded_bytes: 15 );
+		$result  = ArchiveScanResult::ready( root: 'plugin', entries: $entries );
 		self::assertTrue( $result->is_valid() );
 		self::assertNull( $result->failure_code() );
 		self::assertSame( 'plugin', $result->root() );
 		self::assertSame( $entries, $result->entries() );
-		self::assertSame( 15, $result->expanded_bytes() );
 	}
 
 	public function test_named_blocked_factory_retains_only_failure_code(): void {
@@ -32,6 +31,5 @@ final class ArchiveScanResultTest extends TestCase {
 		self::assertSame( 'archive_size_limit', $result->failure_code() );
 		self::assertNull( $result->root() );
 		self::assertSame( array(), $result->entries() );
-		self::assertSame( 0, $result->expanded_bytes() );
 	}
 }

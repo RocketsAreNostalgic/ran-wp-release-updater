@@ -598,16 +598,8 @@ moves or replaces the installed folder, for interactive, bulk and background upd
 The native error code is `ran_wp_release_updater_target_is_working_copy`.
 The same closed reason, `target_is_working_copy`, appears in
 `$handle->status()['native']['failure_code']` and `$handle->diagnostics()` in the
-current request. It survives WordPress's install-result hook.
-
-An intentional overwrite requires `allow_working_copy: true` on that target's
-`plugin()` or `theme()` registration. The option defaults to `false`; it is not
-a global filter or a persisted permission. Conflicting registrations for the
-same target are rejected, including registrations that disagree on this option.
-
-This closed refusal and declaration option advance the runtime generation.
-Incompatible physical copies refuse each other in either load order; deploy the
-qualified family together so an older broker cannot discard this refusal reason.
+current request. It survives WordPress's install-result hook. Working copies are
+always refused without a registration override.
 
 ## Host-bound provider replacement
 
@@ -769,17 +761,6 @@ and fits 120 bytes, with shape `[A-Za-z0-9][A-Za-z0-9._+-]*`; otherwise null.
 The foreign-code `identifier()` rule is unsuitable for numeric-leading tags,
 upper case, `+`, and the 120-byte tag bound. The strict credential screen is retained;
 nothing is truncated, rewritten or redacted. Consumers must escape display context.
-
-`ran_wp_release_updater_check_completed_v2` receives the unchanged v1 completion
-fields plus `search_exhausted` (bool|null), `listing_diagnostics` (the report above
-or null), and `candidate_rejections` (at most eight samples of the same three-key
-shape). It follows v1 and uses the same check ID; there is no second start event.
-Known inspection/acquisition rejection reasons survive an older successful offer.
-Unknown causes do not acquire invented reasons; messages, details, URLs and digests
-are withheld. A new actual check clears previous request-local reports. V1's keys,
-reasons and values remain unchanged. This slice adds no transport, offer or admission
-diagnostics. Incompatible runtime generations fail closed in either load order;
-consumer adoption and publication remain separate owner decisions.
 
 
 ### Package folder names

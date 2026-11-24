@@ -245,7 +245,7 @@ $release = array(
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $queue_proof = static function () use ( $release, $bytes, $fixture_repository_id ): void {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	$GLOBALS['rs_responses'] = array( ran_wp_release_updater_test_rs_response( array( 'id' => (int) $fixture_repository_id ) ), ran_wp_release_updater_test_rs_response( $release ), array_replace( ran_wp_release_updater_test_rs_response( null ), array( 'body' => str_repeat( 'a', 40 ) ) ), ran_wp_release_updater_test_rs_response( array( 'id' => (int) $fixture_repository_id ) ), ran_wp_release_updater_test_rs_response( null, $bytes ), ran_wp_release_updater_test_rs_response( array( 'id' => (int) $fixture_repository_id ) ) );
+	$GLOBALS['rs_responses'] = array( ran_wp_release_updater_test_rs_response( array( 'id' => (int) $fixture_repository_id ) ), ran_wp_release_updater_test_rs_response( $release ), array_replace( ran_wp_release_updater_test_rs_response( null ), array( 'body' => str_repeat( 'a', 40 ) ) ), ran_wp_release_updater_test_rs_response( null, $bytes ) );
 };
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $credentials = 0;
@@ -332,7 +332,7 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 		} elseif ( 'fence-inspect' === $scenario ) {
 			ran_wp_release_updater_test_rs_assert(
 				array(
-					'requests' => 6,
+					'requests' => 4,
 					'zips'     => 1,
 				) === $fence_delta,
 				'README inspection fence did not complete its public operation.'
@@ -344,7 +344,7 @@ if ( str_starts_with( $scenario, 'fence-' ) ) {
 			ran_wp_release_updater_test_rs_assert( hash_equals( $acquisition['value']['inspection']['artifact_sha256'], (string) hash_file( 'sha256', $application_owned_path ) ), 'Acquisition fence prepared-copy digest changed.' );
 			ran_wp_release_updater_test_rs_assert(
 				array(
-					'requests' => 6,
+					'requests' => 4,
 					'zips'     => 1,
 				) === $fence_delta,
 				'Acquisition fence did not complete its public operation.'

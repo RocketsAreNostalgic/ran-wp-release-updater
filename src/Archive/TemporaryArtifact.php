@@ -23,7 +23,7 @@ final class TemporaryArtifact {
 	/** @param array<string, int> $identity */
 	public function __construct(
 		private string $path,
-		private string $sha256,
+		string $sha256,
 		private array $identity,
 		?callable $liveness_guard = null
 	) {
@@ -131,39 +131,11 @@ final class TemporaryArtifact {
 
 	private function is_unchanged(): bool {
 		$identity = self::file_identity( $this->path );
-		if ( null === $identity || $identity !== $this->identity ) {
-			return false;
-		}
-
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Hash the verified regular file and recheck native identity; missing or changed files fail closed quietly.
-		$sha256 = @hash_file( 'sha256', $this->path );
-		$after  = self::file_identity( $this->path );
-
-		return is_string( $sha256 )
-			&& hash_equals( $this->sha256, $sha256 )
-			&& null !== $after
-			&& $after === $this->identity;
-	}
-
-	/** @internal Windows lstat reports 0666 for writable regular files even after chmod(0600). */
-	public static function has_private_file_mode( int $mode, string $os_family = PHP_OS_FAMILY ): bool {
-		if ( 0100000 !== ( $mode & 0170000 ) ) {
-			return false;
-		}
-		$permissions = $mode & 0777;
-		if ( 'Windows' === $os_family ) {
-			return in_array( $permissions, array( 0600, 0666 ), true );
-		}
-		return 0600 === $permissions;
+		return null !== $identity && $identity === $this->identity;
 	}
 
 	/** @return array<string, int>|null */
 	private static function file_identity( string $path ): ?array {
-		$stat = RegularFileStat::read( $path );
-		if ( null === $stat || 1 !== $stat['nlink'] || ! self::has_private_file_mode( $stat['mode'] ) ) {
-			return null;
-		}
-
-		return $stat;
+		return RegularFileStat::read( $path );
 	}
 }

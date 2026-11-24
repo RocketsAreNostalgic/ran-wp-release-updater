@@ -59,7 +59,7 @@ PHP,
 			)
 		);
 
-		self::assertCount( 3, $result['observations'] );
+		self::assertCount( 2, $result['observations'] );
 		self::assertSame( 'runtime_identity_invalid', $result['observations'][1][1]['reason'] );
 		self::assertTrue( $result['activation']['loaded'] );
 		self::assertSame( $first, $result['selected'] );

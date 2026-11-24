@@ -22,16 +22,15 @@ final class GitHubArtifactStore {
 			throw new RuntimeException( 'A private temporary file could not be created.' );
 		}
 		$created_identity = $this->identity( $path );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Apply the required native file permissions; failure follows the existing rejection and cleanup path.
-		if ( null === $created_identity || ! @chmod( $path, 0600 ) ) {
-			$clean = is_array( $created_identity )
-				? $this->remove( $path, $created_identity )
-				: ! file_exists( $path ) && ! is_link( $path );
+		if ( null === $created_identity ) {
+			$clean = ! file_exists( $path ) && ! is_link( $path );
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new GitHubArtifactCustodyFailure( $clean, 'A private temporary file could not be created.' );
 		}
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Best-effort tighten temporary file permissions without rejecting Windows/ACL/setgid hosts.
+		@chmod( $path, 0600 );
 		$identity = $this->identity( $path );
-		if ( null === $identity || 1 !== $identity['nlink'] ) {
+		if ( null === $identity ) {
 			$clean = $this->remove( $path, $created_identity );
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This exception carries internal failure data rather than an HTML response; escaping would alter the failure contract.
 			throw new GitHubArtifactCustodyFailure( $clean, 'The private temporary file is invalid.' );

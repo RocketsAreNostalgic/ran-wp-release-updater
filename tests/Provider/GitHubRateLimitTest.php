@@ -267,16 +267,76 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 		 * @return array{limited:bool,remaining:?int,reset_at:?int,retry_after:int}
 		 */
 		private function rate_limit( int $status, array $headers, int $now ): array {
-			$method = new \ReflectionMethod( GitHubReleaseService::class, 'rate_limit' );
-			return $method->invoke(
-				null,
-				array(
-					'response' => array( 'code' => $status ),
-					'headers'  => $headers,
-					'body'     => '',
-				),
-				$now
-			);
+			$script     = tempnam( sys_get_temp_dir(), 'ran-rate-limit-probe-' );
+			$facts_file = tempnam( sys_get_temp_dir(), 'ran-rate-limit-facts-' );
+			self::assertIsString( $script );
+			self::assertIsString( $facts_file );
+			try {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Encode exact fixture facts for an isolated process; WordPress JSON filters must not alter fixture bytes.
+				$encoded = json_encode(
+					array(
+						'bootstrap' => dirname( __DIR__ ) . '/bootstrap.php',
+						'headers'   => $headers,
+						'now'       => $now,
+						'status'    => $status,
+					),
+					JSON_THROW_ON_ERROR
+				);
+				$fixture = <<<'PHP'
+<?php
+namespace RAN\WPReleaseUpdater\V1\Provider\GitHub {
+	function time(): int {
+		return $GLOBALS['ran_rate_limit_now'];
+	}
+}
+namespace {
+	function wp_remote_retrieve_response_code( array $response ): int|string {
+		return $response['response']['code'];
+	}
+	function wp_remote_retrieve_header( array $response, string $name ): mixed {
+		return $response['headers'][ strtolower( $name ) ] ?? null;
+	}
+	$ran_facts                     = json_decode( (string) file_get_contents( $argv[1] ), true, 64, JSON_THROW_ON_ERROR );
+	$GLOBALS['ran_rate_limit_now'] = $ran_facts['now'];
+	require $ran_facts['bootstrap'];
+	$ran_method = new \ReflectionMethod( \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::class, 'rate_limit' );
+	try {
+		$ran_result = $ran_method->invoke(
+			null,
+			array(
+				'response' => array( 'code' => $ran_facts['status'] ),
+				'headers'  => $ran_facts['headers'],
+				'body'     => '',
+			)
+		);
+		echo json_encode( array( 'ok' => true, 'result' => $ran_result ), JSON_THROW_ON_ERROR );
+	} catch ( \RuntimeException $ran_exception ) {
+		echo json_encode( array( 'ok' => false, 'message' => $ran_exception->getMessage() ), JSON_THROW_ON_ERROR );
+	}
+}
+PHP;
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write isolated subprocess script for deterministic rate-limit time verification.
+				file_put_contents( $script, $fixture );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact fixture input bytes for the native subprocess.
+				file_put_contents( $facts_file, $encoded );
+				$output = array();
+				$code   = 0;
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
+				exec( escapeshellarg( PHP_BINARY ) . ' -n ' . escapeshellarg( $script ) . ' ' . escapeshellarg( $facts_file ), $output, $code );
+				self::assertSame( 0, $code, implode( "\n", $output ) );
+				$decoded = json_decode( implode( "\n", $output ), true, 64, JSON_THROW_ON_ERROR );
+				self::assertIsArray( $decoded );
+				if ( true !== ( $decoded['ok'] ?? false ) ) {
+					// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Re-throw closed internal fixture error text from the isolated rate-limit probe.
+					throw new \RuntimeException( is_string( $decoded['message'] ?? null ) ? $decoded['message'] : 'Rate-limit timing invalid.' );
+				}
+				return $decoded['result'];
+			} finally {
+				foreach ( array( $script, $facts_file ) as $cleanup_path ) {
+					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario.
+					@unlink( $cleanup_path );
+				}
+			}
 		}
 		private function service(): GitHubReleaseService {
 			return new GitHubReleaseService(

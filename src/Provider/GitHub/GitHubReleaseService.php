@@ -396,9 +396,12 @@ final class GitHubReleaseService {
 	private function acquire_with_token(
 		array $facts,
 		string $artifact_identity,
-		?string $token
+		?string $token,
+		bool $repository_verified = false
 	): TemporaryArtifact {
-		$this->repository_identity( $token );
+		if ( ! $repository_verified ) {
+			$this->repository_identity( $token );
+		}
 		$path             = null;
 		$initial_identity = null;
 
@@ -415,8 +418,6 @@ final class GitHubReleaseService {
 			$identity = $this->artifact_store->identity( $path );
 			if (
 				null === $identity
-				|| 1 !== $identity['nlink']
-				|| ! TemporaryArtifact::has_private_file_mode( $identity['mode'] )
 				|| $identity['size'] !== $facts['artifact_size']
 				|| $identity['size'] > $this->binding['maximum_artifact_bytes']
 			) {
@@ -429,7 +430,6 @@ final class GitHubReleaseService {
 				throw is_string( $sha256 ) ? ReleaseFailure::rejected( 'download_digest_mismatch' ) : new ReleaseFailure( 'package_incompatible' );
 			}
 
-			$this->repository_identity( $token );
 			$this->assert_live();
 			return new TemporaryArtifact( $path, $sha256, $identity, $this->liveness_guard );
 		} catch ( \Throwable $exception ) {
@@ -473,7 +473,7 @@ final class GitHubReleaseService {
 		$release           = $this->release_facts( $release_identity, $expected_tag, $token );
 		$artifact_identity = self::canonical_decimal( $release['artifact_identity'] )
 			?? throw new RuntimeException( 'The GitHub artifact identity is invalid.' );
-		$artifact          = $this->acquire_with_token( $release, $artifact_identity, $token );
+		$artifact          = $this->acquire_with_token( $release, $artifact_identity, $token, true );
 		try {
 			$validator = new PackageIdentityValidator();
 			$package   = $artifact->inspect(
@@ -982,8 +982,8 @@ final class GitHubReleaseService {
 	/** @param array<string, mixed> $response
 	 * @return array{limited:bool,remaining:?int,reset_at:?int,retry_after:int}
 	 */
-	private static function rate_limit( array $response, ?int $now = null ): array {
-		$now       ??= time();
+	private static function rate_limit( array $response ): array {
+		$now         = time();
 		$status      = GitHubApiClient::response_code( $response );
 		$remaining   = self::non_negative_header(
 			GitHubApiClient::response_header( $response, 'x-ratelimit-remaining' )

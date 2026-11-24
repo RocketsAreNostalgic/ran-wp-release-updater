@@ -97,8 +97,8 @@ $ran_wp_release_updater_broker_origin = static function ( mixed $broker, mixed $
 /* The sealed catalog is deliberately local to this selected runtime. */
 $ran_wp_release_updater_provider_catalog = array(
 	'github' => array(
-		'native'  => static function ( array $d, array $resolved, array $headers, string $identity, int $network_id, mixed $selected_runtime_state ): array {
-			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::compose_from_declaration( $d, $resolved, $headers, $identity, network_id: $network_id, selected_runtime_state: $selected_runtime_state );
+		'native'  => static function ( array $d, array $resolved, Closure $header_loader, string $identity, int $network_id, mixed $selected_runtime_state ): array {
+			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::compose_from_declaration( $d, $resolved, $header_loader, $identity, network_id: $network_id, selected_runtime_state: $selected_runtime_state );
 		},
 		'release' => static function ( array $d, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
 			$service = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::from_release_declaration( $d, $state );
@@ -177,14 +177,15 @@ return new class(
 			is_array( $GLOBALS['wp_plugin_paths'] ?? null ) ? $GLOBALS['wp_plugin_paths'] : array(),
 			is_array( $GLOBALS['wp_theme_directories'] ?? null ) ? array_values( $GLOBALS['wp_theme_directories'] ) : array(),
 		);
-		$resolved  = $installed->resolve( $d );
-		if ( 'installed_identity_verified' !== ( $resolved['code'] ?? null ) ) {
+		$resolved  = $installed->resolve_location( $d );
+		if ( 'installed_location_verified' !== ( $resolved['code'] ?? null ) ) {
 			return $this->failure( $id, is_string( $resolved['code'] ?? null ) ? $resolved['code'] : 'installed_file_invalid' );
 		}
-		$type     = $d['target_type'];
-		$headers  = $resolved['headers'];
-		$identity = $resolved['installed_package_identity'];
-		$key      = hash(
+		$type          = $d['target_type'];
+		$resolved_file = $resolved['file'];
+		$header_loader = static fn (): array => $installed->read_headers( $resolved_file, $type );
+		$identity      = $resolved['installed_package_identity'];
+		$key           = hash(
 			'sha256',
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			json_encode(
@@ -219,7 +220,7 @@ return new class(
 			);
 			return $this->accepted( $id, 'declaration_deferred_operation_started', $key, $handle );
 		}
-		$composition = $provider( $d, $resolved, $headers, $identity, $this->network_id, $this->selected_runtime_state );
+		$composition = $provider( $d, $resolved, $header_loader, $identity, $this->network_id, $this->selected_runtime_state );
 		$native      = is_array( $composition ) ? ( $composition['native'] ?? null ) : null;
 		if ( ! $native instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater ) {
 			return $this->failure( $id, is_string( $composition['code'] ?? null ) ? $composition['code'] : 'target_composition_failed' );
@@ -365,7 +366,7 @@ return new class(
 				return false;
 			}
 		}
-		return ( $first['allow_working_copy'] ?? false ) === ( $next['allow_working_copy'] ?? false );
+		return true;
 	}
 	private function deferred_handle(): object {
 		return new class() {

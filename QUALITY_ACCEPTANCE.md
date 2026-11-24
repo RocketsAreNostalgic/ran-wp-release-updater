@@ -59,9 +59,8 @@ local product requirements, not shared-standard exemptions.
 | Native `ZipArchive::$numFiles` | Two line-local property-name ignores cover three reads of the external extension property. Owned members remain enforced. |
 | Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Owned free functions/classes/constants follow the package prefix and owned test namespaces use `RAN\WPReleaseUpdater\V1\Tests` without namespace exceptions. Existing shared-state/global-variable prefix allowances are occurrence-local; foreign signatures, synthetic syntax and native/process exceptions are diagnostic-local. No test-path exclusions remain. These retained boundaries do not exempt production. |
 
-Six declaration-local PHPStan exceptions remain: ReleaseSource's
-direct-filesystem constant inspection and five InstalledPackageResolver
-Reflection-assigned property type seams. Bodies remain directly analyzed at
+One declaration-local PHPStan exception remains: `SelectedRuntimeState`'s
+direct-filesystem constant inspection. Bodies remain directly analyzed at
 level 8. No baseline, new analysis exclusion or lower level is introduced.
 
 ## Runtime and public-name transition

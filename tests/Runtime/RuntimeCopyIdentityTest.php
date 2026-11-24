@@ -154,18 +154,54 @@ PHP,
 		self::assertSame( 14, $result['hooks'] );
 	}
 
-	public function test_copied_source_change_without_manifest_update_is_rejected_before_selection(): void {
-		$copy = $this->package_copy( 'changed-without-manifest' );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test.
-		file_put_contents( $copy . '/src/Runtime/RequestBroker.php', (string) file_get_contents( $copy . '/src/Runtime/RequestBroker.php' ) . "\n// Changed without updating the manifest.\n" );
+	public function test_bootstrap_and_selection_do_not_hash_source_files_on_request(): void {
+		$copy       = $this->package_copy( 'no-per-request-hash' );
+		$probe_file = $this->parent . '/hash-probe-' . bin2hex( random_bytes( 6 ) ) . '.php';
+		$facts_file = $this->parent . '/hash-facts-' . bin2hex( random_bytes( 6 ) ) . '.json';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write exact fixture facts for an isolated process; WordPress JSON filters must not alter fixture bytes.
+		file_put_contents( $facts_file, json_encode( array( 'copy' => $copy ), JSON_THROW_ON_ERROR ) );
+		$fixture = <<<'PHP'
+<?php
+namespace RAN\WPReleaseUpdater\V1\Runtime {
+	function hash_file( string $algorithm, string $filename, bool $binary = false ): string|false {
+		++$GLOBALS['ran_runtime_selector_hash_calls'];
+		return \hash_file( $algorithm, $filename, $binary );
+	}
+}
+namespace {
+	$ran_facts = json_decode( (string) file_get_contents( $argv[1] ), true, 64, JSON_THROW_ON_ERROR );
+	$GLOBALS['ran_runtime_selector_hash_calls'] = 0;
+	$ran_registrar                              = require $ran_facts['copy'] . '/bootstrap.php';
+	$ran_broker                                 = $GLOBALS['ran_wp_release_updater_v1_broker'];
+	$ran_activation                             = $ran_broker->activate(
+		array(
+			'php_version'       => '8.2.0',
+			'runtime_protocol'  => 11,
+			'wordpress_version' => '6.8.0',
+		)
+	);
+	echo json_encode(
+		array(
+			'activation' => $ran_activation,
+			'hash_calls' => $GLOBALS['ran_runtime_selector_hash_calls'],
+			'state'      => $ran_registrar->diagnostics()['state'],
+		),
+		JSON_THROW_ON_ERROR
+	);
+}
+PHP;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write isolated subprocess script for native hash interception verification.
+		file_put_contents( $probe_file, $fixture );
+		$output = array();
+		$status = 0;
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
+		exec( escapeshellarg( PHP_BINARY ) . ' -n ' . escapeshellarg( $probe_file ) . ' ' . escapeshellarg( $facts_file ), $output, $status );
+		self::assertSame( 0, $status, implode( "\n", $output ) );
+		$result = json_decode( implode( "\n", $output ), true, 64, JSON_THROW_ON_ERROR );
 
-		$result = $this->probe( '$registrar = require $data["copy"] . "/bootstrap.php"; echo json_encode(array("diagnostics" => $registrar->diagnostics(), "published" => array_key_exists("ran_wp_release_updater_v1_broker", $GLOBALS), "broker_class" => class_exists("RAN\\WPReleaseUpdater\\V1\\Runtime\\RequestBroker", false), "state_class" => class_exists("RAN\\WPReleaseUpdater\\V1\\Runtime\\SelectedRuntimeState", false)));', array( 'copy' => $copy ) );
-
-		self::assertFalse( $result['published'] );
-		self::assertFalse( $result['broker_class'] );
-		self::assertFalse( $result['state_class'] );
-		self::assertSame( 'conflict', $result['diagnostics']['state'] );
-		self::assertSame( array( 'protocol_conflict_inactive' ), array_column( $result['diagnostics']['diagnostics'], 'code' ) );
+		self::assertTrue( $result['activation']['loaded'] );
+		self::assertSame( 'active', $result['state'] );
+		self::assertSame( 0, $result['hash_calls'] );
 	}
 
 	public function test_invalid_copy_does_not_invoke_an_autoloader_for_the_broker(): void {

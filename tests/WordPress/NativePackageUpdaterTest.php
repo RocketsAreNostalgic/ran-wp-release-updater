@@ -544,14 +544,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			}
 		}
 
-		public function test_explicit_working_copy_override_preserves_the_verified_install_path(): void {
-			list( $updater ) = $this->subject( allow_working_copy: true );
-			$marker          = $this->working_copy_marker();
-			$this->complete( $updater );
-			self::assertFileDoesNotExist( $marker );
-			self::assertFileExists( $this->installed_directory() . '/package.php' );
-		}
-
 		public function test_marker_created_by_final_admission_is_checked_before_native_mutation(): void {
 			$control         = new class() {
 				public bool $create_marker = false;
@@ -598,19 +590,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			return $marker;
 		}
 
-		/** @return list<array{bool}> */
-		public static function post_begin_working_copy_cases(): array {
-			return array( array( false ), array( true ) );
-		}
-
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'post_begin_working_copy_cases' )]
-		public function test_marker_created_by_native_begin_is_refused_unless_explicitly_overridden( bool $allow ): void {
-			$observed                                 = new class() {
+		public function test_marker_created_by_native_begin_is_refused(): void {
+			$observed                     = new class() {
 				public ?string $outcome = null;
 				public ?string $owner   = null;
 				public int $completions = 0;
 			};
-			list( $updater, , $database, , $binding ) = $this->subject(
+			list( $updater, , $database ) = $this->subject(
 				operation_guard: static fn(): bool => true,
 				native_mutation_begin: function (): string {
 					$this->working_copy_marker();
@@ -621,40 +607,26 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					$observed->owner   = $owner;
 					$observed->outcome = $outcome;
 					++$observed->completions;
-				},
-				allow_working_copy: $allow
+				}
 			);
-			$offer                                    = $this->offer( $updater );
-			$archive                                  = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			$offer                        = $this->offer( $updater );
+			$archive                      = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 			self::assertIsString( $archive );
 			self::assertNull( $updater->filter_pre_unzip_file( null, $archive, '/tmp', array(), 0.0 ) );
 			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
 			$stage  = $this->staged();
 			$result = $updater->filter_source_selection( $stage, '/tmp', null, $this->extra() );
-			if ( $allow ) {
-				self::assertSame( $stage, $result );
-				$updater->capture_install_package_result( array( 'destination' => $this->install_staged( $stage ) ), $this->extra() );
-				$updater->observe_completion(
-					null,
-					array(
-						'action'  => 'update',
-						'type'    => 'plugin',
-						'plugins' => array( 'package/package.php' ),
-					)
-				);
-			} else {
-				self::assertInstanceOf( \WP_Error::class, $result );
-				self::assertSame( 'ran_wp_release_updater_target_is_working_copy', $result->code );
-				self::assertSame( $result, $updater->capture_install_package_result( $result, $this->extra() ) );
-			}
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertSame( 'ran_wp_release_updater_target_is_working_copy', $result->code );
+			self::assertSame( $result, $updater->capture_install_package_result( $result, $this->extra() ) );
 			$updater->finalize_pending_install();
-			self::assertSame( $allow ? null : 'target_is_working_copy', $updater->status()['failure_code'] );
-			self::assertSame( $allow ? 'verified_success' : 'uncertain', $observed->outcome );
+			self::assertSame( 'target_is_working_copy', $updater->status()['failure_code'] );
+			self::assertSame( 'uncertain', $observed->outcome );
 			self::assertSame( 1, $observed->completions );
 			self::assertSame( 'owner', $observed->owner );
 			self::assertFileDoesNotExist( $archive );
-			self::assertSame( ! $allow, is_file( $this->installed_directory() . '/.git' ) );
-			self::assertSame( $allow ? 'verified_success' : 'target_is_working_copy', $this->retained_outcome( $updater )['outcome'] );
+			self::assertTrue( is_file( $this->installed_directory() . '/.git' ) );
+			self::assertSame( 'target_is_working_copy', $this->retained_outcome( $updater )['outcome'] );
 			self::assertSame( array(), $database->rows() );
 		}
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
@@ -692,141 +664,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@rmdir( $this->temporary_directory );
 		}
-		public function test_v2_bounds_and_screens_known_rejections_without_inventing_unknown_causes(): void {
-			list( $updater, $adapter ) = $this->subject();
-			$candidates                = array();
-			for ( $index = 1; $index <= 8; ++$index ) {
-				$id                               = (string) $index;
-				$candidates[]                     = array(
-					'release_identity' => $id,
-					'tag'              => 'secret_orchid',
-					'version'          => '3.0.0',
-				);
-				$adapter->inspect_outcomes[ $id ] = ReleaseFailure::rejected( 'tag_not_version', 'withheld detail' );
-			}
-			$adapter->list_response = array(
-				'candidates'  => $candidates,
-				'diagnostics' => array( 'unsafe' => 'withheld' ),
-			);
-			$updater->filter_update(
-				false,
-				array(
-					'Version'   => '1.0.0',
-					'UpdateURI' => $this->uri(),
-				),
-				'package/package.php',
-				array()
-			);
-			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
-			self::assertNull( $events[2][1]['listing_diagnostics'] );
-			self::assertCount( 8, $events[2][1]['candidate_rejections'] );
-			self::assertSame(
-				array(
-					'release_identity' => '1',
-					'tag'              => null,
-					'reason'           => 'tag_not_version',
-				),
-				$events[2][1]['candidate_rejections'][0]
-			);
-			$updater->refresh();
-			$adapter->inspect_outcomes['1'] = new \RuntimeException( 'withheld cause' );
-			$updater->filter_update(
-				false,
-				array(
-					'Version'   => '1.0.0',
-					'UpdateURI' => $this->uri(),
-				),
-				'package/package.php',
-				array()
-			);
-			$last = end( $GLOBALS['ran_wp_release_updater_test_observations'] );
-			self::assertSame( array(), $last[1]['candidate_rejections'] );
-		}
-
-		public function test_v2_retains_known_inspection_and_acquisition_rejections_when_an_older_candidate_is_offered(): void {
-			foreach ( array( 'inspect', 'acquire' ) as $stage ) {
-				list( $updater, $adapter, , $older ) = $this->subject();
-				$facts                               = $older->to_array();
-				unset( $facts['fingerprint'] );
-				$newer                           = IdentityDescriptor::create(
-					array_replace(
-						$facts,
-						array(
-							'release_identity' => '77',
-							'tag'              => 'v3.0.0',
-							'version'          => '3.0.0',
-						)
-					)
-				);
-				$diagnostics                     = array(
-					'scanned_count' => 3,
-					'dropped_count' => 1,
-					'drops'         => array(
-						array(
-							'release_identity' => '76',
-							'tag'              => null,
-							'reason'           => 'tag_not_version',
-						),
-					),
-					'truncated'     => false,
-				);
-				$adapter->list_response          = array(
-					'candidates'       => array( $this->candidate( $newer ), $this->candidate( $older ) ),
-					'diagnostics'      => $diagnostics,
-					'search_exhausted' => true,
-				);
-				$adapter->inspect_outcomes['77'] = $newer;
-				if ( 'inspect' === $stage ) {
-					$adapter->inspect_outcomes['77'] = ReleaseFailure::rejected( 'digest_missing' );
-				} else {
-					$adapter->acquire_outcomes['77'] = ReleaseFailure::rejected( 'download_digest_mismatch' );
-				}
-				$GLOBALS['ran_wp_release_updater_test_observations'] = array();
-				$this->offer( $updater );
-				$events = $GLOBALS['ran_wp_release_updater_test_observations'];
-				self::assertCount( 3, $events );
-				self::assertSame( array( 'check_id', 'status', 'reason', 'relationship', 'installed_version', 'candidate_version', 'offered_version', 'candidate_validation_code' ), array_keys( $events[1][1] ) );
-				self::assertSame( 'ran_wp_release_updater_check_completed_v2', $events[2][0] );
-				self::assertSame( $events[1][1], array_intersect_key( $events[2][1], $events[1][1] ) );
-				self::assertSame( 'update_available', $events[2][1]['reason'] );
-				self::assertSame( $diagnostics, $events[2][1]['listing_diagnostics'] );
-				self::assertTrue( $events[2][1]['search_exhausted'] );
-				self::assertSame(
-					array(
-						array(
-							'release_identity' => '77',
-							'tag'              => 'v3.0.0',
-							'reason'           => 'inspect' === $stage ? 'digest_missing' : 'download_digest_mismatch',
-						),
-					),
-					$events[2][1]['candidate_rejections']
-				);
-				$updater->refresh();
-				$adapter->list_response = array(
-					'candidates'       => array(),
-					'search_exhausted' => false,
-					'not_modified'     => false,
-				);
-				$updater->filter_update(
-					false,
-					array(
-						'Version'   => '1.0.0',
-						'UpdateURI' => $this->uri(),
-					),
-					'package/package.php',
-					array()
-				);
-				$last = end( $GLOBALS['ran_wp_release_updater_test_observations'] );
-				self::assertNull( $last[1]['listing_diagnostics'] );
-				self::assertSame( array(), $last[1]['candidate_rejections'] );
-			}
-		}
-
 		public function test_observation_captures_actual_check(): void {
 			list( $updater, $adapter ) = $this->subject();
 			$this->offer( $updater );
 			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
-			self::assertCount( 3, $events );
+			self::assertCount( 2, $events );
 			self::assertSame( 'ran_wp_release_updater_check_started_v1', $events[0][0] );
 			self::assertSame( 'ran_wp_release_updater_check_completed_v1', $events[1][0] );
 			self::assertMatchesRegularExpression( '/^[a-f0-9]{32}$/', $events[0][1]['check_id'] );
@@ -870,7 +712,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array( 1, 1, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 			self::assertSame( array(), $database->rows() );
 			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
-			self::assertCount( 3, $events );
+			self::assertCount( 2, $events );
 			self::assertSame( 'ran_wp_release_updater_check_started_v1', $events[0][0] );
 			self::assertSame( 'ran_wp_release_updater_check_completed_v1', $events[1][0] );
 			self::assertSame( 'failed', $events[1][1]['status'] );
@@ -879,14 +721,14 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		public function test_reused_discovery_emits_no_fresh_check(): void {
 			list( $updater, $adapter ) = $this->subject( native_discovery_reuse: true );
 			$this->offer( $updater );
-			self::assertCount( 3, $GLOBALS['ran_wp_release_updater_test_observations'] );
+			self::assertCount( 2, $GLOBALS['ran_wp_release_updater_test_observations'] );
 			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
 			$this->offer( $updater );
 			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_observations'] );
 			self::assertSame( 1, $adapter->list_calls );
 			$updater->refresh();
 			$this->offer( $updater );
-			self::assertCount( 3, $GLOBALS['ran_wp_release_updater_test_observations'] );
+			self::assertCount( 2, $GLOBALS['ran_wp_release_updater_test_observations'] );
 			self::assertSame( 2, $adapter->list_calls );
 		}
 
@@ -3061,11 +2903,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				self::assertSame( 'rejected', $report['status'], $label );
 				self::assertSame( 'candidate_rejected', $report['reason'], $label );
 				self::assertSame( $expected_code, $report['candidate_validation_code'], $label );
-				self::assertCount( 3, $events, $label );
+				self::assertCount( 2, $events, $label );
 				self::assertSame( 'ran_wp_release_updater_check_completed_v1', $events[1][0], $label );
 				self::assertSame( $expected_code, $events[1][1]['candidate_validation_code'] ?? null, $label . ' v1' );
-				self::assertSame( 'ran_wp_release_updater_check_completed_v2', $events[2][0], $label );
-				self::assertSame( $expected_code, $events[2][1]['candidate_validation_code'] ?? null, $label . ' v2' );
 			}
 
 			self::assertFalse( \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::is_candidate_validation_code( 'unlisted_code' ) );
@@ -3516,22 +3356,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( '8.1', $offer['requires_php'] );
 		}
 
-		public function test_filter_offer_release_refusal_restores_candidate_rejections_and_writes_no_lock(): void {
-			list( $updater, $adapter, $database, $descriptor ) = $this->subject();
-			$rejections_property                               = new \ReflectionProperty( NativePackageUpdater::class, 'candidate_rejections' );
-			$seed_rejections                                   = array(
-				array(
-					'release_identity' => 'release:seed',
-					'tag'              => 'v1.5.0',
-					'reason'           => 'archive_unreadable',
-				),
-			);
-			$rejections_property->setValue( $updater, $seed_rejections );
+		public function test_filter_offer_release_refusal_writes_no_lock(): void {
+			list( $updater, $adapter, $database, $descriptor )            = $this->subject();
 			$adapter->acquire_outcomes[ $descriptor->release_identity() ] = new ReleaseFailure( 'package_incompatible', null, 'complete', null, 'header_requires_php_unmet' );
 
 			$report = $this->offer_release( $updater );
 			self::assertSame( 'refused', $report['status'] );
-			self::assertSame( $seed_rejections, $rejections_property->getValue( $updater ) );
 			self::assertSame( array(), $database->rows() );
 		}
 
@@ -4051,13 +3881,13 @@ PHP;
 			return $record;
 		}
 		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,array<string,mixed>} */
-		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null, bool $allow_working_copy = false, string $installed_version = '1.0.0' ): array {
+		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null, string $installed_version = '1.0.0' ): array {
 			$archive_path = $this->archive();
 			$descriptor   = $this->descriptor( $archive_path, $channel, $prerelease );
 			$binding      = $this->binding( $mode, $channel );
 			$adapter      = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
 			$database   ??= new FakeOptionDatabase( 100 );
-			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode, $installed_version ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete, $descriptor_admission, $allow_working_copy );
+			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode, $installed_version ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete, $descriptor_admission );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			return array( $updater, $adapter, $database, $descriptor, $binding );
 		}

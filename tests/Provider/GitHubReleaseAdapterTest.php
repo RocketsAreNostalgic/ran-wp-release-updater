@@ -447,7 +447,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
 				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
-				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 404, null ),
 			);
 			self::assertSame( 'release_unavailable', $source->acquire( '7', 'v1.2.3', $inspection['value']['fingerprint'] )['code'] );
@@ -470,9 +469,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $release ),
 				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
-				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), $invalid ),
-				$this->response( 200, array( 'id' => 99 ) ),
 			);
 			$broken                          = $theme->inspect( '7', 'v1.2.3' );
 			self::assertSame( 'package_incompatible', $broken['code'] );
@@ -528,7 +525,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
 				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
-				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 429, null, array( 'retry-after' => '30' ) ),
 			);
 			try {
@@ -546,7 +542,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
 				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
-				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), 'invalid bytes' ),
 			);
 			try {
@@ -788,39 +783,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 
 			$service = $this->public_service();
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-			$GLOBALS['ran_github_chmod_failures'] = 1;
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-			try {
-				$service->inspect( '7', 'v1.2.3' );
-				self::fail( 'A chmod allocation failure must be structured.' );
-			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'operation_failed', $failure->release_code );
-				self::assertSame( 'complete', $failure->cleanup_status );
-			}
-			$this->assert_all_temporary_paths_absent();
-
-			$service = $this->public_service();
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-			$GLOBALS['ran_github_chmod_failures'] = 1;
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-			$GLOBALS['ran_github_unlink_failures'] = 2;
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
-			try {
-				$service->inspect( '7', 'v1.2.3' );
-				self::fail( 'An unreleased chmod allocation failure must be structured.' );
-			} catch ( ReleaseFailure $failure ) {
-				self::assertSame( 'operation_failed', $failure->release_code );
-				self::assertSame( 'failed', $failure->cleanup_status );
-			}
-			$unreleased_path = $GLOBALS['ran_github_temp_paths'][ count( $GLOBALS['ran_github_temp_paths'] ) - 1 ];
-			self::assertFileExists( $unreleased_path );
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
-			self::assertTrue( \unlink( $unreleased_path ) );
-
-			$service = $this->public_service();
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_unlink_failures'] = 0;
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 			$GLOBALS['ran_github_responses'] = $this->prospective_inspection_responses( 7, 'v1.2.3', $archive );
@@ -890,7 +852,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$this->service_configuration( $this->binding() ),
 				null,
 				static function () use ( &$checks ): ?string {
-					return ++$checks >= 17 ? 'runtime_unavailable' : null; }
+					return ++$checks >= 13 ? 'runtime_unavailable' : null; }
 			);
 			$archive = $this->prospective_archive( "<?php\n/*\nPlugin Name: Repository\nVersion: 1.2.3\nUpdate URI: https://github.com/owner/repository\nRequires PHP: 8.2\nRequires at least: 6.8\n*/" );
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -2191,14 +2153,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					array( 'location' => 'https://release-assets.githubusercontent.com/file' )
 				),
 				$this->response( 200, null, array(), 'zip-data' ),
-				$this->response( 200, array( 'id' => 99 ) ),
 			);
 
 			$artifact = $adapter->acquire( $descriptor );
 			self::assertInstanceOf( TemporaryArtifact::class, $artifact );
 
 			self::assertSame( 2, $calls );
-			self::assertCount( 7, $GLOBALS['ran_github_requests'] );
+			self::assertCount( 6, $GLOBALS['ran_github_requests'] );
 			self::assertSame(
 				'Bearer private-token',
 				$GLOBALS['ran_github_requests'][4][1]['headers']['Authorization']
@@ -2251,7 +2212,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertSame( 'repository.php', $facts['main_file'] );
 			self::assertArrayHasKey( 'fingerprint', $facts );
 			self::assertSame( 1, $calls );
-			self::assertCount( 6, $GLOBALS['ran_github_requests'] );
+			self::assertCount( 4, $GLOBALS['ran_github_requests'] );
 			$this->assert_all_temporary_paths_absent();
 		}
 
@@ -2383,9 +2344,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertSame( 'retained', $owned['cleanup_status'] );
 			self::assertSame( $inspection['value'], $owned['value']['inspection'] );
 			self::assertSame( 2, $calls );
-			self::assertCount( 12, $GLOBALS['ran_github_requests'] );
+			self::assertCount( 8, $GLOBALS['ran_github_requests'] );
 			foreach ( $GLOBALS['ran_github_requests'] as $index => $request ) {
-				self::assertSame( 'Bearer ' . ( $index < 6 ? 'inspection-token' : 'acquisition-token' ), $request[1]['headers']['Authorization'] );
+				self::assertSame( 'Bearer ' . ( $index < 4 ? 'inspection-token' : 'acquisition-token' ), $request[1]['headers']['Authorization'] );
 			}
 			$artifact = $owned['value']['artifact'];
 			$path     = $artifact->inspect( static fn ( string $path ): string => $path );
@@ -2526,7 +2487,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertFalse( $rejected['ok'] );
 			self::assertSame( 'release_changed', $rejected['code'] );
 			self::assertSame( 'complete', $rejected['cleanup_status'] );
-			self::assertCount( 12, $GLOBALS['ran_github_requests'] );
+			self::assertCount( 8, $GLOBALS['ran_github_requests'] );
 			$this->assert_all_temporary_paths_absent();
 		}
 
@@ -2769,7 +2730,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$GLOBALS['ran_github_responses'] = array(
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), 'zip-data' ),
-				$this->response( 200, array( 'id' => 99 ) ),
 			);
 			$artifact                        = $adapter->acquire( $descriptor );
 			$path                            = $artifact->inspect( static fn ( string $path ): string => $path );
@@ -3052,9 +3012,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					$this->response( 200, array( 'id' => 99 ) ),
 					$this->response( 200, $release ),
 					$this->raw_response( 200, str_repeat( 'a', 40 ) ),
-					$this->response( 200, array( 'id' => 99 ) ),
 					$this->response( 200, null, array(), $archive ),
-					$this->response( 200, array( 'id' => 99 ) ),
 				),
 			);
 		}
@@ -3143,7 +3101,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $this->release( 7, 'v1.2.3' ) ),
 				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
-				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), 'invalid bytes' ),
 			);
 		}
@@ -3201,9 +3158,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, $release ),
 				$this->raw_response( 200, str_repeat( 'a', 40 ) ),
-				$this->response( 200, array( 'id' => 99 ) ),
 				$this->response( 200, null, array(), $archive ),
-				$this->response( 200, array( 'id' => 99 ) ),
 			);
 		}
 

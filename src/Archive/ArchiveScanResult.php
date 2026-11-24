@@ -11,17 +11,16 @@ final readonly class ArchiveScanResult {
 	private function __construct(
 		private ?string $failure_code,
 		private ?string $root,
-		private array $entries,
-		private int $expanded_bytes
+		private array $entries
 	) {}
 
 	public static function blocked( string $failure_code ): self {
-		return new self( $failure_code, null, array(), 0 );
+		return new self( $failure_code, null, array() );
 	}
 
 	/** @param list<array{name:string,path:string,directory:bool,size:int,compressed_size:int}> $entries */
-	public static function ready( string $root, array $entries, int $expanded_bytes ): self {
-		return new self( null, $root, $entries, $expanded_bytes );
+	public static function ready( string $root, array $entries ): self {
+		return new self( null, $root, $entries );
 	}
 
 	public function is_valid(): bool {
@@ -39,9 +38,5 @@ final readonly class ArchiveScanResult {
 	/** @return list<array{name:string,path:string,directory:bool,size:int,compressed_size:int}> */
 	public function entries(): array {
 		return $this->entries;
-	}
-
-	public function expanded_bytes(): int {
-		return $this->expanded_bytes;
 	}
 }

@@ -99,7 +99,7 @@ final class ArchiveScanner {
 			return ArchiveScanResult::blocked( 'archive_entry_limit' );
 		}
 
-		return ArchiveScanResult::ready( $root, $entries, $expanded );
+		return ArchiveScanResult::ready( $root, $entries );
 	}
 
 	/**

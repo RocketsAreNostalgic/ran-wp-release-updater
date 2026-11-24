@@ -53,9 +53,11 @@ final class RuntimeCopySelector {
 		$this->version( $facts['package_version'] );
 		$this->version( $facts['php_floor'] );
 		$this->version( $facts['wordpress_floor'] );
+		$this->regular_file( $root, 'bootstrap.php' );
 		$runtime = $this->regular_file( $root, 'runtime.php' );
-		if ( ! hash_equals( $facts['package_revision'], $this->package_revision( $root ) ) ) {
-			throw new RuntimeException( 'Runtime package identity mismatch.' );
+		$source  = $root . DIRECTORY_SEPARATOR . 'src';
+		if ( is_link( $source ) || ! is_dir( $source ) || realpath( $source ) !== $source ) {
+			throw new RuntimeException( 'Invalid runtime source.' );
 		}
 		return array(
 			'package_revision' => $facts['package_revision'],
@@ -122,42 +124,6 @@ final class RuntimeCopySelector {
 			throw new RuntimeException( 'Equal runtime versions disagree.' );
 		}
 		return $compatible[0];
-	}
-
-	private function package_revision( string $root ): string {
-		$files = array( 'bootstrap.php', 'runtime.php' );
-		foreach ( $files as $file ) {
-			$this->regular_file( $root, $file );
-		}
-
-		$source = $root . DIRECTORY_SEPARATOR . 'src';
-		if ( is_link( $source ) || ! is_dir( $source ) || realpath( $source ) !== $source ) {
-			throw new RuntimeException( 'Invalid runtime source.' );
-		}
-		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $source, \FilesystemIterator::SKIP_DOTS ) );
-		foreach ( $iterator as $entry ) {
-			if ( $entry->isLink() ) {
-				throw new RuntimeException( 'Invalid runtime source.' );
-			}
-			if ( ! $entry->isFile() || 'php' !== $entry->getExtension() ) {
-				continue;
-			}
-			$path     = $entry->getPathname();
-			$relative = str_replace( '\\', '/', substr( $path, strlen( $root ) + 1 ) );
-			$this->regular_file( $root, $relative );
-			$files[] = $relative;
-		}
-		sort( $files, SORT_STRING );
-		$payload = '';
-		foreach ( $files as $file ) {
-			$digest = hash_file( 'sha256', $this->regular_file( $root, $file ) );
-			if ( false === $digest ) {
-				throw new RuntimeException( 'Unreadable runtime source.' );
-			}
-			$payload .= $file . "\0" . $digest . "\n";
-		}
-
-		return hash( 'sha256', $payload );
 	}
 
 	private function regular_file( string $root, string $relative ): string {

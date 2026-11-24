@@ -19,15 +19,6 @@ final class IdentityDescriptorTest extends TestCase {
 		$snapshot['release_identity'] = '43';
 		$this->expectException( InvalidArgumentException::class );
 		IdentityDescriptor::rehydrate( $snapshot ); }
-	public function test_exact_target_binding_rejects_provider_repository_and_uri_switches(): void {
-		$descriptor = IdentityDescriptor::create( $this->facts() );
-		foreach ( array( array( 'provider_code' => 'gitlab' ), array( 'repository_identity' => 'repo:2' ), array( 'repository_locator' => 'other/repo' ) ) as $replacement ) {
-			try {
-				IdentityDescriptor::assert_target_binding( $descriptor, array_merge( $this->target(), $replacement ) );
-				self::fail( 'Switched target was accepted.' );
-			} catch ( InvalidArgumentException ) {
-				self::addToAssertionCount( 1 ); }
-		} }
 	public function test_automatic_assurance_facts_remain_closed(): void {
 		$snapshot = IdentityDescriptor::create( $this->facts() )->to_array();
 		$snapshot['assurance_facts']['publication_immutable'] = false;
@@ -46,14 +37,12 @@ final class IdentityDescriptorTest extends TestCase {
 			IdentityDescriptor::create( $facts )->to_array()['artifact_filename']
 		);
 	}
-	public function test_named_parameters_preserve_explicit_target_and_length_checks(): void {
+	public function test_named_parameters_preserve_rehydration_and_length_checks(): void {
 		$descriptor = IdentityDescriptor::create( $this->facts() );
 		$snapshot   = $descriptor->to_array();
-		self::assertSame( $snapshot, IdentityDescriptor::rehydrate( value: $snapshot, expected_target: $this->target() )->to_array() );
+		self::assertSame( $snapshot, IdentityDescriptor::rehydrate( value: $snapshot )->to_array() );
 		self::assertTrue( IdentityDescriptor::is_bounded_opaque_identity( value: 'abc', maximum_bytes: 3 ) );
 		self::assertFalse( IdentityDescriptor::is_bounded_opaque_identity( value: 'abcd', maximum_bytes: 3 ) );
-		$this->expectException( InvalidArgumentException::class );
-		IdentityDescriptor::rehydrate( value: $snapshot, expected_target: null );
 	}
 	/** @return array<string,mixed> */ private function facts(): array {
 		return array(
@@ -83,13 +72,5 @@ final class IdentityDescriptorTest extends TestCase {
 			'tag'                        => 'v1.2.3',
 			'target_type'                => 'plugin',
 			'version'                    => '1.2.3',
-		); }
-	/** @return array<string,string> */ private function target(): array {
-		return array(
-			'installed_package_identity' => 'ran-booster/ran-booster.php',
-			'provider_code'              => 'github',
-			'repository_identity'        => 'github:org/ran-booster',
-			'repository_locator'         => 'org/ran-booster',
-			'target_type'                => 'plugin',
 		); }
 }
