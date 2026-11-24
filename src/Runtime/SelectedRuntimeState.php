@@ -103,8 +103,7 @@ final class SelectedRuntimeState {
 
 	/** @internal Returns the normalized runtime PHP version, preserving prereleases while stripping distro suffixes. */
 	public static function current_php_version( string $version = PHP_VERSION ): string {
-		return self::normalize_php_version( $version )
-			?? ( PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '.' . PHP_RELEASE_VERSION );
+		return self::normalize_php_version( $version ) ?? $version;
 	}
 
 	/** @internal Shared WordPress direct-filesystem check, loading file.php during WP-Cron when available. */

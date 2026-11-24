@@ -165,10 +165,23 @@ final class GitHubApiClient {
 		if ( ! is_resource( $handle ) ) {
 			return;
 		}
-		ftruncate( $handle, 0 );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream opened for redirect target reset.
-		fclose( $handle );
-		clearstatcache( true, $filename );
+		try {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Confirm the opened descriptor matches the verified regular file before truncating in place.
+			$open = @fstat( $handle );
+			if (
+				! is_array( $open )
+				|| 0100000 !== ( (int) $open['mode'] & 0170000 )
+				|| (int) $open['dev'] !== (int) $stat['dev']
+				|| (int) $open['ino'] !== (int) $stat['ino']
+			) {
+				return;
+			}
+			ftruncate( $handle, 0 );
+		} finally {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream opened for redirect target reset.
+			fclose( $handle );
+			clearstatcache( true, $filename );
+		}
 	}
 
 	private static function validated_redirect_url( ?string $url ): ?string {

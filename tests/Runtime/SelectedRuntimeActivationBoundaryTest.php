@@ -245,6 +245,9 @@ PHP,
 			'8.5.7-dev~deb13u1'                     => '8.5.7-dev',
 			'8.4.0RC1'                              => '8.4.0-rc.1',
 			'8.4.0RC1-1+ubuntu24.04.1'              => '8.4.0-rc.1',
+			'8.4.0RC0'                              => '8.4.0RC0',
+			'8.5.7-dev_custom'                      => '8.5.7-dev_custom',
+			'not-a-php-version'                     => 'not-a-php-version',
 		) as $raw_php => $expected_php ) {
 			self::assertSame( $expected_php, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::current_php_version( $raw_php ), $raw_php );
 		}
@@ -256,6 +259,8 @@ PHP,
 			'8.5.7-dev'                             => 'active',
 			'8.2.0RC1'                              => 'inactive',
 			'8.2.0-dev'                             => 'inactive',
+			'8.4.0RC0'                              => 'inactive',
+			'8.5.7-dev_custom'                      => 'inactive',
 			'8.1.29-0+deb12u1'                      => 'inactive',
 			'not-a-php-version'                     => 'inactive',
 		) as $php_version => $expected_state ) {

@@ -686,6 +686,6 @@ final class PackageIdentityValidator {
 	}
 
 	private static function is_header_region_separator( string $between ): bool {
-		return 1 === preg_match( '/\A(?:[ \t\r\n]|<\?php\b|\?>|\/\/[^\n]*\n?)*\z/', $between );
+		return 1 === preg_match( '/\A(?:[ \t\r\n]|<\?php\b|\?>|\/\/[^\n]*\n?|#(?!\[)[^\n]*\n?)*\z/', $between );
 	}
 }

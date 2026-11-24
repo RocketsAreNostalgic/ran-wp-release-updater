@@ -1227,8 +1227,9 @@ final class NativePackageUpdater {
 		if ( $this->working_copy_blocked() ) {
 			return $this->fail_pending( 'target_is_working_copy' );
 		}
+		$had_native_owner = null !== $this->native_owner;
 		if ( ! $this->begin_native_mutation() ) {
-			return $this->fail_pending( 'runtime_liveness_lost', null !== $this->native_owner );
+			return $this->fail_pending( 'runtime_liveness_lost', ! $had_native_owner && null !== $this->native_owner );
 		}
 		if ( $this->working_copy_blocked() ) {
 			$this->diagnose( 'target_is_working_copy', null, true );

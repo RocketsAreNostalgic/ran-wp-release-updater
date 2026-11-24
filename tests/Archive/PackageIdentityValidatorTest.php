@@ -801,6 +801,22 @@ PHP;
 		self::assertTrue(
 			$validator->validate( $this->descriptor( $post_code_zip, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $post_code_zip )->is_valid()
 		);
+
+		$hash_comment_header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\n# Shell-style header separator comment\n/*\nRequires PHP: 99.0\n*/\n";
+		$hash_comment_zip    = $this->archive( array( 'example-plugin/example-plugin.php' => $hash_comment_header ) );
+		$prospective_hash    = $this->prospective_plugin( $hash_comment_zip );
+		self::assertIsArray( $prospective_hash );
+		self::assertSame( 'header_requires_php_unmet', $prospective_hash['reason'] ?? null );
+
+		$attribute_header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\n#[AllowDynamicProperties]\n/**\n * Requires PHP: 99.0\n */\nclass Example_Attr {}\n";
+		$attribute_zip    = $this->archive( array( 'example-plugin/example-plugin.php' => $attribute_header ) );
+		self::assertSame(
+			array(
+				'package_root' => 'example-plugin',
+				'main_file'    => 'example-plugin.php',
+			),
+			$this->prospective_plugin( $attribute_zip )
+		);
 	}
 
 	public function test_validate_propagates_exceptions_from_after_open_without_swallowing_in_finally(): void {

@@ -3463,6 +3463,32 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertFileDoesNotExist( $owned_archive );
 		}
 
+		public function test_repeated_source_selection_while_native_owner_is_held_preserves_custody_until_finalization(): void {
+			$database                        = new FakeOptionDatabase( 100 );
+			$completions                     = array();
+			list( $updater, , , , $binding ) = $this->subject(
+				database: $database,
+				operation_guard: static fn (): bool => true,
+				native_mutation_begin: static fn (): string => 'owner-in-flight',
+				native_mutation_complete: static function ( string $owner, string $type, string $identity, string $outcome ) use ( &$completions ): void {
+					$completions[] = array( $owner, $type, $identity, $outcome );
+				}
+			);
+
+			$prepared = $this->prepare_install( $updater );
+			$second   = $updater->filter_source_selection( $prepared['stage'], '/tmp', null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $second );
+			self::assertSame( 'ran_wp_release_updater_runtime_liveness_lost', $second->get_error_code() );
+			self::assertSame( array(), $completions );
+			self::assertSame( 'owner-in-flight', ( new \ReflectionProperty( NativePackageUpdater::class, 'native_owner' ) )->getValue( $updater ) );
+			self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'c', 64 ), 600 )['result'] );
+
+			$updater->finalize_pending_install();
+			self::assertSame( array( array( 'owner-in-flight', 'plugin', 'package/package.php', 'verified_success' ) ), $completions );
+			self::assertNull( ( new \ReflectionProperty( NativePackageUpdater::class, 'native_owner' ) )->getValue( $updater ) );
+			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'c', 64 ), 600 )['result'] );
+		}
+
 		public function test_standalone_liveness_loss_fails_closed_for_updater_package_token(): void {
 			$state  = new SelectedRuntimeState();
 			$broker = new RequestBroker( false, $state );
