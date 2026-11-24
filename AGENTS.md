@@ -31,11 +31,12 @@ operation tokens also require exact diagnostic annotations, never severity-zero
 or whole-file rules. The existing coverage guards reject broad/case-variant
 suppressions, local rule exclusions, weakened severity and checker arguments,
 and exercise real diagnostics immediately outside retained annotations.
-The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded; it, `src/Dependency/FailureText.php` and
+The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded; it, `src/Dependency/FailureText.php`,
 `src/Dependency/TargetWorkingCopy.php`, `src/Dependency/PackageDirectory.php`,
-`src/Dependency/RepositoryRelativePath.php` and
-`src/Dependency/InvalidRepositoryPathException.php` are namespace-only parity checked
-against the locked upstream package. All 38 shipped PHP files, including those generated
+`src/Dependency/RepositoryRelativePath.php`, `src/Dependency/InvalidRepositoryPathException.php`,
+`src/Dependency/RegularFileStat.php`, `src/Dependency/WordPressHeaders.php`,
+`src/Dependency/RuntimeVersion.php` and `src/Dependency/PluginFileIdentifier.php` are namespace-only parity checked
+against the locked upstream package. All 42 shipped PHP files, including those generated
 copies, remain directly analysed at PHPStan level 8.
 Analysis defaults to the repository root, including new root/nested PHP and the
 generated helper. Root-relative tests/scripts, dependencies and disposable state

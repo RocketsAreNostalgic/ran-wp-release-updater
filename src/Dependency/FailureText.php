@@ -9,7 +9,7 @@ namespace RAN\WPReleaseUpdater\V1\Dependency;
  * One policy, implemented once, for Core and both updaters. The whole text is
  * screened first and only then bounded. A text that matches any rule is dropped
  * whole; nothing is ever redacted, rewritten or partly kept. The result is the
- * accepted printable-ASCII text or null, and there is no other outcome.
+ * accepted text or null, and there is no other outcome.
  *
  * The screen is by shape, deliberately broad, and a safety net rather than a
  * proof: false positives are accepted, false negatives are not. Sinks must still
@@ -30,7 +30,7 @@ final class FailureText {
 	public const MAX_IDENTIFIER_LENGTH = 96;
 
 	/**
-	 * Shape rules, applied to the whole printable-ASCII text by every mode.
+	 * Shape rules, applied to the whole text by every mode.
 	 *
 	 * @var array<string, string>
 	 */
@@ -139,11 +139,10 @@ final class FailureText {
 	/**
 	 * DISPLAY: screens curated sentences that Core shows, by shape only.
 	 *
-	 * Identical to `strict()` except that the prose credential-word rules are not
-	 * applied, so `Check the token permissions and organisation approval.` passes.
-	 * Tokens, userinfo, URLs, query credentials, digests, hex and base64 runs,
-	 * paths, markup and control, format and non-ASCII characters are still
-	 * dropped. Full sentences with spaces and punctuation are allowed.
+	 * Admits printable UTF-8 and whitespace-delimited slash separators. Shape
+	 * screening catches tokens, URLs, credentials, digests, paths and markup.
+	 * The prose credential-word rules are omitted, so curated instructions
+	 * about tokens or passwords can pass.
 	 *
 	 * @param string $text       Curated failure text.
 	 * @param int    $max_length Longest result to return, in bytes (1 to MAX_INPUT_LENGTH).
@@ -198,17 +197,23 @@ final class FailureText {
 			return null;
 		}
 		try {
-			// Non-ASCII, control, format and invisible characters are never accepted, and are never normalized away.
-			if ( ! self::test( '#\A[\x20-\x7E]+\z#', $text ) ) { // rule: printable_ascii_only
+			// Strict accepts ASCII; display accepts printable UTF-8 without controls or separators that break lines.
+			if ( $prose ? ! self::test( '#\A[\x20-\x7E]+\z#', $text ) : ! self::test( '#\A[^\p{C}\p{Zl}\p{Zp}]+\z#u', $text ) ) { // rule: printable_text_only
 				return null;
 			}
 			$text = trim( $text, ' ' );
 			if ( '' === $text || self::hostile( $text, $prose ) ) {
 				return null;
 			}
-			$bounded = rtrim( substr( $text, 0, $max_length ) );
+			$bounded = substr( $text, 0, $max_length );
+			if ( ! $prose ) {
+				while ( '' !== $bounded && 1 !== preg_match( '//u', $bounded ) ) {
+					$bounded = substr( $bounded, 0, -1 );
+				}
+			}
+			$bounded = rtrim( $bounded, ' ' );
 			// A cut can leave a credential word at the end of what remains (`a passenger` cut to `a pass`): screen it again.
-			if ( $bounded !== $text && self::hostile( $bounded, $prose ) ) {
+			if ( '' === $bounded || ( $bounded !== $text && self::hostile( $bounded, $prose ) ) ) {
 				return null;
 			}
 		} catch ( \RuntimeException ) {
@@ -220,12 +225,17 @@ final class FailureText {
 	}
 
 	/**
-	 * True when the printable-ASCII text matches any rule.
+	 * True when the screened text matches any rule.
 	 *
-	 * @param string $text  Text already confined to printable ASCII.
+	 * @param string $text  Text already confined to the mode’s printable characters.
 	 * @param bool   $prose Whether the prose credential-word rules apply.
 	 */
 	private static function hostile( string $text, bool $prose ): bool {
+		if ( ! $prose ) {
+			// Screen Unicode space separators as ordinary spaces while preserving the returned copy.
+			$text = self::replace( '#\p{Zs}#u', ' ', $text );
+		}
+
 		return self::matches_table( $text, $prose )
 			|| self::hex_run( $text ) // rule: hex_run
 			|| self::hex_word( $text ) // rule: hex_word
@@ -237,13 +247,16 @@ final class FailureText {
 	/**
 	 * Applies the single-shape rules.
 	 *
-	 * @param string $text  Text already confined to printable ASCII.
+	 * @param string $text  Text already confined to the mode’s printable characters.
 	 * @param bool   $prose Whether the prose credential-word rules apply.
 	 */
 	private static function matches_table( string $text, bool $prose ): bool {
 		foreach ( $prose ? array_merge( self::RULES, self::PROSE_VALUE_RULES ) : self::RULES as $name => $pattern ) {
 			// Clock times are allowed to carry colons; every other attached colon still drops the text.
 			$subject = 'colon_attached' === $name ? self::replace( self::CLOCK_TIME, '0', $text ) : $text;
+			if ( 'slash' === $name && ! $prose ) {
+				$pattern = '#(?:\A|/) *(?:/|\z)|(?<! )/|/(?! )#';
+			}
 			if ( self::test( $pattern, $subject ) ) {
 				return true;
 			}
@@ -266,7 +279,7 @@ final class FailureText {
 	 *
 	 * Catches digests and UUIDs however they are broken up.
 	 *
-	 * @param string $text Text already confined to printable ASCII.
+	 * @param string $text Text already confined to the mode’s printable characters.
 	 */
 	private static function hex_run( string $text ): bool {
 		return self::test( '#[0-9a-f]{32}#i', self::strip( '#[^0-9A-Za-z]+#', $text ) );
@@ -275,7 +288,7 @@ final class FailureText {
 	/**
 	 * Sixteen or more hex digits in one word once punctuation is removed.
 	 *
-	 * @param string $text Text already confined to printable ASCII.
+	 * @param string $text Text already confined to the mode’s printable characters.
 	 */
 	private static function hex_word( string $text ): bool {
 		return self::test( '#[0-9a-f]{16}#i', self::strip( '#[^0-9A-Za-z\s]+#', $text ) );
@@ -286,7 +299,7 @@ final class FailureText {
 	 *
 	 * Base64, base64url and mixed tokens. A lowercase-only snake_case code is not matched.
 	 *
-	 * @param string $text Text already confined to printable ASCII.
+	 * @param string $text Text already confined to the mode’s printable characters.
 	 */
 	private static function long_mixed_run( string $text ): bool {
 		return self::test( '#(?<![0-9A-Za-z])(?=[0-9A-Za-z]*[0-9A-Z])[0-9A-Za-z]{32}#', self::strip( '#[^0-9A-Za-z\s]+#', $text ) );
@@ -295,7 +308,7 @@ final class FailureText {
 	/**
 	 * A 25+ character run of letters and digits, which no ordinary word or identifier part reaches.
 	 *
-	 * @param string $text Text already confined to printable ASCII.
+	 * @param string $text Text already confined to the mode’s printable characters.
 	 */
 	private static function long_word( string $text ): bool {
 		return self::test( '#[0-9A-Za-z]{25}#', $text );
@@ -306,7 +319,7 @@ final class FailureText {
 	 *
 	 * Words of 32 or more characters belong to long_mixed_run. Catches an encoded secret split by whitespace.
 	 *
-	 * @param string $text Text already confined to printable ASCII.
+	 * @param string $text Text already confined to the mode’s printable characters.
 	 */
 	private static function dense_chunks( string $text ): bool {
 		$run    = 0;

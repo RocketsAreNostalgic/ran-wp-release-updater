@@ -86,6 +86,7 @@ final class RequestProtocolValidator {
 		'binding_fence_lost',
 		'descriptor_admission_rejected',
 		'outcome_uncertain',
+		'policy_blocked',
 		'remote_release_changed',
 		'runtime_liveness_lost',
 		'runtime_package_identity_invalid',
@@ -124,6 +125,10 @@ final class RequestProtocolValidator {
 
 	public static function is_native_failure_code( string $code ): bool {
 		return in_array( $code, self::FAILURE_CODES, true );
+	}
+
+	public static function is_candidate_validation_code( string $code ): bool {
+		return in_array( $code, self::CANDIDATE_VALIDATION_CODES, true );
 	}
 
 	public static function owned_by( object $value, string $root ): bool {

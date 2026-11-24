@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\Archive;
 
+use RAN\WPReleaseUpdater\V1\Dependency\RegularFileStat;
 use RuntimeException;
 
 /** A verified temporary archive whose cleanup remains with this object. */
@@ -129,7 +130,6 @@ final class TemporaryArtifact {
 	}
 
 	private function is_unchanged(): bool {
-		clearstatcache( true, $this->path );
 		$identity = self::file_identity( $this->path );
 		if ( null === $identity || $identity !== $this->identity ) {
 			return false;
@@ -137,8 +137,7 @@ final class TemporaryArtifact {
 
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Hash the verified regular file and recheck native identity; missing or changed files fail closed quietly.
 		$sha256 = @hash_file( 'sha256', $this->path );
-		clearstatcache( true, $this->path );
-		$after = self::file_identity( $this->path );
+		$after  = self::file_identity( $this->path );
 
 		return is_string( $sha256 )
 			&& hash_equals( $this->sha256, $sha256 )
@@ -160,23 +159,11 @@ final class TemporaryArtifact {
 
 	/** @return array<string, int>|null */
 	private static function file_identity( string $path ): ?array {
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
-		$stat = @lstat( $path );
-		if ( ! is_array( $stat ) || is_link( $path ) || 0100000 !== ( (int) $stat['mode'] & 0170000 )
-			|| 1 !== (int) $stat['nlink'] || ! self::has_private_file_mode( (int) $stat['mode'] ) ) {
+		$stat = RegularFileStat::read( $path );
+		if ( null === $stat || 1 !== $stat['nlink'] || ! self::has_private_file_mode( $stat['mode'] ) ) {
 			return null;
 		}
 
-		return array(
-			'dev'   => (int) $stat['dev'],
-			'ino'   => (int) $stat['ino'],
-			'mode'  => (int) $stat['mode'],
-			'nlink' => (int) $stat['nlink'],
-			'uid'   => (int) $stat['uid'],
-			'gid'   => (int) $stat['gid'],
-			'size'  => (int) $stat['size'],
-			'mtime' => (int) $stat['mtime'],
-			'ctime' => (int) $stat['ctime'],
-		);
+		return $stat;
 	}
 }

@@ -18,6 +18,7 @@ final class InvalidRepositoryPathException extends InvalidArgumentException {
 	public const MESSAGE = 'The repository-relative path is invalid.';
 
 	public const REASONS = array(
+		'path_too_long',
 		'path_control_character',
 		'path_empty',
 		'path_absolute',
@@ -25,6 +26,7 @@ final class InvalidRepositoryPathException extends InvalidArgumentException {
 		'path_drive_letter',
 		'path_empty_component',
 		'path_dot_segment',
+		'component_too_long',
 		'path_encoded_traversal',
 		'path_encoded_drive_letter',
 		'path_encoded_control_character',

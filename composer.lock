@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "85e6c4c31c00db2af03baf108955284b",
+    "content-hash": "5e0d3a89f27abea3e1ac1caffc03e221",
     "packages": [],
     "packages-dev": [
         {
@@ -1350,16 +1350,16 @@
         },
         {
             "name": "ran/updater-support",
-            "version": "v1.0.0-beta.10",
+            "version": "v1.0.0-beta.11",
             "source": {
                 "type": "git",
                 "url": "https://github.com/RocketsAreNostalgic/ran-updater-support.git",
-                "reference": "e6d534a7ca34e9c0154d3e9dfb0bcf721d988103"
+                "reference": "ca469e586abb81ed1e61cfc3b7c2168cb23df741"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/RocketsAreNostalgic/ran-updater-support/zipball/e6d534a7ca34e9c0154d3e9dfb0bcf721d988103",
-                "reference": "e6d534a7ca34e9c0154d3e9dfb0bcf721d988103",
+                "url": "https://api.github.com/repos/RocketsAreNostalgic/ran-updater-support/zipball/ca469e586abb81ed1e61cfc3b7c2168cb23df741",
+                "reference": "ca469e586abb81ed1e61cfc3b7c2168cb23df741",
                 "shasum": ""
             },
             "require": {
@@ -1370,6 +1370,7 @@
                 "phpcompatibility/phpcompatibility-paragonie": "2.0.0-alpha2",
                 "phpcompatibility/phpcompatibility-wp": "3.0.0-alpha2",
                 "phpstan/phpstan": "^2.1",
+                "phpunit/phpunit": "^11.5",
                 "ran/coding-standards": "^1.0"
             },
             "type": "library",
@@ -1394,6 +1395,9 @@
                 ],
                 "test:contract": [
                     "php tests/contract.php"
+                ],
+                "test:unit": [
+                    "@php vendor/bin/phpunit --bootstrap vendor/autoload.php --do-not-cache-result --fail-on-warning tests/Unit"
                 ],
                 "test:package-directory": [
                     "php tests/package-directory.php"
@@ -1426,6 +1430,7 @@
                 "test": [
                     "@test:analysis-coverage",
                     "@test:contract",
+                    "@test:unit",
                     "@test:package-directory",
                     "@test:working-copy",
                     "@test:failure-text",
@@ -1452,7 +1457,7 @@
                 "security": "https://github.com/RocketsAreNostalgic/ran-updater-support/security/advisories/new",
                 "source": "https://github.com/RocketsAreNostalgic/ran-updater-support"
             },
-            "time": "2026-11-20T06:15:00+00:00"
+            "time": "2026-11-23T23:12:22+00:00"
         },
         {
             "name": "sebastian/cli-parser",

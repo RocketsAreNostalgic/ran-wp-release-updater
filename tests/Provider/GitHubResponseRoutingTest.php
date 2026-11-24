@@ -155,6 +155,34 @@ final class GitHubResponseRoutingTest extends TestCase {
 		}
 		$this->assert_temporary_paths_absent();
 	}
+
+	public function test_metadata_requests_use_short_timeout_and_streamed_downloads_use_extended_timeout(): void {
+		$descriptor = $this->descriptor();
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+		$GLOBALS['ran_github_requests'] = array();
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
+		$GLOBALS['ran_github_responses'] = array(
+			$this->response( 200, array( 'id' => 99 ) ),
+			$this->response( 302, null, array( 'location' => 'https://objects.githubusercontent.com/repository.zip' ) ),
+			$this->response( 200, null, array(), 'zip-data' ),
+			$this->response( 200, array( 'id' => 99 ) ),
+		);
+
+		$artifact = $this->service()->acquire_installed( $descriptor );
+		try {
+			self::assertCount( 4, $GLOBALS['ran_github_requests'] );
+			self::assertSame( 10, $GLOBALS['ran_github_requests'][0][1]['timeout'] );
+			self::assertArrayNotHasKey( 'filename', $GLOBALS['ran_github_requests'][0][1] );
+			self::assertSame( 120, $GLOBALS['ran_github_requests'][1][1]['timeout'] );
+			self::assertTrue( $GLOBALS['ran_github_requests'][1][1]['stream'] );
+			self::assertSame( 120, $GLOBALS['ran_github_requests'][2][1]['timeout'] );
+			self::assertTrue( $GLOBALS['ran_github_requests'][2][1]['stream'] );
+			self::assertSame( 10, $GLOBALS['ran_github_requests'][3][1]['timeout'] );
+		} finally {
+			self::assertTrue( $artifact->discard() );
+		}
+		$this->assert_temporary_paths_absent();
+	}
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'endpoint_failure_provider' )]
 	public function test_endpoint_failures_use_neutral_codes_and_make_no_later_request( string $operation, string $scenario, string $code, int $requests ): void {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.

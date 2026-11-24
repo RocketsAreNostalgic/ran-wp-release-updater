@@ -13,6 +13,9 @@ namespace RAN\WPReleaseUpdater\V1\Dependency;
  */
 final class RepositoryRelativePath {
 
+	public const MAX_PATH_BYTES      = 4096;
+	public const MAX_COMPONENT_BYTES = 255;
+
 	private const MAX_DECODE_PASSES = 8;
 
 	/**
@@ -22,6 +25,9 @@ final class RepositoryRelativePath {
 	 *                                        a \InvalidArgumentException whose message is fixed.
 	 */
 	public static function normalize( string $value ): string {
+		if ( strlen( $value ) > self::MAX_PATH_BYTES ) {
+			throw self::invalid( 'path_too_long' );
+		}
 		if ( 1 === preg_match( '/[\x00-\x1F\x7F]/', $value ) ) {
 			throw self::invalid( 'path_control_character' );
 		}
@@ -52,6 +58,9 @@ final class RepositoryRelativePath {
 			}
 			if ( '.' === $segment || '..' === $segment ) {
 				throw self::invalid( 'path_dot_segment' );
+			}
+			if ( strlen( $segment ) > self::MAX_COMPONENT_BYTES ) {
+				throw self::invalid( 'component_too_long' );
 			}
 
 			self::assert_decoded_segment_is_safe( $segment, 0 === $index );

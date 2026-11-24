@@ -9,6 +9,7 @@ use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
+use RAN\WPReleaseUpdater\V1\Dependency\RuntimeVersion;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
 
@@ -76,8 +77,10 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				'code'   => 'target_composition_failed',
 			);
 		}
-		$wordpress_version = SelectedRuntimeState::normalize_word_press_version( $GLOBALS['wp_version'] ?? null );
-		if ( ! is_string( $wordpress_version ) ) {
+		$raw_wordpress     = $GLOBALS['wp_version'] ?? null;
+		$wordpress_version = is_string( $raw_wordpress ) ? RuntimeVersion::wordpress( $raw_wordpress ) : null;
+		$php_version       = RuntimeVersion::php( PHP_VERSION );
+		if ( ! is_string( $wordpress_version ) || ! is_string( $php_version ) ) {
 			return array(
 				'native' => null,
 				'code'   => 'target_composition_failed',
@@ -89,7 +92,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 			'installed_package_identity'   => $identity,
 			'maximum_artifact_bytes'       => $declaration['maximum_artifact_bytes'],
 			'network_id'                   => $network_id,
-			'php_runtime_version'          => SelectedRuntimeState::current_php_version(),
+			'php_runtime_version'          => $php_version,
 			'provider_code'                => 'github',
 			'release_channel'              => $declaration['channel'],
 			'stable_repository_identity'   => $repository_id,
@@ -118,7 +121,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 			'maximum_artifact_bytes'     => $declaration['maximum_artifact_bytes'],
 			'metadata_name'              => $headers['Name'],
 			'offer_update_uri'           => $uri,
-			'php_runtime_version'        => SelectedRuntimeState::current_php_version(),
+			'php_runtime_version'        => $php_version,
 			'provider_code'              => 'github',
 			'repository_identity'        => $repository_id,
 			'repository_locator'         => $locator,

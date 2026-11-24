@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\WordPress;
 
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
+use RAN\WPReleaseUpdater\V1\Dependency\RegularFileStat;
 
 /** Owns the security-sensitive local copy and identity checks for acquired archives. */
 final class OwnedArchiveStore {
@@ -137,13 +138,9 @@ final class OwnedArchiveStore {
 	/** @return array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null */
 	public function identity( string $path, IdentityDescriptor $descriptor ): ?array {
 		$facts = $descriptor->to_array();
-		clearstatcache( true, $path );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
-		$stat = @lstat( $path );
+		$stat  = RegularFileStat::read( $path );
 		if (
-			! is_array( $stat )
-			|| is_link( $path )
-			|| 0100000 !== ( $stat['mode'] & 0170000 )
+			null === $stat
 			|| 1 !== $stat['nlink']
 			|| $stat['size'] !== $facts['artifact_size']
 		) {
@@ -151,16 +148,12 @@ final class OwnedArchiveStore {
 		}
 
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Hash the verified regular file and recheck native identity; missing or changed files fail closed quietly.
-		$hash = @hash_file( 'sha256', $path );
-		clearstatcache( true, $path );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Re-observe native filesystem identity without following symlinks to reject concurrent replacement during hashing.
-		$after = @lstat( $path );
+		$hash  = @hash_file( 'sha256', $path );
+		$after = RegularFileStat::read( $path );
 		if (
 			! is_string( $hash )
 			|| ! hash_equals( $facts['artifact_sha256'], $hash )
-			|| ! is_array( $after )
-			|| is_link( $path )
-			|| 0100000 !== ( $after['mode'] & 0170000 )
+			|| null === $after
 			|| 1 !== $after['nlink']
 			|| $after['dev'] !== $stat['dev']
 			|| $after['ino'] !== $stat['ino']

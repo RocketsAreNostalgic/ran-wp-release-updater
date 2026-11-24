@@ -12,6 +12,7 @@ use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseRejection;
+use RAN\WPReleaseUpdater\V1\Dependency\RuntimeVersion;
 use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 
@@ -116,8 +117,10 @@ final class GitHubReleaseService {
 		if ( ! self::exact_keys( $declaration, $opted_in ? array( ...$keys, 'rejection_reasons' ) : $keys ) || ( $opted_in && true !== $declaration['rejection_reasons'] ) || 'github' !== $declaration['provider_code'] ) {
 			throw new InvalidArgumentException( 'The release declaration is invalid.' );
 		}
-		$wordpress = SelectedRuntimeState::normalize_word_press_version( $GLOBALS['wp_version'] ?? null );
-		if ( ! is_string( $wordpress ) ) {
+		$raw_wordpress = $GLOBALS['wp_version'] ?? null;
+		$wordpress     = is_string( $raw_wordpress ) ? RuntimeVersion::wordpress( $raw_wordpress ) : null;
+		$php           = RuntimeVersion::php( PHP_VERSION );
+		if ( ! is_string( $wordpress ) || ! is_string( $php ) ) {
 			throw new \RuntimeException( 'The release runtime is unavailable.' );
 		}
 		return new self(
@@ -125,7 +128,7 @@ final class GitHubReleaseService {
 				'canonical_repository_locator' => $declaration['repository_locator'],
 				'canonical_update_uri'         => CanonicalUpdateUri::canonicalize( 'https://github.com/' . $declaration['repository_locator'] ),
 				'maximum_artifact_bytes'       => $declaration['maximum_artifact_bytes'],
-				'php_runtime_version'          => SelectedRuntimeState::current_php_version(),
+				'php_runtime_version'          => $php,
 				'release_channel'              => $declaration['channel'],
 				'stable_repository_identity'   => $declaration['repository_identity'],
 				'target_type'                  => $declaration['target_type'],

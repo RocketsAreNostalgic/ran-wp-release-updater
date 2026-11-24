@@ -375,10 +375,10 @@ PHP;
 			'php absent'       => array( "Requires at least: 6.8\n", null ),
 			'wordpress absent' => array( "Requires PHP: 8.2\n", null ),
 			'both met'         => array( "Requires PHP: 8.2\nRequires at least: 6.8\n", null ),
-			'php empty'        => array( "Requires PHP:\nRequires at least: 6.8\n", 'header_requires_php_unmet' ),
+			'php empty'        => array( "Requires PHP:\nRequires at least: 6.8\n", null ),
 			'php invalid'      => array( "Requires PHP: soon\n", 'header_requires_php_unmet' ),
 			'php unmet'        => array( "Requires PHP: 8.3\n", 'header_requires_php_unmet' ),
-			'wordpress empty'  => array( "Requires at least:\n", 'header_requires_wp_unmet' ),
+			'wordpress empty'  => array( "Requires at least:\n", null ),
 			'wordpress unmet'  => array( "Requires at least: 6.9\n", 'header_requires_wp_unmet' ),
 		);
 		foreach ( $cases as $name => [$requires, $reason] ) {
@@ -853,7 +853,7 @@ PHP;
 		$large_bomb = $this->archive(
 			array(
 				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
-				'example-plugin/bomb.txt'           => str_repeat( "\0", 100000 ),
+				'example-plugin/bomb.txt'           => str_repeat( "\0", 131072 ),
 			)
 		);
 		self::assertSame(
@@ -1021,6 +1021,337 @@ PHP;
 			'archive_unreadable'
 		);
 		self::assertTrue( $opened );
+	}
+
+	public function test_optional_requires_headers_may_be_omitted_or_empty_for_plugins_and_themes(): void {
+		$validator = new PackageIdentityValidator();
+		foreach ( array( 'plugin', 'theme' ) as $type ) {
+			$root     = 'plugin' === $type ? 'example-plugin' : 'example-theme';
+			$file     = 'plugin' === $type ? 'example-plugin.php' : 'style.css';
+			$name     = 'plugin' === $type ? 'Example Plugin' : 'Example Theme';
+			$kind     = 'plugin' === $type ? 'Plugin Name' : 'Theme Name';
+			$identity = 'theme' === $type ? $root : $root . '/' . $file;
+			$policy   = $this->policy( $type, $root, $file, $name );
+			$head     = ( 'plugin' === $type ? "<?php\n" : '' ) . "/*\n{$kind}: {$name}\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n";
+
+			foreach ( array(
+				'both omitted'      => '',
+				'php omitted'       => "Requires at least: 6.8\n",
+				'wordpress omitted' => "Requires PHP: 8.2\n",
+				'both empty'        => "Requires PHP:\nRequires at least:\n",
+				'php empty wp met'  => "Requires PHP:   \nRequires at least: 6.8\n",
+				'wp empty php met'  => "Requires PHP: 8.2\nRequires at least:   \n",
+			) as $label => $requires ) {
+				$archive = $this->archive( array( $root . '/' . $file => $head . $requires . '*/' ) );
+				self::assertSame(
+					array(
+						'package_root' => $root,
+						'main_file'    => $file,
+					),
+					$validator->inspect_prospective( $this->prospective_policy( $archive, $type ), $archive ),
+					$type . ': ' . $label
+				);
+				self::assertTrue(
+					$validator->validate( $this->descriptor( $archive, $type, $identity ), $policy, $archive )->is_valid(),
+					$type . ': ' . $label
+				);
+			}
+
+			foreach ( array(
+				'malformed php'       => array( "Requires PHP: not-a-version\n", 'header_requires_php_unmet', 'archive_php_requirement_incompatible' ),
+				'malformed wordpress' => array( "Requires at least: not-a-version\n", 'header_requires_wp_unmet', 'archive_wordpress_requirement_incompatible' ),
+				'unmet php'           => array( "Requires PHP: 8.3\n", 'header_requires_php_unmet', 'archive_php_requirement_incompatible' ),
+				'unmet wordpress'     => array( "Requires at least: 6.9\n", 'header_requires_wp_unmet', 'archive_wordpress_requirement_incompatible' ),
+			) as $label => [$requires, $prospective_reason, $archive_code] ) {
+				$archive = $this->archive( array( $root . '/' . $file => $head . $requires . '*/' ) );
+				$this->assert_rejected(
+					$validator->inspect_prospective( $this->prospective_policy( $archive, $type ), $archive ),
+					$prospective_reason
+				);
+				self::assertSame(
+					$archive_code,
+					$validator->validate( $this->descriptor( $archive, $type, $identity ), $policy, $archive )->code(),
+					$type . ': ' . $label
+				);
+			}
+		}
+	}
+
+	public function test_utf8_zip_entry_paths_are_admitted_while_unicode_controls_and_malformed_utf8_fail(): void {
+		$validator = new PackageIdentityValidator();
+		$policy    = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+		$utf8_zip  = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+				'example-plugin/assets/ümlaut.png'  => 'png-bytes',
+				'example-plugin/assets/café.txt'    => 'nfc-latin',
+				'example-plugin/assets/画像.svg'      => '<svg/>',
+				'example-plugin/assets/한국어.txt'     => 'nfc-hangul',
+				'example-plugin/ресурсы/файл.txt'   => 'text-bytes',
+			)
+		);
+		self::assertSame(
+			array(
+				'package_root' => 'example-plugin',
+				'main_file'    => 'example-plugin.php',
+			),
+			$validator->inspect_prospective( $this->prospective_policy( $utf8_zip, 'plugin' ), $utf8_zip )
+		);
+		self::assertTrue(
+			$validator->validate( $this->descriptor( $utf8_zip, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $utf8_zip )->is_valid()
+		);
+
+		foreach ( array(
+			'bidi format'    => "example-plugin/assets/name\u{202E}gnp.php",
+			'lrm format'     => "example-plugin/assets/name\u{200E}.png",
+			'line separator' => "example-plugin/assets/name\u{2028}.png",
+			'c1 control'     => "example-plugin/assets/name\u{0085}.png",
+		) as $label => $unsafe_entry ) {
+			$archive = $this->archive(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					$unsafe_entry                       => 'payload',
+				)
+			);
+			$this->assert_rejected(
+				$validator->inspect_prospective( $this->prospective_policy( $archive, 'plugin' ), $archive ),
+				'archive_path_unsafe'
+			);
+			self::assertSame(
+				'archive_path_unsafe',
+				$validator->validate( $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $archive )->code(),
+				$label
+			);
+		}
+
+		// Malformed UTF-8 bytes are rejected both at the path helper and when libzip opens a UTF-8-flagged entry.
+		self::assertNull( \RAN\WPReleaseUpdater\V1\Dependency\ArchiveSafety::normalize_path( "example-plugin/assets/\xff.png", allow_utf8: true ) );
+		$invalid_utf8 = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+				'example-plugin/assets/üX.png'      => 'payload',
+			)
+		);
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read local ZIP fixture bytes to inject a raw non-UTF-8 filename byte.
+		$raw_bytes = file_get_contents( $invalid_utf8 );
+		self::assertIsString( $raw_bytes );
+		$patched = str_replace( 'example-plugin/assets/üX.png', "example-plugin/assets/ü\xff.png", $raw_bytes, $count );
+		self::assertSame( 2, $count );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write modified ZIP fixture bytes directly.
+		file_put_contents( $invalid_utf8, $patched );
+		$this->assert_rejected(
+			$validator->inspect_prospective( $this->prospective_policy( $invalid_utf8, 'plugin' ), $invalid_utf8 ),
+			'archive_unreadable'
+		);
+		self::assertSame(
+			'archive_unreadable',
+			$validator->validate( $this->descriptor( $invalid_utf8, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $invalid_utf8 )->code(),
+			'invalid utf8'
+		);
+
+		// Unicode case-folding collisions (for example Ü.png vs ü.png, ß vs SS) and Unicode file-parent collisions must fail closed.
+		foreach ( array(
+			'unicode case duplicate'                   => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					'example-plugin/assets/Ü.png'       => 'upper',
+					'example-plugin/assets/ü.png'       => 'lower',
+				),
+				'archive_path_duplicate',
+			),
+			'unicode sharp-s case fold'                => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					'example-plugin/assets/straße.txt'  => 'sharp-s',
+					'example-plugin/assets/STRASSE.txt' => 'ascii-ss',
+				),
+				'archive_path_duplicate',
+			),
+			'unicode file parent collision'            => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					'example-plugin/assets/ü'           => 'file',
+					'example-plugin/assets/Ü/child.txt' => 'child',
+				),
+				'archive_path_unsafe',
+			),
+			'unicode nfc vs nfd duplicate'             => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					"example-plugin/assets/caf\xc3\xa9.txt" => 'nfc',
+					"example-plugin/assets/cafe\xcc\x81.txt" => 'nfd',
+				),
+				class_exists( \Normalizer::class ) ? 'archive_path_duplicate' : 'archive_path_unsafe',
+			),
+			'unicode nfc vs nfd file parent collision' => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					"example-plugin/assets/caf\xc3\xa9" => 'file',
+					"example-plugin/assets/cafe\xcc\x81/sub.txt" => 'child',
+				),
+				'archive_path_unsafe',
+			),
+			'unicode canonical singleton semicolon duplicate' => array(
+				array(
+					'example-plugin/example-plugin.php'    => $this->header( 'Plugin Name', 'Example Plugin' ),
+					'example-plugin/assets/a;b.txt'        => 'ascii-semicolon',
+					"example-plugin/assets/a\u{037E}b.txt" => 'greek-question-mark',
+				),
+				class_exists( \Normalizer::class ) ? 'archive_path_duplicate' : 'archive_path_unsafe',
+			),
+			'unicode canonical singleton greek oxia duplicate' => array(
+				array(
+					'example-plugin/example-plugin.php'  => $this->header( 'Plugin Name', 'Example Plugin' ),
+					"example-plugin/assets/\u{03AC}.txt" => 'tonos',
+					"example-plugin/assets/\u{1F71}.txt" => 'oxia',
+				),
+				class_exists( \Normalizer::class ) ? 'archive_path_duplicate' : 'archive_path_unsafe',
+			),
+			'unicode canonical singleton angle bracket duplicate' => array(
+				array(
+					'example-plugin/example-plugin.php'    => $this->header( 'Plugin Name', 'Example Plugin' ),
+					"example-plugin/assets/a\u{2329}b.txt" => 'tech-angle',
+					"example-plugin/assets/a\u{3008}b.txt" => 'cjk-angle',
+				),
+				class_exists( \Normalizer::class ) ? 'archive_path_duplicate' : 'archive_path_unsafe',
+			),
+			'unicode canonical singleton file parent collision' => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					'example-plugin/assets/a;b'         => 'file',
+					"example-plugin/assets/a\u{037E}b/child.txt" => 'child',
+				),
+				'archive_path_unsafe',
+			),
+		) as $label => [$files, $expected_code] ) {
+			$colliding = $this->archive( $files );
+			$this->assert_rejected(
+				$validator->inspect_prospective( $this->prospective_policy( $colliding, 'plugin' ), $colliding ),
+				$expected_code
+			);
+			self::assertSame(
+				$expected_code,
+				$validator->validate( $this->descriptor( $colliding, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $colliding )->code(),
+				$label
+			);
+		}
+	}
+
+	public function test_expanded_archive_limit_scales_dynamically_from_maximum_artifact_bytes(): void {
+		$validator = new PackageIdentityValidator();
+		$header    = $this->header( 'Plugin Name', 'Example Plugin' );
+		$payload   = str_repeat( '0123456789abcdef', 1024 ); // 16 KiB compressible, well below 128 KiB ratio floor.
+		$archive   = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $header,
+				'example-plugin/data.txt'           => $payload,
+			)
+		);
+		$expanded  = strlen( $header ) + strlen( $payload );
+		$zip_size  = filesize( $archive );
+		self::assertIsInt( $zip_size );
+		$small_limit = max( $zip_size, intdiv( $expanded - 1, 4 ) );
+		self::assertLessThan( $expanded, 4 * $small_limit );
+		$large_limit = intdiv( $expanded, 4 ) + 1;
+		self::assertGreaterThanOrEqual( $expanded, 4 * $large_limit );
+
+		$prospective_small                           = $this->prospective_policy( $archive, 'plugin' );
+		$prospective_small['maximum_artifact_bytes'] = $small_limit;
+		$this->assert_rejected(
+			$validator->inspect_prospective( $prospective_small, $archive ),
+			'archive_size_limit'
+		);
+
+		$prospective_large                           = $this->prospective_policy( $archive, 'plugin' );
+		$prospective_large['maximum_artifact_bytes'] = $large_limit;
+		self::assertSame(
+			array(
+				'package_root' => 'example-plugin',
+				'main_file'    => 'example-plugin.php',
+			),
+			$validator->inspect_prospective( $prospective_large, $archive )
+		);
+
+		$policy_small                           = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+		$policy_small['maximum_artifact_bytes'] = $small_limit;
+		$descriptor                             = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );
+		self::assertSame(
+			'archive_size_limit',
+			$validator->validate( $descriptor, $policy_small, $archive )->code()
+		);
+
+		$policy_large                           = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+		$policy_large['maximum_artifact_bytes'] = $large_limit;
+		$validated                              = $validator->validate( $descriptor, $policy_large, $archive );
+		self::assertTrue( $validated->is_valid() );
+		self::assertSame( $expanded, $validator->consume_receipt_proof( $validated, $descriptor )['manifest_expanded_bytes'] );
+
+		$zip = new \ZipArchive();
+		self::assertTrue( $zip->open( $archive ) );
+		try {
+			self::assertTrue( \RAN\WPReleaseUpdater\V1\Archive\ArchiveScanner::scan( $zip )->is_valid() );
+			self::assertSame( 'archive_size_limit', \RAN\WPReleaseUpdater\V1\Archive\ArchiveScanner::scan( $zip, 'example-plugin', $expanded - 1 )->failure_code() );
+			self::assertTrue( \RAN\WPReleaseUpdater\V1\Archive\ArchiveScanner::scan( $zip, 'example-plugin', $expanded )->is_valid() );
+		} finally {
+			$zip->close();
+		}
+	}
+
+	public function test_encrypted_zip_entries_and_nonzero_directory_payloads_are_rejected(): void {
+		$validator = new PackageIdentityValidator();
+		$policy    = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+
+		$encrypted = tempnam( sys_get_temp_dir(), 'ran-encrypted-' );
+		self::assertIsString( $encrypted );
+		$this->archives[] = $encrypted;
+		$zip              = new \ZipArchive();
+		self::assertTrue( $zip->open( $encrypted, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) );
+		self::assertTrue( $zip->addFromString( 'example-plugin/example-plugin.php', $this->header( 'Plugin Name', 'Example Plugin' ) ) );
+		self::assertTrue( $zip->addFromString( 'example-plugin/secret.txt', 'classified' ) );
+		self::assertTrue( $zip->setEncryptionName( 'example-plugin/secret.txt', \ZipArchive::EM_AES_256, 'password' ) );
+		self::assertTrue( $zip->close() );
+
+		$probe = new \ZipArchive();
+		self::assertTrue( $probe->open( $encrypted ) );
+		try {
+			self::assertSame( 'archive_unreadable', \RAN\WPReleaseUpdater\V1\Archive\ArchiveScanner::scan( $probe )->failure_code() );
+		} finally {
+			$probe->close();
+		}
+		$this->assert_rejected(
+			$validator->inspect_prospective( $this->prospective_policy( $encrypted, 'plugin' ), $encrypted ),
+			'archive_unreadable'
+		);
+		self::assertSame(
+			'archive_unreadable',
+			$validator->validate( $this->descriptor( $encrypted, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $encrypted )->code()
+		);
+
+		$dir_payload = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+				'example-plugin/sub/'               => 'unexpected-directory-bytes',
+			),
+			array(),
+			array(
+				'example-plugin/sub/' => array( \ZipArchive::OPSYS_UNIX, 0040755 << 16 ),
+			)
+		);
+		$probe       = new \ZipArchive();
+		self::assertTrue( $probe->open( $dir_payload ) );
+		try {
+			self::assertSame( 'archive_size_limit', \RAN\WPReleaseUpdater\V1\Archive\ArchiveScanner::scan( $probe )->failure_code() );
+		} finally {
+			$probe->close();
+		}
+		$this->assert_rejected(
+			$validator->inspect_prospective( $this->prospective_policy( $dir_payload, 'plugin' ), $dir_payload ),
+			'archive_size_limit'
+		);
+		self::assertSame(
+			'archive_size_limit',
+			$validator->validate( $this->descriptor( $dir_payload, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $dir_payload )->code()
+		);
 	}
 
 	/**

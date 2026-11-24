@@ -574,11 +574,6 @@ final class RequestBroker {
 		);
 	}
 
-	// @phpstan-ignore method.unused (ConciseRegistrarTest invokes this validation seam through Reflection.)
-	private function valid_native_status( mixed $native ): bool {
-		return RequestProtocolValidator::valid_native_status( $native );
-	}
-
 	/** @param array<string,mixed> $value */
 	private function declaration_code( array $value ): ?string {
 		return RequestProtocolValidator::declaration_code( $value );
