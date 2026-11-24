@@ -11,7 +11,14 @@ final class PackageDirectory {
 
 	/** Folder admission only: preserve case and compare admitted names exactly. */
 	public static function is_valid_name( string $value ): bool {
-		return 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,190}\z/D', $value );
+		if ( 1 !== preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,190}\z/D', $value ) ) {
+			return false;
+		}
+		if ( str_ends_with( $value, '.' ) ) {
+			return false;
+		}
+
+		return 0 === preg_match( '/\A(?:con|prn|aux|nul|(?:com|lpt)[1-9])(?:\.|\z)/iD', $value );
 	}
 
 	/** Derive from a consumer-validated WordPress identifier, retaining installed case. */
@@ -23,8 +30,10 @@ final class PackageDirectory {
 			throw new InvalidArgumentException( 'The package type is invalid.' );
 		}
 		$identifier = trim( $identifier, '/' );
-		$directory  = dirname( $identifier );
-		return '.' === $directory ? (string) pathinfo( $identifier, PATHINFO_FILENAME ) : basename( $directory );
+		$separator  = strpos( $identifier, '/' );
+		return false === $separator
+			? (string) pathinfo( $identifier, PATHINFO_FILENAME )
+			: substr( $identifier, 0, $separator );
 	}
 
 	/** Optional subdirectory; throws InvalidArgumentException with a fixed message. */

@@ -23,6 +23,10 @@ final class ArchiveSafetyDependencyTest extends TestCase {
 			[$entries, $expected] = $case;
 			self::assertSame( $expected, ArchiveSafety::collision_failure( $entries ), $name );
 		}
+		foreach ( $fixture['sizes'] as $name => $case ) {
+			[$size, $comp_size, $directory, $ratio, $floor, $expected] = $case;
+			self::assertSame( $expected, ArchiveSafety::entry_size_failure( $size, $comp_size, $directory, $ratio, $floor ), $name );
+		}
 	}
 
 	public function test_owned_naming_scope_covers_current_and_future_cohort_files(): void {

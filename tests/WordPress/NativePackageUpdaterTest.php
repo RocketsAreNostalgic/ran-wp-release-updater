@@ -3009,6 +3009,93 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 'candidate_rejected', $rejected['reason'] );
 			self::assertFalse( $rejected['offered'] );
 		}
+
+		public function test_manual_check_and_observations_preserve_archive_validation_rejection_codes(): void {
+			$uri   = $this->uri();
+			$cases = array(
+				'version mismatch' => array(
+					array( 'package/package.php' => "<?php\n/*\nPlugin Name: Package\nVersion: 9.9.9\nUpdate URI: {$uri}\n*/" ),
+					'archive_version_mismatch',
+				),
+				'unsafe path'      => array(
+					array(
+						'package/package.php'   => "<?php\n/*\nPlugin Name: Package\nVersion: 2.0.0\nUpdate URI: {$uri}\n*/",
+						'package/../escape.php' => '<?php',
+					),
+					'archive_path_unsafe',
+				),
+				'root mismatch'    => array(
+					array( 'other-root/package.php' => "<?php\n/*\nPlugin Name: Package\nVersion: 2.0.0\nUpdate URI: {$uri}\n*/" ),
+					'archive_root_mismatch',
+				),
+				'size limit bomb'  => array(
+					array(
+						'package/package.php' => "<?php\n/*\nPlugin Name: Package\nVersion: 2.0.0\nUpdate URI: {$uri}\n*/",
+						'package/bomb.bin'    => str_repeat( "\0", 200000 ),
+					),
+					'archive_size_limit',
+				),
+			);
+
+			foreach ( $cases as $label => [$entries, $expected_code] ) {
+				$archive_path = tempnam( $this->temporary_directory, 'ran-native-bad-' );
+				self::assertIsString( $archive_path );
+				$this->paths[] = $archive_path;
+				$zip           = new \ZipArchive();
+				self::assertTrue( $zip->open( $archive_path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) );
+				foreach ( $entries as $entry_name => $contents ) {
+					self::assertTrue( $zip->addFromString( $entry_name, $contents ) );
+				}
+				self::assertTrue( $zip->close() );
+
+				$descriptor = $this->descriptor( $archive_path, 'stable', false );
+				$binding    = $this->binding( 'disabled', 'stable' );
+				$adapter    = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
+				$updater    = NativePackageUpdater::from_configuration( $this->config( 'disabled' ), $binding, $adapter, new FakeOptionDatabase( 100 ), $this->policy() );
+				self::assertInstanceOf( NativePackageUpdater::class, $updater );
+				$GLOBALS['ran_wp_release_updater_test_observations'] = array();
+
+				$report = $this->manual_check( $updater );
+				$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+
+				self::assertSame( 'rejected', $report['status'], $label );
+				self::assertSame( 'candidate_rejected', $report['reason'], $label );
+				self::assertSame( $expected_code, $report['candidate_validation_code'], $label );
+				self::assertCount( 3, $events, $label );
+				self::assertSame( 'ran_wp_release_updater_check_completed_v1', $events[1][0], $label );
+				self::assertSame( $expected_code, $events[1][1]['candidate_validation_code'] ?? null, $label . ' v1' );
+				self::assertSame( 'ran_wp_release_updater_check_completed_v2', $events[2][0], $label );
+				self::assertSame( $expected_code, $events[2][1]['candidate_validation_code'] ?? null, $label . ' v2' );
+			}
+
+			self::assertFalse( \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::is_candidate_validation_code( 'unlisted_code' ) );
+			foreach ( array(
+				'archive_entry_limit',
+				'archive_entry_unreadable',
+				'archive_file_identity_mismatch',
+				'archive_header_duplicate',
+				'archive_header_missing',
+				'archive_header_unreadable',
+				'archive_identity_verified',
+				'archive_metadata_identity_mismatch',
+				'archive_path_duplicate',
+				'archive_path_unsafe',
+				'archive_php_requirement_incompatible',
+				'archive_root_mismatch',
+				'archive_size_limit',
+				'archive_target_policy_invalid',
+				'archive_unreadable',
+				'archive_update_uri_mismatch',
+				'archive_version_mismatch',
+				'archive_wordpress_requirement_incompatible',
+				'archive_zip_extension_unavailable',
+			) as $archive_code ) {
+				self::assertTrue(
+					\RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::is_candidate_validation_code( $archive_code ),
+					$archive_code
+				);
+			}
+		}
 		public function test_manual_check_is_ignored_for_other_targets_and_when_not_live(): void {
 			list( $updater, $adapter ) = $this->subject( 'disabled' );
 			self::assertNull( $updater->filter_check_releases( null, 'theme', 'package/package.php' ) );

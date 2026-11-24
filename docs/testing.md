@@ -46,7 +46,7 @@ test independently discovers all script PHP, including nested `scripts/tests`,
 compares effective selection, asserts level 8, detects an excluded nested script,
 and proves a new script's incorrect return fails actual analysis.
 
-Current direct analysis covers all 110 maintained PHP files: 38 production files and
+Current direct analysis covers all 114 maintained PHP files: 42 production files and
 three scripts at level 8, plus 69 test files at level 8. The small
 `scripts/analyze-tests.php` runner discovers the whole tests directory through
 PHPStan's file finder, then passes each file separately to the locked analyzer.
@@ -87,7 +87,7 @@ analysis; unmatched identifiers fail. Controls reuse actual annotations and
 prove the immediately following occurrence remains diagnosed. See
 QUALITY_ACCEPTANCE.md for dispositions requiring candidate review.
 
-All 38 maintained production PHP files (`bootstrap.php`, `runtime.php` and
+All 42 maintained production PHP files (`bootstrap.php`, `runtime.php` and
 production PHP under `src/`) now have direct level-8 roots. Issue #60 records the historical
 source acceptance; this coverage count does not certify later exception changes.
 
@@ -118,10 +118,10 @@ deprecated-syntax warnings.
 
 `src/Runtime/RequestBroker.php` is a direct level-8 root. Local callable
 checks supplement source ownership and exact-method validation; they do not
-admit magic or inherited extra methods. Eight unused private validator
-forwarders were removed. The `validNativeStatus` Reflection seam remains,
-with only its `method.unused` diagnostic ignored at the declaration because
-`ConciseRegistrarTest` calls it directly; its body remains analysed.
+admit magic or inherited extra methods. All private validator forwarders,
+including the former `valid_native_status` Reflection seam, are removed and
+`ConciseRegistrarTest` calls `RequestProtocolValidator::valid_native_status()`
+directly.
 
 `runtime.php` is a direct level-8 root. Its handoff arrays have explicit element
 types, and native handle calls check callability while retaining the object-based
@@ -138,7 +138,7 @@ type to PHPStan so the existing impure cleanup retry remains analysed without
 suppression. Bootstrap/provenance, public release-source schema and registrar
 lifecycle tests cover these boundaries.
 
-All six generated PHP files under `src/Dependency/` are explicitly analysed at level 8.
+All ten generated PHP files under `src/Dependency/` are explicitly analysed at level 8.
 Their source remains owned by the pinned `ran/updater-support` dependency;
 `scripts/sync-updater-support.php --check` requires namespace-only byte parity.
 Future fixes belong upstream and must arrive through the reviewed dependency and

@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\WordPress;
 
 use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
+use RAN\WPReleaseUpdater\V1\Dependency\PluginFileIdentifier;
+use RAN\WPReleaseUpdater\V1\Dependency\RuntimeVersion;
+use RAN\WPReleaseUpdater\V1\Dependency\WordPressHeaders;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
 
 /** @internal Resolves one stable, WordPress-registered installed target. */
 final class InstalledPackageResolver {
 
-	private const MAX_HEADER_BYTES = 8192;
+	private const MAX_HEADER_BYTES = WordPressHeaders::MAX_BYTES;
 
 	/** @var null|\Closure(string):void Tests inject a deterministic race by Reflection. */
 	// @phpstan-ignore property.unusedType (InstalledPackageResolverTest assigns this seam through Reflection.)
@@ -249,8 +252,7 @@ final class InstalledPackageResolver {
 			if ( 2 !== count( $parts ) ) {
 				return 1 === count( $parts ) ? 'plugin_root_level_unsupported' : 'installed_file_outside_root';
 			}
-			$base = substr( $parts[1], 0, -4 );
-			if ( ! PackageDirectory::is_valid_name( $parts[0] ) || ! str_ends_with( $parts[1], '.php' ) || 1 !== preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\z/D', $base ) ) {
+			if ( ! PackageDirectory::is_valid_name( $parts[0] ) || ! str_ends_with( $parts[1], '.php' ) || strlen( $parts[1] ) > 104 || ! PluginFileIdentifier::is_valid( $parts[1] ) ) {
 				return 'installed_file_invalid';
 			}
 			return array(
@@ -334,7 +336,7 @@ final class InstalledPackageResolver {
 			return true;
 		}
 		if ( '' !== $headers['RequiresPHP'] ) {
-			$php_version    = \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_php_version(
+			$php_version    = RuntimeVersion::php(
 				$this->php_version ?? \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::current_php_version()
 			);
 			$php_comparison = is_string( $php_version ) ? ReleaseVersion::compare( $php_version, $headers['RequiresPHP'] ) : null;
@@ -342,7 +344,8 @@ final class InstalledPackageResolver {
 				return true;
 			}
 		}
-		$wordpress  = \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::normalize_word_press_version( $GLOBALS['wp_version'] ?? null );
+		$raw_wp     = $GLOBALS['wp_version'] ?? null;
+		$wordpress  = is_string( $raw_wp ) ? RuntimeVersion::wordpress( $raw_wp ) : null;
 		$comparison = is_string( $wordpress ) ? ReleaseVersion::compare( $wordpress, $headers['RequiresWP'] ) : null;
 		return '' !== $headers['RequiresWP'] && ( null === ReleaseVersion::normalize_header( $headers['RequiresWP'] ) || null === $comparison || $comparison < 0 );
 	}

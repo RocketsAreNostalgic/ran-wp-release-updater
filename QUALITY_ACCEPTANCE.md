@@ -10,7 +10,7 @@ Core dependency update. The native-operation refinement below was delivered sepa
 
 | Surface | Required evidence |
 | --- | --- |
-| `bootstrap.php`, `runtime.php`, and 36 PHP files under `src/` | All 38 shipped PHP paths are direct PHPStan level-8 roots. `scanDirectories` is additional discovery, not coverage. |
+| `bootstrap.php`, `runtime.php`, and 40 PHP files under `src/` | All 42 shipped PHP paths are direct PHPStan level-8 roots. `scanDirectories` is additional discovery, not coverage. |
 | Maintained production PHP except the generated helper | PHPCS/PHPCBF use the same shared ruleset and scope. Owned methods and variables are enforced across paths, including new files. |
 | `scripts/` | Syntax and shared standards, with method/variable naming enforced. The helper synchronizer's remaining local name is normalized. |
 | Generated helpers under `src/Dependency/` except `ArchiveSafety.php` | Namespace-only byte parity against the locked `ran/updater-support` source (`composer check:updater-support`) and direct level-8 analysis remain required. Unlike ArchiveSafety these pass the shared ruleset, so they are not PHPCS excluded. Never hand-edit these files. |
@@ -59,11 +59,10 @@ local product requirements, not shared-standard exemptions.
 | Native `ZipArchive::$numFiles` | Two line-local property-name ignores cover three reads of the external extension property. Owned members remain enforced. |
 | Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Owned free functions/classes/constants follow the package prefix and owned test namespaces use `RAN\WPReleaseUpdater\V1\Tests` without namespace exceptions. Existing shared-state/global-variable prefix allowances are occurrence-local; foreign signatures, synthetic syntax and native/process exceptions are diagnostic-local. No test-path exclusions remain. These retained boundaries do not exempt production. |
 
-Seven declaration-local PHPStan exceptions remain: RequestBroker's
-Reflection-invoked private validation seam; ReleaseSource's direct-filesystem
-constant inspection; and five InstalledPackageResolver Reflection-assigned
-property type seams. Bodies remain directly analyzed at level 8. No baseline,
-new analysis exclusion or lower level is introduced.
+Six declaration-local PHPStan exceptions remain: ReleaseSource's
+direct-filesystem constant inspection and five InstalledPackageResolver
+Reflection-assigned property type seams. Bodies remain directly analyzed at
+level 8. No baseline, new analysis exclusion or lower level is introduced.
 
 ## Runtime and public-name transition
 

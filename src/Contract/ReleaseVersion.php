@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\Contract;
 
+use RAN\WPReleaseUpdater\V1\Dependency\RuntimeVersion;
+
 /** Canonical release-version parsing and ordering for discovery and headers. */
 final class ReleaseVersion {
 
@@ -35,23 +37,7 @@ final class ReleaseVersion {
 
 	/** Normalizes runtime PHP versions including Debian/Ubuntu/Sury distro suffixes. */
 	public static function normalize_php_version( string $version ): ?string {
-		if ( strlen( $version ) > self::MAX_LENGTH ) {
-			return null;
-		}
-		$header = self::normalize_header( $version );
-		if ( null !== $header ) {
-			return $header;
-		}
-		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*)[+~][0-9A-Za-z.+~-]+|[+~][0-9A-Za-z.+~-]+)\z/D', $version, $matches ) ) {
-			return $matches[1] . '.' . $matches[2] . '.' . $matches[3];
-		}
-		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(alpha|beta|rc)([1-9]\d*)(?:[+~-][0-9A-Za-z.+~-]+)?\z/Di', $version, $matches ) ) {
-			return $matches[1] . '.' . $matches[2] . '.' . $matches[3] . '-' . strtolower( $matches[4] ) . '.' . $matches[5];
-		}
-		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)(?:[+~][0-9A-Za-z.+~-]+)?\z/D', $version, $matches ) ) {
-			return $matches[1] . '.' . $matches[2] . '.' . $matches[3] . '-' . $matches[4];
-		}
-		return null;
+		return RuntimeVersion::php( $version );
 	}
 
 	public static function is_prerelease( string $version ): bool {

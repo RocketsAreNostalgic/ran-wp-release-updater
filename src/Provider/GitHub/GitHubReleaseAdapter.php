@@ -9,6 +9,7 @@ use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
+use RAN\WPReleaseUpdater\V1\Dependency\RuntimeVersion;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
 
@@ -76,7 +77,8 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				'code'   => 'target_composition_failed',
 			);
 		}
-		$wordpress_version = SelectedRuntimeState::normalize_word_press_version( $GLOBALS['wp_version'] ?? null );
+		$raw_wordpress     = $GLOBALS['wp_version'] ?? null;
+		$wordpress_version = is_string( $raw_wordpress ) ? RuntimeVersion::wordpress( $raw_wordpress ) : null;
 		if ( ! is_string( $wordpress_version ) ) {
 			return array(
 				'native' => null,

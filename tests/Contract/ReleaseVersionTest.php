@@ -57,16 +57,17 @@ final class ReleaseVersionTest extends TestCase {
 			'8.2.28-1+ubuntu22.04.1+deb.sury.org+1' => '8.2.28',
 			'8.2.28-1~deb12u1'                      => '8.2.28',
 			'8.2.28+deb12u1'                        => '8.2.28',
-			'8.2.28~deb12u1'                        => '8.2.28',
 			'8.2'                                   => '8.2.0',
 			'8.4.0RC1'                              => '8.4.0-rc.1',
 			'8.4.0alpha2'                           => '8.4.0-alpha.2',
 			'8.4.0beta1'                            => '8.4.0-beta.1',
 			'8.4.0-rc.1+build.4'                    => '8.4.0-rc.1',
+			'8.5.0~alpha4-1'                        => '8.5.0-alpha.4',
+			'8.5.1-dev'                             => '8.5.1-dev.0',
 		) as $input => $expected ) {
 			self::assertSame( $expected, ReleaseVersion::normalize_php_version( $input ), $input );
 		}
-		foreach ( array( '', '8', 'eight.two', '08.2.0', '8.2.28-0+deb12u1!', '8.2.28-bad_char' ) as $invalid ) {
+		foreach ( array( '', '8', 'eight.two', '08.2.0', '8.2.28-0+deb12u1!', '8.2.28~deb12u1', '8.5.0~pre1-1' ) as $invalid ) {
 			self::assertNull( ReleaseVersion::normalize_php_version( $invalid ), $invalid );
 		}
 		self::assertNull( ReleaseVersion::compare( '1.0.0+build.1', '1.0.0' ) );

@@ -22,7 +22,7 @@ final class PackageDirectoryDependencyTest extends TestCase {
 
 	public function test_generated_helpers_retain_namespace_only_parity_with_published_sources(): void {
 		$root = dirname( __DIR__, 2 );
-		foreach ( array( 'PackageDirectory', 'RepositoryRelativePath', 'InvalidRepositoryPathException' ) as $class ) {
+		foreach ( array( 'PackageDirectory', 'RepositoryRelativePath', 'InvalidRepositoryPathException', 'RegularFileStat', 'WordPressHeaders', 'RuntimeVersion', 'PluginFileIdentifier' ) as $class ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Compare exact locked dependency bytes for namespace-only generation.
 			$source = file_get_contents( $root . '/vendor/ran/updater-support/src/' . $class . '.php' );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Compare the exact generated runtime copy with its published source.

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\Provider\GitHub;
 
 use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
+use RAN\WPReleaseUpdater\V1\Dependency\PluginFileIdentifier;
 use InvalidArgumentException;
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
@@ -136,7 +137,7 @@ final readonly class ProspectiveReleaseInspection {
 		if ( 'theme' === $type ) {
 			return 'style.css' === $main;
 		}
-		return 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D', $main );
+		return str_ends_with( $main, '.php' ) && strlen( $main ) <= 104 && ! str_contains( $main, '/' ) && PluginFileIdentifier::is_valid( $main );
 	}
 
 	private static function valid_assurance_facts( mixed $value ): bool {

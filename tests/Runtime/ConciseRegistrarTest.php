@@ -482,9 +482,7 @@ PHP
 	}
 
 	public function test_native_offer_identity_must_be_bounded_and_present_exactly_with_the_offer_version(): void {
-		$broker   = new \RAN\WPReleaseUpdater\V1\Runtime\RequestBroker();
-		$validate = new \ReflectionMethod( $broker, 'valid_native_status' );
-		$status   = array(
+		$status = array(
 			'candidate_header_version'  => null,
 			'candidate_tag'             => null,
 			'candidate_validation_code' => null,
@@ -497,12 +495,62 @@ PHP
 			'relationship'              => null,
 			'last_native_outcome'       => null,
 		);
-		self::assertTrue( $validate->invoke( $broker, $status ) );
+		self::assertTrue( \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::valid_native_status( $status ) );
 		$status['offered_release_identity'] = str_repeat( 'x', 192 );
-		self::assertFalse( $validate->invoke( $broker, $status ) );
+		self::assertFalse( \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::valid_native_status( $status ) );
 		$status['offered_release_identity'] = 'release:42';
 		$status['offered_version']          = null;
-		self::assertFalse( $validate->invoke( $broker, $status ) );
+		self::assertFalse( \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::valid_native_status( $status ) );
+		$status['offered_release_identity'] = null;
+		$status['failure_code']             = 'policy_blocked';
+		self::assertTrue( \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::valid_native_status( $status ) );
+		self::assertTrue( \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::valid_diagnostic_code( 'policy_blocked' ) );
+	}
+
+	public function test_policy_blocked_pre_download_preserves_broker_and_sibling_targets(): void {
+		foreach ( array( 'disabled', 'forced-off' ) as $policy ) {
+			$result = $this->probe(
+				<<<'PHP'
+class WP_Error { public function __construct(public string $code, public string $message) {} public function get_error_code(): string { return $this->code; } }
+$r=require $data['bootstrap'];
+$blocked=$r->plugin('github',$data['forced'],'acme/forced-plugin','456789012','stable',$data['policy']);
+$sibling=$r->plugin('github',$data['plugin'],'acme/example','123456789','stable','manual');
+$blocked->register();
+$sibling->register();
+$broker=$GLOBALS['ran_wp_release_updater_v1_broker'];
+$broker->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>11,'wordpress_version'=>'6.8.0']);
+$error=null;
+foreach($GLOBALS['p0_1_hooks'] as $hook) {
+	if($hook['hook']==='upgrader_pre_download') {
+		$reply=($hook['callback'])(false,'unused',null,['plugin'=>'forced-plugin/main.php','action'=>'update','type'=>'plugin']);
+		if($reply instanceof WP_Error) { $error=$reply->get_error_code(); }
+	}
+}
+echo json_encode([
+	'error'=>$error,
+	'blocked_status'=>$blocked->status(),
+	'blocked_diagnostics'=>$blocked->diagnostics(),
+	'sibling_status'=>$sibling->status(),
+	'broker'=>$broker->diagnostics(),
+	'refreshed'=>$blocked->refresh(),
+	'broker_after_refresh'=>$broker->diagnostics(),
+]);
+PHP,
+				array( 'policy' => $policy )
+			);
+
+			self::assertSame( 'ran_wp_release_updater_policy_blocked', $result['error'], $policy );
+			self::assertSame( 'active', $result['blocked_status']['state'], $policy );
+			self::assertSame( 'policy_blocked', $result['blocked_status']['native']['failure_code'], $policy );
+			self::assertSame( 'active', $result['blocked_diagnostics']['state'], $policy );
+			self::assertContains( array( 'code' => 'policy_blocked' ), $result['blocked_diagnostics']['diagnostics'], $policy );
+			self::assertSame( 'active', $result['sibling_status']['state'], $policy );
+			self::assertSame( 'target_active', $result['sibling_status']['code'], $policy );
+			self::assertSame( 'active', $result['broker']['state'], $policy );
+			self::assertSame( array(), $result['broker']['diagnostics'], $policy );
+			self::assertTrue( $result['refreshed'], $policy );
+			self::assertSame( 'active', $result['broker_after_refresh']['state'], $policy );
+		}
 	}
 
 	public function test_lexical_rejections_are_stable_and_retained_by_the_handle(): void {

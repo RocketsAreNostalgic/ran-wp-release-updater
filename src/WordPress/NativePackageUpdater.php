@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace RAN\WPReleaseUpdater\V1\WordPress;
 
 use RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory;
+use RAN\WPReleaseUpdater\V1\Dependency\PluginFileIdentifier;
+use RAN\WPReleaseUpdater\V1\Dependency\RegularFileStat;
 use InvalidArgumentException;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Archive\ValidatedPackage;
@@ -864,8 +866,7 @@ final class NativePackageUpdater {
 				$payload[ $key ] = null;
 			}
 		}
-		$validation_codes = array( 'release_list_failed', 'candidate_list_invalid', 'candidate_invalid', 'candidate_not_newer', 'candidate_inspection_failed', 'candidate_admission_rejected', 'candidate_descriptor_mismatch', 'candidate_validation_failed', 'archive_identity_verified' );
-		if ( ! in_array( $payload['candidate_validation_code'], $validation_codes, true ) ) {
+		if ( is_string( $payload['candidate_validation_code'] ) && ! RequestProtocolValidator::is_candidate_validation_code( $payload['candidate_validation_code'] ) ) {
 			$payload['candidate_validation_code'] = null;
 		}
 		return $payload;
@@ -1822,9 +1823,7 @@ final class NativePackageUpdater {
 
 		$header = 'plugin' === $this->target_type ? basename( $this->installed_identity ) : 'style.css';
 		$path   = $inspect_directory . DIRECTORY_SEPARATOR . $header;
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
-		$file = @lstat( $path );
-		if ( ! is_array( $file ) || 0100000 !== ( $file['mode'] & 0170000 ) ) {
+		if ( null === RegularFileStat::read( $path ) ) {
 			return null;
 		}
 
@@ -2371,7 +2370,7 @@ final class NativePackageUpdater {
 		}
 		$parts = explode( '/', $identity );
 		return 'plugin' === $type && 2 === count( $parts ) && PackageDirectory::is_valid_name( $parts[0] )
-			&& 1 === preg_match( '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D', $parts[1] );
+			&& str_ends_with( $parts[1], '.php' ) && strlen( $parts[1] ) <= 104 && PluginFileIdentifier::is_valid( $parts[1] );
 	}
 	/** @param list<string> $keys */ private static function exact_keys( mixed $value, array $keys ): bool {
 		if ( ! is_array( $value ) || count( $value ) !== count( $keys ) ) {

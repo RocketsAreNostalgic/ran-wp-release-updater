@@ -586,7 +586,7 @@ function ran_wp_release_updater_test_github_request_contract( array $args, bool 
 	return is_array( $headers )
 		&& 'GET' === ( $args['method'] ?? null )
 		&& 0 === ( $args['redirection'] ?? null )
-		&& 10 === ( $args['timeout'] ?? null )
+		&& ( $asset ? 120 : 10 ) === ( $args['timeout'] ?? null )
 		&& 'Bearer phase24-token' === ( $headers['Authorization'] ?? null )
 		&& 'ran-wp-release-updater' === ( $headers['User-Agent'] ?? null )
 		&& '2022-11-28' === ( $headers['X-GitHub-Api-Version'] ?? null )

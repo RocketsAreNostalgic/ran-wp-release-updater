@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\Provider\GitHub;
 
+use RAN\WPReleaseUpdater\V1\Dependency\RegularFileStat;
 use RuntimeException;
 
 /** Owns bounded WordPress HTTP transport, redirect validation, and response projection for GitHub. */
 final class GitHubApiClient {
 
-	private const API_HOST            = 'api.github.com';
-	private const API_ORIGIN          = 'https://' . self::API_HOST;
-	private const HTTP_TIMEOUT        = 10;
-	private const RELEASE_ASSET_HOSTS = array(
+	private const API_HOST   = 'api.github.com';
+	private const API_ORIGIN = 'https://' . self::API_HOST;
+	/** Timeout in seconds for GitHub JSON metadata API requests. */
+	private const HTTP_TIMEOUT = 10;
+	/** Timeout in seconds for streamed binary release ZIP downloads, matching Branch/Core transport expectations. */
+	private const DOWNLOAD_HTTP_TIMEOUT = 120;
+	private const RELEASE_ASSET_HOSTS   = array(
 		'github-releases.githubusercontent.com',
 		'objects.githubusercontent.com',
 		'release-assets.githubusercontent.com',
@@ -135,7 +139,7 @@ final class GitHubApiClient {
 			'headers'             => $headers,
 			'limit_response_size' => PHP_INT_MAX === $limit ? PHP_INT_MAX : $limit + 1,
 			'redirection'         => 0,
-			'timeout'             => self::HTTP_TIMEOUT,
+			'timeout'             => null !== $filename ? self::DOWNLOAD_HTTP_TIMEOUT : self::HTTP_TIMEOUT,
 		);
 		if ( null !== $filename ) {
 			$args['filename'] = $filename;
@@ -154,10 +158,8 @@ final class GitHubApiClient {
 
 	/** Clears any 3xx redirect response bytes written to the stream target before following Location. */
 	private static function reset_stream_target( string $filename ): void {
-		clearstatcache( true, $filename );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Inspect the exact owned stream target without following symlinks before clearing redirect response bytes.
-		$stat = @lstat( $filename );
-		if ( ! is_array( $stat ) || is_link( $filename ) || 0100000 !== ( (int) $stat['mode'] & 0170000 ) || 0 === (int) $stat['size'] ) {
+		$stat = RegularFileStat::read( $filename );
+		if ( null === $stat || 0 === $stat['size'] ) {
 			return;
 		}
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Truncate the verified local stream target in place before following a redirect.
