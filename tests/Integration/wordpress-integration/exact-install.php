@@ -248,7 +248,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 				'shutdown_cleanup'   => is_dir( $backup ) === $early_refusal && array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
 				'stale_backup_after' => ! $early_refusal || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
 				'single_completion'  => $completions === $observed->completions,
-				'backup_deletions'   => ( $backup_moved && ! $restoring ? 1 : 0 ) === $observed->deletions,
+				'backup_deletions'   => ( $backup_moved ? 1 : 0 ) === $observed->deletions,
 				'other_upgrader'     => 1 === $observed->foreign_restore,
 			);
 			if ( null !== $alternate_destination ) {
