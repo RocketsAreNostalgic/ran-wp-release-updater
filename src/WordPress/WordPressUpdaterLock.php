@@ -230,7 +230,7 @@ final class WordPressUpdaterLock {
 				$locks[ $this->wpdb ] = array(
 					'token'   => $entry['token'],
 					'owners'  => $entry['owners'] - 1,
-					'settled' => $entry['settled'],
+					'settled' => true,
 				);
 				return true;
 			}
@@ -276,13 +276,19 @@ final class WordPressUpdaterLock {
 
 	private function options_table(): ?string {
 		if (
-			! property_exists( $this->wpdb, 'options' )
-			|| ! is_string( $this->wpdb->options )
-			|| 1 !== preg_match( '/\A[A-Za-z0-9_]+\z/D', $this->wpdb->options )
-			|| ! method_exists( $this->wpdb, 'prepare' )
+			! method_exists( $this->wpdb, 'prepare' )
 			|| ! method_exists( $this->wpdb, 'query' )
 			|| ! method_exists( $this->wpdb, 'get_row' )
 		) {
+			return null;
+		}
+		if ( property_exists( $this->wpdb, 'base_prefix' ) ) {
+			if ( ! is_string( $this->wpdb->base_prefix ) || 1 !== preg_match( '/\A[A-Za-z0-9_]*\z/D', $this->wpdb->base_prefix ) ) {
+				return null;
+			}
+			return $this->wpdb->base_prefix . 'options';
+		}
+		if ( ! property_exists( $this->wpdb, 'options' ) || ! is_string( $this->wpdb->options ) || 1 !== preg_match( '/\A[A-Za-z0-9_]+\z/D', $this->wpdb->options ) ) {
 			return null;
 		}
 		return $this->wpdb->options;
@@ -440,9 +446,41 @@ final class WordPressUpdaterLock {
 	}
 
 	private function clear_option_cache(): void {
-		if ( function_exists( 'wp_cache_delete' ) ) {
-			wp_cache_delete( self::OPTION_NAME, 'options' );
-			wp_cache_delete( 'notoptions', 'options' );
+		if ( ! function_exists( 'wp_cache_delete' ) ) {
+			return;
 		}
+		if (
+			function_exists( 'is_multisite' )
+			&& is_multisite()
+			&& function_exists( 'get_current_blog_id' )
+			&& function_exists( 'get_main_site_id' )
+		) {
+			$current_blog = get_current_blog_id();
+			$main_site    = get_main_site_id();
+			if ( $main_site > 0 && $current_blog !== $main_site ) {
+				if ( function_exists( 'wp_cache_switch_to_blog' ) ) {
+					wp_cache_switch_to_blog( $main_site );
+					try {
+						wp_cache_delete( self::OPTION_NAME, 'options' );
+						wp_cache_delete( 'notoptions', 'options' );
+					} finally {
+						wp_cache_switch_to_blog( $current_blog );
+					}
+					return;
+				}
+				if ( function_exists( 'switch_to_blog' ) && function_exists( 'restore_current_blog' ) ) {
+					switch_to_blog( $main_site );
+					try {
+						wp_cache_delete( self::OPTION_NAME, 'options' );
+						wp_cache_delete( 'notoptions', 'options' );
+					} finally {
+						restore_current_blog();
+					}
+					return;
+				}
+			}
+		}
+		wp_cache_delete( self::OPTION_NAME, 'options' );
+		wp_cache_delete( 'notoptions', 'options' );
 	}
 }

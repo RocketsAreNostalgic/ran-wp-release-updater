@@ -39,10 +39,17 @@ namespace {
 			$GLOBALS['ran_wp_release_updater_test_hooks'][] = array( 'action', $hook, $callback, $priority, $arguments );
 		}
 	}
+	if ( ! function_exists( 'remove_action' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
+		function remove_action( string $hook, mixed $callback, int $priority = 10 ): bool {
+			$GLOBALS['ran_wp_release_updater_test_removed_hooks'][] = array( 'action', $hook, $callback, $priority );
+			return true;
+		}
+	}
 	if ( ! function_exists( 'get_current_blog_id' ) ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress site identity seam.
 		function get_current_blog_id(): int {
-			return 1;
+			return is_int( $GLOBALS['ran_wp_release_updater_test_blog_id'] ?? null ) ? $GLOBALS['ran_wp_release_updater_test_blog_id'] : 1;
 		}
 	}
 	if ( ! function_exists( 'delete_site_transient' ) ) {
@@ -348,6 +355,100 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$auto_db->seed_option( WordPressUpdaterLock::OPTION_NAME, $core_token, 'off' );
 			$this->complete( $auto );
 			self::assertSame( $core_token, $auto_db->rows()[ WordPressUpdaterLock::OPTION_NAME ]['option_value'] );
+		}
+
+		public function test_borrowed_lock_automatic_install_finalizes_during_automatic_updates_complete_before_core_releases_lock(): void {
+			$GLOBALS['ran_wp_release_updater_test_doing_action']  = 'wp_maybe_auto_update';
+			$GLOBALS['ran_wp_release_updater_test_removed_hooks'] = array();
+			list( $updater, , $database )                         = $this->subject( 'automatic' );
+			$core_token = (string) time();
+			$database->seed_option( WordPressUpdaterLock::OPTION_NAME, $core_token, 'off' );
+
+			$this->prepare_install( $updater );
+
+			// Core fires automatic_updates_complete while auto_updater.lock is still held.
+			$updater->observe_automatic_results(
+				array(
+					'plugin' => array(
+						(object) array(
+							'item'   => (object) array( 'plugin' => 'package/package.php' ),
+							'result' => true,
+						),
+					),
+				)
+			);
+
+			// Finalization succeeded synchronously before Core deleted auto_updater.lock, leaving Core's lock intact.
+			self::assertSame( $core_token, $database->rows()[ WordPressUpdaterLock::OPTION_NAME ]['option_value'] );
+			self::assertSame( 'verified_success', $this->retained_outcome( $updater )['outcome'] );
+			self::assertContains( 'update_completed', $updater->diagnostics() );
+			self::assertNull( $updater->status()['failure_code'] );
+			$headers = ( new \ReflectionProperty( NativePackageUpdater::class, 'headers' ) )->getValue( $updater );
+			self::assertSame( '2.0.0', $headers['Version'] );
+			self::assertSame(
+				array(
+					array( 'action', 'shutdown', array( $updater, 'finalize_pending_install' ), PHP_INT_MAX ),
+				),
+				$GLOBALS['ran_wp_release_updater_test_removed_hooks']
+			);
+
+			// Core releases auto_updater.lock before returning, and PHP shutdown runs later as a no-op.
+			$database->delete_option( WordPressUpdaterLock::OPTION_NAME );
+			$GLOBALS['ran_wp_release_updater_test_doing_action'] = 'shutdown';
+			$updater->finalize_pending_install();
+
+			self::assertSame( array(), $database->rows() );
+			self::assertSame( 'verified_success', $this->retained_outcome( $updater )['outcome'] );
+			self::assertNull( $updater->status()['failure_code'] );
+		}
+
+		public function test_borrowed_lock_automatic_install_records_wordpress_error_when_automatic_updates_complete_reports_failure(): void {
+			$GLOBALS['ran_wp_release_updater_test_doing_action']  = 'wp_maybe_auto_update';
+			$GLOBALS['ran_wp_release_updater_test_removed_hooks'] = array();
+			list( $updater, , $database )                         = $this->subject( 'automatic' );
+			$core_token = (string) time();
+			$database->seed_option( WordPressUpdaterLock::OPTION_NAME, $core_token, 'off' );
+
+			$this->prepare_install( $updater );
+
+			// Core (or rollback) attaches a WP_Error result before firing automatic_updates_complete while lock is held.
+			$updater->observe_automatic_results(
+				array(
+					'plugin' => array(
+						(object) array(
+							'item'   => (object) array( 'plugin' => 'package/package.php' ),
+							'result' => new \WP_Error( 'plugin_update_fatal_error_rollback_failed', 'Private.' ),
+						),
+					),
+				)
+			);
+
+			// Core's lock remains intact; outcome is recorded as unverified_install_result with source 'WordPress'.
+			self::assertSame( $core_token, $database->rows()[ WordPressUpdaterLock::OPTION_NAME ]['option_value'] );
+			$record = $this->retained_outcome( $updater );
+			self::assertSame( 'unverified_install_result', $record['outcome'] );
+			// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
+			self::assertSame( 'wordpress', $record['source'] );
+			self::assertSame( 'plugin_update_fatal_error_rollback_failed', $record['wordpress_code'] );
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
+			$headers = ( new \ReflectionProperty( NativePackageUpdater::class, 'headers' ) )->getValue( $updater );
+			self::assertSame( '1.0.0', $headers['Version'] );
+			self::assertSame(
+				array(
+					array( 'action', 'shutdown', array( $updater, 'finalize_pending_install' ), PHP_INT_MAX ),
+				),
+				$GLOBALS['ran_wp_release_updater_test_removed_hooks']
+			);
+
+			// Core releases auto_updater.lock before returning, and PHP shutdown runs later as a no-op.
+			$database->delete_option( WordPressUpdaterLock::OPTION_NAME );
+			$GLOBALS['ran_wp_release_updater_test_doing_action'] = 'shutdown';
+			$updater->finalize_pending_install();
+
+			self::assertSame( array(), $database->rows() );
+			self::assertSame( 'unverified_install_result', $this->retained_outcome( $updater )['outcome'] );
+			// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
+			self::assertSame( 'wordpress', $this->retained_outcome( $updater )['source'] );
 		}
 
 		public function test_failed_download_paths_always_release_updater_lock_without_orphan_rows(): void {

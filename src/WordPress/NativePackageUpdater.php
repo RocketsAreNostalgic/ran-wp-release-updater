@@ -1425,15 +1425,24 @@ final class NativePackageUpdater {
 	}
 	/** @param array<string,mixed> $results */
 	public function observe_automatic_results( array $results ): void {
-		if ( null === $this->attempt_outcome || ! is_array( $this->pending_install->install_result() ) || ( null === $this->native_owner && ! $this->live() ) ) {
-			return;
-		}
-		$field   = 'plugin' === $this->target_type ? 'plugin' : 'theme';
-		$entries = $results[ $this->target_type ] ?? array();
-		foreach ( is_array( $entries ) ? $entries : array() as $entry ) {
-			if ( is_object( $entry ) && is_object( $entry->item ?? null ) && ( $entry->item->$field ?? null ) === $this->installed_identity ) {
-				$this->observe_wordpress_error( $entry->result ?? null );
+		if ( null !== $this->attempt_outcome && is_array( $this->pending_install->install_result() ) && ( null !== $this->native_owner || $this->live() ) ) {
+			$field   = 'plugin' === $this->target_type ? 'plugin' : 'theme';
+			$entries = $results[ $this->target_type ] ?? array();
+			foreach ( is_array( $entries ) ? $entries : array() as $entry ) {
+				if ( is_object( $entry ) && is_object( $entry->item ?? null ) && ( $entry->item->$field ?? null ) === $this->installed_identity ) {
+					$this->observe_wordpress_error( $entry->result ?? null );
+				}
 			}
+		}
+		if (
+			null === $this->exact_install
+			&& null === $this->native_mutation_begin
+			&& ! $this->lock_owned
+			&& null !== $this->lock_token
+			&& $this->shutdown_scheduled
+			&& $this->pending_install->active()
+		) {
+			$this->finalize_pending_install();
 		}
 	}
 	private function observe_wordpress_error( mixed $result ): void {
@@ -1522,6 +1531,12 @@ final class NativePackageUpdater {
 		} finally {
 			$this->clear_pending();
 			$this->finalizing = false;
+			if ( null === $exact && $this->shutdown_scheduled ) {
+				if ( function_exists( 'remove_action' ) ) {
+					remove_action( 'shutdown', array( $this, 'finalize_pending_install' ), PHP_INT_MAX );
+				}
+				$this->shutdown_scheduled = false;
+			}
 			if ( $shutdown ) {
 				$this->disarm_exact_install();
 			}

@@ -268,7 +268,7 @@ try {
 			'subsite-discovery',
 			array(
 				'RAN_UPDATER_NETWORK_OUTPUT'    => $child_output,
-				'RAN_UPDATER_NETWORK_LOCK_MODE' => 'observe',
+				'RAN_UPDATER_NETWORK_LOCK_MODE' => 'contend',
 			)
 		);
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -285,13 +285,13 @@ try {
 		ran_wp_release_updater_test_assert_network( $main, $ran_wp_release_updater_test_contender, $child );
 		ran_wp_release_updater_test_write_file( $release, "release\n" );
 		ran_wp_release_updater_test_finish_process( $winner );
-		// Positive control: a follow-up mutation lock succeeds cleanly once the competing owner releases auto_updater.lock.
+		// Positive control: a follow-up subsite mutation lock succeeds cleanly in the shared base options table once the main site releases auto_updater.lock.
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-		$after_output = $run . '/main-after-release.json';
+		$after_output = $run . '/subsite-after-release.json';
 		ran_wp_release_updater_test_command(
-			array_merge( $arguments, array( '--url=http://example.test', 'eval-file', $observer ) ),
+			array_merge( $arguments, array( '--url=http://example.test/subsite/', 'eval-file', $observer ) ),
 			$site,
-			'main-after-release',
+			'subsite-after-release',
 			array(
 				'RAN_UPDATER_NETWORK_OUTPUT'    => $after_output,
 				'RAN_UPDATER_NETWORK_LOCK_MODE' => 'after',
@@ -302,13 +302,16 @@ try {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$result['scenarios']['multisite']['after_release'] = $after;
 		ran_wp_release_updater_test_require_fact(
-			1 === ( $after['provider_callback_delta'] ?? null )
+			( $after['blog_id'] ?? null ) === $child['blog_id']
+			&& 1 === ( $after['provider_callback_delta'] ?? null )
 			&& 0 === ( $after['legacy_target_row_count'] ?? null )
 			&& true === ( $after['lock']['acquired'] ?? null )
+			&& true === ( $after['lock']['present'] ?? null )
 			&& 'off' === ( $after['lock']['autoload'] ?? null )
+			&& 0 === ( $after['lock']['subsite_lock_rows'] ?? null )
 			&& is_string( $after['lock']['token_sha256'] ?? null )
 			&& $after['lock']['token_sha256'] !== $main['lock']['token_sha256'],
-			'Follow-up process did not acquire auto_updater.lock after release.'
+			'Follow-up subsite process did not acquire and release shared auto_updater.lock after release.'
 		);
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$result['scenarios']['multisite']['pass'] = true;
@@ -853,10 +856,15 @@ function ran_wp_release_updater_test_assert_network( array $main, array $contend
 		&& 'off' === ( $main['lock']['autoload'] ?? null )
 		&& false === ( $contender['lock']['acquired'] ?? null )
 		&& true === ( $contender['lock']['present'] ?? null )
+		&& false === ( $child['lock']['acquired'] ?? null )
+		&& true === ( $child['lock']['present'] ?? null )
+		&& 'off' === ( $child['lock']['autoload'] ?? null )
+		&& 0 === ( $child['lock']['subsite_lock_rows'] ?? null )
 		&& is_string( $main['lock']['token_sha256'] ?? null )
 		&& 1 === preg_match( '/\A[0-9a-f]{64}\z/', $main['lock']['token_sha256'] )
-		&& ( $contender['lock']['token_sha256'] ?? null ) === $main['lock']['token_sha256'],
-		'Competing process was not fenced by the unchanged auto_updater.lock owner.'
+		&& ( $contender['lock']['token_sha256'] ?? null ) === $main['lock']['token_sha256']
+		&& ( $child['lock']['token_sha256'] ?? null ) === $main['lock']['token_sha256'],
+		'Competing main-site or subsite process was not fenced by the unchanged shared auto_updater.lock owner.'
 	);
 }
 

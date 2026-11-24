@@ -38,14 +38,25 @@ $ran_wp_release_updater_test_lock_token  = null;
 if ( in_array( $ran_wp_release_updater_test_lock_mode, array( 'hold', 'contend', 'after' ), true ) ) {
 	$ran_wp_release_updater_test_lock_token = $ran_wp_release_updater_test_lock->acquire();
 }
-$ran_wp_release_updater_test_lock_row = $wpdb->get_row(
+$ran_wp_release_updater_test_shared_options_table = $wpdb->base_prefix . 'options';
+$ran_wp_release_updater_test_lock_row             = $wpdb->get_row(
 	$wpdb->prepare(
 		'SELECT option_value, autoload FROM %i WHERE option_name = %s',
-		$wpdb->options,
+		$ran_wp_release_updater_test_shared_options_table,
 		\RAN\WPReleaseUpdater\V1\WordPress\WordPressUpdaterLock::OPTION_NAME
 	),
 	ARRAY_A
 );
+$ran_wp_release_updater_test_subsite_lock_rows    = 0;
+if ( $wpdb->options !== $ran_wp_release_updater_test_shared_options_table ) {
+	$ran_wp_release_updater_test_subsite_lock_rows = (int) $wpdb->get_var(
+		$wpdb->prepare(
+			'SELECT COUNT(*) FROM %i WHERE option_name = %s',
+			$wpdb->options,
+			\RAN\WPReleaseUpdater\V1\WordPress\WordPressUpdaterLock::OPTION_NAME
+		)
+	);
+}
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 $diagnostics = $broker->diagnostics();
 // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
@@ -60,11 +71,12 @@ $proof = array(
 	'provider_callback_delta'         => $provider_after - $provider_before,
 	'legacy_target_row_count'         => $ran_wp_release_updater_test_legacy_rows,
 	'lock'                            => array(
-		'mode'         => $ran_wp_release_updater_test_lock_mode,
-		'acquired'     => is_string( $ran_wp_release_updater_test_lock_token ),
-		'present'      => is_array( $ran_wp_release_updater_test_lock_row ),
-		'autoload'     => is_array( $ran_wp_release_updater_test_lock_row ) ? ( $ran_wp_release_updater_test_lock_row['autoload'] ?? null ) : null,
-		'token_sha256' => is_array( $ran_wp_release_updater_test_lock_row ) && is_string( $ran_wp_release_updater_test_lock_row['option_value'] ?? null )
+		'mode'              => $ran_wp_release_updater_test_lock_mode,
+		'acquired'          => is_string( $ran_wp_release_updater_test_lock_token ),
+		'present'           => is_array( $ran_wp_release_updater_test_lock_row ),
+		'autoload'          => is_array( $ran_wp_release_updater_test_lock_row ) ? ( $ran_wp_release_updater_test_lock_row['autoload'] ?? null ) : null,
+		'subsite_lock_rows' => $ran_wp_release_updater_test_subsite_lock_rows,
+		'token_sha256'      => is_array( $ran_wp_release_updater_test_lock_row ) && is_string( $ran_wp_release_updater_test_lock_row['option_value'] ?? null )
 			? hash( 'sha256', $ran_wp_release_updater_test_lock_row['option_value'] )
 			: null,
 	),
