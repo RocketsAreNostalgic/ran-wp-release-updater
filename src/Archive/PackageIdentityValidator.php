@@ -538,7 +538,7 @@ final class PackageIdentityValidator {
 			substr( $contents, 0, self::MAX_HEADER_BYTES )
 		);
 		$name_label = 'theme' === $type ? 'Theme Name' : 'Plugin Name';
-		$scope      = self::header_block( $contents, $name_label );
+		$scopes     = self::header_scopes( $contents, $name_label );
 		$labels     = array(
 			'Author'      => 'Author',
 			'Description' => 'Description',
@@ -559,7 +559,10 @@ final class PackageIdentityValidator {
 			$pattern = '/^[ \\t]*(?:<\\?php[ \\t]*)?[\\/*#@ \\t]*'
 				. preg_quote( $label, '/' )
 				. ':[ \\t]*(.*)$/mi';
-			$count   = preg_match_all( $pattern, $scope, $matches );
+			$target  = in_array( $key, array( 'RequiresPHP', 'RequiresWP' ), true )
+				? $scopes['compatibility']
+				: $scopes['primary'];
+			$count   = preg_match_all( $pattern, $target, $matches );
 			if ( 1 < $count ) {
 				return array(
 					'code'   => 'installed_header_ambiguous',
@@ -623,12 +626,18 @@ final class PackageIdentityValidator {
 	}
 
 	/**
-	 * Isolates the file header comment block so subsequent PHPDoc/CSS comments do not collide.
+	 * Isolates the primary header comment block and contiguous header-region comment blocks
+	 * so split compatibility headers are preserved while PHPDoc/CSS comments after code do not collide.
+	 *
+	 * @return array{primary:string,compatibility:string}
 	 */
-	private static function header_block( string $contents, string $name_label ): string {
+	private static function header_scopes( string $contents, string $name_label ): array {
 		$name_pattern = '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*' . preg_quote( $name_label, '/' ) . ':/mi';
 		if ( 1 > preg_match_all( '/\/\*.*?\*\//s', $contents, $blocks, PREG_OFFSET_CAPTURE ) ) {
-			return $contents;
+			return array(
+				'primary'       => $contents,
+				'compatibility' => $contents,
+			);
 		}
 		foreach ( $blocks[0] as $index => $block ) {
 			$text = $block[0];
@@ -637,11 +646,46 @@ final class PackageIdentityValidator {
 			}
 			$has_core_sibling = 1 === preg_match( '/^[ \t]*(?:<\?php[ \t]*)?[\/*#@ \t]*(?:Version|Update URI):/mi', $text );
 			$has_later_block  = isset( $blocks[0][ $index + 1 ] );
-			if ( $has_core_sibling || $has_later_block ) {
-				return $text;
+			if ( ! $has_core_sibling && ! $has_later_block ) {
+				return array(
+					'primary'       => $contents,
+					'compatibility' => $contents,
+				);
 			}
-			return $contents;
+			$region       = array( $text );
+			$cursor_start = $block[1];
+			for ( $prev = $index - 1; $prev >= 0; --$prev ) {
+				$prev_end = $blocks[0][ $prev ][1] + strlen( $blocks[0][ $prev ][0] );
+				$between  = substr( $contents, $prev_end, $cursor_start - $prev_end );
+				if ( ! self::is_header_region_separator( $between ) ) {
+					break;
+				}
+				array_unshift( $region, $blocks[0][ $prev ][0] );
+				$cursor_start = $blocks[0][ $prev ][1];
+			}
+			$cursor_end  = $block[1] + strlen( $text );
+			$block_count = count( $blocks[0] );
+			for ( $next = $index + 1; $next < $block_count; ++$next ) {
+				$next_start = $blocks[0][ $next ][1];
+				$between    = substr( $contents, $cursor_end, $next_start - $cursor_end );
+				if ( ! self::is_header_region_separator( $between ) ) {
+					break;
+				}
+				$region[]   = $blocks[0][ $next ][0];
+				$cursor_end = $next_start + strlen( $blocks[0][ $next ][0] );
+			}
+			return array(
+				'primary'       => $text,
+				'compatibility' => implode( "\n", $region ),
+			);
 		}
-		return $contents;
+		return array(
+			'primary'       => $contents,
+			'compatibility' => $contents,
+		);
+	}
+
+	private static function is_header_region_separator( string $between ): bool {
+		return 1 === preg_match( '/\A(?:[ \t\r\n]|<\?php\b|\?>|\/\/[^\n]*\n?)*\z/', $between );
 	}
 }

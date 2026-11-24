@@ -286,6 +286,16 @@ final class InstalledPackageResolverTest extends TestCase {
 
 		$unparseable = new InstalledPackageResolver( $this->root . '/plugins', array(), array( $this->root . '/themes' ), 'unparseable-php' );
 		self::assertSame( 'installed_requirement_incompatible', $unparseable->resolve( $this->declaration( 'plugin', $requires_82 ) )['code'] );
+
+		$requires_84  = $this->file( 'plugins/req-84/main.php', $this->plugin_header( 'Requires PHP: 8.4.0' ) );
+		$requires_857 = $this->file( 'plugins/req-857/main.php', $this->plugin_header( 'Requires PHP: 8.5.7' ) );
+		$requires_856 = $this->file( 'plugins/req-856/main.php', $this->plugin_header( 'Requires PHP: 8.5.6' ) );
+		$rc_resolver  = new InstalledPackageResolver( $this->root . '/plugins', array(), array( $this->root . '/themes' ), '8.4.0RC1' );
+		$dev_resolver = new InstalledPackageResolver( $this->root . '/plugins', array(), array( $this->root . '/themes' ), '8.5.7-dev' );
+		self::assertSame( 'installed_requirement_incompatible', $rc_resolver->resolve( $this->declaration( 'plugin', $requires_84 ) )['code'] );
+		self::assertSame( 'installed_identity_verified', $rc_resolver->resolve( $this->declaration( 'plugin', $requires_83 ) )['code'] );
+		self::assertSame( 'installed_requirement_incompatible', $dev_resolver->resolve( $this->declaration( 'plugin', $requires_857 ) )['code'] );
+		self::assertSame( 'installed_identity_verified', $dev_resolver->resolve( $this->declaration( 'plugin', $requires_856 ) )['code'] );
 	}
 
 	public function test_utf8_bom_and_plugin_template_or_phpdoc_tags_are_handled_safely(): void {

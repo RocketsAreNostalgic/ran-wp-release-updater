@@ -101,9 +101,10 @@ final class SelectedRuntimeState {
 		}
 	}
 
-	/** @internal Returns the canonical MAJOR.MINOR.PATCH runtime PHP version without distro suffixes. */
-	public static function current_php_version(): string {
-		return PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '.' . PHP_RELEASE_VERSION;
+	/** @internal Returns the normalized runtime PHP version, preserving prereleases while stripping distro suffixes. */
+	public static function current_php_version( string $version = PHP_VERSION ): string {
+		return self::normalize_php_version( $version )
+			?? ( PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION . '.' . PHP_RELEASE_VERSION );
 	}
 
 	/** @internal Shared WordPress direct-filesystem check, loading file.php during WP-Cron when available. */
@@ -141,7 +142,7 @@ final class SelectedRuntimeState {
 		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(alpha|beta|rc)([1-9]\d*)(?:[+~-][0-9A-Za-z.+~-]+)?\z/Di', $value, $matches ) ) {
 			return $matches[1] . '.' . $matches[2] . '.' . $matches[3] . '-' . strtolower( $matches[4] ) . '.' . $matches[5];
 		}
-		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)(?:\+[0-9A-Za-z.+~-]+)?\z/D', $value, $matches ) ) {
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)(?:[+~][0-9A-Za-z.+~-]+)?\z/D', $value, $matches ) ) {
 			return $matches[1] . '.' . $matches[2] . '.' . $matches[3] . '-' . $matches[4];
 		}
 		return null;

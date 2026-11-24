@@ -765,6 +765,44 @@ PHP;
 		self::assertSame( 'installed_header_verified', PackageIdentityValidator::parse_header( $theme_header, 'theme' )['code'] );
 	}
 
+	public function test_split_header_region_compatibility_blocks_are_enforced_while_post_code_phpdoc_is_ignored(): void {
+		$validator = new PackageIdentityValidator();
+		$policy    = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+
+		$split_php_header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\n/*\nRequires PHP: 99.0\n*/\ndefined( 'ABSPATH' ) || exit;\n";
+		$split_php_zip    = $this->archive( array( 'example-plugin/example-plugin.php' => $split_php_header ) );
+		$prospective_php  = $this->prospective_plugin( $split_php_zip );
+		self::assertIsArray( $prospective_php );
+		self::assertSame( 'header_requires_php_unmet', $prospective_php['reason'] ?? null );
+		self::assertSame(
+			'archive_php_requirement_incompatible',
+			$validator->validate( $this->descriptor( $split_php_zip, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $split_php_zip )->code()
+		);
+
+		$split_wp_header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\n/*\nRequires at least: 9.0\n*/\n";
+		$split_wp_zip    = $this->archive( array( 'example-plugin/example-plugin.php' => $split_wp_header ) );
+		$prospective_wp  = $this->prospective_plugin( $split_wp_zip );
+		self::assertIsArray( $prospective_wp );
+		self::assertSame( 'header_requires_wp_unmet', $prospective_wp['reason'] ?? null );
+		self::assertSame(
+			'archive_wordpress_requirement_incompatible',
+			$validator->validate( $this->descriptor( $split_wp_zip, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $split_wp_zip )->code()
+		);
+
+		$post_code_doc = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\ndefined( 'ABSPATH' ) || exit;\n/**\n * Documentation note.\n * Requires PHP: 99.0\n * Requires at least: 9.0\n * Version: 9.9.9\n */\n";
+		$post_code_zip = $this->archive( array( 'example-plugin/example-plugin.php' => $post_code_doc ) );
+		self::assertSame(
+			array(
+				'package_root' => 'example-plugin',
+				'main_file'    => 'example-plugin.php',
+			),
+			$this->prospective_plugin( $post_code_zip )
+		);
+		self::assertTrue(
+			$validator->validate( $this->descriptor( $post_code_zip, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $post_code_zip )->is_valid()
+		);
+	}
+
 	public function test_validate_propagates_exceptions_from_after_open_without_swallowing_in_finally(): void {
 		$archive    = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$descriptor = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );
@@ -852,6 +890,28 @@ PHP;
 			'archive_path_unsafe',
 			$validator->validate( $this->descriptor( $ntfs_volume_label, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $ntfs_volume_label )->code()
 		);
+
+		foreach ( array(
+			'ntfs device'        => array( 'example-plugin/dev.txt', 0x0040 ),
+			'ntfs reparse point' => array( 'example-plugin/reparse.txt', 0x0400 ),
+			'ntfs junction dir'  => array( 'example-plugin/junction/', 0x0410 ),
+		) as $label => [$entry_name, $ntfs_attr] ) {
+			$ntfs_special = $this->archive(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					$entry_name                         => str_ends_with( $entry_name, '/' ) ? '' : 'special',
+				),
+				array(),
+				array(
+					$entry_name => array( 10, $ntfs_attr ),
+				)
+			);
+			self::assertSame(
+				'archive_path_unsafe',
+				$validator->validate( $this->descriptor( $ntfs_special, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $ntfs_special )->code(),
+				$label
+			);
+		}
 	}
 
 	public function test_prospective_inspection_rejects_forged_entry_size_and_unreadable_top_level_php(): void {

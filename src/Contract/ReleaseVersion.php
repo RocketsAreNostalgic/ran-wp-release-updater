@@ -48,7 +48,7 @@ final class ReleaseVersion {
 		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(alpha|beta|rc)([1-9]\d*)(?:[+~-][0-9A-Za-z.+~-]+)?\z/Di', $version, $matches ) ) {
 			return $matches[1] . '.' . $matches[2] . '.' . $matches[3] . '-' . strtolower( $matches[4] ) . '.' . $matches[5];
 		}
-		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)(?:\+[0-9A-Za-z.+~-]+)?\z/D', $version, $matches ) ) {
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)(?:[+~][0-9A-Za-z.+~-]+)?\z/D', $version, $matches ) ) {
 			return $matches[1] . '.' . $matches[2] . '.' . $matches[3] . '-' . $matches[4];
 		}
 		return null;

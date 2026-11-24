@@ -15,6 +15,7 @@ final class ArchiveScanner {
 	private const MIN_COMPRESSION_RATIO_BYTES = 65536;
 	private const OPSYS_WINDOWS_NTFS          = 10;
 	private const OPSYS_MAC_OSX               = 19;
+	private const NTFS_FORBIDDEN_ATTRIBUTES   = 0x0440; // FILE_ATTRIBUTE_DEVICE (0x0040) | FILE_ATTRIBUTE_REPARSE_POINT (0x0400).
 
 	public static function scan( \ZipArchive $zip, ?string $expected_root = null ): ArchiveScanResult {
 		if ( $zip->numFiles < 1 || $zip->numFiles > self::MAX_ENTRIES ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- ZipArchive exposes this native extension property.
@@ -34,14 +35,17 @@ final class ArchiveScanner {
 			$origin            = 0;
 			$attributes        = 0;
 			$has_attributes    = null !== $path && $zip->getExternalAttributesIndex( $index, $origin, $attributes, \ZipArchive::FL_UNCHANGED );
+			$ntfs_special      = $has_attributes && self::OPSYS_WINDOWS_NTFS === $origin && 0 !== ( $attributes & self::NTFS_FORBIDDEN_ATTRIBUTES );
 			$normalized_origin = match ( $origin ) {
 				self::OPSYS_MAC_OSX      => \ZipArchive::OPSYS_UNIX,
 				self::OPSYS_WINDOWS_NTFS => \ZipArchive::OPSYS_DOS,
 				default                  => $origin,
 			};
-			$type_failure = ! $has_attributes
-				? ArchiveSafety::entry_type_failure( null, null, false )
-				: ArchiveSafety::entry_type_failure( $normalized_origin, $attributes, $path['directory'] );
+			$type_failure = match ( true ) {
+				! $has_attributes => ArchiveSafety::entry_type_failure( null, null, false ),
+				$ntfs_special     => 'entry_type_unsupported',
+				default           => ArchiveSafety::entry_type_failure( $normalized_origin, $attributes, $path['directory'] ),
+			};
 			if (
 				null === $path
 				|| ! is_array( $stat )
