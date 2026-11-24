@@ -1146,6 +1146,61 @@ PHP;
 			$validator->validate( $this->descriptor( $invalid_utf8, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $invalid_utf8 )->code(),
 			'invalid utf8'
 		);
+
+		// Unicode case-folding collisions (for example Ü.png vs ü.png, ß vs SS) and Unicode file-parent collisions must fail closed.
+		foreach ( array(
+			'unicode case duplicate'                   => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					'example-plugin/assets/Ü.png'       => 'upper',
+					'example-plugin/assets/ü.png'       => 'lower',
+				),
+				'archive_path_duplicate',
+			),
+			'unicode sharp-s case fold'                => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					'example-plugin/assets/straße.txt'  => 'sharp-s',
+					'example-plugin/assets/STRASSE.txt' => 'ascii-ss',
+				),
+				'archive_path_duplicate',
+			),
+			'unicode file parent collision'            => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					'example-plugin/assets/ü'           => 'file',
+					'example-plugin/assets/Ü/child.txt' => 'child',
+				),
+				'archive_path_unsafe',
+			),
+			'unicode nfc vs nfd duplicate'             => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					"example-plugin/assets/caf\xc3\xa9.txt" => 'nfc',
+					"example-plugin/assets/cafe\xcc\x81.txt" => 'nfd',
+				),
+				class_exists( \Normalizer::class ) ? 'archive_path_duplicate' : 'archive_path_unsafe',
+			),
+			'unicode nfc vs nfd file parent collision' => array(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					"example-plugin/assets/caf\xc3\xa9" => 'file',
+					"example-plugin/assets/cafe\xcc\x81/sub.txt" => 'child',
+				),
+				'archive_path_unsafe',
+			),
+		) as $label => [$files, $expected_code] ) {
+			$colliding = $this->archive( $files );
+			$this->assert_rejected(
+				$validator->inspect_prospective( $this->prospective_policy( $colliding, 'plugin' ), $colliding ),
+				$expected_code
+			);
+			self::assertSame(
+				$expected_code,
+				$validator->validate( $this->descriptor( $colliding, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $colliding )->code(),
+				$label
+			);
+		}
 	}
 
 	public function test_expanded_archive_limit_scales_dynamically_from_maximum_artifact_bytes(): void {

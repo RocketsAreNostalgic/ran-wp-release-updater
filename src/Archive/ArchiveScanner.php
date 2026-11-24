@@ -55,7 +55,10 @@ final class ArchiveScanner {
 				return ArchiveScanResult::blocked( 'archive_path_unsafe' );
 			}
 			$expanded += $stat['size'];
-			$key       = strtolower( $path['path'] );
+			$key       = self::collision_key( $path['path'] );
+			if ( null === $key ) {
+				return ArchiveScanResult::blocked( 'archive_path_unsafe' );
+			}
 			if ( isset( $seen[ $key ] ) ) {
 				return ArchiveScanResult::blocked( 'archive_path_duplicate' );
 			}
@@ -78,7 +81,10 @@ final class ArchiveScanner {
 				'size'            => $stat['size'],
 				'compressed_size' => $stat['comp_size'],
 			);
-			$collision_entries[] = $path;
+			$collision_entries[] = array(
+				'path'      => $key,
+				'directory' => $path['directory'],
+			);
 		}
 
 		$collision = ArchiveSafety::collision_failure( $collision_entries );
@@ -94,5 +100,44 @@ final class ArchiveScanner {
 		}
 
 		return ArchiveScanResult::ready( $root, $entries, $expanded );
+	}
+
+	/**
+	 * Fold an archive path to a case- and canonical-normalization-insensitive collision key.
+	 *
+	 * Preserves the ASCII fast path while failing closed when non-ASCII paths cannot be
+	 * safely case-folded or canonically normalized for destination filesystem collision checks.
+	 */
+	private static function collision_key( string $path ): ?string {
+		if ( 0 === preg_match( '/[^\x00-\x7f]/', $path ) ) {
+			return strtolower( $path );
+		}
+
+		$has_normalizer = class_exists( \Normalizer::class );
+		if ( $has_normalizer ) {
+			$normalized = \Normalizer::normalize( $path, \Normalizer::FORM_D );
+			if ( ! is_string( $normalized ) ) {
+				return null;
+			}
+		} else {
+			if ( 0 !== preg_match( '/[\p{M}\x{1100}-\x{11FF}\x{F900}-\x{FAFF}\x{2F800}-\x{2FA1F}]/u', $path ) ) {
+				return null;
+			}
+			$normalized = $path;
+		}
+
+		if ( ! function_exists( 'mb_convert_case' ) ) {
+			return null;
+		}
+		$folded = mb_convert_case( $normalized, MB_CASE_FOLD, 'UTF-8' );
+
+		if ( $has_normalizer ) {
+			$folded = \Normalizer::normalize( $folded, \Normalizer::FORM_C );
+			if ( ! is_string( $folded ) ) {
+				return null;
+			}
+		}
+
+		return substr_count( $folded, '/' ) === substr_count( $path, '/' ) ? $folded : null;
 	}
 }
