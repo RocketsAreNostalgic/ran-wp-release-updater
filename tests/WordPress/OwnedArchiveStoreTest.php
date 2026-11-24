@@ -7,7 +7,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress;
 use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\WordPress\OwnedArchiveStore;
-use RAN\WPReleaseUpdater\V1\WordPress\StagedPackageManifest;
 
 final class OwnedArchiveStoreTest extends TestCase {
 
@@ -193,38 +192,6 @@ PHP;
 			}
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown.
 			@rmdir( $symlink_dir );
-		}
-	}
-
-	public function test_staged_package_manifest_tracks_directories_separately_from_file_entry_budget(): void {
-		$root = sys_get_temp_dir() . '/ran-manifest-dirs-' . bin2hex( random_bytes( 8 ) );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create a real staged directory tree for StagedPackageManifest budget tests.
-		mkdir( $root, 0700, true );
-		try {
-			$files = array();
-			for ( $index = 0; $index < 12; ++$index ) {
-				$dir = $root . '/dir-' . $index;
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create subdirectories to verify they do not consume the file entry count.
-				mkdir( $dir, 0700, true );
-				$file = $dir . '/file.txt';
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write real fixture file bytes for StagedPackageManifest hashing.
-				file_put_contents( $file, 'payload-' . $index );
-				$files[] = $file;
-			}
-			$manifest = ( new StagedPackageManifest() )->build( $root );
-			self::assertIsArray( $manifest );
-			self::assertCount( 12, $manifest );
-			self::assertSame( 10000, ( new \ReflectionClassConstant( StagedPackageManifest::class, 'MAX_ENTRIES' ) )->getValue() );
-			self::assertSame( 10000, ( new \ReflectionClassConstant( StagedPackageManifest::class, 'MAX_DIRECTORIES' ) )->getValue() );
-		} finally {
-			for ( $index = 0; $index < 12; ++$index ) {
-				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown.
-				@unlink( $root . '/dir-' . $index . '/file.txt' );
-				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown.
-				@rmdir( $root . '/dir-' . $index );
-			}
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown.
-			@rmdir( $root );
 		}
 	}
 }

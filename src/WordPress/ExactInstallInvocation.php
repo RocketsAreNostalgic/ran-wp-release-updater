@@ -27,7 +27,7 @@ final class ExactInstallInvocation {
 	public bool $download_consumed       = false;
 	public bool $lease_claimed           = false;
 	public bool $wordpress_started       = false;
-	public bool $backup_deleted          = false;
+	public bool $ready_to_commit         = false;
 	public bool $artifact_cleanup_failed = false;
 	public ?string $download_failure     = null;
 	/** @var Finalization|null */
@@ -37,41 +37,17 @@ final class ExactInstallInvocation {
 		public readonly \Plugin_Upgrader|\Theme_Upgrader $upgrader,
 		public readonly string $token,
 		public readonly string $installed_version,
-		private readonly ExactInstallRecovery $recovery,
 		private readonly \WP_Upgrader_Skin $skin
 	) {}
 
-	public static function create( string $target_type, string $directory, string $token, string $installed_version ): self {
-		$recovery = new ExactInstallRecovery( $directory, $target_type );
+	public static function create( string $target_type, string $token, string $installed_version ): self {
 		if ( 'plugin' === $target_type ) {
 			$skin     = new class() extends \Bulk_Plugin_Upgrader_Skin {
 				public function flush_output(): void {
 					// The operation buffers progress without flushing the caller's response.
 				}
 			};
-			$upgrader = new class( $skin, $recovery ) extends \Plugin_Upgrader {
-				public function __construct( \Bulk_Plugin_Upgrader_Skin $skin, private readonly ExactInstallRecovery $recovery ) {
-					parent::__construct( $skin );
-				}
-
-				public function move_to_temp_backup_dir( $args ): bool|\WP_Error {
-					return $this->recovery->move_backup( $args, parent::move_to_temp_backup_dir( ... ) );
-				}
-
-				public function restore_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
-					unset( $temp_backups );
-					return $this->recovery->restore_backup( parent::restore_temp_backup( ... ) );
-				}
-
-				public function delete_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
-					unset( $temp_backups );
-					return $this->recovery->delete_backup( parent::delete_temp_backup( ... ) );
-				}
-
-				public function maintenance_mode( $enable = false ): void {
-					$this->recovery->maintenance_mode( true === $enable, parent::maintenance_mode( ... ) );
-				}
-			};
+			$upgrader = new \Plugin_Upgrader( $skin );
 		} else {
 			$skin     = new class() extends \Theme_Upgrader_Skin {
 				public function feedback( $feedback, ...$args ): void {
@@ -79,51 +55,61 @@ final class ExactInstallInvocation {
 					unset( $feedback, $args );
 				}
 			};
-			$upgrader = new class( $skin, $recovery ) extends \Theme_Upgrader {
-				public function __construct( \Theme_Upgrader_Skin $skin, private readonly ExactInstallRecovery $recovery ) {
-					parent::__construct( $skin );
-				}
-
-				public function move_to_temp_backup_dir( $args ): bool|\WP_Error {
-					return $this->recovery->move_backup( $args, parent::move_to_temp_backup_dir( ... ) );
-				}
-
-				public function restore_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
-					unset( $temp_backups );
-					return $this->recovery->restore_backup( parent::restore_temp_backup( ... ) );
-				}
-
-				public function delete_temp_backup( mixed $temp_backups = array() ): bool|\WP_Error {
-					unset( $temp_backups );
-					return $this->recovery->delete_backup( parent::delete_temp_backup( ... ) );
-				}
-
-				public function maintenance_mode( $enable = false ): void {
-					$this->recovery->maintenance_mode( true === $enable, parent::maintenance_mode( ... ) );
-				}
-			};
+			$upgrader = new \Theme_Upgrader( $skin );
 		}
-		return new self( $upgrader, $token, $installed_version, $recovery, $skin );
+		return new self( $upgrader, $token, $installed_version, $skin );
 	}
 
 	public function run( string $identity ): mixed {
 		$this->wordpress_started = true;
 		$level                   = ob_get_level();
 		$upgrader                = $this->upgrader;
+		$target_type             = $upgrader instanceof \Plugin_Upgrader ? 'plugin' : 'theme';
 		$theme_cache_args        = $upgrader instanceof \Theme_Upgrader ? self::theme_cache_action_arguments() : null;
+		$source_admitted         = false;
+		$install_package_error   = null;
 		// Core's translation upgrader uses its own output-flushing skin. Leave its offers for a later update.
 		$defer_translations = static fn (): bool => false;
+		$observe_source     = static function ( mixed $source, mixed $remote_source = null, mixed $calling_upgrader = null ) use ( $upgrader, &$source_admitted ): mixed {
+			unset( $remote_source );
+			if ( $calling_upgrader === $upgrader && ! ( $source instanceof \WP_Error ) ) {
+				$source_admitted = true;
+			}
+			return $source;
+		};
+		$observe_result     = static function ( mixed $install_result, mixed $hook_extra = null ) use ( $target_type, $identity, &$install_package_error ): mixed {
+			if (
+				$install_result instanceof \WP_Error
+				&& is_array( $hook_extra )
+				&& ( $hook_extra[ $target_type ] ?? null ) === $identity
+				&& ( ! array_key_exists( 'type', $hook_extra ) || $target_type === $hook_extra['type'] )
+				&& ( ! array_key_exists( 'action', $hook_extra ) || 'update' === $hook_extra['action'] )
+			) {
+				$install_package_error = (string) $install_result->get_error_code();
+			}
+			return $install_result;
+		};
 		add_filter( 'async_update_translation', $defer_translations, PHP_INT_MAX, 0 );
+		add_filter( 'upgrader_source_selection', $observe_source, PHP_INT_MAX, 3 );
+		add_filter( 'upgrader_install_package_result', $observe_result, PHP_INT_MIN, 2 );
 		ob_start();
 		try {
 			if ( $upgrader instanceof \Plugin_Upgrader ) {
 				$results = $upgrader->bulk_upgrade( array( $identity ) );
 				return is_array( $results ) && array( $identity ) === array_keys( $results ) ? $results[ $identity ] : false;
 			}
-			$result = $upgrader->upgrade( $identity );
-			return true === $result ? $upgrader->result : $result;
+			$upgrade = $upgrader->upgrade( $identity );
+			return true === $upgrade ? $upgrader->result : $upgrade;
 		} finally {
 			remove_filter( 'async_update_translation', $defer_translations, PHP_INT_MAX );
+			remove_filter( 'upgrader_source_selection', $observe_source, PHP_INT_MAX );
+			remove_filter( 'upgrader_install_package_result', $observe_result, PHP_INT_MIN );
+			$backup_move_skipped = ! $source_admitted
+				|| in_array( $install_package_error, array( 'fs_no_content_dir', 'fs_temp_backup_mkdir', 'fs_temp_backup_move' ), true );
+			if ( $backup_move_skipped ) {
+				remove_action( 'shutdown', array( $upgrader, 'restore_temp_backup' ), 10 );
+				remove_action( 'shutdown', array( $upgrader, 'delete_temp_backup' ), 100 );
+			}
 			$this->remove_upgrade_filters( $theme_cache_args );
 			if ( ob_get_level() === $level + 1 ) {
 				ob_end_clean();
@@ -161,61 +147,7 @@ final class ExactInstallInvocation {
 		return false !== has_action( 'shutdown', array( $this->upgrader, 'restore_temp_backup' ) );
 	}
 
-	public function maintenance_pending(): bool {
-		return $this->recovery->maintenance_pending();
-	}
-
-	/** @param array<string,array{sha256:string,size:int}> $files */
-	public function expect_incoming( array $files ): void {
-		$this->recovery->expect_incoming( $files );
-	}
-
 	public function uses_original_skin(): bool {
 		return $this->upgrader->skin === $this->skin;
-	}
-
-	public function recover_at_shutdown(): bool {
-		return $this->recovery->recover_at_shutdown( $this->backup_deleted || $this->restore_pending() || false !== $this->backup_deletion_priority() );
-	}
-
-	public function preserve_backup(): void {
-		$this->recovery->preserve_backup();
-	}
-
-	public function authorize_backup_deletion(): void {
-		$this->recovery->authorize_backup_deletion();
-	}
-
-	public function destination_has_original_parent( string $destination ): bool {
-		return $this->recovery->destination_has_original_parent( $destination );
-	}
-
-	/** Complete only this instance's scheduled deletion, after ruling out its scheduled restoration. */
-	public function finish_backup(): ?string {
-		$delete = array( $this->upgrader, 'delete_temp_backup' );
-		if ( $this->restore_pending() ) {
-			return 'backup_restore_pending';
-		}
-		if ( 100 !== $this->backup_deletion_priority() ) {
-			return 'backup_cleanup_unconfirmed';
-		}
-		try {
-			$deleted = $this->upgrader->delete_temp_backup();
-		} catch ( \Throwable ) {
-			return 'backup_cleanup_failed';
-		}
-		if ( true !== $deleted || ! remove_action( 'shutdown', $delete, 100 ) ) {
-			return 'backup_cleanup_failed';
-		}
-		if ( $this->restore_pending() || false !== $this->backup_deletion_priority() ) {
-			return 'backup_cleanup_unconfirmed';
-		}
-		$this->backup_deleted = true;
-		return null;
-	}
-
-	/** @phpstan-impure Core and the host can add or remove the callback. */
-	private function backup_deletion_priority(): bool|int {
-		return has_action( 'shutdown', array( $this->upgrader, 'delete_temp_backup' ) );
 	}
 }

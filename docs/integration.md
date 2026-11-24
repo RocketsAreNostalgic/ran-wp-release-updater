@@ -25,9 +25,9 @@ Registration is deliberately passive: it does not resolve credentials, contact t
 
 During acquisition, the updater reuses the source archive's validated identity
 after copying it into owned custody, with a fresh byte check after the binding
-fence. This avoids a second full ZIP scan without replacing the later staging
-and installed-package checks. Confirmed completion also avoids redundant lease
-release work; uncertain outcomes retain cleanup retries.
+fence. This avoids a second full ZIP scan without replacing the later staged
+and installed package header/identity checks. Confirmed completion also avoids
+redundant lease release work; uncertain outcomes retain cleanup retries.
 
 WordPress Core remains responsible for update scheduling, the Plugins and Updates screens, filesystem access, temporary backups, extraction, installation, rollback, activation state, and Core cleanup. The library validates and fences the operation around those Core-owned steps.
 
@@ -404,37 +404,44 @@ The updater checks the live installed identity, descriptor, policy and manual
 assurance, acquires the ZIP once, and validates it into private custody.
 WordPress receives the verified copy only for the matching invocation. The
 download hook re-inspects the descriptor, checks its fingerprint and the
-binding fence, and rechecks the copy before issuing the receipt. The offer is
+binding fence, and rechecks the copy before beginning pending custody. The offer is
 request-local. The report contains no archive path.
 
-The plugin route uses one-item `Plugin_Upgrader::bulk_upgrade()`. The theme
-route uses `Theme_Upgrader::upgrade()`. After a clean return with matching
-completion evidence, the updater checks that instance for pending restoration
-at shutdown priority 10. It then runs the instance's scheduled backup deletion
-at priority 100. Successful deletion disarms that callback and permits one
-synchronous finalization. Pending restoration, interrupted upgrades and
-unconfirmed deletion retain WordPress's shutdown callbacks and the updater's
-cleanup fallback. Exact installs with unconfirmed deletion report uncertainty
-and leave the host mutation outcome uncertain.
+The plugin route uses native one-item `Plugin_Upgrader::bulk_upgrade()`. The theme
+route uses native `Theme_Upgrader::upgrade()`. WordPress Core natively owns
+temporary backup, rollback (`restore_temp_backup` at shutdown priority 10),
+backup deletion (`delete_temp_backup` at shutdown priority 100, which also runs
+after a failed restore), and `.maintenance` management. After a clean return
+with matching completion evidence and no pending restoration at shutdown
+priority 10, the updater verifies the installed destination, mutation lock, and
+lightweight installed package headers/identity and finalizes synchronously
+(cleaning up private archive custody, invoking host completion, releasing any
+standalone lock, and disarming its own shutdown fallback). Pending restoration
+and post-registration unverified install results retain WordPress Core's native
+shutdown callbacks alongside the updater's shutdown cleanup fallback. Because
+the updater relies on native `WP_Upgrader` rather than a custom recovery layer,
+an unhandled exception thrown after `move_to_temp_backup_dir()` and before
+`WP_Upgrader::run()` registers its shutdown callbacks leaves the target
+unrecovered by Core; on the plugin `bulk_upgrade()` path (when the plugin is
+active or on multisite), WordPress's 10-minute `.maintenance` timeout applies
+(`Theme_Upgrader::upgrade()` does not enable maintenance mode), while the
+updater's own shutdown fallback still cleans up private custody, releases its
+lock, and reports an uncertain outcome.
 
-Before moving the installed package, the updater verifies that it can take a
-recovery snapshot. A refusal before the move preserves the current installation
-and any pre-existing backup. Before running Core's restoration or deletion,
-the updater rechecks the backup directory's identity and filesystem mapping.
-Core restoration also requires the original destination parent and mapping.
-A failed or declined restoration preserves the backup through shutdown.
-If installation stops after the move and before Core
-schedules recovery, the updater can identify the backup even if Core throws
-after the rename. It verifies the backup and the destination's original parent
-directory before restoring over an absent or empty destination, or over a
-directory containing only byte-matching files and their enclosing directories
-from the verified incoming package. Other destination contents and the backup
-are preserved. The updater also clears any maintenance marker that the
-invocation created and still owns. The operation buffers native progress without
-flushing the caller's response. WordPress's asynchronous translation callback
-leaves pending language packs for a later update while the exact install is
-running. When the native call returns or throws, the updater removes its
-temporary upgrader filters and leaves scheduled backup recovery in place.
+If an exact install is refused before WordPress moves the live package to
+temporary backup (for example in `upgrader_pre_install`, `upgrader_source_selection`,
+or on raw `fs_no_content_dir`, `fs_temp_backup_mkdir`, or `fs_temp_backup_move`
+errors observed via `upgrader_install_package_result` prior to error rewriting),
+the updater disarms Core's `restore_temp_backup` (priority 10) and
+`delete_temp_backup` (priority 100) shutdown callbacks for that upgrader
+instance so a pre-existing stale directory under `upgrade-temp-backup/` cannot
+overwrite the healthy live installation or be deleted by the refused invocation.
+
+The operation buffers native progress without flushing the caller's response.
+WordPress's asynchronous translation callback leaves pending language packs for
+a later update while the exact install is running. When the native call returns
+or throws, the updater removes its temporary upgrader filters and leaves any
+post-move WordPress Core shutdown backup callbacks in place.
 
 The report carries `status`, `code`, `version`, `relationship`,
 `finalization_pending` and `finalization`. Only `installed` with
@@ -445,7 +452,7 @@ invocation, `finalization` describes that specific invocation.
 
 | Field | Values |
 | --- | --- |
-| `commit` | `completed` when the updater verified the installed package and consumed its persistent receipt, `failed` when that could not be proved after backup deletion, or `not_attempted` |
+| `commit` | `completed` when the updater verified the installed package and committed completion, `failed` when that could not be proved during synchronous commit, or `not_attempted` |
 | `host_completion` | `completed` when the configured mutation completion callback returned normally, `failed` when it threw, or `not_applicable` |
 | `lease` | `released`, `failed` or `not_held` |
 | `archive_cleanup` | `clean` or `failed` |
@@ -474,7 +481,7 @@ Important native failure codes include:
 | `remote_release_changed` | The release no longer matches the exact release previously offered |
 | `acquisition_identity_invalid` | Acquired bytes failed the expected archive/provider identity checks |
 | `archive_changed_before_extraction` | The controlled archive changed before Core extraction |
-| `staged_package_identity_invalid` | Core's staged package does not match the admitted package/manifest |
+| `staged_package_identity_invalid` | Core's staged package does not match the admitted package identity or headers |
 | `runtime_liveness_lost` | The selected physical runtime is no longer authoritative for the operation |
 | `unverified_pre_download` / `unverified_pre_install` | A required verification/admission precondition was not satisfied |
 | `unverified_install_result` | Core did not produce an install result the updater can safely accept |
@@ -672,7 +679,7 @@ order; there is no downgrade that drops a guard. Deploy the qualified family of
 physical copies together.
 
 `begin(string $target_type, string $installed_identity): string` runs after final
-staged-byte/receipt validation in source selection, immediately before WordPress
+staged package validation in source selection, immediately before WordPress
 may change the destination. It must atomically acquire the host's exact native
 lock, revalidate selection/admission and durably record uncertainty, returning an
 opaque owner tag of 1–191 non-whitespace, non-control bytes. An invalid result or
@@ -682,9 +689,10 @@ invent an owner or infer rollback.
 
 `complete(string $owner_tag, string $target_type, string $installed_identity,
 string $outcome): void` runs at most once after private finalization and archive
-cleanup. `verified_success` requires the existing installed manifest/header,
-one-use receipt and durable binding completion proofs plus removed private
-archive/directory. Every unverified result is `uncertain`. Completion uses the
+cleanup. `verified_success` requires WordPress Core's install result, active
+mutation lock verification, lightweight installed package header/identity and
+destination verification, and removed private archive/directory. Every
+unverified result is `uncertain`. Completion uses the
 captured owner even when provider availability disappears; refresh cannot discard
 that pending lifecycle. A completion exception is reported as uncertain without a
 success diagnostic or retry. The host clears its marker only on exact verified

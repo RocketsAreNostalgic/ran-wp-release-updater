@@ -86,7 +86,6 @@ final class NativePackageUpdater {
 	private ?array $discovery_snapshot = null;
 	private int $discovery_epoch       = 0;
 	private OwnedArchiveStore $archive_store;
-	private StagedPackageManifest $manifest_builder;
 	private PendingInstallState $pending_install;
 	private WordPressUpdaterLock $updater_lock;
 	private ?\Closure $operation_guard;
@@ -142,7 +141,6 @@ final class NativePackageUpdater {
 		private bool $allow_working_copy = false
 	) {
 		$this->archive_store            = new OwnedArchiveStore();
-		$this->manifest_builder         = new StagedPackageManifest();
 		$this->pending_install          = new PendingInstallState();
 		$this->updater_lock             = new WordPressUpdaterLock( $wpdb );
 		$this->operation_guard          = null === $operation_guard ? null : \Closure::fromCallable( $operation_guard );
@@ -603,7 +601,7 @@ final class NativePackageUpdater {
 		}
 
 		try {
-			$exact = ExactInstallInvocation::create( $this->target_type, $this->installed_directory, self::EXACT_TOKEN_PREFIX . bin2hex( random_bytes( 32 ) ), $installed );
+			$exact = ExactInstallInvocation::create( $this->target_type, self::EXACT_TOKEN_PREFIX . bin2hex( random_bytes( 32 ) ), $installed );
 		} catch ( \Throwable ) {
 			return $this->exact_report( 'wordpress_unavailable' );
 		}
@@ -613,7 +611,7 @@ final class NativePackageUpdater {
 		} catch ( \Throwable ) {
 			$code = 'unexpected_failure';
 		} finally {
-			if ( ! $this->pending_install->active() && ! $exact->maintenance_pending() ) {
+			if ( ! $this->pending_install->active() ) {
 				if ( $exact->lease_claimed && null === $exact->finalization ) {
 					$this->clear_pending();
 				}
@@ -667,9 +665,6 @@ final class NativePackageUpdater {
 		if ( null === $exact->finalization && $exact->restore_pending() ) {
 			return 'backup_restore_pending';
 		}
-		if ( $exact->maintenance_pending() ) {
-			return 'maintenance_cleanup_failed';
-		}
 		if (
 			! $exact->download_consumed
 			|| ! $this->pending_install->completion_observed()
@@ -680,19 +675,14 @@ final class NativePackageUpdater {
 			return $exact->download_failure ?? 'unverified_install_result';
 		}
 		try {
-			$installed_verified = $this->verify_installed_manifest( $descriptor );
+			$installed_verified = $this->verify_installed_package( $descriptor );
 		} catch ( \Throwable ) {
 			$installed_verified = false;
 		}
 		if ( ! $installed_verified ) {
-			$exact->preserve_backup();
 			return 'unverified_install_result';
 		}
-		$exact->authorize_backup_deletion();
-		$failure = $exact->finish_backup();
-		if ( null !== $failure ) {
-			return $failure;
-		}
+		$exact->ready_to_commit = true;
 		$this->finalize_pending_install();
 		return 'update_completed';
 	}
@@ -1269,9 +1259,6 @@ final class NativePackageUpdater {
 			return $this->fail_pending( 'runtime_liveness_lost' );
 		}
 
-		$manifest   = is_string( $source ) && $this->matches_staged_metadata( $source )
-			? $this->manifest_builder->build( $source )
-			: null;
 		$descriptor = $this->descriptor;
 		if (
 			! $this->direct_filesystem()
@@ -1280,14 +1267,9 @@ final class NativePackageUpdater {
 			|| ! $this->verify_mutation_lock()
 			|| ! $descriptor instanceof IdentityDescriptor
 			|| ! $this->descriptor_admitted( $descriptor )
+			|| ! $this->pending_install->matches_descriptor( $descriptor )
 			|| ! is_string( $source )
-			|| null === $manifest
-			|| ! $this->pending_install->matches_archive_manifest(
-				$descriptor,
-				$this->manifest_builder->hash( $manifest ),
-				count( $manifest ),
-				$this->manifest_builder->expanded_bytes( $manifest )
-			)
+			|| ! $this->matches_staged_metadata( $source )
 		) {
 			return $this->fail_pending( 'staged_package_identity_invalid' );
 		}
@@ -1311,10 +1293,6 @@ final class NativePackageUpdater {
 			return $this->failure( 'target_is_working_copy' );
 		}
 		$this->admit_theme_error_bridge( $upgrader, $hook_extra );
-		$exact = $this->exact_install;
-		if ( null !== $exact && $exact->upgrader === $upgrader ) {
-			$exact->expect_incoming( $manifest );
-		}
 		return $source;
 	}
 	/** @param array<string,mixed> $hook_extra */
@@ -1464,17 +1442,8 @@ final class NativePackageUpdater {
 	public function finalize_pending_install(): void {
 		$exact    = $this->exact_install;
 		$shutdown = null !== $exact && doing_action( 'shutdown' );
-		if ( ! $this->shutdown_scheduled || ( null !== $exact && ! $exact->backup_deleted && ! $shutdown ) ) {
+		if ( ! $this->shutdown_scheduled || ( null !== $exact && ! $exact->ready_to_commit && ! $shutdown ) ) {
 			return;
-		}
-		if ( $shutdown ) {
-			try {
-				if ( ! $exact->recover_at_shutdown() ) {
-					$this->diagnose( 'outcome_uncertain', null );
-				}
-			} catch ( \Throwable ) {
-				$this->diagnose( 'outcome_uncertain', null );
-			}
 		}
 		if ( $this->finalizing ) {
 			if ( $shutdown ) {
@@ -1496,8 +1465,8 @@ final class NativePackageUpdater {
 			if ( ! $this->pending_install->active() ) {
 				return;
 			}
-			// An interrupted exact install can still clean up, but only a proved Core return and backup deletion admit a commit.
-			if ( null !== $exact && ! $exact->backup_deleted ) {
+			// An interrupted exact install can still clean up, but only a proved Core return admits a commit.
+			if ( null !== $exact && ! $exact->ready_to_commit ) {
 				$this->diagnose( 'outcome_uncertain', null );
 				return;
 			}
@@ -1513,7 +1482,7 @@ final class NativePackageUpdater {
 			if (
 				! $this->pending_install->install_result_captured()
 				|| ( ! $this->pending_install->completion_observed() && ! $this->pending_install->multi_run() )
-				|| ! $this->verify_installed_manifest( $descriptor )
+				|| ! $this->verify_installed_package( $descriptor )
 			) {
 				$this->diagnose( 'outcome_uncertain', null );
 				return;
@@ -1543,46 +1512,33 @@ final class NativePackageUpdater {
 		}
 	}
 
-	private function verify_installed_manifest( IdentityDescriptor $descriptor ): bool {
+	private function verify_installed_package( IdentityDescriptor $descriptor ): bool {
 		$result      = $this->pending_install->install_result();
 		$destination = is_array( $result ) ? ( $result['destination'] ?? null ) : null;
-		if ( ! is_string( $destination ) || ! $this->installed_destination_matches( $destination ) ) {
-			return false;
-		}
-		$manifest_root = $this->registered_plugin_symlink_target( $destination ) ?? $destination;
-		$manifest      = $this->manifest_builder->build( $manifest_root );
-		if ( ! $this->verify_mutation_lock() || null === $manifest ) {
-			return false;
-		}
 		if (
-			! $this->pending_install->matches_archive_manifest(
-				$descriptor,
-				$this->manifest_builder->hash( $manifest ),
-				count( $manifest ),
-				$this->manifest_builder->expanded_bytes( $manifest )
-			)
+			! is_string( $destination )
+			|| ! $this->pending_install->staging_verified()
+			|| ! $this->pending_install->matches_descriptor( $descriptor )
+			|| ! $this->verify_mutation_lock()
+			|| ! $this->installed_destination_matches( $destination )
 		) {
 			return false;
 		}
-		return $this->pending_install->staging_verified() && $this->matches_staged_metadata( $destination, null, true ) && $this->installed_destination_matches( $destination );
+		return $this->matches_staged_metadata( $destination, $descriptor->to_array()['version'], true )
+			&& $this->installed_destination_matches( $destination );
 	}
 
+	/** @phpstan-impure The filesystem destination may change between observations. */
 	private function installed_destination_matches( string $destination ): bool {
 		$destination = rtrim( $destination, '/\\' );
 		$registered  = rtrim( $this->installed_directory, '/\\' );
-		if ( null !== $this->exact_install && wp_normalize_path( $registered ) !== wp_normalize_path( $destination ) ) {
-			return false;
-		}
 		clearstatcache( true );
 		$resolved = realpath( $destination );
 		if ( false === $resolved || realpath( $registered ) !== $resolved ) {
 			return false;
 		}
-		if ( null !== $this->exact_install ) {
-			return $this->exact_install->destination_has_original_parent( $destination );
-		}
 		// Hosts register the PHP-resolved package path while Core reports it beneath the unresolved plugin or theme
-		// root, so ordinary installs compare resolved directories and only admit a linked leaf registered in $wp_plugin_paths.
+		// root, so compare resolved directories and only admit a linked leaf registered in $wp_plugin_paths.
 		return is_dir( $destination ) && ( ! is_link( $destination ) || null !== $this->registered_plugin_symlink_target( $destination ) );
 	}
 
@@ -2363,7 +2319,7 @@ final class NativePackageUpdater {
 		}
 		if ( null !== $exact ) {
 			$exact->finalization = array(
-				'commit'          => 'verified_success' === $candidate ? 'completed' : ( $exact->backup_deleted ? 'failed' : 'not_attempted' ),
+				'commit'          => 'verified_success' === $candidate ? 'completed' : ( $exact->ready_to_commit ? 'failed' : 'not_attempted' ),
 				'host_completion' => $host,
 				'lease'           => $lease,
 				'archive_cleanup' => $clean ? 'clean' : 'failed',

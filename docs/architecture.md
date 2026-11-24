@@ -78,11 +78,12 @@ This is an intentional trust boundary. Adding another provider is a package chan
 
 The release updater verifies and admits the operation around Core. WordPress remains responsible for filesystem mutation, extraction, installation, rollback/temporary backup behaviour and the native update UI/scheduling.
 
-The package therefore does not maintain a parallel installer. Its security model depends on:
+The package therefore does not maintain a parallel installer or custom backup/rollback
+recovery layer. Its security model depends on:
 
-1. validating the exact provider/release/archive before Core mutation;
+1. validating the exact provider/release/archive (`sha256` digest, archive safety, package headers/identity, `Update URI`, compatibility) before Core mutation;
 2. fencing the target against stale/competing operations;
-3. checking the staged/installed package after Core runs;
+3. checking Core's install result, mutation lock, destination path, and lightweight staged/installed package header/identity without recursive directory-tree re-hashing;
 4. refusing to claim a verified terminal outcome when those postconditions cannot be established.
 
 ## Physical runtime selection

@@ -46,8 +46,8 @@ test independently discovers all script PHP, including nested `scripts/tests`,
 compares effective selection, asserts level 8, detects an excluded nested script,
 and proves a new script's incorrect return fails actual analysis.
 
-Current direct analysis covers all 108 maintained PHP files: 38 production files and
-three scripts at level 8, plus 67 test files at level 8. The small
+Current direct analysis covers all 110 maintained PHP files: 38 production files and
+three scripts at level 8, plus 69 test files at level 8. The small
 `scripts/analyze-tests.php` runner discovers the whole tests directory through
 PHPStan's file finder, then passes each file separately to the locked analyzer.
 `--list` exposes exactly that selection to the independent coverage guard.

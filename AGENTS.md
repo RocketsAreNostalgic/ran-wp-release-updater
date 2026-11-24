@@ -35,7 +35,7 @@ The generated `src/Dependency/ArchiveSafety.php` stays PHPCS-excluded; it, `src/
 `src/Dependency/TargetWorkingCopy.php`, `src/Dependency/PackageDirectory.php`,
 `src/Dependency/RepositoryRelativePath.php` and
 `src/Dependency/InvalidRepositoryPathException.php` are namespace-only parity checked
-against the locked upstream package. All 41 shipped PHP files, including those generated
+against the locked upstream package. All 38 shipped PHP files, including those generated
 copies, remain directly analysed at PHPStan level 8.
 Analysis defaults to the repository root, including new root/nested PHP and the
 generated helper. Root-relative tests/scripts, dependencies and disposable state

@@ -102,18 +102,6 @@ final class PendingInstallState {
 			&& hash_equals( $this->archive_proof['update_uri'], $facts['canonical_update_uri'] );
 	}
 
-	public function matches_archive_manifest( IdentityDescriptor $descriptor, string $manifest_hash, int $entry_count, int $expanded_bytes ): bool {
-		if ( null === $this->archive_proof || ! $this->matches_descriptor( $descriptor ) ) {
-			return false;
-		}
-		return 1 === preg_match( '/\A[a-f0-9]{64}\z/D', $manifest_hash )
-			&& $entry_count > 0
-			&& $expanded_bytes >= 0
-			&& hash_equals( $this->archive_proof['manifest_hash'], $manifest_hash )
-			&& $this->archive_proof['manifest_entry_count'] === $entry_count
-			&& $this->archive_proof['manifest_expanded_bytes'] === $expanded_bytes;
-	}
-
 	/** Last observed evidence only; this does not assert that a stage succeeded. */
 	public function last_observed_step(): ?string {
 		return match ( true ) {

@@ -162,7 +162,6 @@ final class NeutralKernelBoundaryTest extends TestCase {
 			'src/Provider/GitHub/GitHubArtifactStore.php',
 			'src/WordPress/InstalledPackageResolver.php',
 			'src/WordPress/OwnedArchiveStore.php',
-			'src/WordPress/StagedPackageManifest.php',
 			'src/WordPress/NativePackageUpdater.php',
 			'scripts/lint-php.php',
 			'scripts/sync-updater-support.php',
