@@ -680,7 +680,7 @@ PHP;
 		self::assertSame( $expected, $result->code() );
 	}
 
-	public function test_archive_validation_permits_absent_requirements_and_rejects_post_closing_duplicates(): void {
+	public function test_archive_validation_permits_absent_requirements_and_rejects_in_block_duplicates(): void {
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
 			$root       = 'plugin' === $type ? 'example-plugin' : 'example-theme';
 			$file       = 'plugin' === $type ? 'example-plugin.php' : 'style.css';
@@ -692,7 +692,11 @@ PHP;
 			$policy     = $this->policy( $type, $root, $file, $name );
 			self::assertTrue( ( new PackageIdentityValidator() )->validate( $descriptor, $policy, $archive )->is_valid() );
 
-			$duplicate  = $this->archive( array( $root . '/' . $file => $header . "\nVersion: 1.0.0" ) );
+			$phpdoc     = $this->archive( array( $root . '/' . $file => $header . "\n/**\n * Version: 9.9.9\n * Author: Docs\n * Description: Helper\n * Template: ignored\n */" ) );
+			$descriptor = $this->descriptor( $phpdoc, $type, 'theme' === $type ? $root : $root . '/' . $file );
+			self::assertTrue( ( new PackageIdentityValidator() )->validate( $descriptor, $policy, $phpdoc )->is_valid() );
+
+			$duplicate  = $this->archive( array( $root . '/' . $file => "<?php\n/*\n{$kind}: {$name}\nVersion: 1.0.0\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/" ) );
 			$descriptor = $this->descriptor( $duplicate, $type, 'theme' === $type ? $root : $root . '/' . $file );
 			self::assertSame( 'archive_version_mismatch', ( new PackageIdentityValidator() )->validate( $descriptor, $policy, $duplicate )->code() );
 		}
@@ -711,6 +715,219 @@ PHP;
 			'malformed php floor'          => array( sprintf( $base, '1.0.0', "\nRequires PHP: eight.two" ), 'archive_php_requirement_incompatible' ),
 			'duplicate wordpress floor'    => array( sprintf( $base, '1.0.0', "\nRequires at least: 6.7\nRequires at least: 6.7" ), 'archive_wordpress_requirement_incompatible' ),
 		);
+	}
+
+	public function test_validator_and_prospective_inspection_accept_distro_php_runtime_versions(): void {
+		$header_82  = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires PHP: 8.2\nRequires at least: 6.8\n*/";
+		$header_83  = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\nRequires PHP: 8.3\nRequires at least: 6.8\n*/";
+		$archive_82 = $this->archive( array( 'example-plugin/example-plugin.php' => $header_82 ) );
+		$archive_83 = $this->archive( array( 'example-plugin/example-plugin.php' => $header_83 ) );
+		$validator  = new PackageIdentityValidator();
+
+		foreach ( array( '8.2.28-0+deb12u1', '8.2.28-1+ubuntu22.04.1+deb.sury.org+1', '8.2.28-1~deb12u1' ) as $php_version ) {
+			$policy                        = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+			$policy['php_runtime_version'] = $php_version;
+			self::assertTrue( $validator->validate( $this->descriptor( $archive_82, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $archive_82 )->is_valid(), $php_version );
+			self::assertSame( 'archive_php_requirement_incompatible', $validator->validate( $this->descriptor( $archive_83, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $archive_83 )->code(), $php_version );
+
+			$prospective_82                        = $this->prospective_policy( $archive_82, 'plugin' );
+			$prospective_82['php_runtime_version'] = $php_version;
+			self::assertSame(
+				array(
+					'package_root' => 'example-plugin',
+					'main_file'    => 'example-plugin.php',
+				),
+				$validator->inspect_prospective( $prospective_82, $archive_82 ),
+				$php_version
+			);
+
+			$prospective_83                        = $this->prospective_policy( $archive_83, 'plugin' );
+			$prospective_83['php_runtime_version'] = $php_version;
+			$rejected                              = $validator->inspect_prospective( $prospective_83, $archive_83 );
+			self::assertIsArray( $rejected );
+			self::assertSame( 'header_requires_php_unmet', $rejected['reason'] ?? null, $php_version );
+		}
+	}
+
+	public function test_parse_header_strips_utf8_bom_and_ignores_post_header_phpdoc_and_plugin_template(): void {
+		$plugin_header = "\xEF\xBB\xBF<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nAuthor: Real Author\nDescription: Real Description\nPlugin URI: https://example.test/plugin\nUpdate URI: https://updates.example.test/owner/package\nTemplate: ../ignored-on-plugin\n*/\n/**\n * Helper docs\n * Version: 9.9.9\n * Author: Doc Author\n * Description: Doc Description\n * Template: ../bad\n */\n";
+		$parsed        = PackageIdentityValidator::parse_header( $plugin_header, 'plugin' );
+		self::assertSame( 'installed_header_verified', $parsed['code'] );
+		if ( ! isset( $parsed['headers'] ) ) {
+			self::fail( 'Verified plugin header omitted headers array.' );
+		}
+		self::assertSame( 'Real Author', $parsed['headers']['Author'] );
+		self::assertSame( 'Real Description', $parsed['headers']['Description'] );
+		self::assertSame( 'https://example.test/plugin', $parsed['headers']['PackageURI'] );
+		self::assertSame( '', $parsed['headers']['Template'] );
+
+		$theme_header = "\xEF\xBB\xBF/*\nTheme Name: Example Theme\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\n/*\n * Version: 9.9.9\n * Template: ../bad\n */\n";
+		self::assertSame( 'installed_header_verified', PackageIdentityValidator::parse_header( $theme_header, 'theme' )['code'] );
+	}
+
+	public function test_split_header_region_compatibility_blocks_are_enforced_while_post_code_phpdoc_is_ignored(): void {
+		$validator = new PackageIdentityValidator();
+		$policy    = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+
+		$split_php_header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\n/*\nRequires PHP: 99.0\n*/\ndefined( 'ABSPATH' ) || exit;\n";
+		$split_php_zip    = $this->archive( array( 'example-plugin/example-plugin.php' => $split_php_header ) );
+		$prospective_php  = $this->prospective_plugin( $split_php_zip );
+		self::assertIsArray( $prospective_php );
+		self::assertSame( 'header_requires_php_unmet', $prospective_php['reason'] ?? null );
+		self::assertSame(
+			'archive_php_requirement_incompatible',
+			$validator->validate( $this->descriptor( $split_php_zip, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $split_php_zip )->code()
+		);
+
+		$split_wp_header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\n/*\nRequires at least: 9.0\n*/\n";
+		$split_wp_zip    = $this->archive( array( 'example-plugin/example-plugin.php' => $split_wp_header ) );
+		$prospective_wp  = $this->prospective_plugin( $split_wp_zip );
+		self::assertIsArray( $prospective_wp );
+		self::assertSame( 'header_requires_wp_unmet', $prospective_wp['reason'] ?? null );
+		self::assertSame(
+			'archive_wordpress_requirement_incompatible',
+			$validator->validate( $this->descriptor( $split_wp_zip, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $split_wp_zip )->code()
+		);
+
+		$post_code_doc = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\ndefined( 'ABSPATH' ) || exit;\n/**\n * Documentation note.\n * Requires PHP: 99.0\n * Requires at least: 9.0\n * Version: 9.9.9\n */\n";
+		$post_code_zip = $this->archive( array( 'example-plugin/example-plugin.php' => $post_code_doc ) );
+		self::assertSame(
+			array(
+				'package_root' => 'example-plugin',
+				'main_file'    => 'example-plugin.php',
+			),
+			$this->prospective_plugin( $post_code_zip )
+		);
+		self::assertTrue(
+			$validator->validate( $this->descriptor( $post_code_zip, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $post_code_zip )->is_valid()
+		);
+
+		$hash_comment_header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\n# Shell-style header separator comment\n/*\nRequires PHP: 99.0\n*/\n";
+		$hash_comment_zip    = $this->archive( array( 'example-plugin/example-plugin.php' => $hash_comment_header ) );
+		$prospective_hash    = $this->prospective_plugin( $hash_comment_zip );
+		self::assertIsArray( $prospective_hash );
+		self::assertSame( 'header_requires_php_unmet', $prospective_hash['reason'] ?? null );
+
+		$attribute_header = "<?php\n/*\nPlugin Name: Example Plugin\nVersion: 1.0.0\nUpdate URI: https://updates.example.test/owner/package\n*/\n#[AllowDynamicProperties]\n/**\n * Requires PHP: 99.0\n */\nclass Example_Attr {}\n";
+		$attribute_zip    = $this->archive( array( 'example-plugin/example-plugin.php' => $attribute_header ) );
+		self::assertSame(
+			array(
+				'package_root' => 'example-plugin',
+				'main_file'    => 'example-plugin.php',
+			),
+			$this->prospective_plugin( $attribute_zip )
+		);
+	}
+
+	public function test_validate_propagates_exceptions_from_after_open_without_swallowing_in_finally(): void {
+		$archive    = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
+		$descriptor = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );
+		$policy     = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+		$validator  = new PackageIdentityValidator();
+		( new \ReflectionProperty( PackageIdentityValidator::class, 'after_open' ) )->setValue(
+			$validator,
+			static function (): void {
+				throw new \RuntimeException( 'after_open_boom' );
+			}
+		);
+
+		$this->expectException( \RuntimeException::class );
+		$this->expectExceptionMessage( 'after_open_boom' );
+		$validator->validate( $descriptor, $policy, $archive );
+	}
+
+	public function test_archive_scanner_allows_small_high_ratio_files_and_macos_or_ntfs_entries(): void {
+		$validator = new PackageIdentityValidator();
+		$policy    = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+
+		$small_compressible = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+				'example-plugin/icon.svg'           => str_repeat( 'A', 4096 ),
+			)
+		);
+		self::assertTrue(
+			$validator->validate( $this->descriptor( $small_compressible, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $small_compressible )->is_valid()
+		);
+
+		$large_bomb = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+				'example-plugin/bomb.txt'           => str_repeat( "\0", 100000 ),
+			)
+		);
+		self::assertSame(
+			'archive_size_limit',
+			$validator->validate( $this->descriptor( $large_bomb, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $large_bomb )->code()
+		);
+
+		$macos_and_ntfs = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+				'example-plugin/macos.txt'          => 'macos-entry',
+				'example-plugin/ntfs.txt'           => 'ntfs-entry',
+			),
+			array(),
+			array(
+				'example-plugin/macos.txt' => array( 19, 0100644 << 16 ),
+				'example-plugin/ntfs.txt'  => array( 10, 0x00 ),
+			)
+		);
+		self::assertTrue(
+			$validator->validate( $this->descriptor( $macos_and_ntfs, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $macos_and_ntfs )->is_valid()
+		);
+
+		$macos_symlink = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+				'example-plugin/link.txt'           => '../outside',
+			),
+			array(),
+			array(
+				'example-plugin/link.txt' => array( 19, 0120777 << 16 ),
+			)
+		);
+		self::assertSame(
+			'archive_path_unsafe',
+			$validator->validate( $this->descriptor( $macos_symlink, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $macos_symlink )->code()
+		);
+
+		$ntfs_volume_label = $this->archive(
+			array(
+				'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+				'example-plugin/vol.txt'            => 'label',
+			),
+			array(),
+			array(
+				'example-plugin/vol.txt' => array( 10, 0x08 ),
+			)
+		);
+		self::assertSame(
+			'archive_path_unsafe',
+			$validator->validate( $this->descriptor( $ntfs_volume_label, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $ntfs_volume_label )->code()
+		);
+
+		foreach ( array(
+			'ntfs device'        => array( 'example-plugin/dev.txt', 0x0040 ),
+			'ntfs reparse point' => array( 'example-plugin/reparse.txt', 0x0400 ),
+			'ntfs junction dir'  => array( 'example-plugin/junction/', 0x0410 ),
+		) as $label => [$entry_name, $ntfs_attr] ) {
+			$ntfs_special = $this->archive(
+				array(
+					'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ),
+					$entry_name                         => str_ends_with( $entry_name, '/' ) ? '' : 'special',
+				),
+				array(),
+				array(
+					$entry_name => array( 10, $ntfs_attr ),
+				)
+			);
+			self::assertSame(
+				'archive_path_unsafe',
+				$validator->validate( $this->descriptor( $ntfs_special, 'plugin', 'example-plugin/example-plugin.php' ), $policy, $ntfs_special )->code(),
+				$label
+			);
+		}
 	}
 
 	public function test_prospective_inspection_rejects_forged_entry_size_and_unreadable_top_level_php(): void {

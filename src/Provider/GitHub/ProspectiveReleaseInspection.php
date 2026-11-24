@@ -122,7 +122,7 @@ final readonly class ProspectiveReleaseInspection {
 			&& is_string( $value['version'] )
 			&& null !== ReleaseVersion::normalize( $value['version'] )
 			&& is_string( $value['php_runtime_version'] )
-			&& null !== ReleaseVersion::normalize_header( $value['php_runtime_version'] )
+			&& null !== ReleaseVersion::normalize_php_version( $value['php_runtime_version'] )
 			&& is_string( $value['wordpress_runtime_version'] )
 			&& null !== ReleaseVersion::normalize_header( $value['wordpress_runtime_version'] )
 			&& is_string( $root )

@@ -87,7 +87,7 @@ final class GitHubReleaseService {
 			|| ! in_array( $configuration['target_type'], array( 'plugin', 'theme' ), true )
 			|| ! in_array( $configuration['release_channel'], array( 'stable', 'prerelease' ), true )
 			|| ! is_string( $configuration['php_runtime_version'] )
-			|| null === ReleaseVersion::normalize_header( $configuration['php_runtime_version'] )
+			|| null === ReleaseVersion::normalize_php_version( $configuration['php_runtime_version'] )
 			|| ! is_string( $configuration['wordpress_runtime_version'] )
 			|| null === ReleaseVersion::normalize_header( $configuration['wordpress_runtime_version'] )
 		) {
@@ -125,7 +125,7 @@ final class GitHubReleaseService {
 				'canonical_repository_locator' => $declaration['repository_locator'],
 				'canonical_update_uri'         => CanonicalUpdateUri::canonicalize( 'https://github.com/' . $declaration['repository_locator'] ),
 				'maximum_artifact_bytes'       => $declaration['maximum_artifact_bytes'],
-				'php_runtime_version'          => PHP_VERSION,
+				'php_runtime_version'          => SelectedRuntimeState::current_php_version(),
 				'release_channel'              => $declaration['channel'],
 				'stable_repository_identity'   => $declaration['repository_identity'],
 				'target_type'                  => $declaration['target_type'],
@@ -413,7 +413,7 @@ final class GitHubReleaseService {
 			if (
 				null === $identity
 				|| 1 !== $identity['nlink']
-				|| 0600 !== ( $identity['mode'] & 0777 )
+				|| ! TemporaryArtifact::has_private_file_mode( $identity['mode'] )
 				|| $identity['size'] !== $facts['artifact_size']
 				|| $identity['size'] > $this->binding['maximum_artifact_bytes']
 			) {

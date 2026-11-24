@@ -87,6 +87,39 @@ final class WindowsPortabilityProofTest extends TestCase {
 		self::assertSame( 'target_active', $result['theme']['code'] );
 	}
 
+	public function test_runtime_reentry_normalizes_expected_and_loaded_class_paths_via_realpath(): void {
+		$copy      = $this->package_copy();
+		$alias_dir = $this->workspace . '/package-link';
+		if ( ! function_exists( 'symlink' ) || ! @symlink( $copy, $alias_dir ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Skip only if symlink creation is unsupported on the host OS.
+			self::markTestSkipped( 'Symlinks are unavailable in this environment.' );
+		}
+		try {
+			$script = $this->workspace . '/runtime-realpath.php';
+			$code   = '<?php '
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture paths as PHP literals for the isolated child script.
+				. '$copy = ' . var_export( $copy, true ) . '; '
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Encode controlled fixture paths as PHP literals for the isolated child script.
+				. '$alias = ' . var_export( $alias_dir, true ) . '; '
+				. 'require_once $copy . "/src/Contract/CanonicalUpdateUri.php"; '
+				. '$handoff = require $alias . "/runtime.php"; '
+				. 'echo json_encode(array("object" => is_object($handoff), "has_boot" => method_exists($handoff, "boot")));';
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write isolated child probe script.
+			file_put_contents( $script, $code );
+			$output = array();
+			$status = 0;
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run runtime.php reentry in a clean PHP process.
+			exec( escapeshellarg( PHP_BINARY ) . ' -n ' . escapeshellarg( $script ), $output, $status );
+			self::assertSame( 0, $status, implode( "\n", $output ) );
+			$result = json_decode( implode( "\n", $output ), true, 64, JSON_THROW_ON_ERROR );
+			self::assertIsArray( $result );
+			self::assertTrue( $result['object'] );
+			self::assertTrue( $result['has_boot'] );
+		} finally {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove symlink alias during test teardown.
+			@unlink( $alias_dir );
+		}
+	}
+
 	private function package_copy(): string {
 		$root = $this->workspace . '/package';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.

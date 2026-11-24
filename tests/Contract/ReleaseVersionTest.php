@@ -50,4 +50,25 @@ final class ReleaseVersionTest extends TestCase {
 			'leading zero'     => array( '01.0.0' ),
 		);
 	}
+
+	public function test_php_version_normalization_handles_distro_suffixes_and_preserves_prereleases(): void {
+		foreach ( array(
+			'8.2.28-0+deb12u1'                      => '8.2.28',
+			'8.2.28-1+ubuntu22.04.1+deb.sury.org+1' => '8.2.28',
+			'8.2.28-1~deb12u1'                      => '8.2.28',
+			'8.2.28+deb12u1'                        => '8.2.28',
+			'8.2.28~deb12u1'                        => '8.2.28',
+			'8.2'                                   => '8.2.0',
+			'8.4.0RC1'                              => '8.4.0-rc.1',
+			'8.4.0alpha2'                           => '8.4.0-alpha.2',
+			'8.4.0beta1'                            => '8.4.0-beta.1',
+			'8.4.0-rc.1+build.4'                    => '8.4.0-rc.1',
+		) as $input => $expected ) {
+			self::assertSame( $expected, ReleaseVersion::normalize_php_version( $input ), $input );
+		}
+		foreach ( array( '', '8', 'eight.two', '08.2.0', '8.2.28-0+deb12u1!', '8.2.28-bad_char' ) as $invalid ) {
+			self::assertNull( ReleaseVersion::normalize_php_version( $invalid ), $invalid );
+		}
+		self::assertNull( ReleaseVersion::compare( '1.0.0+build.1', '1.0.0' ) );
+	}
 }

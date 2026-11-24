@@ -115,8 +115,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				self::assertTrue( $matches->invoke( $updater, $staged, '2.0.0' ) );
 
 				$file = $staged . '/' . ( 'plugin' === $target_type ? 'fake-release.php' : 'style.css' );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact fixture header bytes without filesystem abstraction.
+				$original = (string) file_get_contents( $file );
 				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
-				file_put_contents( $file, "\nVersion: 2.0.0", FILE_APPEND );
+				file_put_contents( $file, str_replace( '*/', "Version: 2.0.0\n*/", $original ) );
 				self::assertFalse( $matches->invoke( $updater, $staged, '2.0.0' ) );
 			}
 		}
@@ -128,8 +130,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$updater    = $this->updater( $this->configuration( 'theme', $uri ), $this->binding( 'theme', $uri, 'stable' ), new FakeOptionDatabase( 100 ), $descriptor, $archive, $this->policy( 'theme', $uri ) );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$staged = $this->tree( 'theme', $uri, 'template-added', '2.0.0' );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read exact fixture header bytes without filesystem abstraction.
+			$original = (string) file_get_contents( $staged . '/style.css' );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for installed-package lifecycle fixtures; WordPress helpers would alter the boundary under test.
-			file_put_contents( $staged . '/style.css', "\nTemplate: parent-theme", FILE_APPEND );
+			file_put_contents( $staged . '/style.css', str_replace( '*/', "Template: parent-theme\n*/", $original ) );
 			$matches = new \ReflectionMethod( NativePackageUpdater::class, 'matches_staged_metadata' );
 			self::assertFalse( $matches->invoke( $updater, $staged, '2.0.0' ) );
 		}

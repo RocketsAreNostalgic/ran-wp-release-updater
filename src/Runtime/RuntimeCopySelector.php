@@ -71,14 +71,14 @@ final class RuntimeCopySelector {
 	public function valid_environment( array $environment ): bool {
 		if (
 			! $this->exact_keys( $environment, array( 'php_version', 'runtime_protocol', 'wordpress_version' ) )
-			|| ! in_array( $environment['runtime_protocol'], array( 6, 7, 8, 9, 10, 11 ), true )
+			|| 11 !== $environment['runtime_protocol']
 			|| ! is_string( $environment['php_version'] )
 			|| ! is_string( $environment['wordpress_version'] )
 		) {
 			return false;
 		}
 		try {
-			$this->version( $environment['php_version'] );
+			$this->php_version( $environment['php_version'] );
 			$this->wordpress_version( $environment['wordpress_version'] );
 			return true;
 		} catch ( \Throwable ) {
@@ -95,11 +95,12 @@ final class RuntimeCopySelector {
 		if ( array() === $candidates || ! $this->valid_environment( $environment ) ) {
 			throw new RuntimeException( 'Invalid runtime environment.' );
 		}
+		$php_version       = $this->php_version( $environment['php_version'] );
 		$wordpress_version = $this->wordpress_version( $environment['wordpress_version'] );
 		$compatible        = array_values(
 			array_filter(
 				$candidates,
-				fn ( array $candidate ): bool => $this->compare( $candidate['php_floor'], $environment['php_version'] ) <= 0
+				fn ( array $candidate ): bool => $this->compare( $candidate['php_floor'], $php_version ) <= 0
 					&& $this->compare( $candidate['wordpress_floor'], $wordpress_version ) <= 0
 			)
 		);
@@ -170,6 +171,23 @@ final class RuntimeCopySelector {
 		}
 
 		return $actual;
+	}
+
+	private function php_version( string $value ): string {
+		if ( 100 < strlen( $value ) ) {
+			throw new RuntimeException( 'Invalid runtime version.' );
+		}
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\z/D', $value, $matches ) ) {
+			$value = $matches[1] . '.' . $matches[2] . '.0';
+		} elseif ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*)[+~][0-9A-Za-z.+~-]+|[+~][0-9A-Za-z.+~-]+)\z/D', $value, $matches ) ) {
+			$value = $matches[1] . '.' . $matches[2] . '.' . $matches[3];
+		} elseif ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(alpha|beta|rc)([1-9]\d*)(?:[+~-][0-9A-Za-z.+~-]+)?\z/Di', $value, $matches ) ) {
+			$value = $matches[1] . '.' . $matches[2] . '.' . $matches[3] . '-' . strtolower( $matches[4] ) . '.' . $matches[5];
+		} elseif ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)(?:[+~][0-9A-Za-z.+~-]+)?\z/D', $value, $matches ) ) {
+			$value = $matches[1] . '.' . $matches[2] . '.' . $matches[3] . '-' . $matches[4];
+		}
+		$this->version( $value );
+		return $value;
 	}
 
 	private function wordpress_version( string $value ): string {

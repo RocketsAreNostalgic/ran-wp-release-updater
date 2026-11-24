@@ -61,6 +61,9 @@ final class GitHubApiClient {
 			if ( $redirects >= 1 ) {
 				throw new RuntimeException( 'The GitHub redirect limit was exceeded.' );
 			}
+			if ( null !== $filename ) {
+				self::reset_stream_target( $filename );
+			}
 
 			$next_url = self::validated_redirect_url( self::response_header( $response, 'location' ) );
 			if ( null === $next_url ) {
@@ -147,6 +150,38 @@ final class GitHubApiClient {
 			self::response_body( $response, $limit );
 		}
 		return $response;
+	}
+
+	/** Clears any 3xx redirect response bytes written to the stream target before following Location. */
+	private static function reset_stream_target( string $filename ): void {
+		clearstatcache( true, $filename );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Inspect the exact owned stream target without following symlinks before clearing redirect response bytes.
+		$stat = @lstat( $filename );
+		if ( ! is_array( $stat ) || is_link( $filename ) || 0100000 !== ( (int) $stat['mode'] & 0170000 ) || 0 === (int) $stat['size'] ) {
+			return;
+		}
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Truncate the verified local stream target in place before following a redirect.
+		$handle = @fopen( $filename, 'r+b' );
+		if ( ! is_resource( $handle ) ) {
+			return;
+		}
+		try {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Confirm the opened descriptor matches the verified regular file before truncating in place.
+			$open = @fstat( $handle );
+			if (
+				! is_array( $open )
+				|| 0100000 !== ( (int) $open['mode'] & 0170000 )
+				|| (int) $open['dev'] !== (int) $stat['dev']
+				|| (int) $open['ino'] !== (int) $stat['ino']
+			) {
+				return;
+			}
+			ftruncate( $handle, 0 );
+		} finally {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream opened for redirect target reset.
+			fclose( $handle );
+			clearstatcache( true, $filename );
+		}
 	}
 
 	private static function validated_redirect_url( ?string $url ): ?string {

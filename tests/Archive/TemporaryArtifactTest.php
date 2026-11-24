@@ -118,6 +118,16 @@ PHP;
 			}
 		}
 	}
+
+	public function test_private_file_mode_accepts_windows_0666_and_rejects_unix_0666(): void {
+		self::assertTrue( TemporaryArtifact::has_private_file_mode( 0100600, 'Linux' ) );
+		self::assertFalse( TemporaryArtifact::has_private_file_mode( 0100666, 'Linux' ) );
+		self::assertFalse( TemporaryArtifact::has_private_file_mode( 0100644, 'Linux' ) );
+		self::assertTrue( TemporaryArtifact::has_private_file_mode( 0100600, 'Windows' ) );
+		self::assertTrue( TemporaryArtifact::has_private_file_mode( 0100666, 'Windows' ) );
+		self::assertFalse( TemporaryArtifact::has_private_file_mode( 0100444, 'Windows' ) );
+		self::assertFalse( TemporaryArtifact::has_private_file_mode( 0040600, 'Windows' ) );
+	}
 	/** @return array<string,int> */
 	private function identity(): array {
 		$stat = lstat( $this->path );

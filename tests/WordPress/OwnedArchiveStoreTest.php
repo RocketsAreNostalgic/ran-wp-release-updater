@@ -6,6 +6,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress;
 
 use PHPUnit\Framework\TestCase;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
+use RAN\WPReleaseUpdater\V1\WordPress\OwnedArchiveStore;
+use RAN\WPReleaseUpdater\V1\WordPress\StagedPackageManifest;
 
 final class OwnedArchiveStoreTest extends TestCase {
 
@@ -108,6 +110,121 @@ PHP;
 				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario.
 				@unlink( $cleanup_path );
 			}
+		}
+	}
+
+	public function test_copy_and_remove_cleans_up_read_only_archive_without_chmodding_symlinks(): void {
+		$source      = tempnam( sys_get_temp_dir(), 'ran-owned-src-' );
+		$target      = tempnam( sys_get_temp_dir(), 'ran-owned-symlink-target-' );
+		$symlink_dir = sys_get_temp_dir() . '/ran-owned-link-dir-' . bin2hex( random_bytes( 8 ) );
+		$link        = $symlink_dir . DIRECTORY_SEPARATOR . 'package.zip';
+		self::assertIsString( $source );
+		self::assertIsString( $target );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create an owned-shape directory for symlink cleanup testing.
+		mkdir( $symlink_dir, 0700, true );
+		try {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact fixture bytes for read-only cleanup verification.
+			file_put_contents( $source, 'owned-archive-payload' );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact fixture bytes for symlink target preservation verification.
+			file_put_contents( $target, 'keep-permissions' );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set exact read-only permissions on the symlink target to prove remove() does not alter it.
+			chmod( $target, 0400 );
+			self::assertTrue( symlink( $target, $link ) );
+
+			$sha256 = hash_file( 'sha256', $source );
+			$size   = filesize( $source );
+			self::assertIsString( $sha256 );
+			self::assertIsInt( $size );
+			$descriptor = IdentityDescriptor::create(
+				array(
+					'artifact_filename'          => 'package.zip',
+					'artifact_identity'          => 'asset:1',
+					'artifact_sha256'            => $sha256,
+					'artifact_size'              => $size,
+					'assurance_facts'            => array(
+						'exact_artifact_identity'       => true,
+						'exact_commit_identity'         => true,
+						'exact_reacquisition_supported' => true,
+						'exact_release_identity'        => true,
+						'provenance_verified'           => true,
+						'publication_immutable'         => true,
+						'repository_identity_stable'    => true,
+						'trusted_digest_source'         => true,
+					),
+					'canonical_update_uri'       => 'https://updates.example.test/owner/package',
+					'channel'                    => 'stable',
+					'commit_identity'            => 'commit:1',
+					'installed_package_identity' => 'example-plugin/example-plugin.php',
+					'prerelease'                 => false,
+					'provider_code'              => 'neutral',
+					'release_identity'           => 'release:1',
+					'repository_identity'        => 'repo:1',
+					'repository_locator'         => 'owner/package',
+					'tag'                        => 'v1.0.0',
+					'target_type'                => 'plugin',
+					'version'                    => '1.0.0',
+				)
+			);
+
+			$store = new OwnedArchiveStore();
+			$copy  = $store->copy( $source, $descriptor );
+			self::assertIsArray( $copy );
+			$stat = lstat( $copy['path'] );
+			self::assertIsArray( $stat );
+			self::assertSame( 0400, (int) $stat['mode'] & 0777 );
+
+			$store->remove( $copy['path'], $copy['directory'] );
+			self::assertFileDoesNotExist( $copy['path'] );
+			self::assertDirectoryDoesNotExist( $copy['directory'] );
+
+			$store->remove( $link, $symlink_dir );
+			self::assertFalse( is_link( $link ) );
+			self::assertDirectoryDoesNotExist( $symlink_dir );
+			clearstatcache( true, $target );
+			$target_stat = lstat( $target );
+			self::assertIsArray( $target_stat );
+			self::assertSame( 0400, (int) $target_stat['mode'] & 0777 );
+		} finally {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Restore writable mode before best-effort fixture teardown.
+			@chmod( $target, 0600 );
+			foreach ( array( $link, $source, $target ) as $cleanup_path ) {
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown tolerates paths already removed by the scenario.
+				@unlink( $cleanup_path );
+			}
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown.
+			@rmdir( $symlink_dir );
+		}
+	}
+
+	public function test_staged_package_manifest_tracks_directories_separately_from_file_entry_budget(): void {
+		$root = sys_get_temp_dir() . '/ran-manifest-dirs-' . bin2hex( random_bytes( 8 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create a real staged directory tree for StagedPackageManifest budget tests.
+		mkdir( $root, 0700, true );
+		try {
+			$files = array();
+			for ( $index = 0; $index < 12; ++$index ) {
+				$dir = $root . '/dir-' . $index;
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create subdirectories to verify they do not consume the file entry count.
+				mkdir( $dir, 0700, true );
+				$file = $dir . '/file.txt';
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write real fixture file bytes for StagedPackageManifest hashing.
+				file_put_contents( $file, 'payload-' . $index );
+				$files[] = $file;
+			}
+			$manifest = ( new StagedPackageManifest() )->build( $root );
+			self::assertIsArray( $manifest );
+			self::assertCount( 12, $manifest );
+			self::assertSame( 10000, ( new \ReflectionClassConstant( StagedPackageManifest::class, 'MAX_ENTRIES' ) )->getValue() );
+			self::assertSame( 10000, ( new \ReflectionClassConstant( StagedPackageManifest::class, 'MAX_DIRECTORIES' ) )->getValue() );
+		} finally {
+			for ( $index = 0; $index < 12; ++$index ) {
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Best-effort fixture teardown.
+				@unlink( $root . '/dir-' . $index . '/file.txt' );
+				// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown.
+				@rmdir( $root . '/dir-' . $index );
+			}
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown.
+			@rmdir( $root );
 		}
 	}
 }

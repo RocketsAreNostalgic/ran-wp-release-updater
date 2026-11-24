@@ -119,6 +119,10 @@ final class OwnedArchiveStore {
 					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Retain best-effort native cleanup of the owned path/directory; this void cleanup deliberately suppresses local failures.
 					@rmdir( $path );
 				} else {
+					if ( 0100000 === ( $entry['mode'] & 0170000 ) ) {
+						// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Restore writable permissions on the regular owned copy before unlinking on Windows.
+						@chmod( $path, 0600 );
+					}
 					// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Retain best-effort native cleanup of the owned path/directory; this void cleanup deliberately suppresses local failures.
 					@unlink( $path );
 				}

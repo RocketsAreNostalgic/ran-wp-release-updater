@@ -76,7 +76,7 @@ final class SelectedRuntimeState {
 			}
 			return $this->broker->activate(
 				array(
-					'php_version'       => PHP_VERSION,
+					'php_version'       => self::current_php_version(),
 					'runtime_protocol'  => 11,
 					'wordpress_version' => self::normalize_word_press_version( $GLOBALS['wp_version'] ?? null ),
 				)
@@ -101,6 +101,52 @@ final class SelectedRuntimeState {
 		}
 	}
 
+	/** @internal Returns the normalized runtime PHP version, preserving prereleases while stripping distro suffixes. */
+	public static function current_php_version( string $version = PHP_VERSION ): string {
+		return self::normalize_php_version( $version ) ?? $version;
+	}
+
+	/** @internal Shared WordPress direct-filesystem check, loading file.php during WP-Cron when available. */
+	public static function direct_filesystem_available(): bool {
+		if ( ! function_exists( 'get_filesystem_method' ) ) {
+			if ( defined( 'ABSPATH' ) && '' !== ABSPATH ) {
+				$file = rtrim( ABSPATH, '/\\' ) . '/wp-admin/includes/file.php';
+				if ( is_file( $file ) && is_readable( $file ) ) {
+					require_once $file;
+				}
+			}
+		}
+		if ( function_exists( 'get_filesystem_method' ) ) {
+			return 'direct' === get_filesystem_method();
+		}
+		// @phpstan-ignore phpstanWP.wpConstant.fetch (The sealed runtime must inspect direct-filesystem policy without invoking filesystem negotiation.)
+		return ( defined( 'FS_METHOD' ) && 'direct' === FS_METHOD )
+			|| ( ! defined( 'FS_METHOD' ) && ( ( $GLOBALS['wp_filesystem'] ?? null ) instanceof \WP_Filesystem_Direct ) );
+	}
+
+	/** @internal Normalizes runtime PHP version strings including Debian/Ubuntu/Sury distro suffixes. */
+	public static function normalize_php_version( mixed $value ): ?string {
+		if ( ! is_string( $value ) || self::MAX_WORDPRESS_VERSION_LENGTH < strlen( $value ) ) {
+			return null;
+		}
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\z/D', $value, $matches ) ) {
+			return $matches[1] . '.' . $matches[2] . '.0';
+		}
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\z/D', $value ) ) {
+			return $value;
+		}
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*)[+~][0-9A-Za-z.+~-]+|[+~][0-9A-Za-z.+~-]+)\z/D', $value, $matches ) ) {
+			return $matches[1] . '.' . $matches[2] . '.' . $matches[3];
+		}
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(alpha|beta|rc)([1-9]\d*)(?:[+~-][0-9A-Za-z.+~-]+)?\z/Di', $value, $matches ) ) {
+			return $matches[1] . '.' . $matches[2] . '.' . $matches[3] . '-' . strtolower( $matches[4] ) . '.' . $matches[5];
+		}
+		if ( 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)(?:[+~][0-9A-Za-z.+~-]+)?\z/D', $value, $matches ) ) {
+			return $matches[1] . '.' . $matches[2] . '.' . $matches[3] . '-' . $matches[4];
+		}
+		return null;
+	}
+
 	/** @internal Normalizes WordPress core's bounded development-version forms. */
 	public static function normalize_word_press_version( mixed $value ): ?string {
 		if ( ! is_string( $value ) || self::MAX_WORDPRESS_VERSION_LENGTH < strlen( $value ) ) {
@@ -114,14 +160,14 @@ final class SelectedRuntimeState {
 		}
 		if (
 			1 === preg_match(
-				'/\A(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?-(?:(alpha)|(beta|rc)([1-9]\d*))(?:-(?:[1-9]\d*|src)(?:-src)?)?\z/Di',
+				'/\A(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?-(?:(alpha)([1-9]\d*)?|(beta|rc)([1-9]\d*))(?:-(?:[1-9]\d*|src)(?:-src)?)?\z/Di',
 				$value,
 				$matches
 			)
 		) {
 			$prerelease = '' !== ( $matches[4] ?? '' )
-				? 'alpha.0'
-				: strtolower( $matches[5] ?? '' ) . '.' . ( $matches[6] ?? '' );
+				? 'alpha.' . ( '' !== ( $matches[5] ?? '' ) ? $matches[5] : '0' )
+				: strtolower( $matches[6] ?? '' ) . '.' . ( $matches[7] ?? '' );
 			return $matches[1] . '.' . $matches[2] . '.' . ( '' !== ( $matches[3] ?? '' ) ? $matches[3] : '0' ) . '-' . $prerelease;
 		}
 		return 1 === preg_match( '/\A(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?\z/D', $value ) ? $value : null;

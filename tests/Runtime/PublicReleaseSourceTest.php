@@ -105,16 +105,28 @@ $credentials = 0;
 $registrar = require $data['bootstrap'];
 $source = $registrar->releases('github', 'plugin', 'acme/example', '123456789', 'stable', static function () use (&$credentials): string { ++$credentials; return 'secret'; });
 $GLOBALS['ran_wp_release_updater_v1_broker']->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 11, 'wordpress_version' => '6.8.0'));
-$result = $source->list();
-echo json_encode(array('result' => $result, 'credentials' => $credentials, 'filesystem_gate_calls' => $GLOBALS['release_source_filesystem_gate_calls'], 'http_calls' => $GLOBALS['release_source_http_calls'], 'hooks' => $GLOBALS['release_source_hooks']));
+$inspect = $source->inspect('1', 'v1.0.0');
+$acquire = $source->acquire('1', 'v1.0.0', 'v2:' . str_repeat('0', 64));
+$beforeList = array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']);
+$list = $source->list();
+echo json_encode(array('inspect' => $inspect, 'acquire' => $acquire, 'list' => $list, 'before_list' => $beforeList, 'after_list' => array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']), 'filesystem_gate_calls' => $GLOBALS['release_source_filesystem_gate_calls'], 'hooks' => $GLOBALS['release_source_hooks']));
 PHP,
 			array( 'filesystem_method' => 'ftpext' )
 		);
 
-		self::assertSame( 'filesystem_unsupported', $result['result']['code'] );
-		self::assertSame( 0, $result['credentials'] );
+		self::assertSame( 'filesystem_unsupported', $result['inspect']['code'] );
+		self::assertSame( 'filesystem_unsupported', $result['acquire']['code'] );
+		self::assertSame(
+			array(
+				'credentials' => 0,
+				'http_calls'  => 0,
+			),
+			$result['before_list']
+		);
+		self::assertNotSame( 'filesystem_unsupported', $result['list']['code'] );
+		self::assertSame( 1, $result['after_list']['credentials'] );
+		self::assertSame( 1, $result['after_list']['http_calls'] );
 		self::assertSame( 0, $result['filesystem_gate_calls'] );
-		self::assertSame( 0, $result['http_calls'] );
 		self::assertSame( array(), $result['hooks'] );
 	}
 
@@ -127,17 +139,19 @@ $credentials = 0;
 $registrar = require $data['bootstrap'];
 $GLOBALS['ran_wp_release_updater_v1_broker']->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 11, 'wordpress_version' => '6.8.0'));
 $source = $registrar->releases('github', 'plugin', 'acme/example', '123456789', 'stable', static function () use (&$credentials): string { ++$credentials; return 'secret'; });
-$first = $source->list();
+$first = $source->inspect('1', 'v1.0.0');
 $before = array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']);
 $GLOBALS['wp_filesystem'] = null;
-$cleared = array($source->list(), $source->inspect('1', 'v1.0.0'), $source->acquire('1', 'v1.0.0', 'v2:' . str_repeat('0', 64)));
+$cleared = array($source->inspect('1', 'v1.0.0'), $source->acquire('1', 'v1.0.0', 'v2:' . str_repeat('0', 64)));
 $clearedWork = array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']);
+$clearedList = $source->list();
+$afterClearedList = array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']);
 $GLOBALS['wp_filesystem'] = new stdClass();
-$replaced = array($source->list(), $source->inspect('1', 'v1.0.0'), $source->acquire('1', 'v1.0.0', 'v2:' . str_repeat('0', 64)));
+$replaced = array($source->inspect('1', 'v1.0.0'), $source->acquire('1', 'v1.0.0', 'v2:' . str_repeat('0', 64)));
 $replacedWork = array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls']);
 $GLOBALS['wp_filesystem'] = new WP_Filesystem_Direct();
-$restored = $source->list();
-echo json_encode(array('first' => $first, 'cleared' => $cleared, 'replaced' => $replaced, 'restored' => $restored, 'before' => $before, 'cleared_work' => $clearedWork, 'replaced_work' => $replacedWork, 'after' => array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls'])));
+$restored = $source->inspect('1', 'v1.0.0');
+echo json_encode(array('first' => $first, 'cleared' => $cleared, 'cleared_list' => $clearedList, 'after_cleared_list' => $afterClearedList, 'replaced' => $replaced, 'restored' => $restored, 'before' => $before, 'cleared_work' => $clearedWork, 'replaced_work' => $replacedWork, 'after' => array('credentials' => $credentials, 'http_calls' => $GLOBALS['release_source_http_calls'])));
 PHP,
 			array( 'filesystem_method' => null )
 		);
@@ -147,7 +161,8 @@ PHP,
 			self::assertSame( 'filesystem_unsupported', $operation['code'] );
 		}
 		self::assertSame( $result['before'], $result['cleared_work'] );
-		self::assertSame( $result['before'], $result['replaced_work'] );
+		self::assertNotSame( 'filesystem_unsupported', $result['cleared_list']['code'] );
+		self::assertSame( $result['after_cleared_list'], $result['replaced_work'] );
 		self::assertSame( 'operation_failed', $result['restored']['code'] );
 	}
 
@@ -172,6 +187,57 @@ PHP
 		self::assertSame( 'runtime_unavailable', $result['lost']['code'] );
 		self::assertSame( 'runtime_unavailable', $result['restored']['code'] );
 		self::assertSame( 0, $result['filesystem_gate_calls'] );
+	}
+
+	#[Test]
+	public function wp_cron_loads_file_php_for_direct_filesystem_detection_in_release_source_and_native_updater(): void {
+		$root = dirname( __DIR__, 2 ) . '/.workspaces/p0.3/php-tmp/cron-abspath-' . bin2hex( random_bytes( 6 ) );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create an isolated WordPress ABSPATH tree for WP-Cron filesystem-helper loading tests.
+		mkdir( $root . '/wp-admin/includes', 0700, true );
+		foreach ( array(
+			'direct' => true,
+			'ftpext' => false,
+		) as $method => $expected_direct ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write controlled fixture file.php returning the target filesystem method.
+			file_put_contents( $root . '/wp-admin/includes/file.php', "<?php\nfunction get_filesystem_method(): string { return " . var_export( $method, true ) . "; }\n" );
+			$result = $this->probe(
+				<<<'PHP'
+define('ABSPATH', $data['abspath'] . '/');
+$GLOBALS['wp_filesystem'] = null;
+$registrar = require $data['bootstrap'];
+$GLOBALS['ran_wp_release_updater_v1_broker']->activate(array('php_version' => PHP_VERSION, 'runtime_protocol' => 11, 'wordpress_version' => '6.8.0'));
+$source = $registrar->releases('github', 'plugin', 'acme/example', '123456789');
+$beforeLoaded = function_exists('get_filesystem_method');
+$inspect = $source->inspect('1', 'v1.0.0');
+$afterLoaded = function_exists('get_filesystem_method');
+$sharedDirect = RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::direct_filesystem_available();
+echo json_encode(array('before_loaded' => $beforeLoaded, 'after_loaded' => $afterLoaded, 'inspect' => $inspect, 'shared_direct' => $sharedDirect, 'http_calls' => $GLOBALS['release_source_http_calls']));
+PHP,
+				array(
+					'abspath'           => $root,
+					'filesystem_method' => null,
+				)
+			);
+
+			self::assertFalse( $result['before_loaded'], $method );
+			self::assertTrue( $result['after_loaded'], $method );
+			self::assertSame( $expected_direct, $result['shared_direct'], $method );
+			if ( $expected_direct ) {
+				self::assertNotSame( 'filesystem_unsupported', $result['inspect']['code'], $method );
+				self::assertSame( 1, $result['http_calls'], $method );
+			} else {
+				self::assertSame( 'filesystem_unsupported', $result['inspect']['code'], $method );
+				self::assertSame( 0, $result['http_calls'], $method );
+			}
+		}
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove temporary fixture file.php after test assertions.
+		@unlink( $root . '/wp-admin/includes/file.php' );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove temporary fixture directories after test assertions.
+		@rmdir( $root . '/wp-admin/includes' );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove temporary fixture directories after test assertions.
+		@rmdir( $root . '/wp-admin' );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Remove temporary fixture directories after test assertions.
+		@rmdir( $root );
 	}
 
 	/**

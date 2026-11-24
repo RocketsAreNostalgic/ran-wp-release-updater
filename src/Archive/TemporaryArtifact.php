@@ -146,12 +146,24 @@ final class TemporaryArtifact {
 			&& $after === $this->identity;
 	}
 
+	/** @internal Windows lstat reports 0666 for writable regular files even after chmod(0600). */
+	public static function has_private_file_mode( int $mode, string $os_family = PHP_OS_FAMILY ): bool {
+		if ( 0100000 !== ( $mode & 0170000 ) ) {
+			return false;
+		}
+		$permissions = $mode & 0777;
+		if ( 'Windows' === $os_family ) {
+			return in_array( $permissions, array( 0600, 0666 ), true );
+		}
+		return 0600 === $permissions;
+	}
+
 	/** @return array<string, int>|null */
 	private static function file_identity( string $path ): ?array {
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
 		$stat = @lstat( $path );
 		if ( ! is_array( $stat ) || is_link( $path ) || 0100000 !== ( (int) $stat['mode'] & 0170000 )
-			|| 1 !== (int) $stat['nlink'] || 0600 !== ( (int) $stat['mode'] & 0777 ) ) {
+			|| 1 !== (int) $stat['nlink'] || ! self::has_private_file_mode( (int) $stat['mode'] ) ) {
 			return null;
 		}
 
