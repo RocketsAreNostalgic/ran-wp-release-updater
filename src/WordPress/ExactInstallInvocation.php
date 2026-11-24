@@ -81,9 +81,9 @@ final class ExactInstallInvocation {
 			if (
 				$install_result instanceof \WP_Error
 				&& is_array( $hook_extra )
-				&& ( $hook_extra['type'] ?? null ) === $target_type
-				&& ( $hook_extra['action'] ?? null ) === 'update'
 				&& ( $hook_extra[ $target_type ] ?? null ) === $identity
+				&& ( ! array_key_exists( 'type', $hook_extra ) || $target_type === $hook_extra['type'] )
+				&& ( ! array_key_exists( 'action', $hook_extra ) || 'update' === $hook_extra['action'] )
 			) {
 				$install_package_error = (string) $install_result->get_error_code();
 			}

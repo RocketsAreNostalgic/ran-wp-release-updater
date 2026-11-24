@@ -3874,10 +3874,9 @@ class WP_Upgrader {
 class Plugin_Upgrader extends WP_Upgrader {
 	/** @param list<string> $plugins @return array<string,mixed> */
 	public function bulk_upgrade( array $plugins ): array {
+		// Mirror real Core Plugin_Upgrader::bulk_upgrade(), which omits 'type' and 'action' from hook_extra.
 		$hook_extra = array(
 			'plugin' => $plugins[0],
-			'type'   => 'plugin',
-			'action' => 'update',
 		);
 		return array( $plugins[0] => $this->simulate_run( $GLOBALS['ran_scenario'], $hook_extra ) );
 	}

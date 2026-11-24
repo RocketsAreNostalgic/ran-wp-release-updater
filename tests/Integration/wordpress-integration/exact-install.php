@@ -43,14 +43,15 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	}
 
 	$observed = (object) array(
-		'downloads'       => 0,
-		'inspections'     => 0,
-		'deletions'       => 0,
-		'upgrader'        => null,
-		'package'         => null,
-		'completions'     => array(),
-		'foreign_restore' => 0,
-		'stdout_bytes'    => 0,
+		'downloads'         => 0,
+		'inspections'       => 0,
+		'deletions'         => 0,
+		'upgrader'          => null,
+		'package'           => null,
+		'completions'       => array(),
+		'foreign_restore'   => 0,
+		'stdout_bytes'      => 0,
+		'block_backup_move' => $backup_move_failed,
 	);
 	ran_wp_release_updater_test_exact_http( $archive, $mode, $observed );
 	$standalone_lock_fault = in_array( $mode, array( 'exact-lease-fail', 'exact-early-lease-fail' ), true );
@@ -135,6 +136,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	try {
 		$report = apply_filters( 'ran_wp_release_updater_install_exact_release_v1', null, $type, $identity, '301', 'v2.0.0', $expected_version, 'exact-refuse' !== $mode && 'older' === $direction );
 	} finally {
+		$observed->block_backup_move = false;
 		if ( $credentials_refused ) {
 			remove_filter( 'request_filesystem_credentials', '__return_false' );
 		}
@@ -429,20 +431,23 @@ function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, strin
 			$observed->package  = $package;
 			if ( 'exact-backup-move-fail' === $mode && is_string( $reply ) ) {
 				// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Fail only the disposable backup target inside move_to_temp_backup_dir() so Core emits fs_temp_backup_move deterministically regardless of runner user permissions.
-				$GLOBALS['wp_filesystem'] = new class( $backup ) extends WP_Filesystem_Direct {
-					public function __construct( private string $backup_path ) {
+				$GLOBALS['wp_filesystem'] = new class( $backup, $observed ) extends WP_Filesystem_Direct {
+					public function __construct( private string $backup_path, private stdClass $observation ) {
 						parent::__construct( null );
 					}
 
 					public function delete( $file, $recursive = false, $type = false ) {
 						if ( rtrim( (string) $file, '/\\' ) === $this->backup_path ) {
-							return false;
+							if ( $this->observation->block_backup_move ) {
+								return false;
+							}
+							++$this->observation->deletions;
 						}
 						return parent::delete( $file, $recursive, $type );
 					}
 
 					public function move( $source, $destination, $overwrite = false ) {
-						if ( rtrim( (string) $destination, '/\\' ) === $this->backup_path ) {
+						if ( $this->observation->block_backup_move && rtrim( (string) $destination, '/\\' ) === $this->backup_path ) {
 							return false;
 						}
 						return parent::move( $source, $destination, $overwrite );
