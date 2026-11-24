@@ -410,21 +410,35 @@ request-local. The report contains no archive path.
 The plugin route uses native one-item `Plugin_Upgrader::bulk_upgrade()`. The theme
 route uses native `Theme_Upgrader::upgrade()`. WordPress Core natively owns
 temporary backup, rollback (`restore_temp_backup` at shutdown priority 10),
-backup deletion (`delete_temp_backup` at shutdown priority 100), and
-`.maintenance` management. After a clean return with matching completion
-evidence and no pending restoration at shutdown priority 10, the updater verifies
-the installed destination, mutation lock, and lightweight installed package
-headers/identity and finalizes synchronously (cleaning up private archive
-custody, invoking host completion, releasing any standalone lock, and disarming
-its own shutdown fallback). Pending restoration, interrupted upgrades, and
-unverified install results retain WordPress Core's native shutdown callbacks
-and the updater's shutdown cleanup fallback.
+backup deletion (`delete_temp_backup` at shutdown priority 100, which also runs
+after a failed restore), and `.maintenance` management. After a clean return
+with matching completion evidence and no pending restoration at shutdown
+priority 10, the updater verifies the installed destination, mutation lock, and
+lightweight installed package headers/identity and finalizes synchronously
+(cleaning up private archive custody, invoking host completion, releasing any
+standalone lock, and disarming its own shutdown fallback). Pending restoration
+and post-registration unverified install results retain WordPress Core's native
+shutdown callbacks alongside the updater's shutdown cleanup fallback. Because
+the updater relies on native `WP_Upgrader` rather than a custom recovery layer,
+an unhandled exception thrown after `move_to_temp_backup_dir()` and before
+`WP_Upgrader::run()` registers its shutdown callbacks leaves the target
+unrecovered by Core and relies on WordPress's 10-minute `.maintenance` timeout
+while the updater's own shutdown fallback still cleans up private custody,
+releases its lock, and reports an uncertain outcome.
+
+If an exact install is refused before WordPress moves the live package to
+temporary backup (for example in `upgrader_pre_install`, `upgrader_source_selection`,
+or on `fs_no_content_dir` / `fs_temp_backup_mkdir`), the updater disarms Core's
+`restore_temp_backup` (priority 10) and `delete_temp_backup` (priority 100)
+shutdown callbacks for that upgrader instance so a pre-existing stale directory
+under `upgrade-temp-backup/` cannot overwrite the healthy live installation or
+be deleted by the refused invocation.
 
 The operation buffers native progress without flushing the caller's response.
 WordPress's asynchronous translation callback leaves pending language packs for
 a later update while the exact install is running. When the native call returns
-or throws, the updater removes its temporary upgrader filters and leaves
-WordPress Core's scheduled backup callbacks in place.
+or throws, the updater removes its temporary upgrader filters and leaves any
+post-move WordPress Core shutdown backup callbacks in place.
 
 The report carries `status`, `code`, `version`, `relationship`,
 `finalization_pending` and `finalization`. Only `installed` with

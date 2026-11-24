@@ -65,19 +65,39 @@ final class ExactInstallInvocation {
 		$level                   = ob_get_level();
 		$upgrader                = $this->upgrader;
 		$theme_cache_args        = $upgrader instanceof \Theme_Upgrader ? self::theme_cache_action_arguments() : null;
+		$source_admitted         = false;
+		$result                  = null;
 		// Core's translation upgrader uses its own output-flushing skin. Leave its offers for a later update.
 		$defer_translations = static fn (): bool => false;
+		$observe_source     = static function ( mixed $source, mixed $remote_source = null, mixed $calling_upgrader = null ) use ( $upgrader, &$source_admitted ): mixed {
+			unset( $remote_source );
+			if ( $calling_upgrader === $upgrader && ! ( $source instanceof \WP_Error ) ) {
+				$source_admitted = true;
+			}
+			return $source;
+		};
 		add_filter( 'async_update_translation', $defer_translations, PHP_INT_MAX, 0 );
+		add_filter( 'upgrader_source_selection', $observe_source, PHP_INT_MAX, 3 );
 		ob_start();
 		try {
 			if ( $upgrader instanceof \Plugin_Upgrader ) {
 				$results = $upgrader->bulk_upgrade( array( $identity ) );
-				return is_array( $results ) && array( $identity ) === array_keys( $results ) ? $results[ $identity ] : false;
+				$result  = is_array( $results ) && array( $identity ) === array_keys( $results ) ? $results[ $identity ] : false;
+				return $result;
 			}
-			$result = $upgrader->upgrade( $identity );
-			return true === $result ? $upgrader->result : $result;
+			$upgrade = $upgrader->upgrade( $identity );
+			$result  = true === $upgrade ? $upgrader->result : $upgrade;
+			return $result;
 		} finally {
 			remove_filter( 'async_update_translation', $defer_translations, PHP_INT_MAX );
+			remove_filter( 'upgrader_source_selection', $observe_source, PHP_INT_MAX );
+			$upgrader_error      = $result instanceof \WP_Error ? $result : ( $upgrader->result instanceof \WP_Error ? $upgrader->result : null );
+			$backup_move_skipped = ! $source_admitted
+				|| ( $upgrader_error instanceof \WP_Error && in_array( $upgrader_error->get_error_code(), array( 'fs_no_content_dir', 'fs_temp_backup_mkdir' ), true ) );
+			if ( $backup_move_skipped ) {
+				remove_action( 'shutdown', array( $upgrader, 'restore_temp_backup' ), 10 );
+				remove_action( 'shutdown', array( $upgrader, 'delete_temp_backup' ), 100 );
+			}
 			$this->remove_upgrade_filters( $theme_cache_args );
 			if ( ob_get_level() === $level + 1 ) {
 				ob_end_clean();
