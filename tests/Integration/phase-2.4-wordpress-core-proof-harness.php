@@ -270,13 +270,7 @@ function ran_wp_release_updater_test_build_target( string $type, string $identit
 				'target'  => $target_status,
 				'manager' => $manager_status,
 			),
-			'targetName'         => 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
-				array(
-					'network_id'                 => 1,
-					'target_type'                => $type,
-					'installed_package_identity' => $identity,
-				)
-			),
+			'targetName'         => 'auto_updater.lock',
 			'sanity'             => array( 'offer_hook_fired' => false ),
 		);
 	}
@@ -295,13 +289,7 @@ function ran_wp_release_updater_test_build_target( string $type, string $identit
 			'target'  => $target_status,
 			'manager' => $manager_status,
 		),
-		'targetName'         => 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
-			array(
-				'network_id'                 => 1,
-				'target_type'                => $type,
-				'installed_package_identity' => $identity,
-			)
-		),
+		'targetName'         => 'auto_updater.lock',
 		'sanity'             => array(
 			'offer_hook_fired' => is_array( $offer ),
 		),

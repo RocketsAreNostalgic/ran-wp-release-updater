@@ -26,7 +26,8 @@ final class P03PairedCompositionTest extends TestCase {
 		self::assertSame( 'update_available', $result['observations'][1][1]['reason'] );
 		self::assertSame( $type, $result['observations'][0][1]['target_type'] );
 		self::assertSame( $result['concise']['binding'], $result['explicit']['binding'] );
-		self::assertSame( $result['concise']['binding']['binding_hash'], $result['explicit']['binding']['binding_hash'] );
+		self::assertSame( $result['concise']['binding_hash'], $result['explicit']['binding_hash'] );
+		self::assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', $result['concise']['binding_hash'] );
 		self::assertSame( $result['concise']['archive_policy'], $result['explicit']['archive_policy'] );
 		self::assertSame( $result['concise']['receipt'], $result['explicit']['receipt'] );
 		$concise_status  = $result['concise']['status'];
@@ -128,12 +129,12 @@ $headers = array(
 	'Author' => '', 'Description' => '', 'Name' => 'Example', 'RequiresPHP' => '',
 	'RequiresWP' => '', 'UpdateURI' => 'https://github.com/acme/example', 'Version' => '1.0.0', 'PluginURI' => '',
 );
-$binding = \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::create(array(
+$binding = array(
 	'canonical_repository_locator' => 'acme/example', 'canonical_update_uri' => 'https://github.com/acme/example',
 	'installed_package_identity' => $identity, 'maximum_artifact_bytes' => 52428800, 'network_id' => 1, 'php_runtime_version' => PHP_VERSION,
 	'provider_code' => 'github', 'release_channel' => 'stable', 'stable_repository_identity' => '123456789',
 	'target_type' => $data['type'], 'theme_template' => '', 'update_policy' => 'manual', 'wordpress_runtime_version' => '6.8.0',
-));
+);
 $configuration = array(
 	'installed_directory' => dirname( $data['installed'] ),
 	'headers' => $headers,
@@ -161,10 +162,10 @@ $explicit = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::regis
 if (! $explicit instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater) {
 	throw new RuntimeException('Explicit GitHub composition failed.');
 }
-$conciseBinding = (new ReflectionProperty($concise, 'binding'))->getValue($concise)->to_array();
+$conciseBinding = (new ReflectionProperty($concise, 'target_binding'))->getValue($concise);
 $conciseHeaders = (new ReflectionProperty($concise, 'headers'))->getValue($concise);
 $concisePolicy = (new ReflectionProperty($concise, 'archive_policy'))->getValue($concise);
-$explicitBinding = (new ReflectionProperty($explicit, 'binding'))->getValue($explicit)->to_array();
+$explicitBinding = (new ReflectionProperty($explicit, 'target_binding'))->getValue($explicit);
 $explicitHeaders = (new ReflectionProperty($explicit, 'headers'))->getValue($explicit);
 $explicitPolicy = (new ReflectionProperty($explicit, 'archive_policy'))->getValue($explicit);
 if ($conciseBinding !== $explicitBinding || $conciseHeaders !== $explicitHeaders || $concisePolicy !== $explicitPolicy) {
@@ -248,11 +249,11 @@ $explicitArchive = $explicit->filter_pre_download(false, $explicitOffer['package
 if (! is_string($conciseArchive) || ! is_string($explicitArchive)) throw new RuntimeException('Receipt fixture failed.');
 $receiptFacts = static function (object $native): array {
 	$pending = (new ReflectionProperty($native, 'pending_install'))->getValue($native);
-	$receipt = $pending->receipt();
-	if (! $receipt instanceof \RAN\WPReleaseUpdater\V1\Contract\AcquisitionReceipt) {
-		throw new RuntimeException('Pending receipt fixture failed.');
+	$proof = $pending->archive_proof();
+	if (! is_array($proof)) {
+		throw new RuntimeException('Pending archive proof fixture failed.');
 	}
-	return (new ReflectionProperty($receipt, 'facts'))->getValue($receipt);
+	return $proof;
 };
 echo json_encode(array(
 	'observations' => $GLOBALS['p03_observations'],
@@ -262,12 +263,12 @@ echo json_encode(array(
 	'provider_calls_after_status' => $providerCallsAfterStatus,
 	'concise' => array(
 		'adapter' => $conciseAdapter,
-		'archive_policy' => $concisePolicy, 'binding' => $conciseBinding, 'hook_count' => count($first),
+		'archive_policy' => $concisePolicy, 'binding' => $conciseBinding, 'binding_hash' => (new ReflectionProperty($concise, 'binding_hash'))->getValue($concise), 'hook_count' => count($first),
 		'hook_names' => $normalise($first), 'offer' => $conciseOffer, 'receipt' => $receiptFacts($concise), 'status' => $concise->status(),
 	),
 	'explicit' => array(
 		'adapter' => $explicitAdapter,
-		'archive_policy' => $explicitPolicy, 'binding' => $explicitBinding, 'hook_count' => count($second),
+		'archive_policy' => $explicitPolicy, 'binding' => $explicitBinding, 'binding_hash' => (new ReflectionProperty($explicit, 'binding_hash'))->getValue($explicit), 'hook_count' => count($second),
 		'hook_names' => $normalise($second), 'offer' => $explicitOffer, 'receipt' => $receiptFacts($explicit), 'status' => $explicit->status(),
 	),
 ), JSON_THROW_ON_ERROR);

@@ -108,12 +108,13 @@ Missing binding state or release descriptors take the existing failure/cleanup
 paths before typed receipt or archive operations. Native lifecycle tests cover
 missing-descriptor rejection, archive cleanup and lease release.
 
-`src/WordPress/BindingFenceCoordinator.php` is a direct level-8 root.
-Its verification result distinguishes success (state and database time present)
-from a lost fence. Local callable guards retain duck-typed database objects,
-including magic-method proxies, without requiring a new interface. SQL, lease
-and exact-value compare-and-swap behaviour remain covered by existing tests
-and the native MySQL proof.
+`src/WordPress/WordPressUpdaterLock.php` is a direct level-8 root.
+It coordinates standalone mutations on WordPress Core's `auto_updater.lock`
+option using fractional tokens, `'off'` autoload, `INSERT IGNORE` acquisition,
+stale-only reclamation, fail-closed corrupt-lock handling, and exact-token
+`CAST(option_value AS BINARY)` deletion. Unit tests and the isolated real MySQL
+proof cover concurrency, stale takeover, corrupt lock refusal, and zero
+deprecated-syntax warnings.
 
 `src/Runtime/RequestBroker.php` is a direct level-8 root. Local callable
 checks supplement source ownership and exact-method validation; they do not

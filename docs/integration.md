@@ -469,7 +469,7 @@ Important native failure codes include:
 | Code | Meaning |
 | --- | --- |
 | `runtime_package_identity_invalid` | Installed package/version/Update URI no longer matches the admitted target |
-| `binding_fence_lost` | The updater could not establish, retain, or verify the persistent target fence; this includes competing ownership and storage/CAS/database-time failures that make fence authority unprovable |
+| `binding_fence_lost` | The updater could not establish, retain, or verify WordPress's `auto_updater.lock` for the mutation; this includes competing ownership, missing/corrupt Core automatic locks, and database failures that make lock authority unprovable |
 | `acquisition_failed` | The provider release/archive could not be freshly inspected or acquired |
 | `remote_release_changed` | The release no longer matches the exact release previously offered |
 | `acquisition_identity_invalid` | Acquired bytes failed the expected archive/provider identity checks |
@@ -694,12 +694,12 @@ No additional persistent recovery journal is owned by this library.
 
 ### Retained native update outcome
 
-The existing target status includes nullable `native.last_native_outcome`, read
-from the current binding's non-autoloaded base-options row without taking a lease.
-An inactive handle exposes no cached outcome because its current binding cannot
+The existing target status includes nullable `native.last_native_outcome`, kept
+request-local on the active target without writing per-target `wp_options` rows.
+An inactive handle exposes no cached outcome because its runtime authority cannot
 be verified.
 It contains `outcome`, `source`, `wordpress_code`, `release_identity`, `version`,
-`last_observed_step`, and `recorded_at` (database Unix time in seconds).
+`last_observed_step`, and `recorded_at` (Unix time in seconds).
 `outcome` is `verified_success`, `uncertain`, or an existing closed native failure
 reason. `source` is `wordpress` for an attributable native error, otherwise
 `release_updater` for this library's refusal or verification result.
@@ -718,22 +718,12 @@ An error before archive admission can have a known refusal and a null step.
 WordPress codes are retained where safely attributable through native result
 hooks or automatic results. Unobserved unpack failures remain uncertain with no
 invented cause. Filesystem connection can fail before this library enters the
-attempt; no new outcome is guaranteed then. A killed request or unavailable
-storage can prevent a write. Uncertainty never proves rollback or old bytes.
+attempt; no new outcome is guaranteed then. Uncertainty never proves rollback or
+old bytes.
 
-There is one small record per target ever bound, within the existing 16 KiB row
-limit. Same-binding discovery, renewal, release and refresh retain it. Verified
-success replaces it; a new binding clears it without resetting fence counters.
-Package deletion removes neither the row nor the outcome. There is no deletion
-hook, binding-removal API or library uninstall cleanup. Consumers filter by
-current management and an outcome time newer than their package setup.
-
-Schema-1 rows remain readable; writes use schema 2 and preserve generations and
-epochs. Completion consumes the receipt durably while holding the lease through
-cleanup and the host callback, then commits the final outcome with lease release
-in one fenced CAS. Stale writers cannot overwrite a successor's outcome. No
-public outcome writer is exposed. Uninstall cleanup belongs to a consumer that
-can establish exact binding ownership and quiescence; otherwise retain the row.
+No per-target lease or outcome option rows are written to `wp_options`. Hosts
+that require cross-request outcome history observe the request-local callbacks
+and status directly.
 
 Prospective inspection already exposes path-free `artifact_identity`,
 `artifact_sha256`, `artifact_size` and `commit_identity`. They describe the freshly

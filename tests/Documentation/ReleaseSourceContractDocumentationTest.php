@@ -37,11 +37,11 @@ final class ReleaseSourceContractDocumentationTest extends TestCase {
 			);
 		}
 		self::assertStringContainsString(
-			'could not establish, retain, or verify the persistent target fence',
+			"could not establish, retain, or verify WordPress's `auto_updater.lock`",
 			$integration
 		);
 		self::assertStringContainsString(
-			'competing ownership and storage/CAS/database-time failures',
+			'competing ownership, missing/corrupt Core automatic locks, and database failures',
 			$integration
 		);
 

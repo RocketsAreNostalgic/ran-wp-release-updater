@@ -58,7 +58,8 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'stdout_bytes'    => 0,
 	);
 	ran_wp_release_updater_test_exact_http( $archive, $mode, $observed );
-	$composition = GitHubReleaseAdapter::compose_from_declaration(
+	$standalone_lock_fault = in_array( $mode, array( 'exact-lease-fail', 'exact-early-lease-fail' ), true );
+	$composition           = GitHubReleaseAdapter::compose_from_declaration(
 		array(
 			'installed_file'           => $header_file,
 			'target_type'              => $type,
@@ -69,16 +70,10 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 			'maximum_artifact_bytes'   => 52_428_800,
 			'credential_resolver'      => null,
 			'descriptor_admission'     => null,
-			'operation_guard'          => static fn (): bool => true,
-			'native_mutation_begin'    => static fn (): string => 'exact-install-proof',
-			'native_mutation_complete' => static function ( string $owner, string $target_type, string $installed_identity, string $outcome ) use ( $observed, $mode ): void {
+			'operation_guard'          => $standalone_lock_fault ? null : static fn (): bool => true,
+			'native_mutation_begin'    => $standalone_lock_fault ? null : static fn (): string => 'exact-install-proof',
+			'native_mutation_complete' => $standalone_lock_fault ? null : static function ( string $owner, string $target_type, string $installed_identity, string $outcome ) use ( $observed, $mode ): void {
 				$observed->completions[] = array( $owner, $target_type, $installed_identity, $outcome );
-				if ( 'exact-lease-fail' === $mode ) {
-					add_filter(
-						'query',
-						static fn ( string $sql ): string => str_starts_with( $sql, 'UPDATE ' ) && str_contains( $sql, 'ran_wp_release_updater_target_v1_' ) ? $sql . ' AND 1 = 0' : $sql
-					);
-				}
 				if ( 'exact-host-fail' === $mode ) {
 					throw new RuntimeException( 'Injected host completion failure.' );
 				}
@@ -93,7 +88,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		1,
 		null
 	);
-	$updater     = $composition['native'];
+	$updater               = $composition['native'];
 	if ( ! $updater instanceof NativePackageUpdater ) {
 		throw new RuntimeException( 'The exact-install fixture could not register its target.' );
 	}
@@ -192,7 +187,6 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'exact-credentials-refused' => 'unverified_install_result',
 		'exact-early-refusal' => 'unverified_install_result',
 		'exact-early-lease-fail' => 'lease_release_failed',
-		'exact-commit-fail' => 'install_commit_failed',
 		'exact-archive-fail'  => 'archive_cleanup_failed',
 		'exact-lease-fail'    => 'lease_release_failed',
 		'exact-host-fail'     => 'host_completion_failed',
@@ -205,16 +199,15 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	$refused                  = in_array( $mode, array( 'exact-refuse', 'exact-listed-change' ), true );
 	$changed                  = 'exact-changed' === $mode;
 	$finalized                = ! $pending && ! $refused && ! $changed && ! $early_refusal && ! $credentials_refused;
-	$commit_failed            = 'exact-commit-fail' === $mode;
 	$finalization             = $pending ? null : array(
-		'commit'          => $finalized ? ( $commit_failed ? 'failed' : 'completed' ) : 'not_attempted',
-		'host_completion' => 'exact-host-fail' === $mode ? 'failed' : ( $finalized ? 'completed' : 'not_applicable' ),
-		'lease'           => in_array( $mode, array( 'exact-lease-fail', 'exact-early-lease-fail' ), true ) ? 'failed' : 'released',
+		'commit'          => $finalized ? 'completed' : 'not_attempted',
+		'host_completion' => 'exact-host-fail' === $mode ? 'failed' : ( $finalized && ! $standalone_lock_fault ? 'completed' : 'not_applicable' ),
+		'lease'           => $standalone_lock_fault ? 'failed' : 'not_held',
 		'archive_cleanup' => 'exact-archive-fail' === $mode ? 'failed' : 'clean',
 	);
 	$success                  = in_array( $mode, array( 'exact-success', 'exact-preexisting-maintenance', 'exact-pending-translation' ), true );
-	$host_completed           = $finalized ? array(
-		array( 'exact-install-proof', $type, $identity, $commit_failed || 'exact-archive-fail' === $mode ? 'uncertain' : 'verified_success' ),
+	$host_completed           = $finalized && ! $standalone_lock_fault ? array(
+		array( 'exact-install-proof', $type, $identity, 'exact-archive-fail' === $mode ? 'uncertain' : 'verified_success' ),
 	) : array();
 	$core_restoring           = 'exact-failure' === $mode || $early_refusal || str_starts_with( $mode, 'exact-rollback-' );
 	$restoring                = 'exact-failure' === $mode || $orphaned_backup;
@@ -269,7 +262,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	}
 	add_action(
 		'shutdown',
-		static function () use ( $checks, $type, $mode, $identity, $backup, $maintenance, $foreign_maintenance, $restoring, $expected_installed_bytes, $read_bytes, $main_file, $before, $observed, $host_completed, $pending, $updater, $report, $early_refusal, $stale_file, $stale_bytes, $backup_fault, $preserved_backup, $alternate_destination ): void {
+		static function () use ( $checks, $type, $mode, $identity, $backup, $maintenance, $foreign_maintenance, $restoring, $expected_installed_bytes, $read_bytes, $main_file, $before, $observed, $host_completed, $finalized, $pending, $updater, $report, $early_refusal, $stale_file, $stale_bytes, $backup_fault, $preserved_backup, $alternate_destination ): void {
 			$after       = $read_bytes( $backup_fault->installed_file ?? $main_file );
 			$is_active   = 'plugin' === $type ? is_plugin_active( $identity ) : get_stylesheet() === $identity;
 			$completions = $pending ? array( array( 'exact-install-proof', $type, $identity, 'uncertain' ) ) : $host_completed;
@@ -279,7 +272,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 				'shutdown_cleanup'   => is_dir( $backup ) === $preserved_backup && array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
 				'stale_backup_after' => ! $early_refusal || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
 				'single_completion'  => $completions === $observed->completions,
-				'backup_deletions'   => ( 'exact-delete-fail' === $mode ? 2 : count( $host_completed ) ) === $observed->deletions,
+				'backup_deletions'   => ( 'exact-delete-fail' === $mode ? 2 : ( $finalized ? 1 : 0 ) ) === $observed->deletions,
 				'maintenance_after'  => $foreign_maintenance ? '<?php $upgrading = 1; // fixture-owned marker' === $read_bytes( $maintenance ) : ! is_file( $maintenance ),
 				'other_upgrader'     => 1 === $observed->foreign_restore,
 			);
@@ -1022,7 +1015,7 @@ function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, strin
 				if ( 'exact-early-lease-fail' === $mode ) {
 					add_filter(
 						'query',
-						static fn ( string $sql ): string => str_starts_with( $sql, 'UPDATE ' ) && str_contains( $sql, 'ran_wp_release_updater_target_v1_' ) ? $sql . ' AND 1 = 0' : $sql
+						static fn ( string $sql ): string => str_starts_with( $sql, 'DELETE ' ) && str_contains( $sql, 'auto_updater.lock' ) ? $sql . ' AND 1 = 0' : $sql
 					);
 				}
 				return new WP_Error( 'exact_fixture_pre_install_refusal', 'Refused before Core moves the backup.' );
@@ -1111,17 +1104,10 @@ function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, strin
 			if ( 'exact-interrupted' === $mode ) {
 				throw new RuntimeException( 'Injected interruption before the native upgrader returns.' );
 			}
-			if ( 'exact-commit-fail' === $mode ) {
-				$failed = false;
+			if ( 'exact-lease-fail' === $mode ) {
 				add_filter(
 					'query',
-					static function ( string $sql ) use ( &$failed ): string {
-						if ( ! $failed && str_starts_with( $sql, 'UPDATE ' ) && str_contains( $sql, 'ran_wp_release_updater_target_v1_' ) ) {
-							$failed = true;
-							return $sql . ' AND 1 = 0';
-						}
-						return $sql;
-					}
+					static fn ( string $sql ): string => str_starts_with( $sql, 'DELETE ' ) && str_contains( $sql, 'auto_updater.lock' ) ? $sql . ' AND 1 = 0' : $sql
 				);
 			}
 		},

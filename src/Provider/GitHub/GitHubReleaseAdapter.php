@@ -7,7 +7,6 @@ namespace RAN\WPReleaseUpdater\V1\Provider\GitHub;
 use InvalidArgumentException;
 use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
 use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
-use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
@@ -17,6 +16,8 @@ use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
 final class GitHubReleaseAdapter implements ReleaseAdapter {
 
 	private GitHubReleaseService $service;
+	/** @var array{canonical_repository_locator:string,canonical_update_uri:string,installed_package_identity:string,maximum_artifact_bytes:int,network_id:int,php_runtime_version:string,provider_code:string,release_channel:string,stable_repository_identity:string,target_type:string,theme_template:string,update_policy:string,wordpress_runtime_version:string} */
+	private array $target_binding;
 
 	/**
 	 * @internal Selected-runtime GitHub declaration composition.
@@ -82,22 +83,20 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				'code'   => 'target_composition_failed',
 			);
 		}
-		$binding                     = BindingRecord::create(
-			array(
-				'canonical_repository_locator' => $locator,
-				'canonical_update_uri'         => $uri,
-				'installed_package_identity'   => $identity,
-				'maximum_artifact_bytes'       => $declaration['maximum_artifact_bytes'],
-				'network_id'                   => $network_id,
-				'php_runtime_version'          => SelectedRuntimeState::current_php_version(),
-				'provider_code'                => 'github',
-				'release_channel'              => $declaration['channel'],
-				'stable_repository_identity'   => $repository_id,
-				'target_type'                  => $declaration['target_type'],
-				'theme_template'               => $headers['Template'],
-				'update_policy'                => $declaration['update_policy'],
-				'wordpress_runtime_version'    => $wordpress_version,
-			)
+		$target_binding              = array(
+			'canonical_repository_locator' => $locator,
+			'canonical_update_uri'         => $uri,
+			'installed_package_identity'   => $identity,
+			'maximum_artifact_bytes'       => $declaration['maximum_artifact_bytes'],
+			'network_id'                   => $network_id,
+			'php_runtime_version'          => SelectedRuntimeState::current_php_version(),
+			'provider_code'                => 'github',
+			'release_channel'              => $declaration['channel'],
+			'stable_repository_identity'   => $repository_id,
+			'target_type'                  => $declaration['target_type'],
+			'theme_template'               => $headers['Template'],
+			'update_policy'                => $declaration['update_policy'],
+			'wordpress_runtime_version'    => $wordpress_version,
 		);
 		$resolver                    = new GitHubCredentialResolver( $declaration['credential_resolver'] );
 		$native_headers              = $headers;
@@ -126,12 +125,12 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 			'staged_package_update_uri'  => $uri,
 			'target_type'                => $declaration['target_type'],
 			'theme_template'             => $headers['Template'],
-			'wordpress_runtime_version'  => $binding->to_array()['wordpress_runtime_version'],
+			'wordpress_runtime_version'  => $wordpress_version,
 		);
 		return array(
 			'native' => self::register_from_configuration(
 				$configuration,
-				$binding,
+				$target_binding,
 				$resolver,
 				$GLOBALS['wpdb'],
 				$archive_policy,
@@ -150,11 +149,12 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 
 	/**
 	 * @param array<string, mixed> $configuration
+	 * @param array<string, mixed> $target_binding
 	 * @param array<string, mixed> $archive_policy
 	 */
 	public static function register_from_configuration(
 		array $configuration,
-		BindingRecord $binding,
+		array $target_binding,
 		?GitHubCredentialResolver $credentials,
 		object $wpdb,
 		array $archive_policy,
@@ -168,28 +168,30 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		bool $allow_working_copy = false
 	): ?NativePackageUpdater {
 		try {
-			$adapter = new self( $binding, $credentials, $operation_guard, null === $selected_runtime_state ? null : static fn(): ?string => $selected_runtime_state->liveness_code() );
+			$adapter = new self( $target_binding, $credentials, $operation_guard, null === $selected_runtime_state ? null : static fn(): ?string => $selected_runtime_state->liveness_code() );
 		} catch ( InvalidArgumentException ) {
 			return null;
 		}
-		$updater = NativePackageUpdater::from_configuration( $configuration, $binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse, operation_guard: $operation_guard, native_mutation_begin: $native_mutation_begin, native_mutation_complete: $native_mutation_complete, descriptor_admission: $descriptor_admission, allow_working_copy: $allow_working_copy );
+		$updater = NativePackageUpdater::from_configuration( $configuration, $target_binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse, operation_guard: $operation_guard, native_mutation_begin: $native_mutation_begin, native_mutation_complete: $native_mutation_complete, descriptor_admission: $descriptor_admission, allow_working_copy: $allow_working_copy );
 		if ( $updater instanceof NativePackageUpdater ) {
 			$updater->register();
 		}
 		return $updater;
 	}
 
+	/** @param array<string, mixed> $target_binding */
 	public function __construct(
-		private BindingRecord $binding_record,
+		array $target_binding,
 		?GitHubCredentialResolver $credentials = null,
 		?callable $operation_guard = null,
 		?callable $liveness_guard = null
 	) {
-		$facts = $binding_record->to_array();
-		if ( 'github' !== $facts['provider_code'] ) {
+		$facts = NativePackageUpdater::normalize_target_binding( $target_binding );
+		if ( null === $facts || 'github' !== $facts['provider_code'] ) {
 			throw new InvalidArgumentException( 'The GitHub binding is invalid.' );
 		}
-		$this->service = new GitHubReleaseService(
+		$this->target_binding = $facts;
+		$this->service        = new GitHubReleaseService(
 			array(
 				'canonical_repository_locator' => $facts['canonical_repository_locator'],
 				'canonical_update_uri'         => $facts['canonical_update_uri'],
@@ -213,14 +215,14 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 
 	public function inspect( string $release_identity, ?string $expected_tag = null ): IdentityDescriptor {
 		return $this->service->inspect_installed(
-			$this->binding_record->to_array()['installed_package_identity'],
+			$this->target_binding['installed_package_identity'],
 			$release_identity,
 			$expected_tag
 		);
 	}
 
 	public function acquire( IdentityDescriptor $descriptor ): TemporaryArtifact {
-		BindingRecord::assert_descriptor_binding( $descriptor, $this->binding_record );
+		NativePackageUpdater::assert_descriptor_binding( $descriptor, $this->target_binding );
 		return $this->service->acquire_installed( $descriptor );
 	}
 }

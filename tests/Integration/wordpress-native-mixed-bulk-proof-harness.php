@@ -1,7 +1,6 @@
 <?php
 
 use RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact;
-use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
@@ -260,13 +259,9 @@ add_action(
 			'managed_b_exact_token'   => 1 === count( $observations[ $ids[2] ] ) && ( $observations[ $ids[2] ][0] ?? null ) === $tokens[1], // @phpstan-ignore nullCoalesce.offset (Retain defensive evidence fallback when validating the isolated WordPress fixture result.)
 			'managed_tokens_distinct' => $tokens[0] !== $tokens[1],
 		);
-		$values               = $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'ran\\_wp\\_release\\_updater\\_target\\_v1\\_%' ORDER BY option_name" );
-		$leases_released      = 2 === count( $values );
-		foreach ( $values as $value ) {
-			$decoded         = is_string( $value ) ? json_decode( $value, true ) : null;
-			$leases_released = $leases_released && is_array( $decoded ) && 1 === ( $decoded['lease_deadline'] ?? null );
-		}
-		$bytes_after = array();
+		$legacy_target_rows   = $wpdb->get_col( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE 'ran\\_wp\\_release\\_updater\\_target\\_v1\\_%' ORDER BY option_name" );
+		$leases_released      = array() === $legacy_target_rows && false === get_option( 'auto_updater.lock', false );
+		$bytes_after          = array();
 		foreach ( $ids as $identity ) {
 			$bytes_after[ $identity ] = ran_wp_release_updater_test_target_bytes( $type, $identity );
 		}
@@ -393,22 +388,20 @@ function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, stri
 			'version'                    => '2.0.0',
 		)
 	);
-	$binding             = BindingRecord::create(
-		array(
-			'canonical_repository_locator' => $locator,
-			'canonical_update_uri'         => $uri,
-			'installed_package_identity'   => $identity,
-			'maximum_artifact_bytes'       => 52_428_800,
-			'network_id'                   => 1,
-			'php_runtime_version'          => PHP_VERSION,
-			'provider_code'                => 'fixture',
-			'release_channel'              => 'stable',
-			'stable_repository_identity'   => $repository_identity,
-			'target_type'                  => $type,
-			'theme_template'               => '',
-			'update_policy'                => 'manual',
-			'wordpress_runtime_version'    => $GLOBALS['wp_version'],
-		)
+	$binding             = array(
+		'canonical_repository_locator' => $locator,
+		'canonical_update_uri'         => $uri,
+		'installed_package_identity'   => $identity,
+		'maximum_artifact_bytes'       => 52_428_800,
+		'network_id'                   => 1,
+		'php_runtime_version'          => PHP_VERSION,
+		'provider_code'                => 'fixture',
+		'release_channel'              => 'stable',
+		'stable_repository_identity'   => $repository_identity,
+		'target_type'                  => $type,
+		'theme_template'               => '',
+		'update_policy'                => 'manual',
+		'wordpress_runtime_version'    => $GLOBALS['wp_version'],
 	);
 	$adapter             = new RAN_WP_RELEASE_UPDATER_Test_MixedBulkFixtureAdapter( $descriptor, $archive );
 	$headers             = array(

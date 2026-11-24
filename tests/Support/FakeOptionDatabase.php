@@ -7,38 +7,51 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Support;
 /** Minimal wpdb double: its opaque prepared tokens prevent tests from parsing SQL. */
 final class FakeOptionDatabase {
 
-	public string $options = 'wp_options';
+	public string $options    = 'wp_options';
+	public string $last_error = '';
 	/** @var array<string, array{option_value:string,autoload:string}> */
 	private array $rows = array();
 	/** @var array<string, array{sql:string,args:array<int|string,mixed>}> */
 	private array $prepared = array();
 	/** @var array<string, int> */
 	private array $write_failures = array();
+	private ?string $next_error   = null;
 	/** @var array<string, array{after:int,callback:callable}> */
 	private array $read_hooks = array();
 	/** @var array<string, callable> */
 	private array $write_hooks = array();
 	/** @var list<string> */
 	private array $read_option_names = array();
-	/** @var array{after:int,callback:callable}|null */
-	private ?array $time_hook = null;
-	private int $sequence     = 0;
-	public function __construct( private int $time ) {}
+	private int $sequence            = 0;
+
+	public function __construct( private int $time = 0 ) {}
 
 	public function set_time( int $time ): void {
 		$this->time = $time;
 	}
 
-	/** Seed an unrelated legacy option without giving the coordinator a migration seam. */
-	public function seed_option( string $name, string $value, string $autoload = 'no' ): void {
+	public function time(): int {
+		return $this->time;
+	}
+
+	/** Seed an option row directly in the fake wp_options store. */
+	public function seed_option( string $name, string $value, string $autoload = 'off' ): void {
 		$this->rows[ $name ] = array(
 			'option_value' => $value,
 			'autoload'     => $autoload,
 		);
 	}
 
+	public function delete_option( string $name ): void {
+		unset( $this->rows[ $name ] );
+	}
+
 	public function fail_next_write( string $name ): void {
 		$this->write_failures[ $name ] = ( $this->write_failures[ $name ] ?? 0 ) + 1;
+	}
+
+	public function fail_next_with_error( string $error ): void {
+		$this->next_error = $error;
 	}
 
 	public function mutate_on_read( string $name, int $after, callable $callback ): void {
@@ -50,13 +63,6 @@ final class FakeOptionDatabase {
 
 	public function mutate_on_next_write( string $name, callable $callback ): void {
 		$this->write_hooks[ $name ] = $callback;
-	}
-
-	public function mutate_on_time_read( int $after, callable $callback ): void {
-		$this->time_hook = array(
-			'after'    => $after,
-			'callback' => $callback,
-		);
 	}
 
 	public function force_option_value( string $name, string $value ): void {
@@ -90,26 +96,20 @@ final class FakeOptionDatabase {
 		return $token;
 	}
 
-	public function get_var( string $query ): string|int|null {
-		if ( 'SELECT UNIX_TIMESTAMP()' === $query ) {
-			if ( null !== $this->time_hook ) {
-				if ( 0 === $this->time_hook['after'] ) {
-					$hook            = $this->time_hook['callback'];
-					$this->time_hook = null;
-					$hook( $this );
-				} else {
-					--$this->time_hook['after'];
-				}
-			}
-			return $this->time;
-		}
-
-		$prepared = $this->prepared[ $query ] ?? null;
-		if ( null === $prepared || ! str_starts_with( $prepared['sql'], 'SELECT option_value' ) ) {
+	public function get_row( string $query ): ?object {
+		if ( null !== $this->next_error ) {
+			$this->last_error = $this->next_error;
+			$this->next_error = null;
 			return null;
 		}
-
-		$name                      = $prepared['args'][0];
+		$prepared = $this->prepared[ $query ] ?? null;
+		if ( null === $prepared || ! str_starts_with( $prepared['sql'], 'SELECT option_value FROM %i WHERE option_name = %s' ) ) {
+			return null;
+		}
+		[ $table, $name ] = $prepared['args'];
+		if ( $table !== $this->options || ! is_string( $name ) ) {
+			return null;
+		}
 		$this->read_option_names[] = $name;
 		if ( isset( $this->read_hooks[ $name ] ) ) {
 			if ( 0 === $this->read_hooks[ $name ]['after'] ) {
@@ -120,45 +120,63 @@ final class FakeOptionDatabase {
 				--$this->read_hooks[ $name ]['after'];
 			}
 		}
-		return $this->rows[ $name ]['option_value'] ?? null;
+		if ( ! isset( $this->rows[ $name ] ) ) {
+			return null;
+		}
+		return (object) array( 'option_value' => $this->rows[ $name ]['option_value'] );
 	}
 
-	public function query( string $query ): int {
+	public function query( string $query ): int|false {
+		if ( null !== $this->next_error ) {
+			$this->last_error = $this->next_error;
+			$this->next_error = null;
+			return false;
+		}
 		$prepared = $this->prepared[ $query ] ?? null;
 		if ( null === $prepared ) {
 			return 0;
 		}
 
-		if ( str_starts_with( $prepared['sql'], 'INSERT INTO' ) ) {
-			[ $name, $value ] = $prepared['args'];
+		if ( str_starts_with( $prepared['sql'], 'INSERT IGNORE INTO %i' ) ) {
+			[ $table, $name, $value, $autoload ] = $prepared['args'];
+			if ( $table !== $this->options || ! is_string( $name ) || ! is_string( $value ) || ! is_string( $autoload ) ) {
+				return false;
+			}
 			if ( isset( $this->write_hooks[ $name ] ) ) {
 				$hook = $this->write_hooks[ $name ];
 				unset( $this->write_hooks[ $name ] );
 				$hook( $this );
 			}
-			if ( $this->consume_write_failure( $name ) || isset( $this->rows[ $name ] ) ) {
+			if ( $this->consume_write_failure( $name ) ) {
+				return false;
+			}
+			if ( isset( $this->rows[ $name ] ) ) {
 				return 0;
 			}
 			$this->rows[ $name ] = array(
 				'option_value' => $value,
-				'autoload'     => 'no',
+				'autoload'     => $autoload,
 			);
 			return 1;
 		}
 
-		if ( str_starts_with( $prepared['sql'], 'UPDATE' ) ) {
-			[ $next, $name, $expected, $lease_deadline ] = $prepared['args'];
+		if ( str_starts_with( $prepared['sql'], 'DELETE FROM %i WHERE option_name = %s AND CAST(option_value AS BINARY) = %s' ) ) {
+			[ $table, $name, $expected ] = $prepared['args'];
+			if ( $table !== $this->options || ! is_string( $name ) || ! is_string( $expected ) ) {
+				return false;
+			}
 			if ( isset( $this->write_hooks[ $name ] ) ) {
 				$hook = $this->write_hooks[ $name ];
 				unset( $this->write_hooks[ $name ] );
 				$hook( $this );
 			}
-			$expired      = str_contains( $prepared['sql'], 'UNIX_TIMESTAMP() > %d' );
-			$lease_allows = $expired ? $this->time > $lease_deadline : $this->time <= $lease_deadline;
-			if ( $this->consume_write_failure( $name ) || ! $lease_allows || ! isset( $this->rows[ $name ] ) || ! hash_equals( $expected, $this->rows[ $name ]['option_value'] ) || hash_equals( $next, $this->rows[ $name ]['option_value'] ) ) {
+			if ( $this->consume_write_failure( $name ) ) {
+				return false;
+			}
+			if ( ! isset( $this->rows[ $name ] ) || ! hash_equals( $expected, $this->rows[ $name ]['option_value'] ) ) {
 				return 0;
 			}
-			$this->rows[ $name ]['option_value'] = $next;
+			unset( $this->rows[ $name ] );
 			return 1;
 		}
 

@@ -7,12 +7,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Performance;
 require_once dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php';
 
 use PHPUnit\Framework\TestCase;
-use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
-use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
-use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
-use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
 use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
+use RAN\WPReleaseUpdater\V1\WordPress\WordPressUpdaterLock;
 
 /**
  * Local deterministic throughput budgets, not provider or network benchmarks.
@@ -21,29 +18,27 @@ use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 final class KernelPerformanceTest extends TestCase {
 
 	public function test_warm_neutral_kernel_tuple_has_generous_local_resource_budgets(): void {
-		$binding  = BindingRecord::create( $this->binding_facts() );
-		$database = new FakeOptionDatabase( 100 );
-		$claimed  = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'a', 64 ), 600 );
-		self::assertInstanceOf( BindingState::class, $claimed['current'] );
-		self::assertSame( 'claimed', $claimed['result'] );
-		$state = $claimed['current'];
-		$claim = $this->claim( $state );
+		$database = new FakeOptionDatabase();
+		$lock     = new WordPressUpdaterLock( $database, static fn (): int => 1_700_000_000 );
+		$token    = $lock->acquire();
+		self::assertIsString( $token );
 		for ( $index = 0; $index < 100; ++$index ) {
 			CanonicalUpdateUri::canonicalize_boundaries( $this->boundaries() );
-			BindingFenceCoordinator::verify_persistent_binding_state( $database, $state, $claim );
+			$lock->verify( $token );
 		}
 		$memory_before = memory_get_usage( true );
 		$cpu_before    = $this->cpu_nanoseconds();
 		$started       = hrtime( true );
 		for ( $index = 0; $index < 1000; ++$index ) {
-			$uri           = CanonicalUpdateUri::canonicalize_boundaries( $this->boundaries() );
-			$verify_result = BindingFenceCoordinator::verify_persistent_binding_state( $database, $state, $claim );
+			$uri      = CanonicalUpdateUri::canonicalize_boundaries( $this->boundaries() );
+			$verified = $lock->verify( $token );
 		}
 		$elapsed_nanoseconds     = hrtime( true ) - $started;
 		$cpu_elapsed_nanoseconds = $this->cpu_nanoseconds() - $cpu_before;
 
 		self::assertSame( 'https://updates.example.test/owner/package', $uri );
-		self::assertSame( 'verified', $verify_result['result'] );
+		self::assertTrue( $verified );
+		self::assertTrue( $lock->release( $token ) );
 		self::assertLessThan( 5_000_000_000, $elapsed_nanoseconds, 'One thousand warm local neutral-kernel tuples exceeded the deliberately generous five-second wall budget.' );
 		self::assertLessThan( 4_000_000_000, $cpu_elapsed_nanoseconds, 'One thousand warm local neutral-kernel tuples exceeded the deliberately generous four-second CPU budget.' );
 		self::assertLessThan( 16 * 1024 * 1024, memory_get_usage( true ) - $memory_before, 'The warm neutral-kernel tuple retained more than the deliberately generous sixteen-megabyte memory budget.' );
@@ -56,38 +51,12 @@ final class KernelPerformanceTest extends TestCase {
 			'configuration'     => 'https://updates.example.test/owner/package',
 			'offer'             => 'https://updates.example.test/owner/package',
 			'staged_package'    => 'https://updates.example.test/owner/package',
-		); }
-	private function cpu_nanoseconds(): int {
-		$usage = getrusage();
-		self::assertIsArray( $usage );
-		return ( (int) $usage['ru_utime.tv_sec'] + (int) $usage['ru_stime.tv_sec'] ) * 1_000_000_000 + ( (int) $usage['ru_utime.tv_usec'] + (int) $usage['ru_stime.tv_usec'] ) * 1000; }
-
-	/** @return array<string,mixed> */
-	private function binding_facts(): array {
-		return array(
-			'canonical_repository_locator' => 'owner/package',
-			'canonical_update_uri'         => 'https://updates.example.test/owner/package',
-			'installed_package_identity'   => 'package/package.php',
-			'maximum_artifact_bytes'       => 52428800,
-			'network_id'                   => 1,
-			'php_runtime_version'          => '8.2',
-			'provider_code'                => 'neutral',
-			'release_channel'              => 'stable',
-			'stable_repository_identity'   => 'repo:1',
-			'target_type'                  => 'plugin',
-			'theme_template'               => '',
-			'update_policy'                => 'manual',
-			'wordpress_runtime_version'    => '6.8',
 		);
 	}
 
-	/** @return array<string,mixed> */
-	private function claim( BindingState $state ): array {
-		return array(
-			'binding_generation' => $state->binding_generation(),
-			'binding_hash'       => $state->binding()->binding_hash(),
-			'lease_deadline'     => $state->lease_deadline(),
-			'owner_token'        => $state->owner_token(),
-		);
+	private function cpu_nanoseconds(): int {
+		$usage = getrusage();
+		self::assertIsArray( $usage );
+		return ( (int) $usage['ru_utime.tv_sec'] + (int) $usage['ru_stime.tv_sec'] ) * 1_000_000_000 + ( (int) $usage['ru_utime.tv_usec'] + (int) $usage['ru_stime.tv_usec'] ) * 1000;
 	}
 }

@@ -282,7 +282,7 @@ PHP;
 		if ( $uri !== \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $headers['UpdateURI'] ) ) {
 			return array( 'native' => null, 'code' => 'installed_update_uri_mismatch' );
 		}
-		$binding = \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::create( array(
+		$binding = array(
 			'canonical_repository_locator' => $d['repository_locator'],
 			'canonical_update_uri' => $uri,
 			'installed_package_identity' => $identity,
@@ -296,7 +296,7 @@ PHP;
 			'theme_template' => '',
 			'update_policy' => $d['update_policy'],
 			'wordpress_runtime_version' => $GLOBALS['wp_version'],
-		) );
+		);
 		$config = array(
 			'installed_directory' => dirname( $d['installed_file'] ),
 			'headers' => array(

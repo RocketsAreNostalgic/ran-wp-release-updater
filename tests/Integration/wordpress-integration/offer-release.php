@@ -6,7 +6,6 @@
  * or after a failed install that WordPress restores.
  */
 
-use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Tests\Support\ControllableReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
@@ -155,22 +154,20 @@ $ran_wp_release_updater_test_updater    = NativePackageUpdater::from_configurati
 		'target_type'                => $type,
 		'update_uri'                 => $ran_wp_release_updater_test_uri,
 	),
-	BindingRecord::create(
-		array(
-			'canonical_repository_locator' => $ran_wp_release_updater_test_facts['repository_locator'],
-			'canonical_update_uri'         => $ran_wp_release_updater_test_uri,
-			'installed_package_identity'   => $ran_wp_release_updater_test_identity,
-			'maximum_artifact_bytes'       => 52_428_800,
-			'network_id'                   => 1,
-			'php_runtime_version'          => PHP_VERSION,
-			'provider_code'                => 'fixture',
-			'release_channel'              => 'stable',
-			'stable_repository_identity'   => $ran_wp_release_updater_test_facts['repository_identity'],
-			'target_type'                  => $type,
-			'theme_template'               => '',
-			'update_policy'                => 'manual',
-			'wordpress_runtime_version'    => $GLOBALS['wp_version'],
-		)
+	array(
+		'canonical_repository_locator' => $ran_wp_release_updater_test_facts['repository_locator'],
+		'canonical_update_uri'         => $ran_wp_release_updater_test_uri,
+		'installed_package_identity'   => $ran_wp_release_updater_test_identity,
+		'maximum_artifact_bytes'       => 52_428_800,
+		'network_id'                   => 1,
+		'php_runtime_version'          => PHP_VERSION,
+		'provider_code'                => 'fixture',
+		'release_channel'              => 'stable',
+		'stable_repository_identity'   => $ran_wp_release_updater_test_facts['repository_identity'],
+		'target_type'                  => $type,
+		'theme_template'               => '',
+		'update_policy'                => 'manual',
+		'wordpress_runtime_version'    => $GLOBALS['wp_version'],
 	),
 	$ran_wp_release_updater_test_adapter,
 	$GLOBALS['wpdb'],

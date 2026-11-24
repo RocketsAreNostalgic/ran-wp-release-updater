@@ -246,49 +246,69 @@ try {
 			$site,
 			'main-site-discovery',
 			array(
-				'RAN_UPDATER_NETWORK_OUTPUT'  => $main_output,
-				'RAN_UPDATER_NETWORK_RELEASE' => $release,
+				'RAN_UPDATER_NETWORK_OUTPUT'    => $main_output,
+				'RAN_UPDATER_NETWORK_RELEASE'   => $release,
+				'RAN_UPDATER_NETWORK_LOCK_MODE' => 'hold',
 			)
 		);
 		ran_wp_release_updater_test_wait_for_output( $winner, $main_output );
+		$ran_wp_release_updater_test_contender_output = $run . '/contender.json';
+		ran_wp_release_updater_test_command(
+			array_merge( $arguments, array( '--url=http://example.test', 'eval-file', $observer ) ),
+			$site,
+			'main-site-contender',
+			array(
+				'RAN_UPDATER_NETWORK_OUTPUT'    => $ran_wp_release_updater_test_contender_output,
+				'RAN_UPDATER_NETWORK_LOCK_MODE' => 'contend',
+			)
+		);
 		ran_wp_release_updater_test_command(
 			array_merge( $arguments, array( '--url=http://example.test/subsite/', 'eval-file', $observer ) ),
 			$site,
 			'subsite-discovery',
-			array( 'RAN_UPDATER_NETWORK_OUTPUT' => $child_output )
+			array(
+				'RAN_UPDATER_NETWORK_OUTPUT'    => $child_output,
+				'RAN_UPDATER_NETWORK_LOCK_MODE' => 'observe',
+			)
 		);
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-		$main = ran_wp_release_updater_test_read_json( $main_output );
+		$main                                  = ran_wp_release_updater_test_read_json( $main_output );
+		$ran_wp_release_updater_test_contender = ran_wp_release_updater_test_read_json( $ran_wp_release_updater_test_contender_output );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$child = ran_wp_release_updater_test_read_json( $child_output );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$result['scenarios']['multisite'] = array(
-			'main'    => $main,
-			'subsite' => $child,
+			'main'      => $main,
+			'contender' => $ran_wp_release_updater_test_contender,
+			'subsite'   => $child,
 		);
-		ran_wp_release_updater_test_assert_network( $main, $child );
+		ran_wp_release_updater_test_assert_network( $main, $ran_wp_release_updater_test_contender, $child );
 		ran_wp_release_updater_test_write_file( $release, "release\n" );
 		ran_wp_release_updater_test_finish_process( $winner );
-		// Positive control: the subsite must discover once the competing owner exits.
+		// Positive control: a follow-up mutation lock succeeds cleanly once the competing owner releases auto_updater.lock.
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-		$after_output = $run . '/subsite-after-release.json';
+		$after_output = $run . '/main-after-release.json';
 		ran_wp_release_updater_test_command(
-			array_merge( $arguments, array( '--url=http://example.test/subsite/', 'eval-file', $observer ) ),
+			array_merge( $arguments, array( '--url=http://example.test', 'eval-file', $observer ) ),
 			$site,
-			'subsite-after-release',
-			array( 'RAN_UPDATER_NETWORK_OUTPUT' => $after_output )
+			'main-after-release',
+			array(
+				'RAN_UPDATER_NETWORK_OUTPUT'    => $after_output,
+				'RAN_UPDATER_NETWORK_LOCK_MODE' => 'after',
+			)
 		);
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$after = ran_wp_release_updater_test_read_json( $after_output );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$result['scenarios']['multisite']['after_release'] = $after;
 		ran_wp_release_updater_test_require_fact(
-			1 === ( $after['provider_callback_delta'] ?? null ) && false === ( $after['suppressed_provider'] ?? null )
-			&& $after['blog_id'] === $child['blog_id'] && $after['option']['name'] === $main['option']['name']
-			&& true === $after['option']['owner_token_present']
-			&& $after['option']['owner_token_sha256'] !== $main['option']['owner_token_sha256']
-			&& $after['option']['fence_epoch'] > $main['option']['fence_epoch'],
-			'Subsite did not acquire the released fence.'
+			1 === ( $after['provider_callback_delta'] ?? null )
+			&& 0 === ( $after['legacy_target_row_count'] ?? null )
+			&& true === ( $after['lock']['acquired'] ?? null )
+			&& 'off' === ( $after['lock']['autoload'] ?? null )
+			&& is_string( $after['lock']['token_sha256'] ?? null )
+			&& $after['lock']['token_sha256'] !== $main['lock']['token_sha256'],
+			'Follow-up process did not acquire auto_updater.lock after release.'
 		);
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$result['scenarios']['multisite']['pass'] = true;
@@ -807,35 +827,36 @@ function ran_wp_release_updater_test_wait_for_output( int $process, string $path
 }
 
 /**
- * @param array<array-key,mixed> $child
  * @param array<array-key,mixed> $main
+ * @param array<array-key,mixed> $contender
+ * @param array<array-key,mixed> $child
  */
-function ran_wp_release_updater_test_assert_network( array $main, array $child ): void {
+function ran_wp_release_updater_test_assert_network( array $main, array $contender, array $child ): void {
 	ran_wp_release_updater_test_require_fact(
 		is_int( $main['blog_id'] ?? null ) && is_int( $child['blog_id'] ?? null )
 		&& $main['blog_id'] !== $child['blog_id'] && $main['network_id'] === $child['network_id'],
 		'Expected two sites in the same network.'
 	);
-	foreach ( array( $main, $child ) as $proof ) {
+	foreach ( array( $main, $contender, $child ) as $proof ) {
 		ran_wp_release_updater_test_require_fact(
 			true === ( $proof['duplicate_registration_accepted'] ?? null )
 			&& 1 === ( $proof['logical_target_count'] ?? null ) && 1 === ( $proof['native_callback_count'] ?? null )
 			&& 'target_active' === ( $proof['status']['code'] ?? null )
-			&& true === ( $proof['option']['present'] ?? null ) && true === ( $proof['option']['owner_token_present'] ?? null )
-			&& $proof['network_id'] === $proof['option']['network_id']
-			&& ( $proof['option']['lease_deadline'] ?? 0 ) > time(),
-			'Network target or live persisted fence is missing.'
+			&& 0 === ( $proof['legacy_target_row_count'] ?? null )
+			&& 1 === ( $proof['provider_callback_delta'] ?? null ),
+			'Network target deduplication or read-only discovery contract failed.'
 		);
 	}
 	ran_wp_release_updater_test_require_fact(
-		1 === $main['provider_callback_delta'] && false === $main['suppressed_provider']
-		&& 0 === $child['provider_callback_delta'] && true === $child['suppressed_provider'],
-		'Competing site was not fenced before provider access.'
-	);
-	ran_wp_release_updater_test_require_fact(
-		$main['option'] === $child['option']
-		&& 1 === preg_match( '/\A[0-9a-f]{64}\z/', $main['option']['owner_token_sha256'] ?? '' ),
-		'Sites did not observe the same unchanged fence owner.'
+		true === ( $main['lock']['acquired'] ?? null )
+		&& true === ( $main['lock']['present'] ?? null )
+		&& 'off' === ( $main['lock']['autoload'] ?? null )
+		&& false === ( $contender['lock']['acquired'] ?? null )
+		&& true === ( $contender['lock']['present'] ?? null )
+		&& is_string( $main['lock']['token_sha256'] ?? null )
+		&& 1 === preg_match( '/\A[0-9a-f]{64}\z/', $main['lock']['token_sha256'] )
+		&& ( $contender['lock']['token_sha256'] ?? null ) === $main['lock']['token_sha256'],
+		'Competing process was not fenced by the unchanged auto_updater.lock owner.'
 	);
 }
 
@@ -940,14 +961,16 @@ function ran_wp_release_updater_test_automatic_example( string $source, string $
 		$observation         = ran_wp_release_updater_test_read_json( $observed );
 		$proof['requests'][] = $observation;
 		ran_wp_release_updater_test_require_fact( true === ( $observation['pass'] ?? null ) && false === ( $observation['installed'] ?? null ), 'Automatic example did not remain correct after process shutdown.' );
-		$outcome = $observation['last_native_outcome'] ?? null;
+		$outcome = $http['target']['last_native_outcome'] ?? null;
 		ran_wp_release_updater_test_require_fact(
-			is_array( $outcome ) && ( $outcome['version'] ?? null ) === $version
-			&& ( '0.2.0' === $version ? 'unverified_install_result' : 'verified_success' ) === ( $outcome['outcome'] ?? null )
-			// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
-			&& ( '0.2.0' === $version ? 'wordpress' : 'release_updater' ) === ( $outcome['source'] ?? null )
-			&& ( '0.2.0' === $version ? 'plugin_update_fatal_error_rollback_failed' : null ) === ( $outcome['wordpress_code'] ?? null ),
-			'Automatic outcome did not retain the terminal error, replace it with verified success, or survive a fresh request.'
+			$expect_install
+				? is_array( $outcome ) && ( $outcome['version'] ?? null ) === $version
+					&& ( '0.2.0' === $version ? 'unverified_install_result' : 'verified_success' ) === ( $outcome['outcome'] ?? null )
+					// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
+					&& ( '0.2.0' === $version ? 'wordpress' : 'release_updater' ) === ( $outcome['source'] ?? null )
+					&& ( '0.2.0' === $version ? 'plugin_update_fatal_error_rollback_failed' : null ) === ( $outcome['wordpress_code'] ?? null )
+				: null === $outcome,
+			'Automatic outcome did not report the terminal error, verified success, or clean no-op state.'
 		);
 		$requests[] = $observation;
 	}
@@ -1219,7 +1242,6 @@ function ran_wp_release_updater_test_installed_offer_release( string $source, st
 		array( 'same', 'plugin', 'exact-early-refusal' ),
 		array( 'same', 'theme', 'exact-early-refusal' ),
 		array( 'same', 'plugin', 'exact-early-lease-fail' ),
-		array( 'same', 'plugin', 'exact-commit-fail' ),
 		array( 'same', 'theme', 'exact-archive-fail' ),
 		array( 'same', 'plugin', 'exact-lease-fail' ),
 		array( 'same', 'theme', 'exact-host-fail' ),

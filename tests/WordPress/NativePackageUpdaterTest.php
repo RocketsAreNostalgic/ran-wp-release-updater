@@ -81,14 +81,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 	require_once dirname( __DIR__ ) . '/Support/ControllableReleaseAdapter.php';
 	use PHPUnit\Framework\TestCase;
 	use RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator;
-	use RAN\WPReleaseUpdater\V1\Contract\BindingRecord;
 	use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 	use RAN\WPReleaseUpdater\V1\Runtime\RequestBroker;
 	use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 	use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
-	use RAN\WPReleaseUpdater\V1\WordPress\BindingState;
 	use RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater;
-	use RAN\WPReleaseUpdater\V1\WordPress\BindingFenceCoordinator;
+	use RAN\WPReleaseUpdater\V1\WordPress\WordPressUpdaterLock;
 	use RAN\WPReleaseUpdater\V1\Tests\Support\ControllableReleaseAdapter;
 	use RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase;
 	// phpcs:ignore Generic.Files.OneObjectStructurePerFile.MultipleFound -- Keep the conditional WordPress stub and its test class in the same self-contained fixture.
@@ -122,33 +120,30 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 		}
 
-		public function test_acquisition_failure_is_retained_across_requests_and_replaced_by_verified_success(): void {
+		public function test_acquisition_failure_is_retained_in_status_releases_lock_and_is_replaced_by_verified_success(): void {
 			list( $updater, $adapter, $database )   = $this->subject();
 			$offer                                  = $this->offer( $updater );
 			$adapter->acquire_outcomes['release:2'] = new \RuntimeException( 'Private transport detail.' );
 			self::assertInstanceOf( \WP_Error::class, $updater->filter_pre_download( false, $offer['package'], null, $this->extra() ) );
+			self::assertSame( array(), $database->rows() );
 			$updater->finalize_pending_install();
-			list( $fresh ) = $this->subject( database: $database );
-			self::assertSame(
-				array(
-					'outcome'            => 'acquisition_failed',
-					'source'             => 'release_updater',
-					'wordpress_code'     => null,
-					'release_identity'   => 'release:2',
-					'version'            => '2.0.0',
-					'last_observed_step' => null,
-					'recorded_at'        => 100,
-				),
-				$fresh->status()['last_native_outcome']
-			);
-			$fresh->refresh();
-			self::assertSame( 'acquisition_failed', $this->retained_outcome( $fresh )['outcome'] );
-			$database->set_time( 200 );
-			$this->complete( $fresh );
-			list( $after ) = $this->subject( database: $database );
-			self::assertSame( 'verified_success', $this->retained_outcome( $after )['outcome'] );
-			self::assertSame( 'completion_observed', $this->retained_outcome( $after )['last_observed_step'] );
-			self::assertSame( 200, $this->retained_outcome( $after )['recorded_at'] );
+			$failed = $this->retained_outcome( $updater );
+			self::assertSame( 'acquisition_failed', $failed['outcome'] );
+			self::assertSame( 'release_updater', $failed['source'] );
+			self::assertNull( $failed['wordpress_code'] );
+			self::assertSame( 'release:2', $failed['release_identity'] );
+			self::assertSame( '2.0.0', $failed['version'] );
+			self::assertNull( $failed['last_observed_step'] );
+			self::assertIsInt( $failed['recorded_at'] );
+			$updater->refresh();
+			self::assertSame( 'acquisition_failed', $this->retained_outcome( $updater )['outcome'] );
+			unset( $adapter->acquire_outcomes['release:2'] );
+			$this->complete( $updater );
+			$after = $this->retained_outcome( $updater );
+			self::assertSame( 'verified_success', $after['outcome'] );
+			self::assertSame( 'completion_observed', $after['last_observed_step'] );
+			self::assertIsInt( $after['recorded_at'] );
+			self::assertSame( array(), $database->rows() );
 		}
 
 		public function test_native_wordpress_reference_is_unchanged_screened_and_never_includes_message(): void {
@@ -163,13 +158,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$this->prepare_install( $updater );
 				$updater->capture_install_package_result( new \WP_Error( $code, 'Private message and path must not persist.' ), $this->extra() );
 				$updater->finalize_pending_install();
-				list( $fresh ) = $this->subject( database: $database );
-				$record        = $this->retained_outcome( $fresh );
+				$record = $this->retained_outcome( $updater );
 				self::assertSame( 'unverified_install_result', $record['outcome'] );
 				// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
 				self::assertSame( 'wordpress', $record['source'] );
 				self::assertSame( $expected, $record['wordpress_code'] );
 				self::assertSame( array( 'outcome', 'source', 'wordpress_code', 'release_identity', 'version', 'last_observed_step', 'recorded_at' ), array_keys( $record ) );
+				self::assertSame( array(), $database->rows() );
 			}
 		}
 
@@ -183,12 +178,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					$updater->filter_pre_unzip_file( null, $archive, '/tmp', array(), 0.0 );
 				}
 				$updater->finalize_pending_install();
-				list( $fresh ) = $this->subject( database: $database );
-				$record        = $this->retained_outcome( $fresh );
+				$record = $this->retained_outcome( $updater );
 				self::assertSame( 'uncertain', $record['outcome'] );
 				self::assertSame( 'release_updater', $record['source'] );
 				self::assertNull( $record['wordpress_code'] );
 				self::assertSame( $extraction_observed ? 'extraction_admitted' : 'archive_admitted', $record['last_observed_step'] );
+				self::assertSame( array(), $database->rows() );
 			}
 		}
 
@@ -216,11 +211,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				)
 			);
 			$updater->finalize_pending_install();
-			list( $fresh ) = $this->subject( 'automatic', $database );
 			// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
-			self::assertSame( 'wordpress', $this->retained_outcome( $fresh )['source'] );
-			self::assertSame( 'plugin_update_fatal_error_rollback_failed', $this->retained_outcome( $fresh )['wordpress_code'] );
-			self::assertNotSame( 'verified_success', $this->retained_outcome( $fresh )['outcome'] );
+			self::assertSame( 'wordpress', $this->retained_outcome( $updater )['source'] );
+			self::assertSame( 'plugin_update_fatal_error_rollback_failed', $this->retained_outcome( $updater )['wordpress_code'] );
+			self::assertNotSame( 'verified_success', $this->retained_outcome( $updater )['outcome'] );
+			self::assertSame( array(), $database->rows() );
 		}
 
 		public function test_core_automatic_error_prevents_host_success_when_candidate_bytes_remain(): void {
@@ -265,9 +260,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				self::assertInstanceOf( \WP_Error::class, $result );
 				self::assertNotSame( $error, $result );
 				$updater->finalize_pending_install();
-				list( $fresh ) = $this->subject( database: $database );
-				self::assertSame( 'foreign_guard_refused', $this->retained_outcome( $fresh )['wordpress_code'] );
-				self::assertSame( 'extraction_admitted', $this->retained_outcome( $fresh )['last_observed_step'] );
+				self::assertSame( 'foreign_guard_refused', $this->retained_outcome( $updater )['wordpress_code'] );
+				self::assertSame( 'extraction_admitted', $this->retained_outcome( $updater )['last_observed_step'] );
+				self::assertSame( array(), $database->rows() );
 			}
 		}
 
@@ -283,10 +278,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				list( $updater, , $database ) = $this->subject();
 				$this->prepare_install( $updater );
 				$updater->capture_install_package_result( new \WP_Error( $code, 'Private detail.' ), $this->extra() );
-				list( $fresh ) = $this->subject( database: $database );
-				self::assertSame( $expected, $this->retained_outcome( $fresh )['wordpress_code'] );
+				self::assertSame( $expected, $this->retained_outcome( $updater )['wordpress_code'] );
 				// phpcs:ignore WordPress.WP.CapitalPDangit.MisspelledInText -- Preserve the exact lowercase source wire value.
-				self::assertSame( 'wordpress', $this->retained_outcome( $fresh )['source'] );
+				self::assertSame( 'wordpress', $this->retained_outcome( $updater )['source'] );
+				self::assertSame( array(), $database->rows() );
 			}
 		}
 
@@ -296,11 +291,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$this->working_copy_marker();
 			$calls = $adapter->acquire_calls;
 			$updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
-			list( $fresh ) = $this->subject( database: $database );
-			self::assertSame( 'target_is_working_copy', $this->retained_outcome( $fresh )['outcome'] );
-			self::assertSame( 'release:2', $this->retained_outcome( $fresh )['release_identity'] );
-			self::assertNull( $this->retained_outcome( $fresh )['last_observed_step'] );
+			self::assertSame( 'target_is_working_copy', $this->retained_outcome( $updater )['outcome'] );
+			self::assertSame( 'release:2', $this->retained_outcome( $updater )['release_identity'] );
+			self::assertNull( $this->retained_outcome( $updater )['last_observed_step'] );
 			self::assertSame( $calls, $adapter->acquire_calls );
+			self::assertSame( array(), $database->rows() );
 		}
 
 		public function test_automatic_observation_is_passive_after_authority_loss_without_a_native_owner(): void {
@@ -323,31 +318,62 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				)
 			);
 			$updater->finalize_pending_install();
-			list( $fresh ) = $this->subject( database: $database );
-			self::assertSame( 'release_updater', $this->retained_outcome( $fresh )['source'] );
-			self::assertSame( 'runtime_liveness_lost', $this->retained_outcome( $fresh )['outcome'] );
+			self::assertSame( 'release_updater', $this->retained_outcome( $updater )['source'] );
+			self::assertSame( 'runtime_liveness_lost', $this->retained_outcome( $updater )['outcome'] );
+			self::assertSame( array(), $database->rows() );
 		}
 
-		public function test_completion_reserves_enough_fence_capacity_for_the_final_outcome_release(): void {
-			list( $updater, , $database, , $binding ) = $this->subject();
-			$name                                     = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
-				array(
-					'network_id'                 => 1,
-					'target_type'                => 'plugin',
-					'installed_package_identity' => 'package/package.php',
-				)
-			);
-			$state                                    = BindingState::create( $binding, str_repeat( 'a', 64 ), 90, 1, BindingState::MAX_SAFE_INTEGER - 3 );
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Seed the near-exhausted persisted fence, preserving the actual claim and receipt lifecycle.
-			$database->seed_option( $name, json_encode( $state->to_array(), JSON_THROW_ON_ERROR ) );
-			$this->prepare_install( $updater );
-			$updater->finalize_pending_install();
-			self::assertNotContains( 'update_completed', $updater->diagnostics() );
-			$stored = BindingState::rehydrate( json_decode( $database->rows()[ $name ]['option_value'], true, 64, JSON_THROW_ON_ERROR ) );
-			self::assertSame( 1, $stored->lease_deadline() );
-			$outcome = $stored->last_native_outcome();
-			self::assertIsArray( $outcome );
-			self::assertSame( 'uncertain', $outcome['outcome'] );
+		public function test_standalone_automatic_update_reuses_core_lock_and_fails_closed_when_absent_or_corrupt(): void {
+			$GLOBALS['ran_wp_release_updater_test_doing_action'] = 'wp_maybe_auto_update';
+			// Absent Core lock fails closed without writing a lock row.
+			list( $missing, $missing_adapter, $missing_db ) = $this->subject( 'automatic' );
+			$offer = $this->offer( $missing );
+			$reply = $missing->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $reply );
+			self::assertSame( 'ran_wp_release_updater_binding_fence_lost', $reply->get_error_code() );
+			self::assertSame( array(), $missing_db->rows() );
+			self::assertSame( 1, $missing_adapter->acquire_calls );
+
+			// Corrupt Core lock fails closed without modifying the row.
+			list( $corrupt, , $corrupt_db ) = $this->subject( 'automatic' );
+			$corrupt_offer                  = $this->offer( $corrupt );
+			$corrupt_db->seed_option( WordPressUpdaterLock::OPTION_NAME, 'corrupt-value', 'off' );
+			$corrupt_reply = $corrupt->filter_pre_download( false, $corrupt_offer['package'], null, $this->extra() );
+			self::assertInstanceOf( \WP_Error::class, $corrupt_reply );
+			self::assertSame( 'corrupt-value', $corrupt_db->rows()[ WordPressUpdaterLock::OPTION_NAME ]['option_value'] );
+
+			// Active Core integer lock is reused and NEVER deleted on finalization.
+			list( $auto, , $auto_db ) = $this->subject( 'automatic' );
+			$core_token               = (string) time();
+			$auto_db->seed_option( WordPressUpdaterLock::OPTION_NAME, $core_token, 'off' );
+			$this->complete( $auto );
+			self::assertSame( $core_token, $auto_db->rows()[ WordPressUpdaterLock::OPTION_NAME ]['option_value'] );
+		}
+
+		public function test_failed_download_paths_always_release_updater_lock_without_orphan_rows(): void {
+			// Inspect failure during refresh_download_binding releases auto_updater.lock immediately.
+			list( $inspect_fail, $inspect_adapter, $inspect_db ) = $this->subject();
+			$offer = $this->offer( $inspect_fail );
+			$inspect_adapter->inspect_outcomes['release:2'] = new \RuntimeException( 'Inspect boom.' );
+			self::assertInstanceOf( \WP_Error::class, $inspect_fail->filter_pre_download( false, $offer['package'], null, $this->extra() ) );
+			self::assertSame( array(), $inspect_db->rows() );
+
+			// Remote release drift during refresh_download_binding releases auto_updater.lock immediately.
+			list( $drift, $drift_adapter, $drift_db, $descriptor ) = $this->subject();
+			$drift_offer = $this->offer( $drift );
+			$changed     = $descriptor->to_array();
+			unset( $changed['fingerprint'] );
+			$changed['commit_identity']        = 'commit:drifted';
+			$drift_adapter->inspect_descriptor = IdentityDescriptor::create( $changed );
+			self::assertInstanceOf( \WP_Error::class, $drift->filter_pre_download( false, $drift_offer['package'], null, $this->extra() ) );
+			self::assertSame( array(), $drift_db->rows() );
+
+			// Acquire failure releases auto_updater.lock immediately.
+			list( $acquire_fail, $acquire_adapter, $acquire_db ) = $this->subject();
+			$acquire_offer                                       = $this->offer( $acquire_fail );
+			$acquire_adapter->acquire_outcomes['release:2']      = new \RuntimeException( 'Download failed.' );
+			self::assertInstanceOf( \WP_Error::class, $acquire_fail->filter_pre_download( false, $acquire_offer['package'], null, $this->extra() ) );
+			self::assertSame( array(), $acquire_db->rows() );
 		}
 
 		public function test_reentrant_download_refusal_does_not_become_the_pending_installs_cause(): void {
@@ -373,9 +399,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 
 		public function test_working_copy_is_refused_before_acquisition_on_manual_and_automatic_updates(): void {
 			foreach ( array( 'manual', 'automatic' ) as $mode ) {
-				list( $updater, $adapter ) = $this->subject( $mode );
-				$offer                     = $this->offer( $updater );
+				list( $updater, $adapter, $database ) = $this->subject( $mode );
+				$offer                                = $this->offer( $updater );
 				$GLOBALS['ran_wp_release_updater_test_doing_action'] = 'automatic' === $mode ? 'wp_maybe_auto_update' : null;
+				if ( 'automatic' === $mode ) {
+					$database->seed_option( WordPressUpdaterLock::OPTION_NAME, (string) time(), 'off' );
+				}
 				$this->working_copy_marker();
 				$calls  = $adapter->acquire_calls;
 				$result = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
@@ -525,7 +554,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertFileDoesNotExist( $archive );
 			self::assertSame( ! $allow, is_file( $this->installed_directory() . '/.git' ) );
 			self::assertSame( $allow ? 'verified_success' : 'target_is_working_copy', $this->retained_outcome( $updater )['outcome'] );
-			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'b', 64 ), 60 )['result'] );
+			self::assertSame( array(), $database->rows() );
 		}
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function setUp(): void {
@@ -723,25 +752,27 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertCount( 1, $GLOBALS['ran_wp_release_updater_test_observations'] );
 		}
 
-		public function test_unexpected_failure_after_start_does_not_dispatch_completion(): void {
-			list( $updater, $adapter, $database ) = $this->subject( native_discovery_reuse: true );
-			$failure                              = new \RuntimeException( 'Unexpected binding read failure.' );
-			$database->mutate_on_time_read(
-				1,
-				static function () use ( $failure ): void {
-					throw $failure;
-				}
+		public function test_provider_failure_after_start_dispatches_failed_completion_without_db_lock(): void {
+			list( $updater, $adapter, $database )   = $this->subject( native_discovery_reuse: true );
+			$adapter->acquire_outcomes['release:2'] = new \RuntimeException( 'Unexpected provider failure.' );
+			self::assertFalse(
+				$updater->filter_update(
+					false,
+					array(
+						'Version'   => '1.0.0',
+						'UpdateURI' => $this->uri(),
+					),
+					'package/package.php',
+					array()
+				)
 			);
-			try {
-				$this->offer( $updater );
-				self::fail( 'Unexpected failure must escape the native check.' );
-			} catch ( \RuntimeException $caught ) {
-				self::assertSame( $failure, $caught );
-			}
 			self::assertSame( array( 1, 1, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+			self::assertSame( array(), $database->rows() );
 			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
-			self::assertCount( 1, $events );
+			self::assertCount( 3, $events );
 			self::assertSame( 'ran_wp_release_updater_check_started_v1', $events[0][0] );
+			self::assertSame( 'ran_wp_release_updater_check_completed_v1', $events[1][0] );
+			self::assertSame( 'failed', $events[1][1]['status'] );
 		}
 
 		public function test_reused_discovery_emits_no_fresh_check(): void {
@@ -1205,34 +1236,14 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$this->offer( $updater );
 			self::assertSame( array( 2, 2, 2 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
-		public function test_claim_takeover_and_expiry_reclaim_never_reuse_a_snapshot(): void {
-			list( $updater, $adapter, $database, , $binding ) = $this->subject( 'manual', null, 'stable', false, null, true );
-			$this->offer( $updater );
-			$name      = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
-				array(
-					'network_id'                 => 1,
-					'target_type'                => 'plugin',
-					'installed_package_identity' => 'package/package.php',
-				)
-			);
-			$state     = BindingState::rehydrate( json_decode( $database->rows()[ $name ]['option_value'], true, 32, JSON_THROW_ON_ERROR ) );
-			$successor = BindingState::create( $binding, str_repeat( 'b', 64 ), 101, $state->binding_generation() + 1, $state->fence_epoch() + 1 );
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
-			$database->force_option_value( $name, json_encode( $successor->to_array(), JSON_THROW_ON_ERROR ) );
-			self::assertFalse(
-				$updater->filter_update(
-					false,
-					array(
-						'Version'   => '1.0.0',
-						'UpdateURI' => $this->uri(),
-					),
-					'package/package.php',
-					array()
-				)
-			);
-			$database->set_time( 102 );
-			$this->offer( $updater );
-			self::assertSame( array( 2, 2, 2 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+		public function test_discovery_is_read_only_and_never_writes_database_locks(): void {
+			list( $updater, $adapter, $database ) = $this->subject( 'manual', null, 'stable', false, null, true );
+			$database->seed_option( WordPressUpdaterLock::OPTION_NAME, (string) time(), 'off' );
+			$before = $database->rows();
+			self::assertIsArray( $this->offer( $updater ) );
+			self::assertSame( $before, $database->rows() );
+			self::assertSame( array(), $database->prepared_sql() );
+			self::assertSame( array( 1, 1, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
 		public function test_failed_discovery_and_runtime_displacement_never_reuse_a_snapshot(): void {
 			list( $updater, $adapter, , $descriptor ) = $this->subject( 'manual', null, 'stable', false, null, true );
@@ -1317,8 +1328,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$updater->status()
 			);
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
-			self::assertCount( 1, $database->prepared_sql() );
-			self::assertStringStartsWith( 'SELECT option_value', $database->prepared_sql()[0] );
+			self::assertCount( 0, $database->prepared_sql() );
 			$this->offer( $updater );
 			$status = $updater->status();
 			self::assertSame( 'v2.0.0', $status['candidate_tag'] );
@@ -1415,22 +1425,20 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$facts['installed_package_identity']         = 'package';
 			$facts['target_type']                        = 'theme';
 			$descriptor                                  = IdentityDescriptor::create( $facts );
-			$binding                                     = BindingRecord::create(
-				array(
-					'canonical_repository_locator' => 'owner/package',
-					'canonical_update_uri'         => $this->uri(),
-					'installed_package_identity'   => 'package',
-					'maximum_artifact_bytes'       => 52428800,
-					'network_id'                   => 1,
-					'php_runtime_version'          => '8.2',
-					'provider_code'                => 'neutral',
-					'release_channel'              => 'stable',
-					'stable_repository_identity'   => 'repo:1',
-					'target_type'                  => 'theme',
-					'theme_template'               => '',
-					'update_policy'                => 'manual',
-					'wordpress_runtime_version'    => '6.8',
-				)
+			$binding                                     = array(
+				'canonical_repository_locator' => 'owner/package',
+				'canonical_update_uri'         => $this->uri(),
+				'installed_package_identity'   => 'package',
+				'maximum_artifact_bytes'       => 52428800,
+				'network_id'                   => 1,
+				'php_runtime_version'          => '8.2',
+				'provider_code'                => 'neutral',
+				'release_channel'              => 'stable',
+				'stable_repository_identity'   => 'repo:1',
+				'target_type'                  => 'theme',
+				'theme_template'               => '',
+				'update_policy'                => 'manual',
+				'wordpress_runtime_version'    => '6.8',
 			);
 			$adapter                                     = new ControllableReleaseAdapter( $descriptor, $archive, $this->temporary_directory );
 			$adapter->list_response                      = array(
@@ -1857,52 +1865,48 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array( 1, 2, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 			self::assertContains( 'unverified_pre_download', $updater->diagnostics() );
 		}
-		public function test_offer_only_shutdown_releases_and_automatic_install_promotes_lease(): void {
+		public function test_offer_only_does_not_lock_and_manual_download_holds_updater_lock(): void {
 			list( $first_updater, , $database ) = $this->subject();
-			$this->offer( $first_updater );
+			$offer                              = $this->offer( $first_updater );
+			self::assertSame( array(), $database->rows() );
 			$first_updater->finalize_pending_install();
 			list( $second_updater ) = $this->subject( 'manual', $database );
 			self::assertIsArray( $this->offer( $second_updater ) );
-			list( $updater, , $database, , $binding ) = $this->subject( 'automatic' );
-			$offer                                    = $this->offer( $updater );
-			$database->set_time( 650 );
-			self::assertIsString( $updater->filter_pre_download( false, $offer['package'], null, $this->extra() ) );
-			$database->set_time( 701 );
-			self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'c', 64 ), 1 )['result'] );
-			$updater->refresh();
+			self::assertSame( array(), $database->rows() );
+
+			$owned = $first_updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $owned );
+			self::assertArrayHasKey( WordPressUpdaterLock::OPTION_NAME, $database->rows() );
+			self::assertSame( 'off', $database->rows()[ WordPressUpdaterLock::OPTION_NAME ]['autoload'] );
+			self::assertNull( ( new WordPressUpdaterLock( $database ) )->acquire() );
+			$first_updater->refresh();
+			self::assertSame( array(), $database->rows() );
 		}
 		public function test_competing_owner_after_unzip_rejects_stale_receipt(): void {
-			list( $updater, , $database, , $binding ) = $this->subject();
-			$offer                                    = $this->offer( $updater );
-			$owned_archive                            = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			list( $updater, , $database ) = $this->subject();
+			$offer                        = $this->offer( $updater );
+			$owned_archive                = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 			self::assertIsString( $owned_archive );
 			self::assertNull( $updater->filter_pre_unzip_file( null, $owned_archive, '/tmp', array(), 0.0 ) );
-			$state         = BindingState::rehydrate( json_decode( array_values( $database->rows() )[0]['option_value'], true, 32, JSON_THROW_ON_ERROR ) );
-			$binding_facts = $binding->to_array();
-			unset( $binding_facts['binding_hash'] );
-			$binding_facts['update_policy'] = 'automatic';
-			$rebound_binding                = BindingRecord::create( $binding_facts );
-			$name                           = 'ran_wp_release_updater_target_v1_' . BindingRecord::target_fence_key(
-				array(
-					'network_id'                 => 1,
-					'target_type'                => 'plugin',
-					'installed_package_identity' => 'package/package.php',
-				)
-			);
-			$successor                      = BindingState::create( $rebound_binding, str_repeat( 'b', 64 ), $state->lease_deadline(), $state->binding_generation() + 1, $state->fence_epoch() + 1 );
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
-			$database->force_option_value( $name, json_encode( $successor->to_array(), JSON_THROW_ON_ERROR ) );
+			$successor = time() . '.999999999999999999999999999';
+			$database->force_option_value( WordPressUpdaterLock::OPTION_NAME, $successor );
 			self::assertInstanceOf( \WP_Error::class, $updater->filter_source_selection( $this->staged(), '/tmp', null, $this->extra() ) );
+			self::assertSame( $successor, $database->rows()[ WordPressUpdaterLock::OPTION_NAME ]['option_value'] );
 		}
 		public function test_completion_and_rollback_release_claims(): void {
-			list( $completed_updater, , $database, , $binding ) = $this->subject();
+			list( $completed_updater, , $database ) = $this->subject();
 			$this->complete( $completed_updater );
-			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
-			list( $rollback_updater, , $database, , $binding ) = $this->subject();
-			$offer = $this->offer( $rollback_updater );
+			self::assertSame( array(), $database->rows() );
+			$lock = new WordPressUpdaterLock( $database );
+			$tok  = $lock->acquire();
+			self::assertIsString( $tok );
+			self::assertTrue( $lock->release( $tok ) );
+
+			list( $rollback_updater, , $database ) = $this->subject();
+			$offer                                 = $this->offer( $rollback_updater );
 			self::assertIsString( $rollback_updater->filter_pre_download( false, $offer['package'], null, $this->extra() ) );
 			self::assertInstanceOf( \WP_Error::class, $rollback_updater->capture_install_package_result( new \WP_Error( 'rollback', 'rollback' ), $this->extra() ) );
-			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'e', 64 ), 1 )['result'] );
+			self::assertSame( array(), $database->rows() );
 		}
 		public function test_passive_seams_do_not_acquire_and_diagnostics_never_expose_caller_input(): void {
 			list( $updater, $adapter ) = $this->subject();
@@ -1992,15 +1996,15 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$property                                    = new \ReflectionProperty( $broker, 'state' );
 			$property->setValue( $broker, 'active' );
 			try {
-				list( $updater, , $database, , $binding ) = $this->subject( 'manual', null, 'stable', false, $state );
-				$offer                                    = $this->offer( $updater );
-				$owned_archive                            = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+				list( $updater, , $database ) = $this->subject( 'manual', null, 'stable', false, $state );
+				$offer                        = $this->offer( $updater );
+				$owned_archive                = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 				self::assertIsString( $owned_archive );
 
 				$GLOBALS['ran_wp_release_updater_v1_broker'] = new \stdClass();
 				self::assertInstanceOf( \WP_Error::class, $updater->filter_pre_unzip_file( null, $owned_archive, '/tmp', array(), 0.0 ) );
 				self::assertFileDoesNotExist( $owned_archive );
-				self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'f', 64 ), 1 )['result'] );
+				self::assertSame( array(), $database->rows() );
 			} finally {
 				unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
 			}
@@ -2014,9 +2018,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$property                                    = new \ReflectionProperty( $broker, 'state' );
 			$property->setValue( $broker, 'active' );
 			try {
-				list( $updater, , $database, , $binding ) = $this->subject( 'manual', null, 'stable', false, $state );
-				$offer                                    = $this->offer( $updater );
-				$owned_archive                            = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+				list( $updater, , $database ) = $this->subject( 'manual', null, 'stable', false, $state );
+				$offer                        = $this->offer( $updater );
+				$owned_archive                = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 				self::assertIsString( $owned_archive );
 				self::assertNull( $updater->filter_pre_unzip_file( null, $owned_archive, '/tmp', array(), 0.0 ) );
 
@@ -2029,7 +2033,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				};
 				self::assertInstanceOf( \WP_Error::class, $result );
 				self::assertFileDoesNotExist( $owned_archive );
-				self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
+				self::assertSame( array(), $database->rows() );
 			} finally {
 				unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
 			}
@@ -2051,9 +2055,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$property                                    = new \ReflectionProperty( $broker, 'state' );
 				$property->setValue( $broker, 'active' );
 				try {
-					list( $updater, , $database, , $binding ) = $this->subject( 'manual', null, 'stable', false, $state );
-					$offer                                    = $this->offer( $updater );
-					$owned_archive                            = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+					list( $updater, , $database ) = $this->subject( 'manual', null, 'stable', false, $state );
+					$offer                        = $this->offer( $updater );
+					$owned_archive                = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 					self::assertIsString( $owned_archive );
 					$status = $updater->status();
 
@@ -2066,7 +2070,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 						self::assertSame( $status, $updater->status() );
 					}
 					self::assertFileDoesNotExist( $owned_archive );
-					self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'e', 64 ), 1 )['result'] );
+					self::assertSame( array(), $database->rows() );
 				} finally {
 					unset( $GLOBALS['ran_wp_release_updater_v1_broker'] );
 				}
@@ -2074,9 +2078,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		}
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'missing_descriptor_callbacks' )]
 		public function test_missing_descriptor_rejects_pending_lifecycle_and_cleans_up( string $callback, string $code ): void {
-			list( $updater, , $database, , $binding ) = $this->subject();
-			$offer                                    = $this->offer( $updater );
-			$owned_archive                            = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			list( $updater, , $database ) = $this->subject();
+			$offer                        = $this->offer( $updater );
+			$owned_archive                = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 			self::assertIsString( $owned_archive );
 			if ( 'pre-unzip' !== $callback ) {
 				self::assertNull( $updater->filter_pre_unzip_file( null, $owned_archive, '/tmp', array(), 0.0 ) );
@@ -2110,7 +2114,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertContains( $code, $updater->diagnostics() );
 			self::assertNotContains( 'update_completed', $updater->diagnostics() );
 			self::assertFileDoesNotExist( $owned_archive );
-			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
+			self::assertSame( array(), $database->rows() );
 		}
 		/** @return array<string,array{string,string}> */
 		public static function missing_descriptor_callbacks(): array {
@@ -2122,9 +2126,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 		}
 		public function test_refresh_during_fresh_inspection_rejects_before_reacquisition(): void {
-			list( $updater, $adapter, $database, , $binding ) = $this->subject();
-			$offer             = $this->offer( $updater );
-			$reentrant_adapter = new class( $adapter, $updater ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter {
+			list( $updater, $adapter, $database ) = $this->subject();
+			$offer                                = $this->offer( $updater );
+			$reentrant_adapter                    = new class( $adapter, $updater ) implements \RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter {
 				public function __construct( private ControllableReleaseAdapter $inner, private NativePackageUpdater $updater ) {}
 				/** @return array<string,mixed> */
 				public function list_releases( array $conditional = array() ): array {
@@ -2144,7 +2148,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertInstanceOf( \WP_Error::class, $result );
 			self::assertContains( 'binding_fence_lost', $updater->diagnostics() );
 			self::assertSame( 1, $adapter->acquire_calls );
-			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'd', 64 ), 1 )['result'] );
+			self::assertSame( array(), $database->rows() );
 		}
 		public function test_refresh_clears_diagnostics_and_destroys_pending_owned_archive(): void {
 			list( $updater ) = $this->subject();
@@ -2227,14 +2231,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$zip->close();
 			$facts = $this->descriptor( $archive )->to_array();
 			unset( $facts['fingerprint'] );
-			$facts['target_type']                = 'theme';
-			$facts['installed_package_identity'] = 'package';
-			$descriptor                          = IdentityDescriptor::create( $facts );
-			$binding_facts                       = $this->binding( $mode )->to_array();
-			unset( $binding_facts['binding_hash'] );
-			$binding_facts['target_type']                = 'theme';
-			$binding_facts['installed_package_identity'] = 'package';
-			$binding                                     = BindingRecord::create( $binding_facts );
+			$facts['target_type']                        = 'theme';
+			$facts['installed_package_identity']         = 'package';
+			$descriptor                                  = IdentityDescriptor::create( $facts );
+			$binding                                     = $this->binding( $mode );
+			$binding['target_type']                      = 'theme';
+			$binding['installed_package_identity']       = 'package';
 			$configuration                               = $this->config( $mode );
 			$configuration['target_type']                = 'theme';
 			$configuration['installed_package_identity'] = 'package';
@@ -2423,43 +2425,24 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertContains( 'outcome_uncertain', $updater->diagnostics() );
 			self::assertNotContains( 'update_completed', $updater->diagnostics() );
 		}
-		public function test_successful_cas_with_changed_readback_preserves_successor_and_uncertain_cleanup(): void {
-			list( $updater, , $database, , $binding ) = $this->subject();
+		public function test_lock_takeover_before_finalization_preserves_successor_and_reports_uncertain(): void {
+			list( $updater, , $database ) = $this->subject();
 			$this->prepare_install( $updater );
-			$name = array_key_first( $database->rows() );
-			self::assertIsString( $name );
-			$successor = null;
-			$database->mutate_on_read(
-				$name,
-				7,
-				static function () use ( $database, $binding, &$successor ): void {
-					$database->set_time( 4000 );
-					$claim = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'b', 64 ), 3600 );
-					self::assertSame( 'claimed', $claim['result'] );
-					$successor = $claim['current'];
-				}
-			);
+			$successor = time() . '.999999999999999999999999999';
+			$database->force_option_value( WordPressUpdaterLock::OPTION_NAME, $successor );
 			$updater->finalize_pending_install();
 			self::assertContains( 'outcome_uncertain', $updater->diagnostics() );
 			self::assertNotContains( 'update_completed', $updater->diagnostics() );
-			self::assertInstanceOf( BindingState::class, $successor );
-			self::assertSame( str_repeat( 'b', 64 ), $successor->owner_token() );
-			self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'c', 64 ), 1 )['result'] );
+			self::assertSame( $successor, $database->rows()[ WordPressUpdaterLock::OPTION_NAME ]['option_value'] );
 		}
-		public function test_confirmed_release_does_not_visit_the_redundant_cleanup_time_failure(): void {
+		public function test_failed_lock_release_at_finalization_reports_uncertain(): void {
 			list( $updater, , $database ) = $this->subject();
 			$this->prepare_install( $updater );
-			$database->mutate_on_time_read(
-				5,
-				static function (): void {
-					throw new \RuntimeException( 'redundant cleanup time read' );
-				}
-			);
+			$database->fail_next_write( WordPressUpdaterLock::OPTION_NAME );
 			$updater->finalize_pending_install();
-			self::assertContains( 'update_completed', $updater->diagnostics() );
-			self::assertFalse( ( new \ReflectionProperty( $updater, 'lease_held' ) )->getValue( $updater ) );
-			$this->expectException( \RuntimeException::class );
-			$database->get_var( 'SELECT UNIX_TIMESTAMP()' );
+			self::assertContains( 'outcome_uncertain', $updater->diagnostics() );
+			self::assertNotContains( 'update_completed', $updater->diagnostics() );
+			self::assertSame( 'uncertain', $this->retained_outcome( $updater )['outcome'] );
 		}
 		public function test_fresh_install_reuses_one_source_scan_after_the_persistent_fence(): void {
 			$opened          = array();
@@ -2476,12 +2459,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			list( $updater, , $database ) = $this->subject();
 			$offer                        = $this->offer( $updater );
 			$before                       = glob( sys_get_temp_dir() . '/ran-wp-release-updater-*', GLOB_ONLYDIR );
-			$name                         = array_key_first( $database->rows() );
-			self::assertIsString( $name );
-			$changed = null;
+			$changed                      = null;
 			$database->mutate_on_read(
-				$name,
-				4,
+				WordPressUpdaterLock::OPTION_NAME,
+				1,
 				static function () use ( $before, &$changed ): void {
 					$now     = glob( sys_get_temp_dir() . '/ran-wp-release-updater-*', GLOB_ONLYDIR );
 					$created = array_values( array_diff( false === $now ? array() : $now, false === $before ? array() : $before ) );
@@ -2498,6 +2479,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertContains( 'acquisition_identity_invalid', $updater->diagnostics() );
 			self::assertIsString( $changed );
 			self::assertFileDoesNotExist( $changed );
+			self::assertSame( array(), $database->rows() );
 		}
 		public function test_new_pending_install_without_staging_cannot_reuse_the_old_marker(): void {
 			list( $updater ) = $this->subject();
@@ -2528,33 +2510,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertInstanceOf( \WP_Error::class, $updater->filter_source_selection( $prepared['stage'], '/tmp', null, $this->extra() ) );
 			$updater->finalize_pending_install();
 			self::assertNotContains( 'update_completed', $updater->diagnostics() );
-		}
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'completion_release_cases' )]
-		public function test_only_confirmed_release_suppresses_the_cleanup_retry( bool $fail_first, int $expected_reads, int $expected_writes, string $code ): void {
-			list( $updater, , $database ) = $this->subject();
-			$this->prepare_install( $updater );
-			$name = array_key_first( $database->rows() );
-			self::assertIsString( $name );
-			if ( $fail_first ) {
-				$database->fail_next_write( $name );
-			}
-			$before_reads  = count( $database->read_option_names() );
-			$before_writes = count( $database->prepared_sql() );
-			$updater->finalize_pending_install();
-			self::assertSame( $expected_reads, count( $database->read_option_names() ) - $before_reads );
-			$sql = array_slice( $database->prepared_sql(), $before_writes );
-			self::assertCount( $expected_writes, array_filter( $sql, static fn( string $query ): bool => str_starts_with( $query, 'UPDATE ' ) ) );
-			self::assertContains( $code, $updater->diagnostics() );
-			$binding = ( new \ReflectionProperty( $updater, 'binding' ) )->getValue( $updater );
-			self::assertInstanceOf( BindingRecord::class, $binding );
-			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'e', 64 ), 1 )['result'] );
-		}
-		/** @return array<string,array{bool,int,int,string}> */
-		public static function completion_release_cases(): array {
-			return array(
-				'confirmed'        => array( false, 10, 2, 'update_completed' ),
-				'failed first CAS' => array( true, 9, 2, 'outcome_uncertain' ),
-			);
 		}
 		#[\PHPUnit\Framework\Attributes\DataProvider( 'invalid_native_owners' )]
 		public function test_begin_refusal_never_authorizes_mutation_or_completion( string $scenario ): void {
@@ -2621,8 +2576,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertNotContains( 'update_completed', $updater->diagnostics() );
 			self::assertSame( 'outcome_uncertain', $updater->status()['failure_code'] );
 			self::assertFileDoesNotExist( $prepared['archive'] );
-			list( $fresh ) = $this->subject( database: $database );
-			self::assertSame( 'uncertain', $this->retained_outcome( $fresh )['outcome'] );
+			self::assertSame( 'uncertain', $this->retained_outcome( $updater )['outcome'] );
+			self::assertSame( array(), $database->rows() );
 		}
 
 		public function test_failed_native_result_defers_uncertain_callback_until_finalization(): void {
@@ -3373,10 +3328,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( '8.1', $offer['requires_php'] );
 		}
 
-		public function test_filter_offer_release_refusal_restores_candidate_rejections_and_releases_lease(): void {
-			list( $updater, $adapter, $database, $descriptor, $binding ) = $this->subject();
-			$rejections_property = new \ReflectionProperty( NativePackageUpdater::class, 'candidate_rejections' );
-			$seed_rejections     = array(
+		public function test_filter_offer_release_refusal_restores_candidate_rejections_and_writes_no_lock(): void {
+			list( $updater, $adapter, $database, $descriptor ) = $this->subject();
+			$rejections_property                               = new \ReflectionProperty( NativePackageUpdater::class, 'candidate_rejections' );
+			$seed_rejections                                   = array(
 				array(
 					'release_identity' => 'release:seed',
 					'tag'              => 'v1.5.0',
@@ -3389,8 +3344,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$report = $this->offer_release( $updater );
 			self::assertSame( 'refused', $report['status'] );
 			self::assertSame( $seed_rejections, $rejections_property->getValue( $updater ) );
-			$reclaim = BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'b', 64 ), 600 );
-			self::assertSame( 'claimed', $reclaim['result'] );
+			self::assertSame( array(), $database->rows() );
 		}
 
 		public function test_verified_install_advances_installed_version_baseline_for_same_request_operations(): void {
@@ -3435,12 +3389,15 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 
 		public function test_begin_native_mutation_failure_after_owner_assignment_completes_owner_and_clears_state(): void {
 			$database        = new FakeOptionDatabase( 100 );
+			$live            = true;
 			$completions     = array();
 			list( $updater ) = $this->subject(
 				database: $database,
-				operation_guard: static fn (): bool => true,
-				native_mutation_begin: static function () use ( $database ): string {
-					$database->set_time( 5000 );
+				operation_guard: static function () use ( &$live ): bool {
+					return $live;
+				},
+				native_mutation_begin: static function () use ( &$live ): string {
+					$live = false;
 					return 'owner-lost-fence';
 				},
 				native_mutation_complete: static function ( string $owner, string $type, string $identity, string $outcome ) use ( &$completions ): void {
@@ -3464,9 +3421,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		}
 
 		public function test_repeated_source_selection_while_native_owner_is_held_preserves_custody_until_finalization(): void {
-			$database                        = new FakeOptionDatabase( 100 );
-			$completions                     = array();
-			list( $updater, , , , $binding ) = $this->subject(
+			$database        = new FakeOptionDatabase( 100 );
+			$completions     = array();
+			list( $updater ) = $this->subject(
 				database: $database,
 				operation_guard: static fn (): bool => true,
 				native_mutation_begin: static fn (): string => 'owner-in-flight',
@@ -3481,12 +3438,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 'ran_wp_release_updater_runtime_liveness_lost', $second->get_error_code() );
 			self::assertSame( array(), $completions );
 			self::assertSame( 'owner-in-flight', ( new \ReflectionProperty( NativePackageUpdater::class, 'native_owner' ) )->getValue( $updater ) );
-			self::assertSame( 'binding_fence_lost', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'c', 64 ), 600 )['result'] );
+			self::assertCount( 0, $database->rows() );
 
 			$updater->finalize_pending_install();
 			self::assertSame( array( array( 'owner-in-flight', 'plugin', 'package/package.php', 'verified_success' ) ), $completions );
 			self::assertNull( ( new \ReflectionProperty( NativePackageUpdater::class, 'native_owner' ) )->getValue( $updater ) );
-			self::assertSame( 'claimed', BindingFenceCoordinator::claim_persistent_binding_state( $database, $binding, str_repeat( 'c', 64 ), 600 )['result'] );
+			self::assertCount( 0, $database->rows() );
 		}
 
 		public function test_standalone_liveness_loss_fails_closed_for_updater_package_token(): void {
@@ -3598,7 +3555,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array( 'outcome', 'source', 'wordpress_code', 'release_identity', 'version', 'last_observed_step', 'recorded_at' ), array_keys( $record ) );
 			return $record;
 		}
-		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,BindingRecord} */
+		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,array<string,mixed>} */
 		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null, bool $allow_working_copy = false, string $installed_version = '1.0.0' ): array {
 			$archive_path = $this->archive();
 			$descriptor   = $this->descriptor( $archive_path, $channel, $prerelease );
@@ -3767,23 +3724,22 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				'wordpress_runtime_version'  => '6.8',
 			);
 		}
-		private function binding( string $mode, string $channel = 'stable' ): BindingRecord {
-			return BindingRecord::create(
-				array(
-					'canonical_repository_locator' => 'owner/package',
-					'canonical_update_uri'         => $this->uri(),
-					'installed_package_identity'   => 'package/package.php',
-					'maximum_artifact_bytes'       => 52428800,
-					'network_id'                   => 1,
-					'php_runtime_version'          => '8.2',
-					'provider_code'                => 'neutral',
-					'release_channel'              => $channel,
-					'stable_repository_identity'   => 'repo:1',
-					'target_type'                  => 'plugin',
-					'theme_template'               => '',
-					'update_policy'                => $mode,
-					'wordpress_runtime_version'    => '6.8',
-				)
+		/** @return array<string,mixed> */
+		private function binding( string $mode, string $channel = 'stable' ): array {
+			return array(
+				'canonical_repository_locator' => 'owner/package',
+				'canonical_update_uri'         => $this->uri(),
+				'installed_package_identity'   => 'package/package.php',
+				'maximum_artifact_bytes'       => 52428800,
+				'network_id'                   => 1,
+				'php_runtime_version'          => '8.2',
+				'provider_code'                => 'neutral',
+				'release_channel'              => $channel,
+				'stable_repository_identity'   => 'repo:1',
+				'target_type'                  => 'plugin',
+				'theme_template'               => '',
+				'update_policy'                => $mode,
+				'wordpress_runtime_version'    => '6.8',
 			);
 		}
 		private function descriptor( string $archive_path, string $channel = 'stable', bool $prerelease = false ): IdentityDescriptor {
@@ -3834,9 +3790,14 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$facts['tag']              = $tag;
 			return IdentityDescriptor::create( $facts );
 		}
-		private function token( IdentityDescriptor $descriptor, BindingRecord $binding ): string {
-			$value = array(
-				'binding_hash' => $binding->binding_hash(),
+		/** @param array<string,mixed> $binding */
+		private function token( IdentityDescriptor $descriptor, array $binding ): string {
+			$normalized = NativePackageUpdater::normalize_target_binding( $binding );
+			self::assertIsArray( $normalized );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
+			$binding_hash = hash( 'sha256', json_encode( $normalized, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) );
+			$value        = array(
+				'binding_hash' => $binding_hash,
 				'descriptor'   => $descriptor->to_array(),
 				'schema'       => 1,
 			);

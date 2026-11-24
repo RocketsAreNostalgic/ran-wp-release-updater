@@ -37,23 +37,15 @@ $ran_wp_release_updater_test_automatic_after_version      = $ran_wp_release_upda
 $ran_wp_release_updater_test_automatic_runtime            = WP_PLUGIN_DIR . '/' . $ran_wp_release_updater_test_automatic_slug . '/vendor/ran/wp-release-updater';
 $ran_wp_release_updater_test_automatic_installed_manifest = ran_wp_release_updater_test_automatic_example_directory_manifest( WP_PLUGIN_DIR . '/' . $ran_wp_release_updater_test_automatic_slug );
 $ran_wp_release_updater_test_automatic_archive_manifest   = ran_wp_release_updater_test_automatic_example_archive_manifest( $ran_wp_release_updater_test_automatic_archive, $ran_wp_release_updater_test_automatic_slug );
-$ran_wp_release_updater_test_automatic_fence_key          = 'ran_wp_release_updater_target_v1_' . \RAN\WPReleaseUpdater\V1\Contract\BindingRecord::target_fence_key(
-	array(
-		'network_id'                 => get_current_network_id(),
-		'target_type'                => 'plugin',
-		'installed_package_identity' => $ran_wp_release_updater_test_automatic_plugin,
-	)
-);
 global $wpdb;
-// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- WordPress exposes its database connection through this named global; only the exact fixture-owned fence option is read.
-$ran_wp_release_updater_test_automatic_fence_raw = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->base_prefix}options WHERE option_name = %s LIMIT 1", $ran_wp_release_updater_test_automatic_fence_key ) );
-$ran_wp_release_updater_test_automatic_fence     = is_string( $ran_wp_release_updater_test_automatic_fence_raw ) ? json_decode( $ran_wp_release_updater_test_automatic_fence_raw, true ) : null;
-$ran_wp_release_updater_test_automatic_cleanup   = array(
-	'auto_updater_lock_absent' => false === get_option( 'auto_updater.lock', false ),
-	'maintenance_absent'       => ! file_exists( ABSPATH . '.maintenance' ),
-	'lease_released'           => is_array( $ran_wp_release_updater_test_automatic_fence ) && 1 === ( $ran_wp_release_updater_test_automatic_fence['lease_deadline'] ?? null ),
-	'backup_absent'            => ! is_dir( WP_CONTENT_DIR . '/upgrade-temp-backup/plugins/' . $ran_wp_release_updater_test_automatic_slug ),
-	'owned_downloads_absent'   => array() === glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_NOSORT ),
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- WordPress exposes its database connection through this named global; verify zero legacy per-target lease rows exist.
+$ran_wp_release_updater_test_automatic_legacy_rows = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE 'ran\\_wp\\_release\\_updater\\_target\\_v1\\_%'" );
+$ran_wp_release_updater_test_automatic_cleanup     = array(
+	'auto_updater_lock_absent'  => false === get_option( 'auto_updater.lock', false ),
+	'maintenance_absent'        => ! file_exists( ABSPATH . '.maintenance' ),
+	'legacy_target_rows_absent' => 0 === $ran_wp_release_updater_test_automatic_legacy_rows,
+	'backup_absent'             => ! is_dir( WP_CONTENT_DIR . '/upgrade-temp-backup/plugins/' . $ran_wp_release_updater_test_automatic_slug ),
+	'owned_downloads_absent'    => array() === glob( rtrim( sys_get_temp_dir(), '/\\' ) . '/ran-wp-release-updater-*', GLOB_NOSORT ),
 );
 // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- The installed runtime copy is exact fixture evidence, not a WordPress-managed file.
 $ran_wp_release_updater_test_automatic_runtime_copy = json_decode( (string) file_get_contents( $ran_wp_release_updater_test_automatic_runtime . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
@@ -80,7 +72,7 @@ $ran_wp_release_updater_test_automatic_proof       = array(
 	'runtime_is_example_vendor' => is_string( $ran_wp_release_updater_test_automatic_origin ) && str_starts_with( $ran_wp_release_updater_test_automatic_origin, $ran_wp_release_updater_test_automatic_runtime . '/' ),
 	'update_offer_present'      => is_object( $ran_wp_release_updater_test_automatic_offer ) && isset( $ran_wp_release_updater_test_automatic_offer->response[ $ran_wp_release_updater_test_automatic_plugin ] ),
 	'cleanup'                   => $ran_wp_release_updater_test_automatic_cleanup,
-	'last_native_outcome'       => is_array( $ran_wp_release_updater_test_automatic_fence ) ? ( $ran_wp_release_updater_test_automatic_fence['last_native_outcome'] ?? null ) : null,
+	'legacy_target_row_count'   => $ran_wp_release_updater_test_automatic_legacy_rows,
 	'update_transient_was'      => false !== $ran_wp_release_updater_test_automatic_before_transient,
 	'pass'                      => in_array( $ran_wp_release_updater_test_automatic_mode, array( 'schedule', 'acquire' ), true ) || ( $ran_wp_release_updater_test_automatic_after_version === $ran_wp_release_updater_test_automatic_version
 		&& is_plugin_active( $ran_wp_release_updater_test_automatic_plugin )
