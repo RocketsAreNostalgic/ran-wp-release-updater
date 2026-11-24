@@ -711,7 +711,9 @@ return new class( $ran_wp_release_updater_broker ) {
 					|| ! $this->matches( $value['artifact_filename'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,215}\.zip\z/Di' )
 					|| ! $this->matches( $value['artifact_sha256'], '/\A[a-f0-9]{64}\z/D' )
 					|| ! is_string( $value['package_root'] ) || ! \RAN\WPReleaseUpdater\V1\Dependency\PackageDirectory::is_valid_name( $value['package_root'] )
-					|| ( 'theme' === $value['target_type'] ? 'style.css' !== $value['main_file'] : ! $this->matches( $value['main_file'], '/\A[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.php\z/D' ) )
+					|| ( 'theme' === $value['target_type']
+						? 'style.css' !== $value['main_file']
+						: ( ! is_string( $value['main_file'] ) || ! str_ends_with( $value['main_file'], '.php' ) || 104 < strlen( $value['main_file'] ) || str_contains( $value['main_file'], '/' ) || ! \RAN\WPReleaseUpdater\V1\Dependency\PluginFileIdentifier::is_valid( $value['main_file'] ) ) )
 					|| ! is_string( $value['canonical_update_uri'] )
 					|| \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $value['canonical_update_uri'] ) !== $value['canonical_update_uri']
 					|| ! $this->matches( $value['fingerprint'], '/\Av2:[a-f0-9]{64}\z/D' ) ) {

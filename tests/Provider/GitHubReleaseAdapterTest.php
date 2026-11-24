@@ -146,6 +146,19 @@ namespace RAN\WPReleaseUpdater\V1\Provider\GitHub {
 		return \chmod( $path, $permissions );
 	}
 
+	/** Scoped test seam for the service's synchronous two-attempt cleanup. */
+	function unlink( string $path ): bool {
+		if ( ( $GLOBALS['ran_github_unlink_failures'] ?? 0 ) > 0 ) {
+			--$GLOBALS['ran_github_unlink_failures'];
+			return false;
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- The namespaced test seam delegates to native unlink after the injected deletion-failure case.
+		return \unlink( $path );
+	}
+}
+
+// phpcs:ignore Universal.Namespaces.OneDeclarationPerFile.MultipleFound, Universal.Namespaces.DisallowCurlyBraceSyntax.Forbidden -- This fixture colocates foreign global stubs and namespaced test or injected provider seams. Keep global WordPress stubs and namespaced test code in the same isolated fixture.
+namespace RAN\WPReleaseUpdater\V1\Dependency {
 	/**
 	 * @return array<int|string,int>|false
 	 */
@@ -157,16 +170,6 @@ namespace RAN\WPReleaseUpdater\V1\Provider\GitHub {
 			}
 		}
 		return \lstat( $path );
-	}
-
-	/** Scoped test seam for the service's synchronous two-attempt cleanup. */
-	function unlink( string $path ): bool {
-		if ( ( $GLOBALS['ran_github_unlink_failures'] ?? 0 ) > 0 ) {
-			--$GLOBALS['ran_github_unlink_failures'];
-			return false;
-		}
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- The namespaced test seam delegates to native unlink after the injected deletion-failure case.
-		return \unlink( $path );
 	}
 }
 

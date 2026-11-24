@@ -130,7 +130,6 @@ final class TemporaryArtifact {
 	}
 
 	private function is_unchanged(): bool {
-		clearstatcache( true, $this->path );
 		$identity = self::file_identity( $this->path );
 		if ( null === $identity || $identity !== $this->identity ) {
 			return false;
@@ -138,8 +137,7 @@ final class TemporaryArtifact {
 
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Hash the verified regular file and recheck native identity; missing or changed files fail closed quietly.
 		$sha256 = @hash_file( 'sha256', $this->path );
-		clearstatcache( true, $this->path );
-		$after = self::file_identity( $this->path );
+		$after  = self::file_identity( $this->path );
 
 		return is_string( $sha256 )
 			&& hash_equals( $this->sha256, $sha256 )

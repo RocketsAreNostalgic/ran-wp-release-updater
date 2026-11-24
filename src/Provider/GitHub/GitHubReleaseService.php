@@ -119,7 +119,8 @@ final class GitHubReleaseService {
 		}
 		$raw_wordpress = $GLOBALS['wp_version'] ?? null;
 		$wordpress     = is_string( $raw_wordpress ) ? RuntimeVersion::wordpress( $raw_wordpress ) : null;
-		if ( ! is_string( $wordpress ) ) {
+		$php           = RuntimeVersion::php( PHP_VERSION );
+		if ( ! is_string( $wordpress ) || ! is_string( $php ) ) {
 			throw new \RuntimeException( 'The release runtime is unavailable.' );
 		}
 		return new self(
@@ -127,7 +128,7 @@ final class GitHubReleaseService {
 				'canonical_repository_locator' => $declaration['repository_locator'],
 				'canonical_update_uri'         => CanonicalUpdateUri::canonicalize( 'https://github.com/' . $declaration['repository_locator'] ),
 				'maximum_artifact_bytes'       => $declaration['maximum_artifact_bytes'],
-				'php_runtime_version'          => SelectedRuntimeState::current_php_version(),
+				'php_runtime_version'          => $php,
 				'release_channel'              => $declaration['channel'],
 				'stable_repository_identity'   => $declaration['repository_identity'],
 				'target_type'                  => $declaration['target_type'],

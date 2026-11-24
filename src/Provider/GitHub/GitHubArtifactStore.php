@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace RAN\WPReleaseUpdater\V1\Provider\GitHub;
 
+use RAN\WPReleaseUpdater\V1\Dependency\RegularFileStat;
 use RuntimeException;
 
 /** Owns private temporary-file allocation, identity checks and cleanup for GitHub artifacts. */
@@ -40,23 +41,7 @@ final class GitHubArtifactStore {
 
 	/** @return array{dev:int,ino:int,mode:int,nlink:int,uid:int,gid:int,size:int,mtime:int,ctime:int}|null */
 	public function identity( string $path ): ?array {
-		clearstatcache( true, $path );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Observe native filesystem identity without following a replacement abstraction; missing or changed facts fail existing validation.
-		$stat = @lstat( $path );
-		if ( ! is_array( $stat ) || is_link( $path ) || 0100000 !== ( (int) $stat['mode'] & 0170000 ) ) {
-			return null;
-		}
-		return array(
-			'dev'   => (int) $stat['dev'],
-			'ino'   => (int) $stat['ino'],
-			'mode'  => (int) $stat['mode'],
-			'nlink' => (int) $stat['nlink'],
-			'uid'   => (int) $stat['uid'],
-			'gid'   => (int) $stat['gid'],
-			'size'  => (int) $stat['size'],
-			'mtime' => (int) $stat['mtime'],
-			'ctime' => (int) $stat['ctime'],
-		);
+		return RegularFileStat::read( $path );
 	}
 
 	/** @param array{dev:int,ino:int,mode:int,nlink:int,uid:int,gid:int,size:int,mtime:int,ctime:int} $identity */

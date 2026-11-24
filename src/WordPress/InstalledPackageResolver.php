@@ -336,9 +336,7 @@ final class InstalledPackageResolver {
 			return true;
 		}
 		if ( '' !== $headers['RequiresPHP'] ) {
-			$php_version    = RuntimeVersion::php(
-				$this->php_version ?? \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState::current_php_version()
-			);
+			$php_version    = RuntimeVersion::php( $this->php_version ?? PHP_VERSION );
 			$php_comparison = is_string( $php_version ) ? ReleaseVersion::compare( $php_version, $headers['RequiresPHP'] ) : null;
 			if ( null === ReleaseVersion::normalize_header( $headers['RequiresPHP'] ) || null === $php_comparison || $php_comparison < 0 ) {
 				return true;
