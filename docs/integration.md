@@ -422,17 +422,20 @@ shutdown callbacks alongside the updater's shutdown cleanup fallback. Because
 the updater relies on native `WP_Upgrader` rather than a custom recovery layer,
 an unhandled exception thrown after `move_to_temp_backup_dir()` and before
 `WP_Upgrader::run()` registers its shutdown callbacks leaves the target
-unrecovered by Core and relies on WordPress's 10-minute `.maintenance` timeout
-while the updater's own shutdown fallback still cleans up private custody,
-releases its lock, and reports an uncertain outcome.
+unrecovered by Core; on the plugin `bulk_upgrade()` path (when the plugin is
+active or on multisite), WordPress's 10-minute `.maintenance` timeout applies
+(`Theme_Upgrader::upgrade()` does not enable maintenance mode), while the
+updater's own shutdown fallback still cleans up private custody, releases its
+lock, and reports an uncertain outcome.
 
 If an exact install is refused before WordPress moves the live package to
 temporary backup (for example in `upgrader_pre_install`, `upgrader_source_selection`,
-or on `fs_no_content_dir` / `fs_temp_backup_mkdir`), the updater disarms Core's
-`restore_temp_backup` (priority 10) and `delete_temp_backup` (priority 100)
-shutdown callbacks for that upgrader instance so a pre-existing stale directory
-under `upgrade-temp-backup/` cannot overwrite the healthy live installation or
-be deleted by the refused invocation.
+or on raw `fs_no_content_dir`, `fs_temp_backup_mkdir`, or `fs_temp_backup_move`
+errors observed via `upgrader_install_package_result` prior to error rewriting),
+the updater disarms Core's `restore_temp_backup` (priority 10) and
+`delete_temp_backup` (priority 100) shutdown callbacks for that upgrader
+instance so a pre-existing stale directory under `upgrade-temp-backup/` cannot
+overwrite the healthy live installation or be deleted by the refused invocation.
 
 The operation buffers native progress without flushing the caller's response.
 WordPress's asynchronous translation callback leaves pending language packs for

@@ -1195,6 +1195,8 @@ function ran_wp_release_updater_test_installed_offer_release( string $source, st
 		array( 'same', 'plugin', 'exact-credentials-refused' ),
 		array( 'same', 'plugin', 'exact-early-refusal' ),
 		array( 'same', 'theme', 'exact-early-refusal' ),
+		array( 'same', 'plugin', 'exact-backup-move-fail' ),
+		array( 'same', 'theme', 'exact-backup-move-fail' ),
 		array( 'same', 'plugin', 'exact-early-lease-fail' ),
 		array( 'same', 'theme', 'exact-archive-fail' ),
 		array( 'same', 'plugin', 'exact-lease-fail' ),

@@ -64,9 +64,10 @@ final class ExactInstallInvocation {
 		$this->wordpress_started = true;
 		$level                   = ob_get_level();
 		$upgrader                = $this->upgrader;
+		$target_type             = $upgrader instanceof \Plugin_Upgrader ? 'plugin' : 'theme';
 		$theme_cache_args        = $upgrader instanceof \Theme_Upgrader ? self::theme_cache_action_arguments() : null;
 		$source_admitted         = false;
-		$result                  = null;
+		$install_package_error   = null;
 		// Core's translation upgrader uses its own output-flushing skin. Leave its offers for a later update.
 		$defer_translations = static fn (): bool => false;
 		$observe_source     = static function ( mixed $source, mixed $remote_source = null, mixed $calling_upgrader = null ) use ( $upgrader, &$source_admitted ): mixed {
@@ -76,24 +77,35 @@ final class ExactInstallInvocation {
 			}
 			return $source;
 		};
+		$observe_result     = static function ( mixed $install_result, mixed $hook_extra = null ) use ( $target_type, $identity, &$install_package_error ): mixed {
+			if (
+				$install_result instanceof \WP_Error
+				&& is_array( $hook_extra )
+				&& ( $hook_extra['type'] ?? null ) === $target_type
+				&& ( $hook_extra['action'] ?? null ) === 'update'
+				&& ( $hook_extra[ $target_type ] ?? null ) === $identity
+			) {
+				$install_package_error = (string) $install_result->get_error_code();
+			}
+			return $install_result;
+		};
 		add_filter( 'async_update_translation', $defer_translations, PHP_INT_MAX, 0 );
 		add_filter( 'upgrader_source_selection', $observe_source, PHP_INT_MAX, 3 );
+		add_filter( 'upgrader_install_package_result', $observe_result, PHP_INT_MIN, 2 );
 		ob_start();
 		try {
 			if ( $upgrader instanceof \Plugin_Upgrader ) {
 				$results = $upgrader->bulk_upgrade( array( $identity ) );
-				$result  = is_array( $results ) && array( $identity ) === array_keys( $results ) ? $results[ $identity ] : false;
-				return $result;
+				return is_array( $results ) && array( $identity ) === array_keys( $results ) ? $results[ $identity ] : false;
 			}
 			$upgrade = $upgrader->upgrade( $identity );
-			$result  = true === $upgrade ? $upgrader->result : $upgrade;
-			return $result;
+			return true === $upgrade ? $upgrader->result : $upgrade;
 		} finally {
 			remove_filter( 'async_update_translation', $defer_translations, PHP_INT_MAX );
 			remove_filter( 'upgrader_source_selection', $observe_source, PHP_INT_MAX );
-			$upgrader_error      = $result instanceof \WP_Error ? $result : ( $upgrader->result instanceof \WP_Error ? $upgrader->result : null );
+			remove_filter( 'upgrader_install_package_result', $observe_result, PHP_INT_MIN );
 			$backup_move_skipped = ! $source_admitted
-				|| ( $upgrader_error instanceof \WP_Error && in_array( $upgrader_error->get_error_code(), array( 'fs_no_content_dir', 'fs_temp_backup_mkdir' ), true ) );
+				|| in_array( $install_package_error, array( 'fs_no_content_dir', 'fs_temp_backup_mkdir', 'fs_temp_backup_move' ), true );
 			if ( $backup_move_skipped ) {
 				remove_action( 'shutdown', array( $upgrader, 'restore_temp_backup' ), 10 );
 				remove_action( 'shutdown', array( $upgrader, 'delete_temp_backup' ), 100 );

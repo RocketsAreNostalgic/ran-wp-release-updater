@@ -3840,54 +3840,81 @@ class Theme_Upgrader_Skin extends WP_Upgrader_Skin {
 class WP_Upgrader {
 	public mixed $result = null;
 	public function __construct( public WP_Upgrader_Skin $skin ) {}
-	protected function simulate_run( string $scenario ): mixed {
+	/** @param array<string,string> $hook_extra */
+	protected function simulate_run( string $scenario, array $hook_extra ): mixed {
 		if ( 'source-rejected' === $scenario ) {
 			apply_filters( 'upgrader_source_selection', new WP_Error( 'staged_package_identity_invalid' ), '/remote', $this );
-			$this->result = new WP_Error( 'staged_package_identity_invalid' );
+			$install_result = new WP_Error( 'staged_package_identity_invalid' );
 		} elseif ( 'pre-install-refused' === $scenario ) {
-			$this->result = new WP_Error( 'pre_install_refused' );
+			$install_result = new WP_Error( 'pre_install_refused' );
 		} elseif ( 'mkdir-failed' === $scenario ) {
 			apply_filters( 'upgrader_source_selection', '/staged/package', '/remote', $this );
-			$this->result = new WP_Error( 'fs_temp_backup_mkdir' );
+			$install_result = new WP_Error( 'fs_temp_backup_mkdir' );
 		} elseif ( 'no-content-dir' === $scenario ) {
 			apply_filters( 'upgrader_source_selection', '/staged/package', '/remote', $this );
-			$this->result = new WP_Error( 'fs_no_content_dir' );
+			$install_result = new WP_Error( 'fs_no_content_dir' );
+		} elseif ( 'move-failed' === $scenario ) {
+			apply_filters( 'upgrader_source_selection', '/staged/package', '/remote', $this );
+			$install_result = new WP_Error( 'fs_temp_backup_move' );
 		} else {
 			apply_filters( 'upgrader_source_selection', '/staged/package', '/remote', $this );
-			$this->result = new WP_Error( 'post_copy_failure' );
+			$install_result = new WP_Error( 'post_copy_failure' );
+			// Core populates $this->result once installation reaches upgrader_post_install.
+			$this->result = $install_result;
 		}
-		// Mirror WP_Upgrader::run(): Core hooks both callbacks whenever install_package returns WP_Error.
+		// Mirror WP_Upgrader::run(): filter install_package() errors through upgrader_install_package_result
+		// (where NativePackageUpdater at PHP_INT_MAX rewrites WP_Error to ran_wp_release_updater_unverified_install_result)
+		// and leave $this->result null on pre-post-install failures while still hooking shutdown backup callbacks.
+		$filtered = apply_filters( 'upgrader_install_package_result', $install_result, $hook_extra );
 		add_action( 'shutdown', array( $this, 'restore_temp_backup' ), 10, 0 );
 		add_action( 'shutdown', array( $this, 'delete_temp_backup' ), 100, 0 );
-		return $this->result;
+		return $filtered;
 	}
 }
 class Plugin_Upgrader extends WP_Upgrader {
 	/** @param list<string> $plugins @return array<string,mixed> */
 	public function bulk_upgrade( array $plugins ): array {
-		return array( $plugins[0] => $this->simulate_run( $GLOBALS['ran_scenario'] ) );
+		$hook_extra = array(
+			'plugin' => $plugins[0],
+			'type'   => 'plugin',
+			'action' => 'update',
+		);
+		return array( $plugins[0] => $this->simulate_run( $GLOBALS['ran_scenario'], $hook_extra ) );
 	}
 }
 class Theme_Upgrader extends WP_Upgrader {
 	public function upgrade( string $theme ): mixed {
-		unset( $theme );
-		$this->simulate_run( $GLOBALS['ran_scenario'] );
-		// Mirror Theme_Upgrader::upgrade(): returns false on WP_Error while storing the error in $this->result.
-		return false;
+		$hook_extra = array(
+			'theme'  => $theme,
+			'type'   => 'theme',
+			'action' => 'update',
+		);
+		$this->simulate_run( $GLOBALS['ran_scenario'], $hook_extra );
+		// Mirror Theme_Upgrader::upgrade(): returns $this->result (null on move-stage failures).
+		return $this->result;
 	}
 }
 
 $summary = array();
 foreach ( array( 'plugin', 'theme' ) as $type ) {
-	foreach ( array( 'pre-install-refused', 'source-rejected', 'mkdir-failed', 'no-content-dir', 'post-move-failure' ) as $scenario ) {
+	$identity = 'plugin' === $type ? 'package/package.php' : 'package';
+	foreach ( array( 'pre-install-refused', 'source-rejected', 'mkdir-failed', 'no-content-dir', 'move-failed', 'post-move-failure' ) as $scenario ) {
 		$GLOBALS['ran_hooks']    = array();
 		$GLOBALS['ran_scenario'] = $scenario;
-		$invocation              = \RAN\WPReleaseUpdater\V1\WordPress\ExactInstallInvocation::create( $type, 'token', '1.0.0' );
-		$invocation->run( 'plugin' === $type ? 'package/package.php' : 'package' );
+		// Mirror NativePackageUpdater::capture_install_package_result() rewriting every WP_Error at PHP_INT_MAX.
+		add_filter(
+			'upgrader_install_package_result',
+			static fn ( mixed $result ): mixed => $result instanceof WP_Error ? new WP_Error( 'ran_wp_release_updater_unverified_install_result' ) : $result,
+			PHP_INT_MAX,
+			2
+		);
+		$invocation = \RAN\WPReleaseUpdater\V1\WordPress\ExactInstallInvocation::create( $type, 'token', '1.0.0' );
+		$invocation->run( $identity );
 		$summary[ $type . ':' . $scenario ] = array(
-			'restore_pending' => $invocation->restore_pending(),
-			'delete_pending'  => false !== has_action( 'shutdown', array( $invocation->upgrader, 'delete_temp_backup' ) ),
-			'source_hook'     => has_action( 'upgrader_source_selection' ),
+			'restore_pending'    => $invocation->restore_pending(),
+			'delete_pending'     => false !== has_action( 'shutdown', array( $invocation->upgrader, 'delete_temp_backup' ) ),
+			'source_hook'        => has_action( 'upgrader_source_selection' ),
+			'result_min_hook'    => isset( $GLOBALS['ran_hooks']['upgrader_install_package_result'][ PHP_INT_MIN ] ),
 		);
 	}
 }
@@ -3906,12 +3933,13 @@ PHP;
 			$actual = json_decode( implode( "\n", $output ), true, 64, JSON_THROW_ON_ERROR );
 			self::assertIsArray( $actual );
 			foreach ( array( 'plugin', 'theme' ) as $type ) {
-				foreach ( array( 'pre-install-refused', 'source-rejected', 'mkdir-failed', 'no-content-dir' ) as $skipped ) {
+				foreach ( array( 'pre-install-refused', 'source-rejected', 'mkdir-failed', 'no-content-dir', 'move-failed' ) as $skipped ) {
 					self::assertSame(
 						array(
 							'restore_pending' => false,
 							'delete_pending'  => false,
 							'source_hook'     => false,
+							'result_min_hook' => false,
 						),
 						$actual[ $type . ':' . $skipped ] ?? null,
 						$type . ':' . $skipped
@@ -3922,6 +3950,7 @@ PHP;
 						'restore_pending' => true,
 						'delete_pending'  => true,
 						'source_hook'     => false,
+						'result_min_hook' => false,
 					),
 					$actual[ $type . ':post-move-failure' ] ?? null,
 					$type . ':post-move-failure'

@@ -30,13 +30,15 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	$release = $zip->getFromName( $slug . '/' . basename( $main_file ) );
 	$zip->close();
 
-	$early_refusal = in_array( $mode, array( 'exact-early-refusal', 'exact-early-lease-fail' ), true );
-	$stale_file    = $backup . '/' . basename( $main_file );
-	$stale_bytes   = $before . "\n// stale backup fixture\n";
-	if ( $early_refusal ) {
+	$early_refusal      = in_array( $mode, array( 'exact-early-refusal', 'exact-early-lease-fail' ), true );
+	$backup_move_failed = 'exact-backup-move-fail' === $mode;
+	$stale_seeded       = $early_refusal || $backup_move_failed;
+	$stale_file         = $backup . '/' . basename( $main_file );
+	$stale_bytes        = $before . "\n// stale backup fixture\n";
+	if ( $stale_seeded ) {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Seed a stale backup before WordPress initializes its filesystem.
 		if ( ! wp_mkdir_p( $backup ) || false === file_put_contents( $stale_file, $stale_bytes ) ) {
-			throw new RuntimeException( 'Could not seed the early refusal backup.' );
+			throw new RuntimeException( 'Could not seed the stale backup fixture.' );
 		}
 	}
 
@@ -164,14 +166,14 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'exact-listed-change'         => 'candidate_descriptor_mismatch',
 		'exact-changed'               => 'remote_release_changed',
 		'exact-failure'               => 'backup_restore_pending',
-		'exact-alternate-destination', 'exact-credentials-refused', 'exact-early-refusal' => 'unverified_install_result',
+		'exact-alternate-destination', 'exact-credentials-refused', 'exact-early-refusal', 'exact-backup-move-fail' => 'unverified_install_result',
 		'exact-interrupted'           => 'unexpected_failure',
 		'exact-early-lease-fail', 'exact-lease-fail' => 'lease_release_failed',
 		'exact-archive-fail'          => 'archive_cleanup_failed',
 		'exact-host-fail'             => 'host_completion_failed',
 		default                       => throw new RuntimeException( 'Invalid exact-install scenario.' ),
 	};
-	$pending                  = in_array( $mode, array( 'exact-failure', 'exact-interrupted', 'exact-alternate-destination' ), true );
+	$pending                  = in_array( $mode, array( 'exact-failure', 'exact-interrupted', 'exact-alternate-destination', 'exact-backup-move-fail' ), true );
 	$refused                  = in_array( $mode, array( 'exact-refuse', 'exact-listed-change' ), true );
 	$changed                  = 'exact-changed' === $mode;
 	$finalized                = ! $pending && ! $refused && ! $changed && ! $early_refusal && ! $credentials_refused;
@@ -187,8 +189,8 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	) : array();
 	$core_restoring           = 'exact-failure' === $mode;
 	$restoring                = 'exact-failure' === $mode;
-	$backup_moved             = $finalized || $pending;
-	$keeps_old_bytes          = $refused || $changed || $early_refusal || $credentials_refused;
+	$backup_moved             = ( $finalized || $pending ) && ! $backup_move_failed;
+	$keeps_old_bytes          = $refused || $changed || $early_refusal || $credentials_refused || $backup_move_failed;
 	$expected_installed_bytes = $keeps_old_bytes ? $before : $release;
 	$expected_status          = $success ? 'installed' : ( $pending ? 'pending' : ( $refused ? 'refused' : 'failed' ) );
 	$checks                   = array(
@@ -209,8 +211,8 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'bytes_before'          => $before_shutdown === $expected_installed_bytes && ( $keeps_old_bytes || $before !== $before_shutdown ),
 		'commit_before'         => $completions_before === $host_completed && ( $success ? 'verified_success' === ( $native_record['outcome'] ?? null ) : 'verified_success' !== ( $native_record['outcome'] ?? null ) ),
 		'shutdown_ownership'    => $pending === $owns_finalizer && $core_restoring === $owns_restore_hook && $backup_moved === $owns_backup_hook && 0 === $deletions_before,
-		'backup_present_before' => ( $backup_moved || $early_refusal ) === $backup_present,
-		'stale_backup_before'   => ! $early_refusal || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
+		'backup_present_before' => ( $backup_moved || $stale_seeded ) === $backup_present,
+		'stale_backup_before'   => ! $stale_seeded || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
 		'private_custody'       => ( $pending || 'exact-archive-fail' === $mode ) ? is_array( $private_before ) && 1 === count( $private_before ) : array() === $private_before,
 	);
 	if ( $observed->upgrader instanceof WP_Upgrader ) {
@@ -238,15 +240,17 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	}
 	add_action(
 		'shutdown',
-		static function () use ( $checks, $type, $identity, $backup, $restoring, $expected_installed_bytes, $read_bytes, $main_file, $before, $observed, $host_completed, $pending, $backup_moved, $updater, $report, $early_refusal, $stale_file, $stale_bytes, $alternate_destination ): void {
+		static function () use ( $checks, $type, $identity, $backup, $restoring, $expected_installed_bytes, $read_bytes, $main_file, $before, $observed, $host_completed, $pending, $backup_moved, $updater, $report, $stale_seeded, $backup_move_failed, $stale_file, $stale_bytes, $alternate_destination ): void {
 			$after       = $read_bytes( $main_file );
 			$is_active   = 'plugin' === $type ? is_plugin_active( $identity ) : get_stylesheet() === $identity;
 			$completions = $pending ? array( array( 'exact-install-proof', $type, $identity, 'uncertain' ) ) : $host_completed;
+			$outcome     = $updater->status()['last_native_outcome'];
 			$checks     += array(
 				'active_preserved'   => $is_active,
 				'rollback_preserved' => ( $restoring ? $before : $expected_installed_bytes ) === $after,
-				'shutdown_cleanup'   => is_dir( $backup ) === $early_refusal && array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
-				'stale_backup_after' => ! $early_refusal || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
+				'shutdown_cleanup'   => is_dir( $backup ) === $stale_seeded && array() === glob( sys_get_temp_dir() . '/ran-wp-release-updater-*' ),
+				'stale_backup_after' => ! $stale_seeded || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
+				'backup_move_error'  => ! $backup_move_failed || 'fs_temp_backup_move' === ( $outcome['wordpress_code'] ?? null ),
 				'single_completion'  => $completions === $observed->completions,
 				'backup_deletions'   => ( $backup_moved ? 1 : 0 ) === $observed->deletions,
 				'other_upgrader'     => 1 === $observed->foreign_restore,
@@ -258,7 +262,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 				'pass'         => ! in_array( false, $checks, true ),
 				'checks'       => $checks,
 				'report'       => $report,
-				'outcome'      => $updater->status()['last_native_outcome'],
+				'outcome'      => $outcome,
 				'downloads'    => $observed->downloads,
 				'stdout_bytes' => $observed->stdout_bytes,
 			);
@@ -417,12 +421,34 @@ function ran_wp_release_updater_test_exact_http( string $archive, string $mode, 
 function ran_wp_release_updater_test_exact_wordpress_faults( string $mode, string $type, string $identity, string $backup, stdClass $observed ): void {
 	add_filter(
 		'upgrader_pre_download',
-		static function ( mixed $reply, string $package, WP_Upgrader $upgrader, array $extra ) use ( $mode, $type, $identity, $observed ): mixed {
+		static function ( mixed $reply, string $package, WP_Upgrader $upgrader, array $extra ) use ( $mode, $type, $identity, $backup, $observed ): mixed {
 			if ( ( $extra[ $type ] ?? null ) !== $identity ) {
 				return $reply;
 			}
 			$observed->upgrader = $upgrader;
 			$observed->package  = $package;
+			if ( 'exact-backup-move-fail' === $mode && is_string( $reply ) ) {
+				// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Fail only the disposable backup target inside move_to_temp_backup_dir() so Core emits fs_temp_backup_move deterministically regardless of runner user permissions.
+				$GLOBALS['wp_filesystem'] = new class( $backup ) extends WP_Filesystem_Direct {
+					public function __construct( private string $backup_path ) {
+						parent::__construct( null );
+					}
+
+					public function delete( $file, $recursive = false, $type = false ) {
+						if ( rtrim( (string) $file, '/\\' ) === $this->backup_path ) {
+							return false;
+						}
+						return parent::delete( $file, $recursive, $type );
+					}
+
+					public function move( $source, $destination, $overwrite = false ) {
+						if ( rtrim( (string) $destination, '/\\' ) === $this->backup_path ) {
+							return false;
+						}
+						return parent::move( $source, $destination, $overwrite );
+					}
+				};
+			}
 			if ( 'exact-archive-fail' === $mode && is_string( $reply ) ) {
 				$sentinel = dirname( $reply ) . '/keep-until-shutdown';
 				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Make the owned archive directory non-empty to inject real native cleanup failure.
