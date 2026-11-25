@@ -433,17 +433,87 @@ PHP,
 		self::assertFileDoesNotExist( $sentinel );
 	}
 
+	public function test_winning_runtime_ancestor_symlink_swap_before_activate_fails_closed(): void {
+		$ancestor_container = $this->parent . '/ancestor-root';
+		$ancestor           = $ancestor_container . '/slot';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create nested ancestor copy directory for realpath-cache swap testing.
+		mkdir( $ancestor, 0700, true );
+		$copy = $this->package_copy_at( $ancestor . '/nested', '1.0.0-beta.24' );
+
+		$outside_slot = $this->parent . '/outside-ancestor-slot';
+		$outside      = $outside_slot . '/nested';
+		$sentinel     = $outside_slot . '/executed.marker';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create outside target tree matching nested copy layout.
+		mkdir( $outside, 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write sentinel payload to prove swapped ancestor runtime.php is never executed.
+		file_put_contents( $outside . '/runtime.php', '<?php file_put_contents(' . var_export( $sentinel, true ) . ', "executed"); return new stdClass();' );
+
+		$result = $this->probe(
+			<<<'PHP'
+require $data['copy'] . '/bootstrap.php';
+$broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
+if (!rename($data['ancestor'], $data['ancestor'] . '-original')) {
+	echo json_encode(array('skipped' => true));
+	return;
+}
+if (!symlink($data['outside_slot'], $data['ancestor'])) {
+	rename($data['ancestor'] . '-original', $data['ancestor']);
+	echo json_encode(array('skipped' => true));
+	return;
+}
+$activation = $broker->activate(array(
+	'php_version' => '8.2.0',
+	'runtime_protocol' => 11,
+	'wordpress_version' => '6.8.0',
+));
+echo json_encode(array(
+	'skipped' => false,
+	'activation' => $activation,
+));
+PHP,
+			array(
+				'copy'         => $copy,
+				'ancestor'     => $ancestor,
+				'outside_slot' => $outside_slot,
+			)
+		);
+		if ( true === ( $result['skipped'] ?? false ) ) {
+			self::markTestSkipped( 'Symlinks or directory renames are unavailable on this platform.' );
+		}
+
+		self::assertFalse( $result['activation']['loaded'] );
+		self::assertSame( 'inactive', $result['activation']['state'] );
+		self::assertSame( 'runtime_load_failed', $result['activation']['code'] );
+		self::assertFileDoesNotExist( $sentinel );
+	}
+
 	public function test_protocol_11_allow_working_copy_interoperability_and_refusal(): void {
 		$new_high = $this->package_copy( 'p11-new-high', '1.0.0-beta.24' );
 		$new_low  = $this->package_copy( 'p11-new-low', '1.0.0-beta.22' );
 		$old_low  = $this->package_copy( 'p11-old-low', '1.0.0-beta.22' );
 		$old_high = $this->package_copy( 'p11-old-high', '1.0.0-beta.24' );
 
-		// Build a faithful base protocol-11 peer across bootstrap.php, runtime.php, RequestProtocolValidator, GitHubReleaseAdapter, and NativePackageUpdater.
+		// Build a faithful base protocol-11 peer (without entrypoint verification) across bootstrap, broker, selector, validator, adapter, and updater.
 		foreach ( array( $old_low, $old_high ) as $old_copy ) {
+			$this->patch_file_strict(
+				$old_copy . '/src/Runtime/RequestBroker.php',
+				array(
+					"\$entrypoint                            = \$this->runtime_copy_selector->verify_selected_entrypoint( \$selected['source_root'], \$selected['runtime_file'] );\n\t\t\t\$ran_wp_release_updater_selected_state = \$this->selected_runtime_state;\n\t\t\t\$handoff                               = require \$entrypoint;"
+						=> "\$ran_wp_release_updater_selected_state = \$this->selected_runtime_state;\n\t\t\t\$handoff                               = require \$selected['runtime_file'];",
+				)
+			);
+			$this->patch_file_strict(
+				$old_copy . '/src/Runtime/RuntimeCopySelector.php',
+				array(
+					"\t/** Revalidates the winning runtime entrypoint immediately before require without hashing source files. */\n\tpublic function verify_selected_entrypoint( string \$source_root, string \$runtime_file ): string {\n\t\tclearstatcache( true );\n\t\t\$actual_root = realpath( \$source_root );\n\t\tif (\n\t\t\t'' === \$source_root\n\t\t\t|| is_link( \$source_root )\n\t\t\t|| ! is_dir( \$source_root )\n\t\t\t|| false === \$actual_root\n\t\t\t|| ! hash_equals( \$source_root, \$actual_root )\n\t\t) {\n\t\t\tthrow new RuntimeException( 'Invalid runtime source.' );\n\t\t}\n\t\t\$expected    = \$source_root . DIRECTORY_SEPARATOR . 'runtime.php';\n\t\t\$actual_file = realpath( \$runtime_file );\n\t\tif (\n\t\t\t! hash_equals( \$expected, \$runtime_file )\n\t\t\t|| is_link( \$runtime_file )\n\t\t\t|| ! is_file( \$runtime_file )\n\t\t\t|| false === \$actual_file\n\t\t\t|| ! hash_equals( \$expected, \$actual_file )\n\t\t) {\n\t\t\tthrow new RuntimeException( 'Invalid runtime source.' );\n\t\t}\n\n\t\treturn \$actual_file;\n\t}\n\n"
+						=> '',
+				)
+			);
 			$this->patch_file_strict(
 				$old_copy . '/bootstrap.php',
 				array(
+					"\$ran_wp_release_updater_selector_verifies_entrypoint = static function ( string \$root ): bool {\n\tif ( ! class_exists( \\RAN\\WPReleaseUpdater\\V1\\Runtime\\RuntimeCopySelector::class, false ) ) {\n\t\treturn false;\n\t}\n\ttry {\n\t\t\$selector_class  = new ReflectionClass( \\RAN\\WPReleaseUpdater\\V1\\Runtime\\RuntimeCopySelector::class );\n\t\t\$selector_source = \$selector_class->getFileName();\n\t\t\$selector_source = is_string( \$selector_source ) ? realpath( \$selector_source ) : false;\n\t\t\$expected_source = realpath( \$root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RuntimeCopySelector.php' );\n\t} catch ( Throwable ) {\n\t\treturn false;\n\t}\n\n\treturn is_string( \$selector_source )\n\t\t&& is_string( \$expected_source )\n\t\t&& \$selector_source === \$expected_source\n\t\t&& \$selector_class->hasMethod( 'verify_selected_entrypoint' )\n\t\t&& \$selector_class->getMethod( 'verify_selected_entrypoint' )->isPublic();\n};\n\$ran_wp_release_updater_broker_compatible            = is_array( \$ran_wp_release_updater_broker_provenance )\n\t&& \$ran_wp_release_updater_broker instanceof RequestBroker\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'protocol_version' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'register_candidate' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'activate' ) )\n\t\t&& is_callable( array( \$ran_wp_release_updater_broker, 'register_target' ) )\n\t\t&& is_callable( array( \$ran_wp_release_updater_broker, 'release_source' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'target_status' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'target_diagnostics' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'refresh_target' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'diagnostics' ) )\n\t&& \$ran_wp_release_updater_selector_verifies_entrypoint( \$ran_wp_release_updater_broker_provenance['root'] );"
+						=> "\$ran_wp_release_updater_broker_compatible = is_array( \$ran_wp_release_updater_broker_provenance )\n\t&& \$ran_wp_release_updater_broker instanceof RequestBroker\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'protocol_version' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'register_candidate' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'activate' ) )\n\t\t&& is_callable( array( \$ran_wp_release_updater_broker, 'register_target' ) )\n\t\t&& is_callable( array( \$ran_wp_release_updater_broker, 'release_source' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'target_status' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'target_diagnostics' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'refresh_target' ) )\n\t&& is_callable( array( \$ran_wp_release_updater_broker, 'diagnostics' ) );",
 					"unset( \$allow_working_copy );\n\t\treturn \$this->target( 'plugin', \$plugin_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes );"
 						=> "return \$this->target( 'plugin', \$plugin_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes, \$allow_working_copy );",
 					"unset( \$allow_working_copy );\n\t\treturn \$this->target( 'theme', \$stylesheet_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes );"
@@ -527,11 +597,9 @@ PHP,
 		self::assertNull( $validator_check['true'] );
 		self::assertSame( 'declaration_invalid', $validator_check['invalid'] );
 
-		// Pair 1 (new copy wins, both load orders) and Pair 2 (faithful base protocol-11 copy wins, both load orders).
+		// Pair 1 & Pair 2 with new broker first (new or faithful base peer wins).
 		$pairs = array(
-			'old-first-new-winner' => array( $old_low, $new_high, 'old', 'new' ),
 			'new-first-new-winner' => array( $new_high, $old_low, 'new', 'new' ),
-			'old-first-old-winner' => array( $old_high, $new_low, 'old', 'old' ),
 			'new-first-old-winner' => array( $new_low, $old_high, 'new', 'old' ),
 		);
 		foreach ( $pairs as $label => $pair ) {
@@ -627,6 +695,119 @@ PHP,
 				self::assertContains( 'unverified_pre_download', $result['plugin_diag'], $label );
 			}
 		}
+
+		// When the genuine base protocol-11 broker (without verify_selected_entrypoint) loads first, loading the new copy must fail closed before activation.
+		$old_first_pairs = array(
+			'old-first-new-winner' => array( $old_low, $new_high, $new_high ),
+			'old-first-old-winner' => array( $old_high, $new_low, $old_high ),
+		);
+		foreach ( $old_first_pairs as $label => $pair ) {
+			$outside  = $this->parent . '/outside-p11-' . $label;
+			$sentinel = $outside . '/executed.marker';
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create external directory to prove base broker cannot execute a swapped entrypoint on conflict.
+			mkdir( $outside, 0700, true );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write sentinel payload for old-first base-broker refusal test.
+			file_put_contents( $outside . '/runtime.php', '<?php file_put_contents(' . var_export( $sentinel, true ) . ', "executed"); return new stdClass();' );
+
+			$conflict_result = $this->probe(
+				<<<'PHP'
+$old_registrar = require $data['old'] . '/bootstrap.php';
+$old_broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
+$new_registrar = require $data['new'] . '/bootstrap.php';
+$broker_cleared = ! array_key_exists('ran_wp_release_updater_v1_broker', $GLOBALS)
+	&& ! array_key_exists('ran_wp_release_updater_v1_broker_provenance', $GLOBALS);
+$backup = $data['winner'] . '/runtime.php.bak';
+if (!rename($data['winner'] . '/runtime.php', $backup)) {
+	echo json_encode(array('skipped' => true));
+	return;
+}
+if (!symlink($data['outside'] . '/runtime.php', $data['winner'] . '/runtime.php')) {
+	rename($backup, $data['winner'] . '/runtime.php');
+	echo json_encode(array('skipped' => true));
+	return;
+}
+$activation = $old_broker->activate(array(
+	'php_version' => '8.2.0',
+	'runtime_protocol' => 11,
+	'wordpress_version' => '6.8.0',
+));
+unlink($data['winner'] . '/runtime.php');
+rename($backup, $data['winner'] . '/runtime.php');
+echo json_encode(array(
+	'skipped' => false,
+	'broker_cleared' => $broker_cleared,
+	'activation' => $activation,
+	'old_diag' => $old_registrar->diagnostics(),
+	'new_diag' => $new_registrar->diagnostics(),
+));
+PHP,
+				array(
+					'old'     => $pair[0],
+					'new'     => $pair[1],
+					'winner'  => $pair[2],
+					'outside' => $outside,
+				)
+			);
+			if ( true === ( $conflict_result['skipped'] ?? false ) ) {
+				self::markTestSkipped( 'Symlinks are unavailable on this platform.' );
+			}
+
+			self::assertTrue( $conflict_result['broker_cleared'], $label );
+			self::assertFalse( $conflict_result['activation']['loaded'], $label );
+			self::assertSame( 'conflict', $conflict_result['activation']['state'], $label );
+			self::assertSame( 'protocol_conflict_inactive', $conflict_result['activation']['code'], $label );
+			self::assertSame( 'conflict', $conflict_result['old_diag']['state'], $label );
+			self::assertSame( 'conflict', $conflict_result['new_diag']['state'], $label );
+			self::assertFileDoesNotExist( $sentinel, $label );
+		}
+
+		// When new loads first and base peer wins version selection, swapping the winning peer runtime.php still fails closed via new broker's verifier.
+		$outside_new_first = $this->parent . '/outside-p11-new-first-swap';
+		$sentinel_swap     = $outside_new_first . '/executed.marker';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create external directory to verify entrypoint check applies to winning base peer.
+		mkdir( $outside_new_first, 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write sentinel payload for new-first winning peer swap test.
+		file_put_contents( $outside_new_first . '/runtime.php', '<?php file_put_contents(' . var_export( $sentinel_swap, true ) . ', "executed"); return new stdClass();' );
+		$swap_result = $this->probe(
+			<<<'PHP'
+require $data['new'] . '/bootstrap.php';
+require $data['old'] . '/bootstrap.php';
+$broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
+$backup = $data['old'] . '/runtime.php.bak';
+if (!rename($data['old'] . '/runtime.php', $backup)) {
+	echo json_encode(array('skipped' => true));
+	return;
+}
+if (!symlink($data['outside'] . '/runtime.php', $data['old'] . '/runtime.php')) {
+	rename($backup, $data['old'] . '/runtime.php');
+	echo json_encode(array('skipped' => true));
+	return;
+}
+$activation = $broker->activate(array(
+	'php_version' => '8.2.0',
+	'runtime_protocol' => 11,
+	'wordpress_version' => '6.8.0',
+));
+unlink($data['old'] . '/runtime.php');
+rename($backup, $data['old'] . '/runtime.php');
+echo json_encode(array(
+	'skipped' => false,
+	'activation' => $activation,
+));
+PHP,
+			array(
+				'new'     => $new_low,
+				'old'     => $old_high,
+				'outside' => $outside_new_first,
+			)
+		);
+		if ( true === ( $swap_result['skipped'] ?? false ) ) {
+			self::markTestSkipped( 'Symlinks are unavailable on this platform.' );
+		}
+		self::assertFalse( $swap_result['activation']['loaded'] );
+		self::assertSame( 'inactive', $swap_result['activation']['state'] );
+		self::assertSame( 'runtime_load_failed', $swap_result['activation']['code'] );
+		self::assertFileDoesNotExist( $sentinel_swap );
 	}
 
 	/** @param array<string,string> $replacements */
@@ -643,7 +824,10 @@ PHP,
 	}
 
 	private function package_copy( string $name, ?string $version = null ): string {
-		$root = $this->parent . '/' . $name;
+		return $this->package_copy_at( $this->parent . '/' . $name, $version );
+	}
+
+	private function package_copy_at( string $root, ?string $version = null ): string {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.
 		mkdir( $root, 0700, true );
 		foreach ( array( 'bootstrap.php', 'runtime.php' ) as $file ) {
