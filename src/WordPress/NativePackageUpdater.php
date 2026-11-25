@@ -14,7 +14,6 @@ use RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri;
 use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseAdapter;
 use RAN\WPReleaseUpdater\V1\Contract\ReleaseVersion;
-use RAN\WPReleaseUpdater\V1\Contract\ReleaseRejection;
 use RAN\WPReleaseUpdater\V1\Dependency\TargetWorkingCopy;
 use RAN\WPReleaseUpdater\V1\Runtime\ReleaseFailure;
 use RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator;
@@ -55,13 +54,10 @@ final class NativePackageUpdater {
 		'repository_locator'         => 'canonical_repository_locator',
 		'repository_identity'        => 'stable_repository_identity',
 	);
-	/** @var array<string,mixed>|null */
-	private ?array $listing_diagnostics = null;
-	private ?bool $search_exhausted     = null;
-	/** @var list<array{release_identity:?string,tag:?string,reason:string}> */
-	private array $candidate_rejections = array();
 
-	private bool $registered                            = false;
+	private bool $registered = false;
+	/** @var array<string,bool> */
+	private array $registered_raw_host_hooks            = array();
 	private ?IdentityDescriptor $descriptor             = null;
 	private ?string $lock_token                         = null;
 	private bool $lock_owned                            = false;
@@ -94,6 +90,9 @@ final class NativePackageUpdater {
 	private ?\Closure $native_mutation_begin;
 	private ?\Closure $native_mutation_complete;
 	private ?\Closure $descriptor_admission;
+	/** @var (\Closure():array{code:string,headers?:array<string,string>,raw_update_uri?:string})|null */
+	private ?\Closure $header_loader;
+	private ?string $header_failure_code            = null;
 	private ?string $native_owner                   = null;
 	private bool $native_beginning                  = false;
 	private bool $finalizing                        = false;
@@ -117,9 +116,10 @@ final class NativePackageUpdater {
 
 
 	/**
-	 * @param array<string,string> $headers
-	 * @param TargetBinding        $target_binding
-	 * @param array<string,mixed>  $archive_policy
+	 * @param array<string,string>|null $headers
+	 * @param TargetBinding             $target_binding
+	 * @param array<string,mixed>       $archive_policy
+	 * @param (callable():array{code:string,headers?:array<string,string>,raw_update_uri?:string})|null $header_loader
 	 */
 	private function __construct(
 		private string $target_type,
@@ -127,7 +127,7 @@ final class NativePackageUpdater {
 		private string $installed_identity,
 		private string $update_uri,
 		private string $policy,
-		private array $headers,
+		private ?array $headers,
 		private array $target_binding,
 		private string $binding_hash,
 		private ReleaseAdapter $adapter,
@@ -140,7 +140,7 @@ final class NativePackageUpdater {
 		?callable $native_mutation_begin = null,
 		?callable $native_mutation_complete = null,
 		?callable $descriptor_admission = null,
-		private bool $allow_working_copy = false
+		?callable $header_loader = null
 	) {
 		$this->archive_store            = new OwnedArchiveStore();
 		$this->pending_install          = new PendingInstallState();
@@ -149,12 +149,14 @@ final class NativePackageUpdater {
 		$this->native_mutation_begin    = null === $native_mutation_begin ? null : \Closure::fromCallable( $native_mutation_begin );
 		$this->native_mutation_complete = null === $native_mutation_complete ? null : \Closure::fromCallable( $native_mutation_complete );
 		$this->descriptor_admission     = null === $descriptor_admission ? null : \Closure::fromCallable( $descriptor_admission );
+		$this->header_loader            = null === $header_loader ? null : \Closure::fromCallable( $header_loader );
 	}
 
 	/**
 	 * @param array<string,mixed> $configuration
 	 * @param array<string,mixed> $target_binding
 	 * @param array<string,mixed> $archive_policy
+	 * @param (callable():array{code:string,headers?:array<string,string>,raw_update_uri?:string})|null $header_loader
 	 */
 	public static function from_configuration(
 		array $configuration,
@@ -169,7 +171,7 @@ final class NativePackageUpdater {
 		?callable $native_mutation_begin = null,
 		?callable $native_mutation_complete = null,
 		?callable $descriptor_admission = null,
-		bool $allow_working_copy = false
+		?callable $header_loader = null
 	): ?self {
 		if ( ( null === $native_mutation_begin ) !== ( null === $native_mutation_complete ) || ( null === $operation_guard && null !== $native_mutation_begin ) ) {
 			return null;
@@ -179,7 +181,7 @@ final class NativePackageUpdater {
 			return null;
 		}
 		if (
-			! self::valid_configuration( $configuration, $binding_facts )
+			! self::valid_configuration( $configuration, $binding_facts, null !== $header_loader )
 			|| $configuration['policy'] !== $binding_facts['update_policy']
 			|| ! array_key_exists( 'theme_template', $archive_policy )
 			|| ! is_string( $archive_policy['theme_template'] )
@@ -214,7 +216,7 @@ final class NativePackageUpdater {
 			$native_mutation_begin,
 			$native_mutation_complete,
 			$descriptor_admission,
-			$allow_working_copy
+			$header_loader
 		);
 	}
 
@@ -315,11 +317,8 @@ final class NativePackageUpdater {
 		$prefix        = 'plugin' === $this->target_type ? 'update_plugins_' : 'update_themes_';
 		$canonical_key = strtolower( $host );
 		add_filter( $prefix . $canonical_key, array( $this, 'filter_update' ), 10, 4 );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
-		$raw_host = parse_url( $this->headers['UpdateURI'], PHP_URL_HOST );
-		if ( is_string( $raw_host ) && '' !== $raw_host && $raw_host !== $canonical_key && 0 === strcasecmp( $raw_host, $canonical_key ) ) {
-			add_filter( $prefix . $raw_host, array( $this, 'filter_update' ), 10, 4 );
-		}
+		$this->register_raw_host_hook();
+		add_filter( 'plugin' === $this->target_type ? 'plugins_update_check_locales' : 'themes_update_check_locales', array( $this, 'prepare_update_check_routing' ), 10, 1 );
 		if ( null !== $this->descriptor_admission || $this->policy_blocked() ) {
 			add_filter( 'site_transient_update_' . ( 'plugin' === $this->target_type ? 'plugins' : 'themes' ), array( $this, 'filter_cached_update' ), 10, 1 );
 		}
@@ -341,6 +340,37 @@ final class NativePackageUpdater {
 		$this->registered = true;
 	}
 
+	/** Ensures lazy headers and any mixed-case raw-host update filter are ready before Core dispatches host-specific update hooks. */
+	public function prepare_update_check_routing( mixed $locales ): mixed {
+		if ( $this->live() ) {
+			$this->ensure_headers_loaded();
+		}
+		return $locales;
+	}
+
+	private function register_raw_host_hook( ?string $raw_update_uri = null ): void {
+		$candidate_uri = $raw_update_uri ?? ( is_array( $this->headers ) ? $this->headers['UpdateURI'] : null );
+		if ( ! is_string( $candidate_uri ) || '' === $candidate_uri ) {
+			return;
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
+		$canonical_host = parse_url( $this->update_uri, PHP_URL_HOST );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
+		$raw_host = parse_url( $candidate_uri, PHP_URL_HOST );
+		if ( ! is_string( $canonical_host ) || '' === $canonical_host || ! is_string( $raw_host ) || '' === $raw_host ) {
+			return;
+		}
+		$canonical_key = strtolower( $canonical_host );
+		if ( $raw_host !== $canonical_key && 0 === strcasecmp( $raw_host, $canonical_key ) ) {
+			$prefix = 'plugin' === $this->target_type ? 'update_plugins_' : 'update_themes_';
+			$hook   = $prefix . $raw_host;
+			if ( ! isset( $this->registered_raw_host_hooks[ $hook ] ) ) {
+				add_filter( $hook, array( $this, 'filter_update' ), 10, 4 );
+				$this->registered_raw_host_hooks[ $hook ] = true;
+			}
+		}
+	}
+
 	public function filter_cached_update( mixed $transient ): mixed {
 		if ( null !== $this->authorized_offer && $this->live() ) {
 			// Supply the authorised release so WordPress's native upgrader finds it in this request.
@@ -359,6 +389,10 @@ final class NativePackageUpdater {
 			return $transient;
 		}
 		if ( $blocked ) {
+			unset( $transient->response[ $this->installed_identity ] );
+			return $transient;
+		}
+		if ( ! $this->ensure_headers_loaded() ) {
 			unset( $transient->response[ $this->installed_identity ] );
 			return $transient;
 		}
@@ -424,7 +458,7 @@ final class NativePackageUpdater {
 		$this->status['installed_version'] = $installed;
 		$this->status['last_check']        = time();
 		$runtime_uri                       = is_string( $package_data['UpdateURI'] ?? null ) ? $package_data['UpdateURI'] : '';
-		if ( null === ReleaseVersion::normalize_header( $installed ) || ! $this->matches_runtime_uri( $runtime_uri ) ) {
+		if ( ! $this->ensure_headers_loaded() || null === ReleaseVersion::normalize_header( $installed ) || ! $this->matches_runtime_uri( $runtime_uri ) ) {
 			$reason   = 'runtime_identity_invalid';
 			$check_id = $this->start_check_observation();
 			return $this->diagnose( 'runtime_package_identity_invalid', $update );
@@ -502,14 +536,12 @@ final class NativePackageUpdater {
 		if ( ! $this->live() ) {
 			return $result;
 		}
-		$previous            = $this->status;
-		$previous_rejections = $this->candidate_rejections;
+		$previous = $this->status;
 		try {
 			return $this->authorize_release( is_string( $release_identity ) ? $release_identity : '', is_string( $tag ) ? $tag : '', true === $older_intended );
 		} finally {
-			// Authorising is not a check: native status and rejection telemetry stay as the last native check left them.
-			$this->status               = $previous;
-			$this->candidate_rejections = $previous_rejections;
+			// Authorising is not a check: native status stays as the last native check left it.
+			$this->status = $previous;
 		}
 	}
 
@@ -524,6 +556,9 @@ final class NativePackageUpdater {
 		$this->begin_operation();
 		if ( ! $this->direct_filesystem() ) {
 			return $this->offer_report( 'filesystem_unavailable' );
+		}
+		if ( ! $this->ensure_headers_loaded() ) {
+			return $this->offer_report( 'runtime_package_identity_invalid' );
 		}
 		try {
 			$descriptor = $this->adapter->inspect( $release_identity, $tag );
@@ -593,6 +628,9 @@ final class NativePackageUpdater {
 		if ( $this->working_copy_blocked() ) {
 			return $this->exact_report( 'target_is_working_copy' );
 		}
+		if ( ! $this->ensure_headers_loaded() ) {
+			return $this->exact_report( 'runtime_package_identity_invalid' );
+		}
 		$installed = $this->bound_package_version( $this->installed_directory, true );
 		if ( null === $installed || null === ReleaseVersion::normalize_header( $installed ) ) {
 			return $this->exact_report( 'runtime_package_identity_invalid' );
@@ -655,10 +693,7 @@ final class NativePackageUpdater {
 		if ( null !== $failure || null === $exact->archive ) {
 			return $failure ?? 'acquisition_identity_invalid';
 		}
-		$exact->archive_identity = $this->archive_store->identity( $exact->archive['path'], $descriptor );
-		if ( null === $exact->archive_identity ) {
-			return 'acquisition_identity_invalid';
-		}
+		$exact->archive_identity = $exact->archive['identity'];
 		if ( ! $this->live() || ! $this->descriptor_admitted( $descriptor ) || ! $this->verify_mutation_lock() ) {
 			return 'binding_fence_lost';
 		}
@@ -787,10 +822,11 @@ final class NativePackageUpdater {
 		if ( null !== $this->exact_install || $this->native_beginning || null !== $this->native_owner || $this->pending_install->active() ) {
 			return $this->check_report( 'runtime_busy' );
 		}
-		$installed                         = $this->installed_version();
+		$headers_loaded                    = $this->ensure_headers_loaded();
+		$installed                         = $headers_loaded ? $this->installed_version() : '';
 		$this->status['installed_version'] = $installed;
 		$this->status['last_check']        = time();
-		if ( null === ReleaseVersion::normalize_header( $installed ) ) {
+		if ( ! $headers_loaded || null === ReleaseVersion::normalize_header( $installed ) ) {
 			$reason   = 'runtime_identity_invalid';
 			$check_id = $this->start_check_observation();
 		} elseif ( 'forced-off' === $this->policy ) {
@@ -873,10 +909,7 @@ final class NativePackageUpdater {
 	}
 
 	private function start_check_observation(): ?string {
-		$this->listing_diagnostics  = null;
-		$this->search_exhausted     = null;
-		$this->candidate_rejections = array();
-		$facts                      = $this->target_binding;
+		$facts = $this->target_binding;
 		if ( ! function_exists( 'do_action' ) || ! function_exists( 'get_current_blog_id' ) ) {
 			return null;
 		}
@@ -919,14 +952,8 @@ final class NativePackageUpdater {
 		if ( null === $check_id ) {
 			return;
 		}
-		$payload  = array( 'check_id' => $check_id ) + $this->check_facts( $reason );
-		$extended = $payload + array(
-			'search_exhausted'     => $this->search_exhausted,
-			'listing_diagnostics'  => $this->listing_diagnostics,
-			'candidate_rejections' => $this->candidate_rejections,
-		);
+		$payload = array( 'check_id' => $check_id ) + $this->check_facts( $reason );
 		self::observe_check( 'completed', $payload );
-		do_action( 'ran_wp_release_updater_check_completed_v2', $extended );
 	}
 
 	/**
@@ -941,14 +968,11 @@ final class NativePackageUpdater {
 		if ( 'plugin_information' !== $action || ! is_object( $arguments ) || $this->information_slug() !== ( $arguments->slug ?? null ) || null !== $this->exact_install || $this->policy_blocked() || ! $this->live() ) {
 			return $result;
 		}
-		$previous_status              = $this->status;
-		$previous_descriptor          = $this->descriptor;
-		$previous_listing_diagnostics = $this->listing_diagnostics;
-		$previous_search_exhausted    = $this->search_exhausted;
-		$previous_rejections          = $this->candidate_rejections;
+		$previous_status     = $this->status;
+		$previous_descriptor = $this->descriptor;
 		try {
 			$this->begin_operation();
-			if ( ! $this->direct_filesystem() ) {
+			if ( ! $this->direct_filesystem() || ! $this->ensure_headers_loaded() ) {
 				return $result;
 			}
 			$descriptor = $this->discover( $this->installed_version() );
@@ -974,10 +998,7 @@ final class NativePackageUpdater {
 			return $this->live() ? $info : false;
 		} finally {
 			// Modal rendering is read-only: native check status stays as the last native check left it.
-			$this->status               = $previous_status;
-			$this->listing_diagnostics  = $previous_listing_diagnostics;
-			$this->search_exhausted     = $previous_search_exhausted;
-			$this->candidate_rejections = $previous_rejections;
+			$this->status = $previous_status;
 			if ( $this->live() ) {
 				$this->descriptor = $previous_descriptor;
 			} else {
@@ -999,6 +1020,9 @@ final class NativePackageUpdater {
 			return null === $this->operation_guard ? $update : false;
 		}
 		$this->begin_operation();
+		if ( ! $this->ensure_headers_loaded() ) {
+			return false;
+		}
 		$descriptor = $this->parse_token( is_string( $item->package ?? null ) ? $item->package : '' );
 		return $this->direct_filesystem() && $descriptor instanceof IdentityDescriptor && $this->descriptor_admitted( $descriptor ) && $this->newer_than_installed( $descriptor ) && $this->automatic_eligible( $descriptor ) && $this->live();
 	}
@@ -1051,8 +1075,11 @@ final class NativePackageUpdater {
 		}
 		$this->clear_pending();
 		$working_copy = $this->working_copy_blocked();
-		$token        = $this->parse_token( $package );
-		$authorized   = $token instanceof IdentityDescriptor && null !== $held && hash_equals( $held, $token->fingerprint_value() );
+		if ( ! $this->ensure_headers_loaded() ) {
+			return $reply instanceof \WP_Error ? $reply : $this->failure( $working_copy ? 'target_is_working_copy' : 'unverified_pre_download', false );
+		}
+		$token      = $this->parse_token( $package );
+		$authorized = $token instanceof IdentityDescriptor && null !== $held && hash_equals( $held, $token->fingerprint_value() );
 		if ( ! $this->direct_filesystem() || ! $token instanceof IdentityDescriptor || ! $this->descriptor_admitted( $token ) || ! $this->download_version_admitted( $token, $authorized ) || ! $this->manual_eligible( $token ) ) {
 			return $reply instanceof \WP_Error ? $reply : $this->failure( $working_copy ? 'target_is_working_copy' : 'unverified_pre_download', false );
 		}
@@ -1080,17 +1107,13 @@ final class NativePackageUpdater {
 			}
 			return $this->fail_pending( $failure ?? 'acquisition_identity_invalid' );
 		}
-		$identity = $this->archive_store->identity( $owned['path'], $fresh );
-		if ( null === $identity ) {
-			$this->archive_store->remove( $owned['path'], $owned['directory'] );
-			return $this->fail_pending( 'acquisition_identity_invalid' );
-		}
+		$identity = $owned['identity'];
 		if ( ! $this->verify_mutation_lock() || ! $this->live() ) {
 			$this->archive_store->remove( $owned['path'], $owned['directory'] );
 			return $this->fail_pending( 'binding_fence_lost' );
 		}
 		try {
-			if ( ! $this->validator->verify_archive_identity( $fresh, $owned['path'] ) ) {
+			if ( ! $this->archive_store->same_stat_identity( $owned['path'], $fresh, $identity ) ) {
 				throw new InvalidArgumentException( 'The owned archive identity changed.' );
 			}
 			$proof = $this->validator->consume_receipt_proof( $owned['proof'], $fresh );
@@ -1139,7 +1162,7 @@ final class NativePackageUpdater {
 		if ( ! $this->verify_mutation_lock() || ! $this->live() ) {
 			return $this->exact_download_failure( $exact, 'binding_fence_lost' );
 		}
-		if ( ! $this->archive_store->same_identity( $owned['path'], $fresh, $identity ) ) {
+		if ( ! $this->archive_store->same_stat_identity( $owned['path'], $fresh, $identity ) ) {
 			return $this->exact_download_failure( $exact, 'acquisition_identity_invalid' );
 		}
 		try {
@@ -1235,7 +1258,7 @@ final class NativePackageUpdater {
 			|| ! $descriptor instanceof IdentityDescriptor
 			|| ! $this->descriptor_admitted( $descriptor )
 			|| ! is_array( $this->pending_install->archive_identity() )
-			|| ! $this->archive_store->same_identity( $file, $descriptor, $this->pending_install->archive_identity() )
+			|| ! $this->archive_store->verify_digest_and_stat( $file, $descriptor, $this->pending_install->archive_identity() )
 			|| ! $this->pending_install->matches_descriptor( $descriptor )
 		) {
 			return $this->fail_pending( 'archive_changed_before_extraction' );
@@ -1270,7 +1293,7 @@ final class NativePackageUpdater {
 			|| ! $this->descriptor_admitted( $descriptor )
 			|| ! $this->pending_install->matches_descriptor( $descriptor )
 			|| ! is_string( $source )
-			|| ! $this->matches_staged_metadata( $source )
+			|| ! $this->matches_staged_metadata( $source, $descriptor->to_array()['version'] )
 		) {
 			return $this->fail_pending( 'staged_package_identity_invalid' );
 		}
@@ -1564,6 +1587,16 @@ final class NativePackageUpdater {
 		}
 		$this->diagnostics = array();
 		$this->status      = self::empty_status();
+		if ( null !== $this->header_loader ) {
+			$this->headers             = null;
+			$this->header_failure_code = null;
+			if ( function_exists( 'remove_filter' ) ) {
+				foreach ( array_keys( $this->registered_raw_host_hooks ) as $hook ) {
+					remove_filter( $hook, array( $this, 'filter_update' ), 10 );
+					unset( $this->registered_raw_host_hooks[ $hook ] );
+				}
+			}
+		}
 		$this->clear_discovery_snapshot();
 		$this->queued_multi_run = false;
 		$this->clear_pending();
@@ -1577,7 +1610,7 @@ final class NativePackageUpdater {
 
 	/** @phpstan-impure Host callbacks can change target markers between checks. */
 	private function working_copy_blocked(): bool {
-		return ! $this->allow_working_copy && TargetWorkingCopy::is_working_copy( $this->installed_directory );
+		return TargetWorkingCopy::is_working_copy( $this->installed_directory );
 	}
 
 	/** `disabled` and `forced-off` admit no discovery, lease, provider work or download token on any path. */
@@ -1636,39 +1669,167 @@ final class NativePackageUpdater {
 	 * @param array<string,mixed> $configuration
 	 * @param TargetBinding       $facts
 	 */
-	private static function valid_configuration( array $configuration, array $facts ): bool {
-		if ( ! self::exact_keys( $configuration, self::CONFIGURATION_KEYS ) || ! is_string( $configuration['installed_directory'] ) || ! is_array( $configuration['headers'] ) || ! self::exact_keys( $configuration['headers'], self::HEADER_KEYS ) || ! is_string( $configuration['update_uri'] ) || ! in_array( $configuration['policy'], array( 'disabled', 'forced-off', 'manual', 'automatic' ), true ) || ! self::valid_native_identity( $configuration['target_type'], $configuration['installed_package_identity'] ) ) {
+	private static function valid_configuration( array $configuration, array $facts, bool $lazy_headers = false ): bool {
+		$headers  = $configuration['headers'] ?? null;
+		$deferred = $lazy_headers && null === $headers;
+		if (
+			! self::exact_keys( $configuration, self::CONFIGURATION_KEYS )
+			|| ! is_string( $configuration['installed_directory'] )
+			|| ( ! $deferred && ( ! is_array( $headers ) || ! self::exact_keys( $headers, self::HEADER_KEYS ) ) )
+			|| ! is_string( $configuration['update_uri'] )
+			|| ! in_array( $configuration['policy'], array( 'disabled', 'forced-off', 'manual', 'automatic' ), true )
+			|| ! self::valid_native_identity( $configuration['target_type'], $configuration['installed_package_identity'] )
+		) {
 			return false;
 		}
 		$directory = str_replace( '\\', '/', $configuration['installed_directory'] );
 		if ( ! str_starts_with( $directory, '/' ) && 1 !== preg_match( '/\A[A-Za-z]:\//D', $directory ) ) {
 			return false;
 		}
-		foreach ( $configuration['headers'] as $header ) {
+		if ( $configuration['target_type'] !== $facts['target_type'] || ! hash_equals( $configuration['installed_package_identity'], $facts['installed_package_identity'] ) ) {
+			return false;
+		}
+		if ( $deferred ) {
+			return CanonicalUpdateUri::canonicalize_boundaries(
+				array(
+					'archive_preflight' => $facts['canonical_update_uri'],
+					'configuration'     => $configuration['update_uri'],
+					'offer'             => $facts['canonical_update_uri'],
+					'staged_package'    => $facts['canonical_update_uri'],
+				)
+			) === $facts['canonical_update_uri'];
+		}
+		if ( ! is_array( $headers ) ) {
+			return false;
+		}
+		foreach ( $headers as $header ) {
 			if ( ! is_string( $header ) || strlen( $header ) > 8192 ) {
 				return false;
 			}
 		}
-		if ( $configuration['target_type'] !== $facts['target_type'] || ! hash_equals( $configuration['installed_package_identity'], $facts['installed_package_identity'] ) || null === ReleaseVersion::normalize_header( $configuration['headers']['Version'] ) ) {
+		if ( null === ReleaseVersion::normalize_header( $headers['Version'] ) ) {
 			return false;
 		}
 		return CanonicalUpdateUri::canonicalize_boundaries(
 			array(
 				'archive_preflight' => $facts['canonical_update_uri'],
 				'configuration'     => $configuration['update_uri'],
-				'offer'             => $configuration['headers']['UpdateURI'],
+				'offer'             => $headers['UpdateURI'],
 				'staged_package'    => $facts['canonical_update_uri'],
 			)
 		) === $facts['canonical_update_uri'];
 	}
 
+	private function ensure_headers_loaded(): bool {
+		if ( is_array( $this->headers ) ) {
+			return true;
+		}
+		if ( null !== $this->header_failure_code ) {
+			return false;
+		}
+		if ( null === $this->header_loader ) {
+			$this->header_failure_code = 'installed_header_invalid';
+			return false;
+		}
+		try {
+			$result = ( $this->header_loader )();
+		} catch ( \Throwable ) {
+			$this->header_failure_code = 'installed_header_invalid';
+			return false;
+		}
+		$code    = is_string( $result['code'] ?? null ) ? $result['code'] : 'installed_header_invalid';
+		$headers = $result['headers'] ?? null;
+		$raw_uri = is_string( $result['raw_update_uri'] ?? null ) && '' !== $result['raw_update_uri']
+			? $result['raw_update_uri']
+			: ( is_array( $headers ) && is_string( $headers['UpdateURI'] ?? null ) && '' !== $headers['UpdateURI'] ? $headers['UpdateURI'] : null );
+		if ( 'installed_header_verified' !== $code || ! is_array( $headers ) ) {
+			return $this->fail_header_load( $code, $raw_uri );
+		}
+		$template = $headers['Template'] ?? '';
+		if ( ! self::valid_theme_template( $this->target_type, $template ) ) {
+			return $this->fail_header_load( 'installed_header_invalid', $raw_uri );
+		}
+		$normalized_headers = array(
+			'Author'      => is_string( $headers['Author'] ?? null ) ? $headers['Author'] : '',
+			'Description' => is_string( $headers['Description'] ?? null ) ? $headers['Description'] : '',
+			'Name'        => is_string( $headers['Name'] ?? null ) ? $headers['Name'] : '',
+			'PluginURI'   => is_string( $headers['PluginURI'] ?? null ) && '' !== $headers['PluginURI']
+				? $headers['PluginURI']
+				: ( is_string( $headers['PackageURI'] ?? null ) ? $headers['PackageURI'] : '' ),
+			'RequiresPHP' => is_string( $headers['RequiresPHP'] ?? null ) ? $headers['RequiresPHP'] : '',
+			'RequiresWP'  => is_string( $headers['RequiresWP'] ?? null ) ? $headers['RequiresWP'] : '',
+			'UpdateURI'   => is_string( $headers['UpdateURI'] ?? null ) ? $headers['UpdateURI'] : '',
+			'Version'     => is_string( $headers['Version'] ?? null ) ? $headers['Version'] : '',
+		);
+		foreach ( $normalized_headers as $value ) {
+			if ( strlen( $value ) > 8192 ) {
+				return $this->fail_header_load( 'installed_header_invalid', $raw_uri );
+			}
+		}
+		if ( null === ReleaseVersion::normalize_header( $normalized_headers['Version'] ) ) {
+			return $this->fail_header_load( 'installed_header_invalid', $raw_uri );
+		}
+		if (
+			CanonicalUpdateUri::canonicalize_boundaries(
+				array(
+					'archive_preflight' => $this->target_binding['canonical_update_uri'],
+					'configuration'     => $this->update_uri,
+					'offer'             => $normalized_headers['UpdateURI'],
+					'staged_package'    => $this->target_binding['canonical_update_uri'],
+				)
+			) !== $this->update_uri
+		) {
+			return $this->fail_header_load( 'installed_update_uri_mismatch', $raw_uri );
+		}
+		$binding                   = $this->target_binding;
+		$binding['theme_template'] = $template;
+		$binding_hash              = self::compute_binding_hash( $binding );
+		if ( null === $binding_hash ) {
+			return $this->fail_header_load( 'installed_header_invalid', $raw_uri );
+		}
+		$this->headers                          = $normalized_headers;
+		$this->target_binding                   = $binding;
+		$this->binding_hash                     = $binding_hash;
+		$this->archive_policy['metadata_name']  = $normalized_headers['Name'];
+		$this->archive_policy['theme_template'] = $template;
+		if ( $this->registered ) {
+			$this->register_raw_host_hook();
+		}
+		return true;
+	}
+
+	private function fail_header_load( string $code, ?string $raw_update_uri ): bool {
+		$this->header_failure_code = $code;
+		if ( $this->registered && is_string( $raw_update_uri ) ) {
+			$this->register_raw_host_hook( $raw_update_uri );
+		}
+		return false;
+	}
+
+	/** @return array<string,string> */
+	private function loaded_headers(): array {
+		return is_array( $this->headers )
+			? $this->headers
+			: array(
+				'Author'      => '',
+				'Description' => '',
+				'Name'        => '',
+				'PluginURI'   => '',
+				'RequiresPHP' => '',
+				'RequiresWP'  => '',
+				'UpdateURI'   => '',
+				'Version'     => '',
+			);
+	}
+
 	private function matches_runtime_uri( string $runtime_uri ): bool {
+		$headers = $this->loaded_headers();
 		return CanonicalUpdateUri::canonicalize_boundaries(
 			array(
 				'archive_preflight' => $this->target_binding['canonical_update_uri'],
 				'configuration'     => $this->update_uri,
 				'offer'             => $runtime_uri,
-				'staged_package'    => $this->headers['UpdateURI'],
+				'staged_package'    => $headers['UpdateURI'],
 			)
 		) === $this->update_uri;
 	}
@@ -1691,16 +1852,17 @@ final class NativePackageUpdater {
 		$facts = $descriptor->to_array()['assurance_facts'];
 		return 'automatic' === $this->policy && $this->manual_eligible( $descriptor ) && true === $facts['publication_immutable'] && true === $facts['provenance_verified']; }
 	private function installed_version(): string {
-		return $this->headers['Version'];
+		return $this->loaded_headers()['Version'];
 	}
 	private function remember_candidate_headers( IdentityDescriptor $descriptor, ValidatedPackage $package ): void {
+		$headers      = $this->loaded_headers();
 		$snapshot     = $package->to_array();
-		$author       = is_string( $snapshot['author'] ?? null ) && '' !== $snapshot['author'] ? $snapshot['author'] : $this->headers['Author'];
-		$description  = is_string( $snapshot['description'] ?? null ) && '' !== $snapshot['description'] ? $snapshot['description'] : $this->headers['Description'];
-		$name         = is_string( $snapshot['metadata_name'] ?? null ) && '' !== $snapshot['metadata_name'] ? $snapshot['metadata_name'] : $this->headers['Name'];
-		$plugin_uri   = is_string( $snapshot['package_uri'] ?? null ) && '' !== $snapshot['package_uri'] ? $snapshot['package_uri'] : $this->headers['PluginURI'];
-		$requires_php = is_string( $snapshot['requires_php'] ?? null ) ? $snapshot['requires_php'] : $this->headers['RequiresPHP'];
-		$requires_wp  = is_string( $snapshot['requires_wp'] ?? null ) ? $snapshot['requires_wp'] : $this->headers['RequiresWP'];
+		$author       = is_string( $snapshot['author'] ?? null ) && '' !== $snapshot['author'] ? $snapshot['author'] : $headers['Author'];
+		$description  = is_string( $snapshot['description'] ?? null ) && '' !== $snapshot['description'] ? $snapshot['description'] : $headers['Description'];
+		$name         = is_string( $snapshot['metadata_name'] ?? null ) && '' !== $snapshot['metadata_name'] ? $snapshot['metadata_name'] : $headers['Name'];
+		$plugin_uri   = is_string( $snapshot['package_uri'] ?? null ) && '' !== $snapshot['package_uri'] ? $snapshot['package_uri'] : $headers['PluginURI'];
+		$requires_php = is_string( $snapshot['requires_php'] ?? null ) ? $snapshot['requires_php'] : $headers['RequiresPHP'];
+		$requires_wp  = is_string( $snapshot['requires_wp'] ?? null ) ? $snapshot['requires_wp'] : $headers['RequiresWP'];
 		$this->candidate_headers[ $descriptor->fingerprint_value() ] = array(
 			'Author'      => $author,
 			'Description' => $description,
@@ -1716,24 +1878,27 @@ final class NativePackageUpdater {
 		if ( isset( $this->candidate_headers[ $fingerprint ] ) ) {
 			return $this->candidate_headers[ $fingerprint ];
 		}
+		$headers = $this->loaded_headers();
 		return array(
-			'Author'      => $this->headers['Author'],
-			'Description' => $this->headers['Description'],
-			'Name'        => $this->headers['Name'],
-			'PluginURI'   => $this->headers['PluginURI'],
-			'RequiresPHP' => $this->headers['RequiresPHP'],
-			'RequiresWP'  => $this->headers['RequiresWP'],
+			'Author'      => $headers['Author'],
+			'Description' => $headers['Description'],
+			'Name'        => $headers['Name'],
+			'PluginURI'   => $headers['PluginURI'],
+			'RequiresPHP' => $headers['RequiresPHP'],
+			'RequiresWP'  => $headers['RequiresWP'],
 		);
 	}
 	private function sync_installed_headers( IdentityDescriptor $descriptor ): void {
-		$headers                      = $this->candidate_headers_for( $descriptor );
-		$this->headers['Version']     = $descriptor->to_array()['version'];
-		$this->headers['Author']      = $headers['Author'];
-		$this->headers['Description'] = $headers['Description'];
-		$this->headers['Name']        = $headers['Name'];
-		$this->headers['PluginURI']   = $headers['PluginURI'];
-		$this->headers['RequiresPHP'] = $headers['RequiresPHP'];
-		$this->headers['RequiresWP']  = $headers['RequiresWP'];
+		$headers                = $this->candidate_headers_for( $descriptor );
+		$current                = $this->loaded_headers();
+		$current['Version']     = $descriptor->to_array()['version'];
+		$current['Author']      = $headers['Author'];
+		$current['Description'] = $headers['Description'];
+		$current['Name']        = $headers['Name'];
+		$current['PluginURI']   = $headers['PluginURI'];
+		$current['RequiresPHP'] = $headers['RequiresPHP'];
+		$current['RequiresWP']  = $headers['RequiresWP'];
+		$this->headers          = $current;
 	}
 	private function newer_than_installed( IdentityDescriptor $descriptor ): bool {
 		return ReleaseVersion::RELATIONSHIP_NEWER === ReleaseVersion::relationship( $descriptor->to_array()['version'], $this->installed_version() ); }
@@ -1760,12 +1925,9 @@ final class NativePackageUpdater {
 		$single  = 'plugin' === $this->target_type ? 'plugin' : 'theme';
 		$targets = $extra[ $key ] ?? array( $extra[ $single ] ?? null );
 		return is_array( $targets ) && in_array( $this->installed_identity, $targets, true ); }
-	private function matches_staged_metadata( string $source, ?string $expected_version = null, bool $allow_registered_plugin_path = false ): bool {
-		$version            = $this->bound_package_version( $source, $allow_registered_plugin_path );
-		$expected_version ??= $this->descriptor instanceof IdentityDescriptor
-			? $this->descriptor->to_array()['version']
-			: null;
-		return null !== $version && null !== $expected_version && 0 === ReleaseVersion::compare( $version, $expected_version );
+	private function matches_staged_metadata( string $source, string $expected_version, bool $allow_registered_plugin_path = false ): bool {
+		$version = $this->bound_package_version( $source, $allow_registered_plugin_path );
+		return null !== $version && 0 === ReleaseVersion::compare( $version, $expected_version );
 	}
 
 	private function registered_plugin_symlink_target( string $path ): ?string {
@@ -1838,8 +2000,9 @@ final class NativePackageUpdater {
 			return null;
 		}
 
-		$headers = $parsed['headers'];
-		return hash_equals( $this->headers['Name'], $headers['Name'] )
+		$headers  = $parsed['headers'];
+		$expected = $this->loaded_headers();
+		return hash_equals( $expected['Name'], $headers['Name'] )
 			&& hash_equals( $this->target_binding['theme_template'], $headers['Template'] )
 			&& $this->matches_runtime_uri( $headers['UpdateURI'] )
 			? $headers['Version'] : null;
@@ -1911,10 +2074,7 @@ final class NativePackageUpdater {
 			$this->status['candidate_validation_code'] = 'release_list_failed';
 			return null;
 		}
-		$diagnostics               = $listed['diagnostics'] ?? null;
-		$this->listing_diagnostics = ReleaseRejection::valid_diagnostics( $diagnostics ) && is_array( $diagnostics ) ? $diagnostics : null;
-		$this->search_exhausted    = is_bool( $listed['search_exhausted'] ?? null ) ? $listed['search_exhausted'] : null;
-		$rate_limit                = $listed['rate_limit'] ?? null;
+		$rate_limit = $listed['rate_limit'] ?? null;
 		if ( is_array( $rate_limit ) && true === ( $rate_limit['limited'] ?? null ) ) {
 			$reason                                    = 'release_list_failed';
 			$this->status['candidate_validation_code'] = 'release_list_failed';
@@ -1952,7 +2112,6 @@ final class NativePackageUpdater {
 				$descriptor = $this->adapter->inspect( $candidate['release_identity'], $candidate['tag'] );
 				self::assert_descriptor_binding( $descriptor, $this->target_binding );
 			} catch ( ReleaseFailure $failure ) {
-				$this->retain_candidate_rejection( $candidate, $failure->rejection_reason );
 				$reason                                    = 'candidate_inspection_failed';
 				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
 				if ( self::can_reject_candidate( $failure ) ) {
@@ -2011,7 +2170,6 @@ final class NativePackageUpdater {
 			$artifact = $this->adapter->acquire( $descriptor );
 			$valid    = $artifact->inspect( fn( string $path ) => $this->validator->validate( $descriptor, $this->archive_policy, $path ) );
 		} catch ( ReleaseFailure $failure ) {
-			$this->retain_candidate_rejection( $candidate, $failure->rejection_reason );
 			$reason                                    = 'candidate_validation_failed';
 			$this->status['candidate_validation_code'] = 'candidate_validation_failed';
 			if ( $artifact instanceof \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact && ! $artifact->discard() ) {
@@ -2052,12 +2210,6 @@ final class NativePackageUpdater {
 		}
 		$this->remember_candidate_headers( $descriptor, $valid );
 		return true;
-	}
-	/** @param array<string,mixed> $candidate */
-	private function retain_candidate_rejection( array $candidate, ?string $reason ): void {
-		if ( null !== $reason && ReleaseRejection::valid( $reason ) && count( $this->candidate_rejections ) < 8 ) {
-			$this->candidate_rejections[] = ReleaseRejection::sample( $candidate['release_identity'], $candidate['tag'], $reason );
-		}
 	}
 
 	private static function can_reject_candidate( ReleaseFailure $failure ): bool {

@@ -29,14 +29,13 @@ PHP,
 		}
 	}
 
-	public function test_working_copy_option_reaches_plugin_and_theme_hooks_and_closed_status(): void {
+	public function test_working_copy_protection_blocks_plugin_and_theme_hooks_with_closed_status(): void {
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
-			foreach ( array( false, true ) as $allow ) {
-				$result = $this->probe(
-					<<<'PHP'
+			$result = $this->probe(
+				<<<'PHP'
 class WP_Error { public function __construct(public string $code, public string $message) {} public function get_error_code(): string { return $this->code; } }
 $r=require $data['bootstrap'];
-$h=$r->{$data['type']}('github',$data[$data['type']],$data['type']==='plugin' ? 'acme/example' : 'acme/example-theme','123456789',allow_working_copy:$data['allow']);
+$h=$r->{$data['type']}('github',$data[$data['type']],$data['type']==='plugin' ? 'acme/example' : 'acme/example-theme','123456789');
 $h->register();
 $GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>11,'wordpress_version'=>'6.8.0']);
 file_put_contents(dirname($data[$data['type']]).'/.git','gitdir: metadata');
@@ -44,26 +43,14 @@ $extra=$data['type']==='plugin' ? ['plugin'=>'plugin/plugin.php'] : ['theme'=>'t
 foreach($GLOBALS['p0_1_hooks'] as $hook) { if($hook['hook']==='upgrader_pre_download') { $error=($hook['callback'])(false,'unused',null,$extra); } }
 echo json_encode(['error'=>$error->get_error_code(),'status'=>$h->status(),'diagnostics'=>$h->diagnostics()]);
 PHP,
-					array(
-						'type'  => $type,
-						'allow' => $allow,
-					)
-				);
-				$code   = $allow ? 'unverified_pre_download' : 'target_is_working_copy';
-				self::assertSame( 'ran_wp_release_updater_' . $code, $result['error'] );
-				self::assertSame( $code, $result['status']['native']['failure_code'] );
-				self::assertContains( array( 'code' => $code ), $result['diagnostics']['diagnostics'] );
-			}
+				array(
+					'type' => $type,
+				)
+			);
+			self::assertSame( 'ran_wp_release_updater_target_is_working_copy', $result['error'] );
+			self::assertSame( 'target_is_working_copy', $result['status']['native']['failure_code'] );
+			self::assertContains( array( 'code' => 'target_is_working_copy' ), $result['diagnostics']['diagnostics'] );
 		}
-	}
-
-	public function test_working_copy_override_conflicts_with_a_protected_registration(): void {
-		$result = $this->probe(
-			<<<'PHP'
-$r=require $data['bootstrap'];$a=$r->plugin('github',$data['plugin'],'acme/example','123456789');$a->register();$b=$r->plugin('github',$data['plugin'],'acme/example','123456789',allow_working_copy:true);$b->register();$GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol'=>11,'wordpress_version'=>'6.8.0']);echo json_encode($b->status());
-PHP
-		);
-		self::assertSame( 'target_declaration_conflict', $result['code'] );
 	}
 
 	private string $root;
@@ -182,7 +169,7 @@ PHP
 		self::assertSame( 'target_active', $result['duplicate']['code'] );
 		self::assertSame( 'target_declaration_conflict', $result['conflict']['code'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 14, $result['hooks'] );
+		self::assertSame( 15, $result['hooks'] );
 		self::assertSame( 0, $result['calls'] );
 	}
 
@@ -202,7 +189,7 @@ PHP
 		self::assertSame( 'target_active', $result['theme']['code'] );
 		self::assertFalse( $result['deferred_refresh'] );
 		self::assertSame( 3, $result['logical'] );
-		self::assertSame( 27, $result['hooks'] );
+		self::assertSame( 29, $result['hooks'] );
 		self::assertSame( 0, $result['calls'] );
 		self::assertSame(
 			array(
@@ -223,7 +210,7 @@ PHP
 		self::assertSame( 'target_active', $result['first']['code'] );
 		self::assertSame( 'target_active', $result['second']['code'] );
 		self::assertSame( 'declaration_deferred_operation_started', $result['late']['code'] );
-		self::assertSame( 30, $result['hooks'] );
+		self::assertSame( 32, $result['hooks'] );
 		self::assertSame( 3, $result['logical'] );
 	}
 
@@ -246,7 +233,7 @@ PHP
 			$result['late_diagnostics']
 		);
 		self::assertSame( 1, $result['runs'] );
-		self::assertSame( 15, $result['hooks'] );
+		self::assertSame( 16, $result['hooks'] );
 	}
 
 	public function test_c03_declaration_after_the_installer_cutoff_is_deferred_even_when_core_fails_early(): void {
@@ -265,7 +252,7 @@ PHP
 			),
 			$result['diagnostics']
 		);
-		self::assertSame( 15, $result['hooks'] );
+		self::assertSame( 16, $result['hooks'] );
 	}
 
 	public function test_c04_fresh_request_declaration_is_not_deferred_by_a_prior_request_cutoff(): void {
@@ -285,14 +272,16 @@ PHP
 		self::assertTrue( $fresh['hooks_registered'] );
 	}
 
-	public function test_canonical_equivalent_installed_uri_activates_and_mismatch_has_exact_code(): void {
+	public function test_canonical_equivalent_installed_uri_activates_and_mismatch_fails_closed_on_check(): void {
 		$result = $this->probe(
 			<<<'PHP'
-$r=require $data['bootstrap'];$equal=$r->plugin('github',$data['canonical'],'acme/example','123456789');$different=$r->plugin('github',$data['mismatch'],'acme/example','123456789');$equal->register();$different->register();$GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol' => 11,'wordpress_version'=>'6.8.0']);echo json_encode(['equal'=>$equal->status()['code'],'different'=>$different->status()['code']]);
+$r=require $data['bootstrap'];$equal=$r->plugin('github',$data['canonical'],'acme/example','123456789','stable','disabled');$different=$r->plugin('github',$data['mismatch'],'acme/example','123456789','stable','disabled');$equal->register();$different->register();$GLOBALS['ran_wp_release_updater_v1_broker']->activate(['php_version'=>PHP_VERSION,'runtime_protocol' => 11,'wordpress_version'=>'6.8.0']);foreach($GLOBALS['p0_1_hooks'] as $hook){if('update_plugins_github.com'===$hook['hook']){($hook['callback'])(false,['Version'=>'1.0.0','UpdateURI'=>'https://github.com/acme/example'],'canonical/plugin.php',[]);($hook['callback'])(false,['Version'=>'1.0.0','UpdateURI'=>'https://github.com/acme/example'],'mismatch/plugin.php',[]);}}echo json_encode(['equal'=>$equal->status()['code'],'equal_failure'=>$equal->status()['native']['failure_code'],'different'=>$different->status()['code'],'different_failure'=>$different->status()['native']['failure_code']]);
 PHP
 		);
 		self::assertSame( 'target_active', $result['equal'] );
-		self::assertSame( 'installed_update_uri_mismatch', $result['different'] );
+		self::assertNull( $result['equal_failure'] );
+		self::assertSame( 'target_active', $result['different'] );
+		self::assertSame( 'runtime_package_identity_invalid', $result['different_failure'] );
 	}
 
 	public function test_dot_repository_names_are_rejected_before_composition(): void {
@@ -317,7 +306,7 @@ PHP
 		self::assertSame( 'target_active', $result['first'] );
 		self::assertSame( array_fill( 0, 6, 'target_declaration_conflict' ), $result['conflicts'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 14, $result['hooks'] );
+		self::assertSame( 15, $result['hooks'] );
 		self::assertSame( 0, $result['calls'] );
 	}
 
@@ -337,7 +326,7 @@ PHP
 		self::assertSame( 0, $result['calls'] );
 		self::assertSame( 0, $result['static'] );
 		self::assertSame( 0, $result['array'] );
-		self::assertSame( 84, $result['hooks'] );
+		self::assertSame( 90, $result['hooks'] );
 	}
 
 	public function test_network_callback_matrix_is_read_once_and_does_not_use_blog_identity(): void {
@@ -360,7 +349,7 @@ PHP,
 			self::assertSame( 'runtime_active', $result['activation'], $name );
 			self::assertSame( in_array( $name, array( 'absent', 'one' ), true ) ? 'target_active' : 'runtime_environment_invalid', $result['target'], $name );
 			self::assertSame( 'absent' === $name ? 0 : 1, $result['calls'], $name );
-			self::assertSame( in_array( $name, array( 'absent', 'one' ), true ) ? 14 : 0, $result['hooks'], $name );
+			self::assertSame( in_array( $name, array( 'absent', 'one' ), true ) ? 15 : 0, $result['hooks'], $name );
 		}
 	}
 
@@ -376,7 +365,7 @@ PHP
 		self::assertSame( 'target_active', $result['status'] );
 		self::assertSame( 'target_active', $result['duplicate'] );
 		self::assertSame( 1, $result['calls'] );
-		self::assertSame( 14, $result['hooks'] );
+		self::assertSame( 15, $result['hooks'] );
 	}
 
 	public function test_logical_and_real_installed_aliases_share_one_target_handle_and_hook_set(): void {
@@ -389,7 +378,7 @@ PHP
 		self::assertSame( 'target_active', $result['first'] );
 		self::assertSame( 'target_active', $result['second'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 14, $result['hooks'] );
+		self::assertSame( 15, $result['hooks'] );
 		self::assertTrue( $result['one_handle'] );
 	}
 
@@ -403,7 +392,7 @@ PHP
 		self::assertSame( 'repository_locator_invalid', $result['rejected'] );
 		self::assertSame( 'target_active', $result['accepted'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 14, $result['hooks'] );
+		self::assertSame( 15, $result['hooks'] );
 		self::assertSame( 0, $result['calls'] );
 	}
 
@@ -464,7 +453,7 @@ PHP,
 				$result['diagnostics'],
 				$fault
 			);
-			self::assertSame( 14, $result['hooks'], $fault );
+			self::assertSame( 15, $result['hooks'], $fault );
 		}
 	}
 

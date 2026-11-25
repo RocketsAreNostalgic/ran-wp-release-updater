@@ -57,7 +57,6 @@ final readonly class IdentityDescriptor {
 		'target_type',
 		'version',
 	);
-	private const TARGET_KEYS         = array( 'installed_package_identity', 'provider_code', 'repository_identity', 'repository_locator', 'target_type' );
 
 	/** @param array<string, mixed> $facts */
 	private function __construct( private array $facts, private string $descriptor_fingerprint ) {
@@ -71,15 +70,7 @@ final readonly class IdentityDescriptor {
 		return new self( $canonical, self::fingerprint_facts( $canonical ) );
 	}
 
-	public static function fingerprint( mixed $facts ): string {
-		if ( ! self::valid_facts( $facts ) ) {
-			throw new InvalidArgumentException( 'The identity descriptor facts are invalid.' );
-		}
-		return self::fingerprint_facts( self::canonical_facts( $facts ) );
-	}
-
-	public static function rehydrate( mixed $value, mixed $expected_target = null ): self {
-		$has_expected_target = 2 === func_num_args();
+	public static function rehydrate( mixed $value ): self {
 		if ( ! self::exact_keys( $value, self::DESCRIPTOR_KEYS ) || ! self::valid_fact_values( $value ) || ! is_string( $value['fingerprint'] ) ) {
 			throw new InvalidArgumentException( 'The identity descriptor is invalid.' );
 		}
@@ -88,23 +79,7 @@ final readonly class IdentityDescriptor {
 		if ( ! hash_equals( $fingerprint, $value['fingerprint'] ) ) {
 			throw new InvalidArgumentException( 'The identity descriptor fingerprint is invalid.' );
 		}
-		$descriptor = new self( $canonical, $fingerprint );
-		if ( $has_expected_target ) {
-			self::assert_target_binding( $descriptor, $expected_target );
-		}
-		return $descriptor;
-	}
-
-	public static function assert_target_binding( self $descriptor, mixed $target ): self {
-		if ( ! self::valid_target( $target ) ) {
-			throw new InvalidArgumentException( 'The target binding is invalid.' );
-		}
-		foreach ( self::TARGET_KEYS as $key ) {
-			if ( $descriptor->facts[ $key ] !== $target[ $key ] ) {
-				throw new InvalidArgumentException( 'The identity descriptor does not bind the requested target.' );
-			}
-		}
-		return $descriptor;
+		return new self( $canonical, $fingerprint );
 	}
 
 	/** @return array<string, mixed> */
@@ -159,12 +134,6 @@ final readonly class IdentityDescriptor {
 			}
 		}
 		return true;
-	}
-
-	private static function valid_target( mixed $value ): bool {
-		return self::exact_keys( $value, self::TARGET_KEYS ) && ( 'plugin' === $value['target_type'] || 'theme' === $value['target_type'] )
-			&& self::is_bounded_opaque_identity( $value['installed_package_identity'], 255 ) && self::is_provider_code( $value['provider_code'] )
-			&& self::is_bounded_opaque_identity( $value['repository_identity'] ) && self::is_bounded_opaque_identity( $value['repository_locator'], 255 );
 	}
 
 	/**

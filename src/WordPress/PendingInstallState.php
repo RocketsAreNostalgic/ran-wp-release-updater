@@ -9,7 +9,7 @@ use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
 /**
  * Constrains the mutable state of one admitted native install operation.
  *
- * @phpstan-type ArchiveProof array{descriptor_fingerprint:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,sha256:string,size:int,update_uri:string}
+ * @phpstan-type ArchiveProof array{descriptor_fingerprint:string,sha256:string,size:int,update_uri:string}
  */
 final class PendingInstallState {
 

@@ -119,14 +119,14 @@ PHP;
 		}
 	}
 
-	public function test_private_file_mode_accepts_windows_0666_and_rejects_unix_0666(): void {
-		self::assertTrue( TemporaryArtifact::has_private_file_mode( 0100600, 'Linux' ) );
-		self::assertFalse( TemporaryArtifact::has_private_file_mode( 0100666, 'Linux' ) );
-		self::assertFalse( TemporaryArtifact::has_private_file_mode( 0100644, 'Linux' ) );
-		self::assertTrue( TemporaryArtifact::has_private_file_mode( 0100600, 'Windows' ) );
-		self::assertTrue( TemporaryArtifact::has_private_file_mode( 0100666, 'Windows' ) );
-		self::assertFalse( TemporaryArtifact::has_private_file_mode( 0100444, 'Windows' ) );
-		self::assertFalse( TemporaryArtifact::has_private_file_mode( 0040600, 'Windows' ) );
+	public function test_inspect_accepts_non_private_file_permissions_without_rehashing(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_chmod -- Set non-0600 fixture permission bits to verify ACL and setgid host compatibility.
+		chmod( $this->path, 0644 );
+		clearstatcache( true, $this->path );
+		$sha256 = hash_file( 'sha256', $this->path );
+		self::assertIsString( $sha256 );
+		$artifact = new TemporaryArtifact( $this->path, $sha256, $this->identity() );
+		self::assertSame( $this->path, $artifact->inspect( static fn( string $path ): string => $path ) );
 	}
 	/** @return array<string,int> */
 	private function identity(): array {

@@ -24,13 +24,13 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 	 * @internal Selected-runtime GitHub declaration composition.
 	 * @param array<string,mixed> $declaration
 	 * @param array<string,mixed> $resolved
-	 * @param array<string,mixed> $headers
+	 * @param \Closure():array{code:string,headers?:array<string,string>,raw_update_uri?:string} $header_loader
 	 * @return array{native:?NativePackageUpdater,code:string}
 	 */
 	public static function compose_from_declaration(
 		array $declaration,
 		array $resolved,
-		array $headers,
+		\Closure $header_loader,
 		string $identity,
 		int $network_id,
 		mixed $selected_runtime_state
@@ -57,18 +57,10 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				'code'   => 'repository_locator_invalid',
 			);
 		}
-		try {
-			$installed_uri = \RAN\WPReleaseUpdater\V1\Contract\CanonicalUpdateUri::canonicalize( $headers['UpdateURI'] );
-		} catch ( \Throwable ) {
+		if ( ! is_string( $uri ) ) {
 			return array(
 				'native' => null,
-				'code'   => 'installed_update_uri_mismatch',
-			);
-		}
-		if ( $uri !== $installed_uri ) {
-			return array(
-				'native' => null,
-				'code'   => 'installed_update_uri_mismatch',
+				'code'   => 'repository_locator_invalid',
 			);
 		}
 		if ( ! is_object( $GLOBALS['wpdb'] ?? null ) || ! function_exists( 'add_filter' ) ) {
@@ -86,7 +78,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				'code'   => 'target_composition_failed',
 			);
 		}
-		$target_binding              = array(
+		$target_binding = array(
 			'canonical_repository_locator' => $locator,
 			'canonical_update_uri'         => $uri,
 			'installed_package_identity'   => $identity,
@@ -97,17 +89,14 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 			'release_channel'              => $declaration['channel'],
 			'stable_repository_identity'   => $repository_id,
 			'target_type'                  => $declaration['target_type'],
-			'theme_template'               => $headers['Template'],
+			'theme_template'               => '',
 			'update_policy'                => $declaration['update_policy'],
 			'wordpress_runtime_version'    => $wordpress_version,
 		);
-		$resolver                    = new GitHubCredentialResolver( $declaration['credential_resolver'] );
-		$native_headers              = $headers;
-		$native_headers['PluginURI'] = $native_headers['PackageURI'];
-		unset( $native_headers['PackageURI'], $native_headers['Template'] );
+		$resolver       = new GitHubCredentialResolver( $declaration['credential_resolver'] );
 		$configuration  = array(
 			'installed_directory'        => dirname( $declaration['installed_file'] ),
-			'headers'                    => $native_headers,
+			'headers'                    => null,
 			'installed_package_identity' => $identity,
 			'policy'                     => $declaration['update_policy'],
 			'target_type'                => $declaration['target_type'],
@@ -119,7 +108,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 			'header_file'                => $resolved['header_file'],
 			'installed_package_identity' => $identity,
 			'maximum_artifact_bytes'     => $declaration['maximum_artifact_bytes'],
-			'metadata_name'              => $headers['Name'],
+			'metadata_name'              => '',
 			'offer_update_uri'           => $uri,
 			'php_runtime_version'        => $php_version,
 			'provider_code'              => 'github',
@@ -127,7 +116,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 			'repository_locator'         => $locator,
 			'staged_package_update_uri'  => $uri,
 			'target_type'                => $declaration['target_type'],
-			'theme_template'             => $headers['Template'],
+			'theme_template'             => '',
 			'wordpress_runtime_version'  => $wordpress_version,
 		);
 		return array(
@@ -144,7 +133,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				$declaration['native_mutation_begin'],
 				$declaration['native_mutation_complete'],
 				$declaration['descriptor_admission'],
-				$declaration['allow_working_copy'] ?? false,
+				$header_loader,
 			),
 			'code'   => 'target_composition_failed',
 		);
@@ -154,6 +143,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 	 * @param array<string, mixed> $configuration
 	 * @param array<string, mixed> $target_binding
 	 * @param array<string, mixed> $archive_policy
+	 * @param (callable():array{code:string,headers?:array<string,string>,raw_update_uri?:string})|null $header_loader
 	 */
 	public static function register_from_configuration(
 		array $configuration,
@@ -168,14 +158,14 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		?callable $native_mutation_begin = null,
 		?callable $native_mutation_complete = null,
 		?callable $descriptor_admission = null,
-		bool $allow_working_copy = false
+		?callable $header_loader = null
 	): ?NativePackageUpdater {
 		try {
 			$adapter = new self( $target_binding, $credentials, $operation_guard, null === $selected_runtime_state ? null : static fn(): ?string => $selected_runtime_state->liveness_code() );
 		} catch ( InvalidArgumentException ) {
 			return null;
 		}
-		$updater = NativePackageUpdater::from_configuration( $configuration, $target_binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse, operation_guard: $operation_guard, native_mutation_begin: $native_mutation_begin, native_mutation_complete: $native_mutation_complete, descriptor_admission: $descriptor_admission, allow_working_copy: $allow_working_copy );
+		$updater = NativePackageUpdater::from_configuration( $configuration, $target_binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse, operation_guard: $operation_guard, native_mutation_begin: $native_mutation_begin, native_mutation_complete: $native_mutation_complete, descriptor_admission: $descriptor_admission, header_loader: $header_loader );
 		if ( $updater instanceof NativePackageUpdater ) {
 			$updater->register();
 		}

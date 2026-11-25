@@ -46,6 +46,13 @@ namespace {
 			return true;
 		}
 	}
+	if ( ! function_exists( 'remove_filter' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
+		function remove_filter( string $hook, mixed $callback, int $priority = 10 ): bool {
+			$GLOBALS['ran_wp_release_updater_test_removed_hooks'][] = array( 'filter', $hook, $callback, $priority );
+			return true;
+		}
+	}
 	if ( ! function_exists( 'get_current_blog_id' ) ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress site identity seam.
 		function get_current_blog_id(): int {
@@ -544,14 +551,6 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			}
 		}
 
-		public function test_explicit_working_copy_override_preserves_the_verified_install_path(): void {
-			list( $updater ) = $this->subject( allow_working_copy: true );
-			$marker          = $this->working_copy_marker();
-			$this->complete( $updater );
-			self::assertFileDoesNotExist( $marker );
-			self::assertFileExists( $this->installed_directory() . '/package.php' );
-		}
-
 		public function test_marker_created_by_final_admission_is_checked_before_native_mutation(): void {
 			$control         = new class() {
 				public bool $create_marker = false;
@@ -598,19 +597,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			return $marker;
 		}
 
-		/** @return list<array{bool}> */
-		public static function post_begin_working_copy_cases(): array {
-			return array( array( false ), array( true ) );
-		}
-
-		#[\PHPUnit\Framework\Attributes\DataProvider( 'post_begin_working_copy_cases' )]
-		public function test_marker_created_by_native_begin_is_refused_unless_explicitly_overridden( bool $allow ): void {
-			$observed                                 = new class() {
+		public function test_marker_created_by_native_begin_is_refused(): void {
+			$observed                     = new class() {
 				public ?string $outcome = null;
 				public ?string $owner   = null;
 				public int $completions = 0;
 			};
-			list( $updater, , $database, , $binding ) = $this->subject(
+			list( $updater, , $database ) = $this->subject(
 				operation_guard: static fn(): bool => true,
 				native_mutation_begin: function (): string {
 					$this->working_copy_marker();
@@ -621,40 +614,26 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					$observed->owner   = $owner;
 					$observed->outcome = $outcome;
 					++$observed->completions;
-				},
-				allow_working_copy: $allow
+				}
 			);
-			$offer                                    = $this->offer( $updater );
-			$archive                                  = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			$offer                        = $this->offer( $updater );
+			$archive                      = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
 			self::assertIsString( $archive );
 			self::assertNull( $updater->filter_pre_unzip_file( null, $archive, '/tmp', array(), 0.0 ) );
 			self::assertTrue( $updater->filter_pre_install( true, $this->extra() ) );
 			$stage  = $this->staged();
 			$result = $updater->filter_source_selection( $stage, '/tmp', null, $this->extra() );
-			if ( $allow ) {
-				self::assertSame( $stage, $result );
-				$updater->capture_install_package_result( array( 'destination' => $this->install_staged( $stage ) ), $this->extra() );
-				$updater->observe_completion(
-					null,
-					array(
-						'action'  => 'update',
-						'type'    => 'plugin',
-						'plugins' => array( 'package/package.php' ),
-					)
-				);
-			} else {
-				self::assertInstanceOf( \WP_Error::class, $result );
-				self::assertSame( 'ran_wp_release_updater_target_is_working_copy', $result->code );
-				self::assertSame( $result, $updater->capture_install_package_result( $result, $this->extra() ) );
-			}
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertSame( 'ran_wp_release_updater_target_is_working_copy', $result->code );
+			self::assertSame( $result, $updater->capture_install_package_result( $result, $this->extra() ) );
 			$updater->finalize_pending_install();
-			self::assertSame( $allow ? null : 'target_is_working_copy', $updater->status()['failure_code'] );
-			self::assertSame( $allow ? 'verified_success' : 'uncertain', $observed->outcome );
+			self::assertSame( 'target_is_working_copy', $updater->status()['failure_code'] );
+			self::assertSame( 'uncertain', $observed->outcome );
 			self::assertSame( 1, $observed->completions );
 			self::assertSame( 'owner', $observed->owner );
 			self::assertFileDoesNotExist( $archive );
-			self::assertSame( ! $allow, is_file( $this->installed_directory() . '/.git' ) );
-			self::assertSame( $allow ? 'verified_success' : 'target_is_working_copy', $this->retained_outcome( $updater )['outcome'] );
+			self::assertTrue( is_file( $this->installed_directory() . '/.git' ) );
+			self::assertSame( 'target_is_working_copy', $this->retained_outcome( $updater )['outcome'] );
 			self::assertSame( array(), $database->rows() );
 		}
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
@@ -665,6 +644,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$GLOBALS['ran_wp_release_updater_test_observations']     = array();
 			$GLOBALS['ran_wp_release_updater_test_observer_throws']  = false;
 			$GLOBALS['ran_wp_release_updater_test_hooks']            = array();
+			$GLOBALS['ran_wp_release_updater_test_removed_hooks']    = array();
 			$GLOBALS['ran_wp_release_updater_test_filter_callbacks'] = array();
 			$GLOBALS['ran_wp_release_updater_test_doing_action']     = null;
 		}
@@ -692,141 +672,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Best-effort fixture teardown tolerates paths already removed by the scenario. Remove native fixture entries directly, preserving the surrounding ownership and link-handling checks.
 			@rmdir( $this->temporary_directory );
 		}
-		public function test_v2_bounds_and_screens_known_rejections_without_inventing_unknown_causes(): void {
-			list( $updater, $adapter ) = $this->subject();
-			$candidates                = array();
-			for ( $index = 1; $index <= 8; ++$index ) {
-				$id                               = (string) $index;
-				$candidates[]                     = array(
-					'release_identity' => $id,
-					'tag'              => 'secret_orchid',
-					'version'          => '3.0.0',
-				);
-				$adapter->inspect_outcomes[ $id ] = ReleaseFailure::rejected( 'tag_not_version', 'withheld detail' );
-			}
-			$adapter->list_response = array(
-				'candidates'  => $candidates,
-				'diagnostics' => array( 'unsafe' => 'withheld' ),
-			);
-			$updater->filter_update(
-				false,
-				array(
-					'Version'   => '1.0.0',
-					'UpdateURI' => $this->uri(),
-				),
-				'package/package.php',
-				array()
-			);
-			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
-			self::assertNull( $events[2][1]['listing_diagnostics'] );
-			self::assertCount( 8, $events[2][1]['candidate_rejections'] );
-			self::assertSame(
-				array(
-					'release_identity' => '1',
-					'tag'              => null,
-					'reason'           => 'tag_not_version',
-				),
-				$events[2][1]['candidate_rejections'][0]
-			);
-			$updater->refresh();
-			$adapter->inspect_outcomes['1'] = new \RuntimeException( 'withheld cause' );
-			$updater->filter_update(
-				false,
-				array(
-					'Version'   => '1.0.0',
-					'UpdateURI' => $this->uri(),
-				),
-				'package/package.php',
-				array()
-			);
-			$last = end( $GLOBALS['ran_wp_release_updater_test_observations'] );
-			self::assertSame( array(), $last[1]['candidate_rejections'] );
-		}
-
-		public function test_v2_retains_known_inspection_and_acquisition_rejections_when_an_older_candidate_is_offered(): void {
-			foreach ( array( 'inspect', 'acquire' ) as $stage ) {
-				list( $updater, $adapter, , $older ) = $this->subject();
-				$facts                               = $older->to_array();
-				unset( $facts['fingerprint'] );
-				$newer                           = IdentityDescriptor::create(
-					array_replace(
-						$facts,
-						array(
-							'release_identity' => '77',
-							'tag'              => 'v3.0.0',
-							'version'          => '3.0.0',
-						)
-					)
-				);
-				$diagnostics                     = array(
-					'scanned_count' => 3,
-					'dropped_count' => 1,
-					'drops'         => array(
-						array(
-							'release_identity' => '76',
-							'tag'              => null,
-							'reason'           => 'tag_not_version',
-						),
-					),
-					'truncated'     => false,
-				);
-				$adapter->list_response          = array(
-					'candidates'       => array( $this->candidate( $newer ), $this->candidate( $older ) ),
-					'diagnostics'      => $diagnostics,
-					'search_exhausted' => true,
-				);
-				$adapter->inspect_outcomes['77'] = $newer;
-				if ( 'inspect' === $stage ) {
-					$adapter->inspect_outcomes['77'] = ReleaseFailure::rejected( 'digest_missing' );
-				} else {
-					$adapter->acquire_outcomes['77'] = ReleaseFailure::rejected( 'download_digest_mismatch' );
-				}
-				$GLOBALS['ran_wp_release_updater_test_observations'] = array();
-				$this->offer( $updater );
-				$events = $GLOBALS['ran_wp_release_updater_test_observations'];
-				self::assertCount( 3, $events );
-				self::assertSame( array( 'check_id', 'status', 'reason', 'relationship', 'installed_version', 'candidate_version', 'offered_version', 'candidate_validation_code' ), array_keys( $events[1][1] ) );
-				self::assertSame( 'ran_wp_release_updater_check_completed_v2', $events[2][0] );
-				self::assertSame( $events[1][1], array_intersect_key( $events[2][1], $events[1][1] ) );
-				self::assertSame( 'update_available', $events[2][1]['reason'] );
-				self::assertSame( $diagnostics, $events[2][1]['listing_diagnostics'] );
-				self::assertTrue( $events[2][1]['search_exhausted'] );
-				self::assertSame(
-					array(
-						array(
-							'release_identity' => '77',
-							'tag'              => 'v3.0.0',
-							'reason'           => 'inspect' === $stage ? 'digest_missing' : 'download_digest_mismatch',
-						),
-					),
-					$events[2][1]['candidate_rejections']
-				);
-				$updater->refresh();
-				$adapter->list_response = array(
-					'candidates'       => array(),
-					'search_exhausted' => false,
-					'not_modified'     => false,
-				);
-				$updater->filter_update(
-					false,
-					array(
-						'Version'   => '1.0.0',
-						'UpdateURI' => $this->uri(),
-					),
-					'package/package.php',
-					array()
-				);
-				$last = end( $GLOBALS['ran_wp_release_updater_test_observations'] );
-				self::assertNull( $last[1]['listing_diagnostics'] );
-				self::assertSame( array(), $last[1]['candidate_rejections'] );
-			}
-		}
-
 		public function test_observation_captures_actual_check(): void {
 			list( $updater, $adapter ) = $this->subject();
 			$this->offer( $updater );
 			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
-			self::assertCount( 3, $events );
+			self::assertCount( 2, $events );
 			self::assertSame( 'ran_wp_release_updater_check_started_v1', $events[0][0] );
 			self::assertSame( 'ran_wp_release_updater_check_completed_v1', $events[1][0] );
 			self::assertMatchesRegularExpression( '/^[a-f0-9]{32}$/', $events[0][1]['check_id'] );
@@ -870,7 +720,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array( 1, 1, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 			self::assertSame( array(), $database->rows() );
 			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
-			self::assertCount( 3, $events );
+			self::assertCount( 2, $events );
 			self::assertSame( 'ran_wp_release_updater_check_started_v1', $events[0][0] );
 			self::assertSame( 'ran_wp_release_updater_check_completed_v1', $events[1][0] );
 			self::assertSame( 'failed', $events[1][1]['status'] );
@@ -879,14 +729,14 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		public function test_reused_discovery_emits_no_fresh_check(): void {
 			list( $updater, $adapter ) = $this->subject( native_discovery_reuse: true );
 			$this->offer( $updater );
-			self::assertCount( 3, $GLOBALS['ran_wp_release_updater_test_observations'] );
+			self::assertCount( 2, $GLOBALS['ran_wp_release_updater_test_observations'] );
 			$GLOBALS['ran_wp_release_updater_test_observations'] = array();
 			$this->offer( $updater );
 			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_observations'] );
 			self::assertSame( 1, $adapter->list_calls );
 			$updater->refresh();
 			$this->offer( $updater );
-			self::assertCount( 3, $GLOBALS['ran_wp_release_updater_test_observations'] );
+			self::assertCount( 2, $GLOBALS['ran_wp_release_updater_test_observations'] );
 			self::assertSame( 2, $adapter->list_calls );
 		}
 
@@ -1248,7 +1098,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array(), $database->read_option_names() );
 			$updater->register();
 			$updater->register();
-			self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 15, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertContains( array( 'filter', 'ran_wp_release_updater_install_exact_release_v1', array( $updater, 'filter_install_exact_release' ), 10, 7 ), $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
@@ -2034,7 +1884,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$property->setValue( $broker, 'active' );
 			list( $updater, $adapter, $database ) = $this->subject( 'manual', null, 'stable', false, $state );
 			$updater->register();
-			self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 15, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
 			foreach ( array( 'stale_global', 'wrong_protocol' ) as $failure ) {
 				if ( 'stale_global' === $failure ) {
@@ -2368,7 +2218,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
-			self::assertCount( 13, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$offer = $updater->filter_update(
 				false,
 				array(
@@ -2393,7 +2243,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$stock = new \Theme_Upgrader();
 				$GLOBALS['ran_wp_release_updater_test_doing_action'] = $automatic_action ? 'wp_maybe_auto_update' : null;
 				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', $stock, $extra ) );
-				self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+				self::assertCount( 15, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 				if ( $failed_result ) {
 					$original      = new \WP_Error( 'post_copy_failed', 'Post-copy failure.' );
 					$stock->result = $original;
@@ -2405,11 +2255,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					self::assertNotSame( $original, $outgoing );
 					$bridged = ! $automatic_action && ! $replace_skin;
 					self::assertSame( $bridged ? array() : $original, $stock->result );
-					self::assertSame( $bridged ? 15 : 14, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
+					self::assertSame( $bridged ? 16 : 15, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
 					if ( $bridged ) {
 						self::assertSame(
 							array( 'action', 'upgrader_process_complete', array( $updater, 'restore_theme_error_result' ), PHP_INT_MIN, 2 ),
-							$GLOBALS['ran_wp_release_updater_test_hooks'][14]
+							$GLOBALS['ran_wp_release_updater_test_hooks'][15]
 						);
 					}
 					$stock->skin->result = $outgoing;
@@ -3061,11 +2911,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				self::assertSame( 'rejected', $report['status'], $label );
 				self::assertSame( 'candidate_rejected', $report['reason'], $label );
 				self::assertSame( $expected_code, $report['candidate_validation_code'], $label );
-				self::assertCount( 3, $events, $label );
+				self::assertCount( 2, $events, $label );
 				self::assertSame( 'ran_wp_release_updater_check_completed_v1', $events[1][0], $label );
 				self::assertSame( $expected_code, $events[1][1]['candidate_validation_code'] ?? null, $label . ' v1' );
-				self::assertSame( 'ran_wp_release_updater_check_completed_v2', $events[2][0], $label );
-				self::assertSame( $expected_code, $events[2][1]['candidate_validation_code'] ?? null, $label . ' v2' );
 			}
 
 			self::assertFalse( \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::is_candidate_validation_code( 'unlisted_code' ) );
@@ -3516,22 +3364,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( '8.1', $offer['requires_php'] );
 		}
 
-		public function test_filter_offer_release_refusal_restores_candidate_rejections_and_writes_no_lock(): void {
-			list( $updater, $adapter, $database, $descriptor ) = $this->subject();
-			$rejections_property                               = new \ReflectionProperty( NativePackageUpdater::class, 'candidate_rejections' );
-			$seed_rejections                                   = array(
-				array(
-					'release_identity' => 'release:seed',
-					'tag'              => 'v1.5.0',
-					'reason'           => 'archive_unreadable',
-				),
-			);
-			$rejections_property->setValue( $updater, $seed_rejections );
+		public function test_filter_offer_release_refusal_writes_no_lock(): void {
+			list( $updater, $adapter, $database, $descriptor )            = $this->subject();
 			$adapter->acquire_outcomes[ $descriptor->release_identity() ] = new ReleaseFailure( 'package_incompatible', null, 'complete', null, 'header_requires_php_unmet' );
 
 			$report = $this->offer_release( $updater );
 			self::assertSame( 'refused', $report['status'] );
-			self::assertSame( $seed_rejections, $rejections_property->getValue( $updater ) );
 			self::assertSame( array(), $database->rows() );
 		}
 
@@ -3573,6 +3411,238 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$hooks = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 );
 			self::assertContains( 'update_plugins_updates.example.test', $hooks );
 			self::assertContains( 'update_plugins_Updates.Example.Test', $hooks );
+		}
+
+		public function test_lazy_header_loader_registers_mixed_case_host_and_maps_package_uri(): void {
+			$mixed_uri         = 'https://Updates.Example.Test/owner/package';
+			$config            = $this->config( 'manual' );
+			$config['headers'] = null;
+			$archive_path      = $this->archive();
+			$descriptor        = $this->descriptor( $archive_path );
+			$binding           = $this->binding( 'manual' );
+			$adapter           = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
+			$loader_calls      = 0;
+			$updater           = NativePackageUpdater::from_configuration(
+				$config,
+				$binding,
+				$adapter,
+				new FakeOptionDatabase( 100 ),
+				$this->policy(),
+				header_loader: static function () use ( $mixed_uri, &$loader_calls ): array {
+					++$loader_calls;
+					return array(
+						'code'    => 'installed_header_verified',
+						'headers' => array(
+							'Author'      => 'Installed Author',
+							'Description' => 'Installed Description',
+							'Name'        => 'Package',
+							'PackageURI'  => 'https://homepage.example.test/package',
+							'RequiresPHP' => '8.2',
+							'RequiresWP'  => '6.5',
+							'Template'    => '',
+							'UpdateURI'   => $mixed_uri,
+							'Version'     => '1.0.0',
+						),
+					);
+				}
+			);
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
+
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Reset controlled hook capture state used by this fixture.
+			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
+			$updater->register();
+			self::assertSame( 0, $loader_calls );
+			$hooks = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 );
+			self::assertContains( 'update_plugins_updates.example.test', $hooks );
+			self::assertContains( 'plugins_update_check_locales', $hooks );
+			self::assertNotContains( 'update_plugins_Updates.Example.Test', $hooks );
+
+			self::assertSame( array( 'en_US' ), $updater->prepare_update_check_routing( array( 'en_US' ) ) );
+			self::assertSame( 1, $loader_calls );
+			$hooks_after = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 );
+			self::assertContains( 'update_plugins_Updates.Example.Test', $hooks_after );
+
+			$offer = $updater->filter_update(
+				false,
+				array(
+					'Version'   => '1.0.0',
+					'UpdateURI' => $mixed_uri,
+				),
+				'package/package.php',
+				array()
+			);
+			self::assertIsArray( $offer );
+			$slug = $offer['slug'];
+			self::assertIsString( $slug );
+			$info = $updater->filter_plugin_information( false, 'plugin_information', (object) array( 'slug' => $slug ) );
+			self::assertInstanceOf( \stdClass::class, $info );
+			self::assertSame( 'https://homepage.example.test/package', $info->homepage );
+		}
+
+		public function test_lazy_header_loader_refresh_rotates_mixed_case_raw_host_hook_and_deduplicates(): void {
+			$current_uri       = 'https://Updates.Example.Test/owner/package';
+			$config            = $this->config( 'manual' );
+			$config['headers'] = null;
+			$archive_path      = $this->archive();
+			$descriptor        = $this->descriptor( $archive_path );
+			$binding           = $this->binding( 'manual' );
+			$adapter           = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
+			$loader_calls      = 0;
+			$updater           = NativePackageUpdater::from_configuration(
+				$config,
+				$binding,
+				$adapter,
+				new FakeOptionDatabase( 100 ),
+				$this->policy(),
+				header_loader: static function () use ( &$current_uri, &$loader_calls ): array {
+					++$loader_calls;
+					return array(
+						'code'    => 'installed_header_verified',
+						'headers' => array(
+							'Author'      => 'Installed Author',
+							'Description' => 'Installed Description',
+							'Name'        => 'Package',
+							'PackageURI'  => 'https://homepage.example.test/package',
+							'RequiresPHP' => '8.2',
+							'RequiresWP'  => '6.5',
+							'Template'    => '',
+							'UpdateURI'   => $current_uri,
+							'Version'     => '1.0.0',
+						),
+					);
+				}
+			);
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
+
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Reset controlled hook capture state used by this fixture.
+			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Reset controlled hook removal state used by this fixture.
+			$GLOBALS['ran_wp_release_updater_test_removed_hooks'] = array();
+			$updater->register();
+			$updater->prepare_update_check_routing( array( 'en_US' ) );
+			$updater->prepare_update_check_routing( array( 'en_US' ) );
+			self::assertSame( 1, $loader_calls );
+			$initial_raw_hooks = array_values(
+				array_filter(
+					array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ),
+					static fn ( string $hook ): bool => 'update_plugins_Updates.Example.Test' === $hook
+				)
+			);
+			self::assertCount( 1, $initial_raw_hooks );
+
+			self::assertTrue( $updater->refresh() );
+			self::assertContains(
+				array( 'filter', 'update_plugins_Updates.Example.Test', array( $updater, 'filter_update' ), 10 ),
+				$GLOBALS['ran_wp_release_updater_test_removed_hooks']
+			);
+
+			$current_uri = 'https://UPDATES.Example.Test/owner/package';
+			$updater->prepare_update_check_routing( array( 'en_US' ) );
+			self::assertSame( 2, $loader_calls );
+			$rotated_raw_hooks = array_values(
+				array_filter(
+					array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ),
+					static fn ( string $hook ): bool => 'update_plugins_UPDATES.Example.Test' === $hook
+				)
+			);
+			self::assertCount( 1, $rotated_raw_hooks );
+		}
+
+		public function test_lazy_header_loader_failure_preserves_mixed_case_raw_host_routing(): void {
+			$mixed_uri         = 'https://Updates.Example.Test/owner/package';
+			$config            = $this->config( 'manual' );
+			$config['headers'] = null;
+			$archive_path      = $this->archive();
+			$descriptor        = $this->descriptor( $archive_path );
+			$binding           = $this->binding( 'manual' );
+			$adapter           = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
+			$loader_calls      = 0;
+			$updater           = NativePackageUpdater::from_configuration(
+				$config,
+				$binding,
+				$adapter,
+				new FakeOptionDatabase( 100 ),
+				$this->policy(),
+				header_loader: static function () use ( $mixed_uri, &$loader_calls ): array {
+					++$loader_calls;
+					return array(
+						'code'           => 'installed_requirement_incompatible',
+						'raw_update_uri' => $mixed_uri,
+					);
+				}
+			);
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
+
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Reset controlled hook capture state used by this fixture.
+			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
+			$updater->register();
+			self::assertSame( array( 'en_US' ), $updater->prepare_update_check_routing( array( 'en_US' ) ) );
+			self::assertSame( 1, $loader_calls );
+			$hooks = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 );
+			self::assertContains( 'update_plugins_Updates.Example.Test', $hooks );
+
+			self::assertFalse(
+				$updater->filter_update(
+					false,
+					array(
+						'Version'   => '1.0.0',
+						'UpdateURI' => $mixed_uri,
+					),
+					'package/package.php',
+					array()
+				)
+			);
+			self::assertSame( 1, $loader_calls );
+			self::assertSame( array( 'runtime_package_identity_invalid' ), $updater->diagnostics() );
+			self::assertSame( 0, $adapter->list_calls + $adapter->inspect_calls + $adapter->acquire_calls );
+		}
+
+		public function test_same_size_and_mtime_owned_zip_tampering_before_extraction_is_rejected(): void {
+			list( $updater, , $database, $descriptor ) = $this->subject();
+			$offer                                     = $this->offer( $updater );
+			$owned                                     = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $owned );
+
+			clearstatcache( true, $owned );
+			$before_stat = lstat( $owned );
+			self::assertIsArray( $before_stat );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Mutate one owned fixture byte in place while preserving exact inode and byte length.
+			$handle = fopen( $owned, 'r+b' );
+			self::assertIsResource( $handle );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read the first byte so the in-place mutation is guaranteed to change content without changing size.
+			$first = fread( $handle, 1 );
+			self::assertIsString( $first );
+			self::assertSame( 0, fseek( $handle, 0 ) );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write one altered byte in place without changing file size or inode.
+			self::assertSame( 1, fwrite( $handle, 'X' === $first ? 'Y' : 'X' ) );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the fixture stream after in-place mutation.
+			fclose( $handle );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_touch -- Restore the original mtime/atime so stat-only checks could be fooled if ctime matches.
+			self::assertTrue( touch( $owned, $before_stat['mtime'], $before_stat['atime'] ) );
+
+			clearstatcache( true, $owned );
+			$after_stat = lstat( $owned );
+			self::assertIsArray( $after_stat );
+			self::assertSame( $before_stat['ino'], $after_stat['ino'] );
+			self::assertSame( $before_stat['size'], $after_stat['size'] );
+			self::assertSame( $before_stat['mtime'], $after_stat['mtime'] );
+
+			// Align pending archive_identity with the post-tamper stat (including ctime) to prove digest verification rejects same-stat byte tampering.
+			$pending = ( new \ReflectionProperty( $updater, 'pending_install' ) )->getValue( $updater );
+			self::assertInstanceOf( \RAN\WPReleaseUpdater\V1\WordPress\PendingInstallState::class, $pending );
+			$store         = new \RAN\WPReleaseUpdater\V1\WordPress\OwnedArchiveStore();
+			$matching_stat = $store->stat_identity( $owned, $descriptor );
+			self::assertIsArray( $matching_stat );
+			self::assertTrue( $store->same_stat_identity( $owned, $descriptor, $matching_stat ) );
+			self::assertFalse( $store->verify_digest_and_stat( $owned, $descriptor, $matching_stat ) );
+			( new \ReflectionProperty( $pending, 'archive_identity' ) )->setValue( $pending, $matching_stat );
+
+			$result = $updater->filter_pre_unzip_file( null, $owned, '/tmp', array(), 0.0 );
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertSame( 'ran_wp_release_updater_archive_changed_before_extraction', $result->get_error_code() );
+			self::assertContains( 'archive_changed_before_extraction', $updater->diagnostics() );
+			self::assertFileDoesNotExist( $owned );
+			self::assertSame( array(), $database->rows() );
 		}
 
 		public function test_begin_native_mutation_failure_after_owner_assignment_completes_owner_and_clears_state(): void {
@@ -4051,13 +4121,13 @@ PHP;
 			return $record;
 		}
 		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,FakeOptionDatabase,IdentityDescriptor,array<string,mixed>} */
-		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null, bool $allow_working_copy = false, string $installed_version = '1.0.0' ): array {
+		private function subject( string $mode = 'manual', ?FakeOptionDatabase $database = null, string $channel = 'stable', bool $prerelease = false, ?SelectedRuntimeState $selected_runtime_state = null, bool $native_discovery_reuse = false, ?PackageIdentityValidator $validator = null, ?callable $operation_guard = null, ?callable $native_mutation_begin = null, ?callable $native_mutation_complete = null, ?callable $descriptor_admission = null, string $installed_version = '1.0.0' ): array {
 			$archive_path = $this->archive();
 			$descriptor   = $this->descriptor( $archive_path, $channel, $prerelease );
 			$binding      = $this->binding( $mode, $channel );
 			$adapter      = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
 			$database   ??= new FakeOptionDatabase( 100 );
-			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode, $installed_version ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete, $descriptor_admission, $allow_working_copy );
+			$updater      = NativePackageUpdater::from_configuration( $this->config( $mode, $installed_version ), $binding, $adapter, $database, $this->policy(), $validator, $selected_runtime_state, $native_discovery_reuse, $operation_guard, $native_mutation_begin, $native_mutation_complete, $descriptor_admission );
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			return array( $updater, $adapter, $database, $descriptor, $binding );
 		}

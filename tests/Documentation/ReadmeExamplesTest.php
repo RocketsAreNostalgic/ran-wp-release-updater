@@ -166,14 +166,14 @@ final class ReadmeExamplesTest extends TestCase {
 				);
 				self::assertSame(
 					array(
-						'requests' => 6,
+						'requests' => 4,
 						'zips'     => 1,
 					),
 					$result['http']['inspect']
 				);
 				self::assertSame(
 					array(
-						'requests' => 6,
+						'requests' => 4,
 						'zips'     => 1,
 					),
 					$result['http']['acquire']

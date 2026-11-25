@@ -79,7 +79,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 			'archive_root' => $slug,
 			'header_file'  => basename( $header_file ),
 		),
-		$header['headers'] ?? array(),
+		static fn (): array => $header,
 		$identity,
 		1,
 		null

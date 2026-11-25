@@ -49,22 +49,34 @@ $ran_wp_release_updater_runtime_files = array(
 	'RAN\\WPReleaseUpdater\\V1\\Runtime\\ReleaseSource'    => 'src/Runtime/ReleaseSource.php',
 );
 
+$ran_wp_release_updater_runtime_root = realpath( __DIR__ );
+if ( ! is_string( $ran_wp_release_updater_runtime_root ) ) {
+	throw new RuntimeException( 'A lifecycle symbol was loaded outside the selected runtime root.' );
+}
+
 foreach ( $ran_wp_release_updater_runtime_files as $ran_wp_release_updater_runtime_class => $ran_wp_release_updater_runtime_relative ) {
-	$ran_wp_release_updater_runtime_file     = __DIR__ . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $ran_wp_release_updater_runtime_relative );
+	$ran_wp_release_updater_runtime_file     = $ran_wp_release_updater_runtime_root . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $ran_wp_release_updater_runtime_relative );
 	$ran_wp_release_updater_runtime_expected = realpath( $ran_wp_release_updater_runtime_file );
+	if (
+		is_link( $ran_wp_release_updater_runtime_file )
+		|| ! is_file( $ran_wp_release_updater_runtime_file )
+		|| ! is_string( $ran_wp_release_updater_runtime_expected )
+		|| ! hash_equals( $ran_wp_release_updater_runtime_file, $ran_wp_release_updater_runtime_expected )
+	) {
+		throw new RuntimeException( 'A lifecycle symbol was loaded outside the selected runtime root.' );
+	}
 	if ( class_exists( $ran_wp_release_updater_runtime_class, false ) || interface_exists( $ran_wp_release_updater_runtime_class, false ) ) {
 		$ran_wp_release_updater_runtime_loaded = ( new ReflectionClass( $ran_wp_release_updater_runtime_class ) )->getFileName();
 		$ran_wp_release_updater_runtime_actual = is_string( $ran_wp_release_updater_runtime_loaded ) ? realpath( $ran_wp_release_updater_runtime_loaded ) : false;
 		if (
-			! is_string( $ran_wp_release_updater_runtime_expected )
-			|| ! is_string( $ran_wp_release_updater_runtime_actual )
+			! is_string( $ran_wp_release_updater_runtime_actual )
 			|| ! hash_equals( $ran_wp_release_updater_runtime_expected, $ran_wp_release_updater_runtime_actual )
 		) {
 			throw new RuntimeException( 'A lifecycle symbol was loaded outside the selected runtime root.' );
 		}
 		continue;
 	}
-	require_once $ran_wp_release_updater_runtime_file;
+	require_once $ran_wp_release_updater_runtime_expected;
 }
 
 unset(
@@ -74,7 +86,8 @@ unset(
 	$ran_wp_release_updater_runtime_file,
 	$ran_wp_release_updater_runtime_files,
 	$ran_wp_release_updater_runtime_loaded,
-	$ran_wp_release_updater_runtime_relative
+	$ran_wp_release_updater_runtime_relative,
+	$ran_wp_release_updater_runtime_root
 );
 
 $ran_wp_release_updater_broker_origin = static function ( mixed $broker, mixed $provenance ): bool {
@@ -97,8 +110,8 @@ $ran_wp_release_updater_broker_origin = static function ( mixed $broker, mixed $
 /* The sealed catalog is deliberately local to this selected runtime. */
 $ran_wp_release_updater_provider_catalog = array(
 	'github' => array(
-		'native'  => static function ( array $d, array $resolved, array $headers, string $identity, int $network_id, mixed $selected_runtime_state ): array {
-			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::compose_from_declaration( $d, $resolved, $headers, $identity, network_id: $network_id, selected_runtime_state: $selected_runtime_state );
+		'native'  => static function ( array $d, array $resolved, Closure $header_loader, string $identity, int $network_id, mixed $selected_runtime_state ): array {
+			return \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::compose_from_declaration( $d, $resolved, $header_loader, $identity, network_id: $network_id, selected_runtime_state: $selected_runtime_state );
 		},
 		'release' => static function ( array $d, \RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState $state ): object {
 			$service = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseService::from_release_declaration( $d, $state );
@@ -177,14 +190,17 @@ return new class(
 			is_array( $GLOBALS['wp_plugin_paths'] ?? null ) ? $GLOBALS['wp_plugin_paths'] : array(),
 			is_array( $GLOBALS['wp_theme_directories'] ?? null ) ? array_values( $GLOBALS['wp_theme_directories'] ) : array(),
 		);
-		$resolved  = $installed->resolve( $d );
-		if ( 'installed_identity_verified' !== ( $resolved['code'] ?? null ) ) {
+		$resolved  = $installed->resolve_location( $d );
+		if ( 'installed_location_verified' !== ( $resolved['code'] ?? null ) ) {
 			return $this->failure( $id, is_string( $resolved['code'] ?? null ) ? $resolved['code'] : 'installed_file_invalid' );
 		}
-		$type     = $d['target_type'];
-		$headers  = $resolved['headers'];
-		$identity = $resolved['installed_package_identity'];
-		$key      = hash(
+		$type             = $d['target_type'];
+		$resolved_file    = $resolved['file'];
+		$canonical_file   = $resolved['canonical_file'];
+		$containment_root = $resolved['containment_root'];
+		$header_loader    = static fn (): array => $installed->read_headers( $resolved_file, $type, $canonical_file, $containment_root );
+		$identity         = $resolved['installed_package_identity'];
+		$key              = hash(
 			'sha256',
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
 			json_encode(
@@ -219,7 +235,7 @@ return new class(
 			);
 			return $this->accepted( $id, 'declaration_deferred_operation_started', $key, $handle );
 		}
-		$composition = $provider( $d, $resolved, $headers, $identity, $this->network_id, $this->selected_runtime_state );
+		$composition = $provider( $d, $resolved, $header_loader, $identity, $this->network_id, $this->selected_runtime_state );
 		$native      = is_array( $composition ) ? ( $composition['native'] ?? null ) : null;
 		if ( ! $native instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater ) {
 			return $this->failure( $id, is_string( $composition['code'] ?? null ) ? $composition['code'] : 'target_composition_failed' );
@@ -365,7 +381,7 @@ return new class(
 				return false;
 			}
 		}
-		return ( $first['allow_working_copy'] ?? false ) === ( $next['allow_working_copy'] ?? false );
+		return true;
 	}
 	private function deferred_handle(): object {
 		return new class() {

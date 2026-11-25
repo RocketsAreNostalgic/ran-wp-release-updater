@@ -59,9 +59,8 @@ local product requirements, not shared-standard exemptions.
 | Native `ZipArchive::$numFiles` | Two line-local property-name ignores cover three reads of the external extension property. Owned members remain enforced. |
 | Test harness/fixture syntax | Synthetic namespaces, globals, hooks, subprocesses, SQL doubles and deliberately invalid input preserve their test purpose. Owned free functions/classes/constants follow the package prefix and owned test namespaces use `RAN\WPReleaseUpdater\V1\Tests` without namespace exceptions. Existing shared-state/global-variable prefix allowances are occurrence-local; foreign signatures, synthetic syntax and native/process exceptions are diagnostic-local. No test-path exclusions remain. These retained boundaries do not exempt production. |
 
-Six declaration-local PHPStan exceptions remain: ReleaseSource's
-direct-filesystem constant inspection and five InstalledPackageResolver
-Reflection-assigned property type seams. Bodies remain directly analyzed at
+One declaration-local PHPStan exception remains: `SelectedRuntimeState`'s
+direct-filesystem constant inspection. Bodies remain directly analyzed at
 level 8. No baseline, new analysis exclusion or lower level is introduced.
 
 ## Runtime and public-name transition
@@ -642,7 +641,8 @@ qualified with the final tuple. No merge/release or manual acceptance is implied
 ## Working-copy refusal runtime boundary
 
 The native `target_is_working_copy` reason extends the broker's closed status and
-diagnostics vocabulary, and `allow_working_copy` extends its target declaration.
+diagnostics vocabulary, and `allow_working_copy` extends its target declaration
+(historical protocol-8 record; `allow_working_copy` is now a compatibility-only no-op so working copies are always refused).
 The first bootstrap loads the broker validator before runtime election, so these
 changes require protocol 8. Bootstrap, broker, selector, selected state and runtime
 metadata advance together. Purpose-built protocol-7 coexistence fixtures join the

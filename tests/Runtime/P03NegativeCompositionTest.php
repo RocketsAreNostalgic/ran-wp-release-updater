@@ -18,11 +18,12 @@ final class P03NegativeCompositionTest extends TestCase {
 	}
 
 	#[\PHPUnit\Framework\Attributes\DataProvider( 'malformed_installed_package_cases' )]
-	public function test_malformed_installed_facts_fail_before_selected_git_hub_composition(
+	public function test_malformed_installed_headers_stay_lazy_on_activate_and_fail_closed_on_update_check(
 		string $type,
 		string $headers,
 		string $expected_code
 	): void {
+		unset( $expected_code );
 		$file   = 'plugin' === $type ? $this->plugin( $headers ) : $this->theme( $headers );
 		$result = $this->probe(
 			<<<'PHP'
@@ -36,8 +37,19 @@ $registered = $handle->register();
 $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(
 	array('php_version' => PHP_VERSION, 'runtime_protocol' => 11, 'wordpress_version' => '6.8.0')
 );
+$before = $handle->status();
+$hook_name = 'plugin' === $data['type'] ? 'update_plugins_github.com' : 'update_themes_github.com';
+$identity = 'plugin' === $data['type'] ? 'plugin/main.php' : 'theme';
+$answer = 'uncalled';
+foreach ($GLOBALS['p03_hooks'] as $entry) {
+	if ($hook_name === $entry['hook']) {
+		$answer = ($entry['callback'])(false, array('Version' => '1.0.0', 'UpdateURI' => 'https://github.com/acme/example'), $identity, array());
+	}
+}
 echo json_encode(array(
 	'activation' => $activation['code'],
+	'answer' => $answer,
+	'before' => $before,
 	'credentials' => $credentials,
 	'database' => $GLOBALS['p03_database_calls'],
 	'http' => $GLOBALS['p03_http_calls'],
@@ -54,10 +66,11 @@ PHP,
 
 		self::assertSame( 'runtime_active', $result['activation'] );
 		self::assertTrue( $result['registered'] );
-		self::assertSame( $expected_code, $result['status']['code'] );
-		self::assertFalse( $result['status']['hooks_registered'] );
-		self::assertNull( $result['status']['native'] );
-		self::assertSame( 0, $result['hooks'] );
+		self::assertSame( 'target_active', $result['before']['code'] );
+		self::assertTrue( $result['before']['hooks_registered'] );
+		self::assertSame( 'plugin' === $type ? 15 : 14, $result['hooks'] );
+		self::assertFalse( $result['answer'] );
+		self::assertSame( 'runtime_package_identity_invalid', $result['status']['native']['failure_code'] );
 		self::assertSame( 0, $result['credentials'] );
 		self::assertSame( 0, $result['http'] );
 		self::assertSame( 0, $result['database'] );
@@ -140,7 +153,7 @@ PHP,
 			)
 		);
 
-		self::assertSame( 14, $result['hooks'], $method );
+		self::assertSame( 15, $result['hooks'], $method );
 		self::assertSame( 0, $result['credentials'], $method );
 		self::assertSame( 0, $result['http'], $method );
 		self::assertSame( 0, $result['database'], $method );

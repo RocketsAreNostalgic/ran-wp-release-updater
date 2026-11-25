@@ -98,9 +98,8 @@ final class GitHubResponseRoutingTest extends TestCase {
 	/** @return array<string,array{string,int}> */
 	public static function acquisition_rate_provider(): array {
 		return array(
-			'asset API'             => array( 'asset', 2 ),
-			'final repository read' => array( 'final_repository', 3 ),
-			'CDN redirect'          => array( 'cdn', 3 ),
+			'asset API'    => array( 'asset', 2 ),
+			'CDN redirect' => array( 'cdn', 3 ),
 		);
 	}
 	public function test_installed_response_acceptance_and_partial_asset_cleanup(): void {
@@ -141,7 +140,6 @@ final class GitHubResponseRoutingTest extends TestCase {
 			$this->response( 200, array( 'id' => 99 ) ),
 			$this->response( 302, null, array( 'location' => 'https://objects.githubusercontent.com/repository.zip' ), '<html>302 Found redirect body</html>' ),
 			$this->response( 200, null, array(), 'zip-data' ),
-			$this->response( 200, array( 'id' => 99 ) ),
 		);
 
 		$artifact = $this->service()->acquire_installed( $descriptor );
@@ -165,19 +163,17 @@ final class GitHubResponseRoutingTest extends TestCase {
 			$this->response( 200, array( 'id' => 99 ) ),
 			$this->response( 302, null, array( 'location' => 'https://objects.githubusercontent.com/repository.zip' ) ),
 			$this->response( 200, null, array(), 'zip-data' ),
-			$this->response( 200, array( 'id' => 99 ) ),
 		);
 
 		$artifact = $this->service()->acquire_installed( $descriptor );
 		try {
-			self::assertCount( 4, $GLOBALS['ran_github_requests'] );
+			self::assertCount( 3, $GLOBALS['ran_github_requests'] );
 			self::assertSame( 10, $GLOBALS['ran_github_requests'][0][1]['timeout'] );
 			self::assertArrayNotHasKey( 'filename', $GLOBALS['ran_github_requests'][0][1] );
 			self::assertSame( 120, $GLOBALS['ran_github_requests'][1][1]['timeout'] );
 			self::assertTrue( $GLOBALS['ran_github_requests'][1][1]['stream'] );
 			self::assertSame( 120, $GLOBALS['ran_github_requests'][2][1]['timeout'] );
 			self::assertTrue( $GLOBALS['ran_github_requests'][2][1]['stream'] );
-			self::assertSame( 10, $GLOBALS['ran_github_requests'][3][1]['timeout'] );
 		} finally {
 			self::assertTrue( $artifact->discard() );
 		}
@@ -222,7 +218,6 @@ final class GitHubResponseRoutingTest extends TestCase {
 		$limited = $this->response( 429, null, array( 'retry-after' => '60' ) );
 		return match ( $endpoint ) {
 			'asset' => array( $this->response( 200, array( 'id' => 99 ) ), $limited ),
-			'final_repository' => array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 200, null, array(), 'zip-data' ), $limited ),
 			'cdn' => array( $this->response( 200, array( 'id' => 99 ) ), $this->response( 302, null, array( 'location' => 'https://objects.githubusercontent.com/repository.zip' ) ), $limited ),
 			default => throw new \UnhandledMatchError(),
 		};

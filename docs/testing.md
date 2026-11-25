@@ -15,10 +15,8 @@ composer check
 
 `composer check` validates the package metadata and generated updater-support copy, audits locked Composer dependencies, lints PHP syntax/style, runs PHPStan, executes PHPUnit, and proves the installed no-dev Composer consumer path.
 
-PHPStan's level-8 roots include `src/WordPress/InstalledPackageResolver.php`.
-Its five private race/read/lock/rewind seams are assigned through Reflection by
-`InstalledPackageResolverTest`; only `property.unusedType` is ignored at those
-specific declarations. Their callable types and all method bodies remain checked.
+PHPStan's level-8 roots include `src/WordPress/InstalledPackageResolver.php`,
+which has no PHPStan suppressions or Reflection seams.
 `scanDirectories: src` supplies symbol discovery; it does not itself analyse
 method bodies. Production analysis now defaults to the repository root rather
 than enumerating individual source files. Root-relative tests/scripts, installed
@@ -91,7 +89,7 @@ All 42 maintained production PHP files (`bootstrap.php`, `runtime.php` and
 production PHP under `src/`) now have direct level-8 roots. Issue #60 records the historical
 source acceptance; this coverage count does not certify later exception changes.
 
-`src/Runtime/ReleaseSource.php` is also a level-8 root. Its direct `FS_METHOD`
+`src/Runtime/SelectedRuntimeState.php` is also a level-8 root. Its direct `FS_METHOD`
 inspection deliberately avoids filesystem negotiation; the line-specific
 `phpstanWP.wpConstant.fetch` exception preserves the contract exercised by
 `PublicReleaseSourceTest`. `TemporaryArtifact::discard()` is marked impure because

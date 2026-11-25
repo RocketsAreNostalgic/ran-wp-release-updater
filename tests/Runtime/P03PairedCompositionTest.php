@@ -22,7 +22,7 @@ final class P03PairedCompositionTest extends TestCase {
 	public function test_concise_github_composition_matches_the_explicit_native_path( string $type ): void {
 		$result = $this->probe( $type );
 
-		self::assertCount( 6, $result['observations'] );
+		self::assertCount( 4, $result['observations'] );
 		self::assertSame( 'update_available', $result['observations'][1][1]['reason'] );
 		self::assertSame( $type, $result['observations'][0][1]['target_type'] );
 		self::assertSame( $result['concise']['binding'], $result['explicit']['binding'] );
@@ -50,7 +50,7 @@ final class P03PairedCompositionTest extends TestCase {
 		self::assertSame( $result['provider_calls_before_status'], $result['provider_calls_after_status'] );
 		self::assertSame( 'archive_identity_verified', $result['concise']['status']['candidate_validation_code'] );
 		self::assertSame( '2.0.0', $result['concise']['offer']['version'] );
-		self::assertSame( 'plugin' === $type ? 14 : 13, $result['concise']['hook_count'] );
+		self::assertSame( 'plugin' === $type ? 15 : 14, $result['concise']['hook_count'] );
 	}
 
 	#[DataProvider( 'target_types' )]
@@ -126,8 +126,8 @@ $concise = (new ReflectionProperty($conciseHandle, 'native'))->getValue($concise
 $identity = 'plugin' === $data['type'] ? 'plugin/main.php' : 'theme';
 $headerFile = 'plugin' === $data['type'] ? 'main.php' : 'style.css';
 $headers = array(
-	'Author' => '', 'Description' => '', 'Name' => 'Example', 'RequiresPHP' => '',
-	'RequiresWP' => '', 'UpdateURI' => 'https://github.com/acme/example', 'Version' => '1.0.0', 'PluginURI' => '',
+	'Author' => '', 'Description' => '', 'Name' => 'Example', 'PluginURI' => '',
+	'RequiresPHP' => '', 'RequiresWP' => '', 'UpdateURI' => 'https://github.com/acme/example', 'Version' => '1.0.0',
 );
 $binding = array(
 	'canonical_repository_locator' => 'acme/example', 'canonical_update_uri' => 'https://github.com/acme/example',
@@ -162,14 +162,9 @@ $explicit = \RAN\WPReleaseUpdater\V1\Provider\GitHub\GitHubReleaseAdapter::regis
 if (! $explicit instanceof \RAN\WPReleaseUpdater\V1\WordPress\NativePackageUpdater) {
 	throw new RuntimeException('Explicit GitHub composition failed.');
 }
-$conciseBinding = (new ReflectionProperty($concise, 'target_binding'))->getValue($concise);
-$conciseHeaders = (new ReflectionProperty($concise, 'headers'))->getValue($concise);
-$concisePolicy = (new ReflectionProperty($concise, 'archive_policy'))->getValue($concise);
-$explicitBinding = (new ReflectionProperty($explicit, 'target_binding'))->getValue($explicit);
-$explicitHeaders = (new ReflectionProperty($explicit, 'headers'))->getValue($explicit);
-$explicitPolicy = (new ReflectionProperty($explicit, 'archive_policy'))->getValue($explicit);
-if ($conciseBinding !== $explicitBinding || $conciseHeaders !== $explicitHeaders || $concisePolicy !== $explicitPolicy) {
-	throw new RuntimeException('Real GitHub compositions diverged.');
+$conciseHeadersBefore = (new ReflectionProperty($concise, 'headers'))->getValue($concise);
+if (null !== $conciseHeadersBefore) {
+	throw new RuntimeException('Concise GitHub composition eagerly read headers before update check.');
 }
 $conciseAdapter = get_class((new ReflectionProperty($concise, 'adapter'))->getValue($concise));
 $explicitAdapter = get_class((new ReflectionProperty($explicit, 'adapter'))->getValue($explicit));
@@ -235,6 +230,15 @@ $invoke = static function (array $registered, object $native) use ($data, $ident
 $normalise = static fn (array $registered): array => array_values(array_map(static fn (array $entry): string => $entry['hook'], $registered));
 $conciseOffer = $invoke($first, $concise);
 $explicitOffer = $invoke($second, $explicit);
+$conciseBinding = (new ReflectionProperty($concise, 'target_binding'))->getValue($concise);
+$conciseHeaders = (new ReflectionProperty($concise, 'headers'))->getValue($concise);
+$concisePolicy = (new ReflectionProperty($concise, 'archive_policy'))->getValue($concise);
+$explicitBinding = (new ReflectionProperty($explicit, 'target_binding'))->getValue($explicit);
+$explicitHeaders = (new ReflectionProperty($explicit, 'headers'))->getValue($explicit);
+$explicitPolicy = (new ReflectionProperty($explicit, 'archive_policy'))->getValue($explicit);
+if ($conciseBinding !== $explicitBinding || $conciseHeaders !== $explicitHeaders || $concisePolicy !== $explicitPolicy) {
+	throw new RuntimeException('Real GitHub compositions diverged.');
+}
 $providerCallsBeforeStatus = array($adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls);
 $publicStatus = $handle->status();
 $providerCallsAfterStatus = array($adapter->listCalls, $adapter->inspectCalls, $adapter->acquireCalls);

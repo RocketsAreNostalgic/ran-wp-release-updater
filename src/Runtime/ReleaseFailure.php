@@ -9,8 +9,7 @@ use RAN\WPReleaseUpdater\V1\Contract\ReleaseRejection;
 /** @internal Closed provider/source failure facts; never expose exception messages. */
 final class ReleaseFailure extends \RuntimeException {
 
-	private const CODES   = array( 'invalid_configuration', 'invalid_release', 'runtime_not_ready', 'runtime_unavailable', 'provider_unavailable', 'filesystem_unsupported', 'credential_unavailable', 'repository_access_unavailable', 'rate_limited', 'release_unavailable', 'package_incompatible', 'release_changed', 'operation_failed', 'cleanup_failed' );
-	private const CLEANUP = array( 'not_applicable', 'complete', 'retained', 'failed' );
+	private const CODES = array( 'invalid_configuration', 'invalid_release', 'runtime_not_ready', 'runtime_unavailable', 'provider_unavailable', 'filesystem_unsupported', 'credential_unavailable', 'repository_access_unavailable', 'rate_limited', 'release_unavailable', 'package_incompatible', 'release_changed', 'operation_failed', 'cleanup_failed' );
 	public readonly ?string $rejection_reason;
 	public readonly ?string $rejection_detail;
 	public function __construct(
@@ -34,9 +33,5 @@ final class ReleaseFailure extends \RuntimeException {
 
 	public static function valid_code( string $code ): bool {
 		return in_array( $code, self::CODES, true );
-	}
-
-	public static function valid_cleanup( string $status ): bool {
-		return in_array( $status, self::CLEANUP, true );
 	}
 }

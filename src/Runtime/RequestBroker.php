@@ -115,8 +115,9 @@ final class RequestBroker {
 		}
 
 		try {
+			$entrypoint                            = $this->runtime_copy_selector->verify_selected_entrypoint( $selected['source_root'], $selected['runtime_file'] );
 			$ran_wp_release_updater_selected_state = $this->selected_runtime_state;
-			$handoff                               = require $selected['runtime_file'];
+			$handoff                               = require $entrypoint;
 		} catch ( Throwable ) {
 			return $this->disable( 'runtime_load_failed' );
 		}

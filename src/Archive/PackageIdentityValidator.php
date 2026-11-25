@@ -19,12 +19,11 @@ final class PackageIdentityValidator {
 
 	public const MAX_EXPANDED_ARCHIVE_BYTES = ArchiveScanner::MAX_EXPANDED_ARCHIVE_BYTES;
 	public const MAX_ARCHIVE_PATH_BYTES     = ArchiveSafety::MAX_PATH_BYTES;
-	private const MAX_ARCHIVE_ENTRIES       = ArchiveScanner::MAX_ENTRIES;
 	private const MAX_HEADER_BYTES          = WordPressHeaders::MAX_BYTES;
 	private const PROSPECTIVE_POLICY_KEYS   = array( 'artifact_sha256', 'artifact_size', 'canonical_update_uri', 'maximum_artifact_bytes', 'php_runtime_version', 'target_type', 'version', 'wordpress_runtime_version' );
 	private const POLICY_KEYS               = array( 'archive_root', 'configuration_update_uri', 'header_file', 'installed_package_identity', 'maximum_artifact_bytes', 'metadata_name', 'offer_update_uri', 'php_runtime_version', 'provider_code', 'repository_identity', 'repository_locator', 'staged_package_update_uri', 'target_type', 'theme_template', 'wordpress_runtime_version' );
 	private ?\Closure $after_open;
-	/** @var WeakMap<ValidatedPackage, array{descriptor_fingerprint:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,maximum_expanded_bytes:int,sha256:string,size:int,update_uri:string}> */
+	/** @var WeakMap<ValidatedPackage, array{descriptor_fingerprint:string,sha256:string,size:int,update_uri:string}> */
 	private WeakMap $receipt_proofs;
 
 	/** @internal The optional callback is a deterministic TOCTOU test seam. */
@@ -67,7 +66,7 @@ final class PackageIdentityValidator {
 			return null;
 		}
 		$facts    = $policy;
-		$identity = $this->archive_identity( $archive_path, $facts );
+		$identity = $this->archive_stat( $archive_path, $facts );
 		if ( null === $identity || ! class_exists( '\\ZipArchive' ) ) {
 			return null;
 		}
@@ -152,10 +151,11 @@ final class PackageIdentityValidator {
 			if ( null === $candidate ) {
 				return null === $pending ? self::rejected( 'no_package_header' ) : self::rejected( $pending[0], $pending[1] );
 			}
-			return $this->matches_archive_identity( $archive_path, $facts, $identity ) ? $candidate : null;
+			$outcome = $candidate;
 		} finally {
 			$zip->close();
 		}
+		return $this->matches_archive_stat( $archive_path, $facts, $identity ) ? $outcome : null;
 	}
 
 	/** Only a canonical, credential-free URI on the expected host may be echoed. */
@@ -198,7 +198,7 @@ final class PackageIdentityValidator {
 		if ( ! $this->valid_policy( $descriptor, $policy ) ) {
 			return ValidatedPackage::blocked( 'archive_target_policy_invalid' );
 		}
-		$identity = $this->archive_identity( $archive_path, $descriptor_facts );
+		$identity = $this->archive_stat( $archive_path, $descriptor_facts );
 		if ( null === $identity ) {
 			return ValidatedPackage::blocked( 'archive_file_identity_mismatch' );
 		}
@@ -215,17 +215,17 @@ final class PackageIdentityValidator {
 		} finally {
 			$zip->close();
 		}
-		if ( ! $this->matches_archive_identity( $archive_path, $descriptor_facts, $identity ) ) {
+		if ( ! $this->matches_archive_stat( $archive_path, $descriptor_facts, $identity ) ) {
 			return ValidatedPackage::blocked( 'archive_file_identity_mismatch' );
 		}
-		return $outcome instanceof ValidatedPackage ? $outcome : $this->ready( $outcome, self::maximum_expanded_bytes( $policy['maximum_artifact_bytes'] ) );
+		return $outcome instanceof ValidatedPackage ? $outcome : $this->ready( $outcome );
 	}
 
 	/**
 	 * @param array<string, mixed> $descriptor_facts
 	 * @param array<string, mixed> $policy
 	 * @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity
-	 * @return ValidatedPackage|array{archive_root:string,author:string,description:string,header_file:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,metadata_name:string,package_type:string,package_uri:string,requires_php:string,requires_wp:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string}
+	 * @return ValidatedPackage|array{archive_root:string,author:string,description:string,header_file:string,metadata_name:string,package_type:string,package_uri:string,requires_php:string,requires_wp:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string}
 	 */
 	private function validate_opened_archive(
 		\ZipArchive $zip,
@@ -247,31 +247,26 @@ final class PackageIdentityValidator {
 			return ValidatedPackage::blocked( $scan->failure_code() ?? 'archive_path_unsafe' );
 		}
 		$header         = null;
-		$manifest       = array();
-		$manifest_bytes = 0;
+		$expanded_bytes = 0;
 		$expected_path  = $policy['archive_root'] . '/' . $policy['header_file'];
 		foreach ( $scan->entries() as $entry ) {
-			if ( ! $entry['directory'] ) {
-				$relative       = substr( $entry['path'], strlen( $policy['archive_root'] ) + 1 );
-				$entry_identity = self::entry_identity( $zip, $entry['name'], $entry['size'] );
-				if ( '' === $relative || null === $entry_identity ) {
-					return ValidatedPackage::blocked( 'archive_entry_unreadable' );
-				}
-				if ( $entry_identity['size'] > $maximum_expanded_bytes - $manifest_bytes ) {
-					return ValidatedPackage::blocked( 'archive_size_limit' );
-				}
-				$manifest[ $relative ] = $entry_identity;
-				$manifest_bytes       += $entry_identity['size'];
-			}
-			if ( ! hash_equals( $expected_path, $entry['path'] ) ) {
-				continue;
-			}
-			if ( $entry['directory'] || null !== $header ) {
+			$is_header = hash_equals( $expected_path, $entry['path'] );
+			if ( $is_header && ( $entry['directory'] || null !== $header ) ) {
 				return ValidatedPackage::blocked( 'archive_header_duplicate' );
 			}
-			$header = self::read_header( $zip, $entry['name'] );
-			if ( null === $header ) {
-				return ValidatedPackage::blocked( 'archive_header_unreadable' );
+			if ( ! $entry['directory'] ) {
+				$relative       = substr( $entry['path'], strlen( $policy['archive_root'] ) + 1 );
+				$entry_identity = self::stream_entry( $zip, $entry['name'], $entry['size'], $is_header ? self::MAX_HEADER_BYTES : 0 );
+				if ( '' === $relative || null === $entry_identity ) {
+					return ValidatedPackage::blocked( $is_header ? 'archive_header_unreadable' : 'archive_entry_unreadable' );
+				}
+				if ( $entry_identity['size'] > $maximum_expanded_bytes - $expanded_bytes ) {
+					return ValidatedPackage::blocked( 'archive_size_limit' );
+				}
+				$expanded_bytes += $entry_identity['size'];
+				if ( $is_header ) {
+					$header = $entry_identity['prefix'];
+				}
 			}
 		}
 		if ( ! is_string( $header ) ) {
@@ -313,68 +308,45 @@ final class PackageIdentityValidator {
 		if ( null !== $requires_word_press && ! self::meets_requirement( $policy['wordpress_runtime_version'], $requires_word_press ) ) {
 			return ValidatedPackage::blocked( 'archive_wordpress_requirement_incompatible' );
 		}
-		ksort( $manifest, SORT_STRING );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Native JSON preserves protocol or fixture bytes without requiring WordPress helpers or their fallback behavior.
-		$manifest_json = json_encode( $manifest, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
 		return array(
-			'archive_root'            => $policy['archive_root'],
-			'author'                  => $headers['Author'] ?? '',
-			'description'             => $headers['Description'] ?? '',
-			'header_file'             => $policy['header_file'],
-			'manifest_entry_count'    => count( $manifest ),
-			'manifest_expanded_bytes' => $manifest_bytes,
-			'manifest_hash'           => hash( 'sha256', $manifest_json ),
-			'metadata_name'           => $name,
-			'package_type'            => $policy['target_type'],
-			'package_uri'             => $headers['PackageURI'] ?? '',
-			'requires_php'            => $headers['RequiresPHP'] ?? '',
-			'requires_wp'             => $headers['RequiresWP'] ?? '',
-			'descriptor_fingerprint'  => $descriptor->fingerprint_value(),
-			'sha256'                  => $descriptor_facts['artifact_sha256'],
-			'size'                    => $descriptor_facts['artifact_size'],
-			'update_uri'              => $descriptor_facts['canonical_update_uri'],
+			'archive_root'           => $policy['archive_root'],
+			'author'                 => $headers['Author'] ?? '',
+			'description'            => $headers['Description'] ?? '',
+			'header_file'            => $policy['header_file'],
+			'metadata_name'          => $name,
+			'package_type'           => $policy['target_type'],
+			'package_uri'            => $headers['PackageURI'] ?? '',
+			'requires_php'           => $headers['RequiresPHP'] ?? '',
+			'requires_wp'            => $headers['RequiresWP'] ?? '',
+			'descriptor_fingerprint' => $descriptor->fingerprint_value(),
+			'sha256'                 => $descriptor_facts['artifact_sha256'],
+			'size'                   => $descriptor_facts['artifact_size'],
+			'update_uri'             => $descriptor_facts['canonical_update_uri'],
 		);
 	}
 
-	/** @internal Verify descriptor-bound bytes with a stable stat/hash/post-hash-stat observation. */
-	public function verify_archive_identity( IdentityDescriptor $descriptor, string $archive_path ): bool {
-		return null !== $this->archive_identity( $archive_path, $descriptor->to_array() );
-	}
-
-	/** @return array{descriptor_fingerprint:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,sha256:string,size:int,update_uri:string} */
+	/** @return array{descriptor_fingerprint:string,sha256:string,size:int,update_uri:string} */
 	public function consume_receipt_proof( ValidatedPackage $package, IdentityDescriptor $descriptor ): array {
 		if ( ! isset( $this->receipt_proofs[ $package ] ) ) {
 			throw new \InvalidArgumentException( 'The package receipt proof is invalid.' );
 		}
 		$proof = $this->receipt_proofs[ $package ];
 		$facts = $descriptor->to_array();
-		if ( ! hash_equals( $proof['descriptor_fingerprint'], $descriptor->fingerprint_value() ) || ! is_int( $proof['manifest_entry_count'] ) || $proof['manifest_entry_count'] < 1 || $proof['manifest_entry_count'] > self::MAX_ARCHIVE_ENTRIES || ! is_int( $proof['manifest_expanded_bytes'] ) || $proof['manifest_expanded_bytes'] < 0 || $proof['manifest_expanded_bytes'] > $proof['maximum_expanded_bytes'] || ! is_string( $proof['manifest_hash'] ) || 1 !== preg_match( '/\A[a-f0-9]{64}\z/D', $proof['manifest_hash'] ) || ! hash_equals( $proof['sha256'], $facts['artifact_sha256'] ) || $proof['size'] !== $facts['artifact_size'] || ! hash_equals( $proof['update_uri'], $facts['canonical_update_uri'] ) ) {
+		if ( ! hash_equals( $proof['descriptor_fingerprint'], $descriptor->fingerprint_value() ) || ! hash_equals( $proof['sha256'], $facts['artifact_sha256'] ) || $proof['size'] !== $facts['artifact_size'] || ! hash_equals( $proof['update_uri'], $facts['canonical_update_uri'] ) ) {
 			throw new \InvalidArgumentException( 'The package receipt proof is invalid.' );
 		}
 		unset( $this->receipt_proofs[ $package ] );
-		return array(
-			'descriptor_fingerprint'  => $proof['descriptor_fingerprint'],
-			'manifest_entry_count'    => $proof['manifest_entry_count'],
-			'manifest_expanded_bytes' => $proof['manifest_expanded_bytes'],
-			'manifest_hash'           => $proof['manifest_hash'],
-			'sha256'                  => $proof['sha256'],
-			'size'                    => $proof['size'],
-			'update_uri'              => $proof['update_uri'],
-		);
+		return $proof;
 	}
 
-	/** @param array{archive_root:string,author:string,description:string,header_file:string,manifest_entry_count:int,manifest_expanded_bytes:int,manifest_hash:string,metadata_name:string,package_type:string,package_uri:string,requires_php:string,requires_wp:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string} $snapshot */
-	private function ready( array $snapshot, int $maximum_expanded_bytes ): ValidatedPackage {
+	/** @param array{archive_root:string,author:string,description:string,header_file:string,metadata_name:string,package_type:string,package_uri:string,requires_php:string,requires_wp:string,descriptor_fingerprint:string,sha256:string,size:int,update_uri:string} $snapshot */
+	private function ready( array $snapshot ): ValidatedPackage {
 		$package                          = ValidatedPackage::ready( $snapshot );
 		$this->receipt_proofs[ $package ] = array(
-			'descriptor_fingerprint'  => $snapshot['descriptor_fingerprint'],
-			'manifest_entry_count'    => $snapshot['manifest_entry_count'],
-			'manifest_expanded_bytes' => $snapshot['manifest_expanded_bytes'],
-			'manifest_hash'           => $snapshot['manifest_hash'],
-			'maximum_expanded_bytes'  => $maximum_expanded_bytes,
-			'sha256'                  => $snapshot['sha256'],
-			'size'                    => $snapshot['size'],
-			'update_uri'              => $snapshot['update_uri'],
+			'descriptor_fingerprint' => $snapshot['descriptor_fingerprint'],
+			'sha256'                 => $snapshot['sha256'],
+			'size'                   => $snapshot['size'],
+			'update_uri'             => $snapshot['update_uri'],
 		);
 		return $package; }
 
@@ -437,12 +409,12 @@ final class PackageIdentityValidator {
 	 * @param array<string,mixed> $facts
 	 * @return array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null
 	 */
-	private function archive_identity( string $path, array $facts ): ?array {
+	private function archive_stat( string $path, array $facts ): ?array {
 		$stat = RegularFileStat::read( $path );
 		if ( null === $stat || ! is_readable( $path ) || $stat['size'] !== $facts['artifact_size'] ) {
 			return null;
 		}
-		$identity = array(
+		return array(
 			'dev'   => $stat['dev'],
 			'ino'   => $stat['ino'],
 			'mode'  => $stat['mode'],
@@ -450,7 +422,6 @@ final class PackageIdentityValidator {
 			'ctime' => $stat['ctime'],
 			'size'  => $stat['size'],
 		);
-		return $this->matches_archive_identity( $path, $facts, $identity ) ? $identity : null;
 	}
 
 	/**
@@ -461,8 +432,19 @@ final class PackageIdentityValidator {
 	private function matches_archive_identity( string $path, array $facts, array $identity ): bool {
 		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Hash the local bytes and recheck native identity; unreadable or changed content is rejected quietly.
 		$digest = @hash_file( 'sha256', $path );
-		$stat   = RegularFileStat::read( $path );
-		if ( ! is_string( $digest ) || ! hash_equals( $facts['artifact_sha256'], $digest ) || null === $stat || $stat['size'] !== $facts['artifact_size'] ) {
+		return is_string( $digest )
+			&& hash_equals( $facts['artifact_sha256'], $digest )
+			&& $this->matches_archive_stat( $path, $facts, $identity );
+	}
+
+	/**
+	 * @phpstan-impure
+	 * @param array<string,mixed> $facts
+	 * @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity
+	 */
+	private function matches_archive_stat( string $path, array $facts, array $identity ): bool {
+		$stat = RegularFileStat::read( $path );
+		if ( null === $stat || $stat['size'] !== $facts['artifact_size'] ) {
 			return false;
 		}
 		foreach ( $identity as $key => $value ) {
@@ -473,32 +455,15 @@ final class PackageIdentityValidator {
 		return true;
 	}
 
-	private static function read_header( \ZipArchive $zip, string $name ): ?string {
-		$stream = $zip->getStream( $name );
-		if ( ! is_resource( $stream ) ) {
-			return null;
-		} $contents = stream_get_contents( $stream, self::MAX_HEADER_BYTES );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream owned by this operation; no WordPress filesystem abstraction applies.
-		fclose( $stream );
-		return is_string( $contents ) ? $contents : null; }
-	/** @return array{sha256:string,size:int}|null */
-	private static function entry_identity( \ZipArchive $zip, string $name, int $expected_size ): ?array {
-		$streamed = self::stream_entry( $zip, $name, $expected_size );
-		return null === $streamed ? null : array(
-			'sha256' => $streamed['sha256'],
-			'size'   => $streamed['size'],
-		);
-	}
-
-	/** @return array{sha256:string,size:int,prefix:string}|null */
+	/** @return array{size:int,prefix:string}|null */
 	private static function stream_entry( \ZipArchive $zip, string $name, int $expected_size, int $capture_bytes = 0 ): ?array {
 		$stream = $zip->getStream( $name );
 		if ( ! is_resource( $stream ) ) {
 			return null;
-		} $context = hash_init( 'sha256' );
-		$size      = 0;
-		$prefix    = '';
-		$valid     = true;
+		}
+		$size   = 0;
+		$prefix = '';
+		$valid  = true;
 		while ( ! feof( $stream ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read bounded bytes from the already opened native stream; existing type, length and identity checks govern acceptance.
 			$chunk = fread( $stream, 65536 );
@@ -510,11 +475,10 @@ final class PackageIdentityValidator {
 				$prefix .= substr( $chunk, 0, $capture_bytes - strlen( $prefix ) );
 			}
 			$size += strlen( $chunk );
-			hash_update( $context, $chunk );
+		}
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the exact native stream owned by this operation; no WordPress filesystem abstraction applies.
-		} fclose( $stream );
+		fclose( $stream );
 		return $valid && $size === $expected_size ? array(
-			'sha256' => hash_final( $context ),
 			'size'   => $size,
 			'prefix' => $prefix,
 		) : null; }
@@ -539,6 +503,96 @@ final class PackageIdentityValidator {
 
 	/**
 	 * @internal
+	 * @param array<string,string> $raw_headers Values extracted by WordPress Core get_file_data().
+	 * @return array{code:string,header?:string,headers?:array<string,string>}
+	 */
+	public static function validate_extracted_headers( array $raw_headers, string $type ): array {
+		if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) ) {
+			return array( 'code' => 'installed_header_invalid' );
+		}
+		$keys = array( 'Author', 'Description', 'Name', 'PackageURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
+		if ( 'theme' === $type ) {
+			$keys[] = 'Template';
+			sort( $keys, SORT_STRING );
+		}
+		$result = array(
+			'Author'      => '',
+			'Description' => '',
+			'Name'        => '',
+			'PackageURI'  => '',
+			'RequiresPHP' => '',
+			'RequiresWP'  => '',
+			'Template'    => '',
+			'UpdateURI'   => '',
+			'Version'     => '',
+		);
+		foreach ( $keys as $key ) {
+			$value = $raw_headers[ $key ] ?? '';
+			if (
+				! is_string( $value )
+				|| ! preg_match( '//u', $value )
+				|| strlen( $value ) > 500
+				|| 1 === preg_match( '/[\\p{Cc}\\p{Cf}]/u', $value )
+			) {
+				return array(
+					'code'   => 'installed_header_invalid',
+					'header' => $key,
+				);
+			}
+			$result[ $key ] = $value;
+		}
+		if ( 'plugin' === $type ) {
+			$result['Template'] = '';
+		}
+		foreach ( array( 'Name', 'Version', 'UpdateURI' ) as $key ) {
+			if ( '' === $result[ $key ] ) {
+				return array(
+					'code'   => 'installed_header_missing',
+					'header' => $key,
+				);
+			}
+		}
+		if ( null === ReleaseVersion::normalize_header( $result['Version'] ) ) {
+			return array(
+				'code'   => 'installed_header_invalid',
+				'header' => 'Version',
+			);
+		}
+		if (
+			'theme' === $type
+			&& '' !== $result['Template']
+			&& ! PackageDirectory::is_valid_name( $result['Template'] )
+		) {
+			return array(
+				'code'   => 'installed_header_invalid',
+				'header' => 'Template',
+			);
+		}
+		return array(
+			'code'    => 'installed_header_verified',
+			'headers' => $result,
+		);
+	}
+
+	/**
+	 * @internal Detect duplicate/ambiguous header declarations in the bounded header scopes.
+	 */
+	public static function duplicate_header( string $contents, string $type ): ?string {
+		if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) ) {
+			return null;
+		}
+		$extracted = self::extract_scoped_headers( $contents, $type );
+		foreach ( $extracted['labels'] as $key => $label ) {
+			unset( $label );
+			if ( 1 < count( $extracted['matches'][ $key ] ?? array() ) ) {
+				return $key;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * @internal
 	 * @return array{code:string,header?:string,headers?:array<string,string>,present?:array<string,bool>}
 	 * Shared bounded WordPress header projection.
 	 */
@@ -546,35 +600,9 @@ final class PackageIdentityValidator {
 		if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) ) {
 			return array( 'code' => 'installed_header_invalid' );
 		}
-		if ( str_starts_with( $contents, "\xEF\xBB\xBF" ) ) {
-			$contents = substr( $contents, 3 );
-		}
-		$contents             = str_replace(
-			array( "\r\n", "\r" ),
-			"\n",
-			substr( $contents, 0, self::MAX_HEADER_BYTES )
-		);
-		$name_label           = 'theme' === $type ? 'Theme Name' : 'Plugin Name';
-		$scopes               = self::header_scopes( $contents, $name_label );
-		$primary_labels       = array(
-			'Author'      => 'Author',
-			'Description' => 'Description',
-			'Name'        => $name_label,
-			'PackageURI'  => 'theme' === $type ? 'Theme URI' : 'Plugin URI',
-			'UpdateURI'   => 'Update URI',
-			'Version'     => 'Version',
-		);
-		$compatibility_labels = array(
-			'RequiresPHP' => 'Requires PHP',
-			'RequiresWP'  => 'Requires at least',
-		);
-		if ( 'theme' === $type ) {
-			$primary_labels['Template'] = 'Template';
-		}
-		$labels = $primary_labels + $compatibility_labels;
-		ksort( $labels, SORT_STRING );
-		$extracted = WordPressHeaders::parse( $scopes['primary'], $primary_labels )
-			+ WordPressHeaders::parse( $scopes['compatibility'], $compatibility_labels );
+		$scoped    = self::extract_scoped_headers( $contents, $type );
+		$labels    = $scoped['labels'];
+		$extracted = $scoped['matches'];
 		$result    = array();
 		$present   = array();
 		foreach ( $labels as $key => $label ) {
@@ -636,6 +664,46 @@ final class PackageIdentityValidator {
 			'code'    => 'installed_header_verified',
 			'headers' => $result,
 			'present' => $present,
+		);
+	}
+
+	/**
+	 * @return array{labels:array<string,string>,matches:array<string,list<string>>}
+	 */
+	private static function extract_scoped_headers( string $contents, string $type ): array {
+		if ( str_starts_with( $contents, "\xEF\xBB\xBF" ) ) {
+			$contents = substr( $contents, 3 );
+		}
+		$contents             = str_replace(
+			array( "\r\n", "\r" ),
+			"\n",
+			substr( $contents, 0, self::MAX_HEADER_BYTES )
+		);
+		$name_label           = 'theme' === $type ? 'Theme Name' : 'Plugin Name';
+		$scopes               = self::header_scopes( $contents, $name_label );
+		$primary_labels       = array(
+			'Author'      => 'Author',
+			'Description' => 'Description',
+			'Name'        => $name_label,
+			'PackageURI'  => 'theme' === $type ? 'Theme URI' : 'Plugin URI',
+			'UpdateURI'   => 'Update URI',
+			'Version'     => 'Version',
+		);
+		$compatibility_labels = array(
+			'RequiresPHP' => 'Requires PHP',
+			'RequiresWP'  => 'Requires at least',
+		);
+		if ( 'theme' === $type ) {
+			$primary_labels['Template'] = 'Template';
+		}
+		$labels = $primary_labels + $compatibility_labels;
+		ksort( $labels, SORT_STRING );
+		$matches = WordPressHeaders::parse( $scopes['primary'], $primary_labels )
+			+ WordPressHeaders::parse( $scopes['compatibility'], $compatibility_labels );
+
+		return array(
+			'labels'  => $labels,
+			'matches' => $matches,
 		);
 	}
 

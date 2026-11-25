@@ -160,7 +160,7 @@ final class RequestProtocolValidator {
 			|| ! is_string( $status['code'] )
 			|| ! is_bool( $status['declaration_accepted'] )
 			|| ! is_bool( $status['hooks_registered'] )
-			|| ! in_array( $status['state'], array( 'new', 'queued', 'composing', 'deferred', 'active', 'inactive' ), true )
+			|| ! in_array( $status['state'], array( 'new', 'queued', 'deferred', 'active', 'inactive' ), true )
 		) {
 			return false;
 		}
@@ -176,10 +176,6 @@ final class RequestProtocolValidator {
 			'queued' => true === $status['declaration_accepted']
 				&& false === $status['hooks_registered']
 				&& 'target_queued' === $status['code']
-				&& null === $status['native'],
-			'composing' => true === $status['declaration_accepted']
-				&& false === $status['hooks_registered']
-				&& 'target_composing' === $status['code']
 				&& null === $status['native'],
 			'deferred' => true === $status['declaration_accepted']
 				&& false === $status['hooks_registered']
@@ -258,7 +254,6 @@ final class RequestProtocolValidator {
 			'late_candidate_rejected',
 			'runtime_active',
 			'declaration_deferred_operation_started',
-			'target_composing',
 			'target_queued',
 			'target_unregistered',
 			'update_completed',
@@ -288,7 +283,7 @@ final class RequestProtocolValidator {
 			'descriptor_admission',
 		);
 		if ( array_key_exists( 'allow_working_copy', $value ) ) {
-			if ( true !== $value['allow_working_copy'] ) {
+			if ( ! is_bool( $value['allow_working_copy'] ) ) {
 				return 'declaration_invalid';
 			}
 			$keys[] = 'allow_working_copy';

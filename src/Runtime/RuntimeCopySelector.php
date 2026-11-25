@@ -53,9 +53,29 @@ final class RuntimeCopySelector {
 		$this->version( $facts['package_version'] );
 		$this->version( $facts['php_floor'] );
 		$this->version( $facts['wordpress_floor'] );
+		$source            = $root . DIRECTORY_SEPARATOR . 'src';
+		$runtime_directory = $source . DIRECTORY_SEPARATOR . 'Runtime';
+		if (
+			is_link( $source )
+			|| ! is_dir( $source )
+			|| realpath( $source ) !== $source
+			|| is_link( $runtime_directory )
+			|| ! is_dir( $runtime_directory )
+			|| realpath( $runtime_directory ) !== $runtime_directory
+		) {
+			throw new RuntimeException( 'Invalid runtime source.' );
+		}
+		$this->regular_file( $root, 'bootstrap.php' );
 		$runtime = $this->regular_file( $root, 'runtime.php' );
-		if ( ! hash_equals( $facts['package_revision'], $this->package_revision( $root ) ) ) {
-			throw new RuntimeException( 'Runtime package identity mismatch.' );
+		foreach (
+			array(
+				'src/Runtime/RequestBroker.php',
+				'src/Runtime/RuntimeCopySelector.php',
+				'src/Runtime/RequestProtocolValidator.php',
+				'src/Runtime/SelectedRuntimeState.php',
+			) as $bootstrap_file
+		) {
+			$this->regular_file( $root, $bootstrap_file );
 		}
 		return array(
 			'package_revision' => $facts['package_revision'],
@@ -124,40 +144,33 @@ final class RuntimeCopySelector {
 		return $compatible[0];
 	}
 
-	private function package_revision( string $root ): string {
-		$files = array( 'bootstrap.php', 'runtime.php' );
-		foreach ( $files as $file ) {
-			$this->regular_file( $root, $file );
-		}
-
-		$source = $root . DIRECTORY_SEPARATOR . 'src';
-		if ( is_link( $source ) || ! is_dir( $source ) || realpath( $source ) !== $source ) {
+	/** Revalidates the winning runtime entrypoint immediately before require without hashing source files. */
+	public function verify_selected_entrypoint( string $source_root, string $runtime_file ): string {
+		clearstatcache( true, $source_root );
+		clearstatcache( true, $runtime_file );
+		$actual_root = realpath( $source_root );
+		if (
+			'' === $source_root
+			|| is_link( $source_root )
+			|| ! is_dir( $source_root )
+			|| false === $actual_root
+			|| ! hash_equals( $source_root, $actual_root )
+		) {
 			throw new RuntimeException( 'Invalid runtime source.' );
 		}
-		$iterator = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $source, \FilesystemIterator::SKIP_DOTS ) );
-		foreach ( $iterator as $entry ) {
-			if ( $entry->isLink() ) {
-				throw new RuntimeException( 'Invalid runtime source.' );
-			}
-			if ( ! $entry->isFile() || 'php' !== $entry->getExtension() ) {
-				continue;
-			}
-			$path     = $entry->getPathname();
-			$relative = str_replace( '\\', '/', substr( $path, strlen( $root ) + 1 ) );
-			$this->regular_file( $root, $relative );
-			$files[] = $relative;
-		}
-		sort( $files, SORT_STRING );
-		$payload = '';
-		foreach ( $files as $file ) {
-			$digest = hash_file( 'sha256', $this->regular_file( $root, $file ) );
-			if ( false === $digest ) {
-				throw new RuntimeException( 'Unreadable runtime source.' );
-			}
-			$payload .= $file . "\0" . $digest . "\n";
+		$expected    = $source_root . DIRECTORY_SEPARATOR . 'runtime.php';
+		$actual_file = realpath( $runtime_file );
+		if (
+			! hash_equals( $expected, $runtime_file )
+			|| is_link( $runtime_file )
+			|| ! is_file( $runtime_file )
+			|| false === $actual_file
+			|| ! hash_equals( $expected, $actual_file )
+		) {
+			throw new RuntimeException( 'Invalid runtime source.' );
 		}
 
-		return hash( 'sha256', $payload );
+		return $actual_file;
 	}
 
 	private function regular_file( string $root, string $relative ): string {
