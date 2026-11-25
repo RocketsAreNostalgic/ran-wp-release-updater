@@ -510,8 +510,13 @@ PHP,
 		$this->patch_file_strict(
 			$copy_228 . '/src/Runtime/RuntimeCopySelector.php',
 			array(
+				"\n\tpublic const FULL_REALPATH_CACHE_ENTRYPOINT_VERIFICATION = true;\n" => '',
 				"\t\tclearstatcache( true );" => "\t\tclearstatcache( true, \$source_root );\n\t\tclearstatcache( true, \$runtime_file );",
 			)
+		);
+		self::assertSame(
+			'7736a39dc54cf65ebafa42472651189578c7916022570e3e49a6af6d9b6a365a',
+			hash_file( 'sha256', $copy_228 . '/src/Runtime/RuntimeCopySelector.php' )
 		);
 		$control = $this->probe(
 			<<<'PHP'
@@ -562,12 +567,11 @@ PHP,
 				'outside_slot' => $outside_slot,
 			)
 		);
-		if ( true !== ( $control['skipped'] ?? false ) ) {
-			self::assertTrue( $control['cached_before_swap'] );
-			self::assertTrue( $control['cached_before_verify'] );
-			self::assertTrue( $control['accepted_stale'] );
-			self::assertSame( $control['expected_stale_path'], $control['verified_path'] );
-		}
+		self::assertFalse( $control['skipped'] );
+		self::assertTrue( $control['cached_before_swap'] );
+		self::assertTrue( $control['cached_before_verify'] );
+		self::assertTrue( $control['accepted_stale'] );
+		self::assertSame( $control['expected_stale_path'], $control['verified_path'] );
 	}
 
 	public function test_predecessor_228_broker_loaded_first_fails_closed_on_partial_cache_verifier(): void {
@@ -583,7 +587,7 @@ PHP,
 		$old_low  = $this->package_copy_at( $ancestor_low . '/nested', '1.0.0-beta.22' );
 		$old_high = $this->package_copy_at( $ancestor_high . '/nested', '1.0.0-beta.24' );
 
-		// Model the genuine #228 (c46c786) predecessor: exposes public verify_selected_entrypoint() with per-path clearstatcache and lacks FULL_REALPATH_CACHE_ENTRYPOINT_VERIFICATION.
+		// Restore the exact #228 (c46c786) bootstrap and selector: no bootstrap reflection check and per-path clearstatcache in RuntimeCopySelector.
 		foreach ( array(
 			$old_low  => '1.0.0-beta.22',
 			$old_high => '1.0.0-beta.24',
@@ -598,9 +602,21 @@ PHP,
 			$this->patch_file_strict(
 				$old_copy . '/bootstrap.php',
 				array(
-					"\t\t\$selector_class      = new ReflectionClass( \\RAN\\WPReleaseUpdater\\V1\\Runtime\\RuntimeCopySelector::class );\n\t\t\$selector_source     = \$selector_class->getFileName();\n\t\t\$selector_source     = is_string( \$selector_source ) ? realpath( \$selector_source ) : false;\n\t\t\$expected_source     = realpath( \$root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RuntimeCopySelector.php' );\n\t\t\$full_cache_constant = \$selector_class->getReflectionConstant( 'FULL_REALPATH_CACHE_ENTRYPOINT_VERIFICATION' );\n\t} catch ( Throwable ) {\n\t\treturn false;\n\t}\n\n\treturn is_string( \$selector_source )\n\t\t&& is_string( \$expected_source )\n\t\t&& \$selector_source === \$expected_source\n\t\t&& \$selector_class->hasMethod( 'verify_selected_entrypoint' )\n\t\t&& \$selector_class->getMethod( 'verify_selected_entrypoint' )->isPublic()\n\t\t&& false !== \$full_cache_constant\n\t\t&& \$full_cache_constant->isPublic()\n\t\t&& true === \$full_cache_constant->getValue();"
-						=> "\t\t\$selector_class  = new ReflectionClass( \\RAN\\WPReleaseUpdater\\V1\\Runtime\\RuntimeCopySelector::class );\n\t\t\$selector_source = \$selector_class->getFileName();\n\t\t\$selector_source = is_string( \$selector_source ) ? realpath( \$selector_source ) : false;\n\t\t\$expected_source = realpath( \$root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RuntimeCopySelector.php' );\n\t} catch ( Throwable ) {\n\t\treturn false;\n\t}\n\n\treturn is_string( \$selector_source )\n\t\t&& is_string( \$expected_source )\n\t\t&& \$selector_source === \$expected_source\n\t\t&& \$selector_class->hasMethod( 'verify_selected_entrypoint' )\n\t\t&& \$selector_class->getMethod( 'verify_selected_entrypoint' )->isPublic();",
+					'$ran_wp_release_updater_broker_provenance            = $ran_wp_release_updater_created_broker'
+						=> '$ran_wp_release_updater_broker_provenance = $ran_wp_release_updater_created_broker',
+					"\$ran_wp_release_updater_selector_verifies_entrypoint = static function ( string \$root ): bool {\n\tif ( ! class_exists( \\RAN\\WPReleaseUpdater\\V1\\Runtime\\RuntimeCopySelector::class, false ) ) {\n\t\treturn false;\n\t}\n\ttry {\n\t\t\$selector_class      = new ReflectionClass( \\RAN\\WPReleaseUpdater\\V1\\Runtime\\RuntimeCopySelector::class );\n\t\t\$selector_source     = \$selector_class->getFileName();\n\t\t\$selector_source     = is_string( \$selector_source ) ? realpath( \$selector_source ) : false;\n\t\t\$expected_source     = realpath( \$root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RuntimeCopySelector.php' );\n\t\t\$full_cache_constant = \$selector_class->getReflectionConstant( 'FULL_REALPATH_CACHE_ENTRYPOINT_VERIFICATION' );\n\t} catch ( Throwable ) {\n\t\treturn false;\n\t}\n\n\treturn is_string( \$selector_source )\n\t\t&& is_string( \$expected_source )\n\t\t&& \$selector_source === \$expected_source\n\t\t&& \$selector_class->hasMethod( 'verify_selected_entrypoint' )\n\t\t&& \$selector_class->getMethod( 'verify_selected_entrypoint' )->isPublic()\n\t\t&& false !== \$full_cache_constant\n\t\t&& \$full_cache_constant->isPublic()\n\t\t&& true === \$full_cache_constant->getValue();\n};\n\$ran_wp_release_updater_broker_compatible            = is_array( \$ran_wp_release_updater_broker_provenance )"
+						=> '$ran_wp_release_updater_broker_compatible = is_array( $ran_wp_release_updater_broker_provenance )',
+					"\t&& is_callable( array( \$ran_wp_release_updater_broker, 'diagnostics' ) )\n\t&& \$ran_wp_release_updater_selector_verifies_entrypoint( \$ran_wp_release_updater_broker_provenance['root'] );"
+						=> "\t&& is_callable( array( \$ran_wp_release_updater_broker, 'diagnostics' ) );",
 				)
+			);
+			self::assertSame(
+				'7736a39dc54cf65ebafa42472651189578c7916022570e3e49a6af6d9b6a365a',
+				hash_file( 'sha256', $old_copy . '/src/Runtime/RuntimeCopySelector.php' )
+			);
+			self::assertSame(
+				'0c440d73c50fd1df132e27e6e8f274631a79a85531f946b81a027bf0b114917f',
+				hash_file( 'sha256', $old_copy . '/bootstrap.php' )
 			);
 			$this->write_runtime_copy( $old_copy, $version );
 		}
