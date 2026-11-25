@@ -693,10 +693,7 @@ final class NativePackageUpdater {
 		if ( null !== $failure || null === $exact->archive ) {
 			return $failure ?? 'acquisition_identity_invalid';
 		}
-		$exact->archive_identity = $this->archive_store->stat_identity( $exact->archive['path'], $descriptor );
-		if ( null === $exact->archive_identity ) {
-			return 'acquisition_identity_invalid';
-		}
+		$exact->archive_identity = $exact->archive['identity'];
 		if ( ! $this->live() || ! $this->descriptor_admitted( $descriptor ) || ! $this->verify_mutation_lock() ) {
 			return 'binding_fence_lost';
 		}
@@ -1110,11 +1107,7 @@ final class NativePackageUpdater {
 			}
 			return $this->fail_pending( $failure ?? 'acquisition_identity_invalid' );
 		}
-		$identity = $this->archive_store->stat_identity( $owned['path'], $fresh );
-		if ( null === $identity ) {
-			$this->archive_store->remove( $owned['path'], $owned['directory'] );
-			return $this->fail_pending( 'acquisition_identity_invalid' );
-		}
+		$identity = $owned['identity'];
 		if ( ! $this->verify_mutation_lock() || ! $this->live() ) {
 			$this->archive_store->remove( $owned['path'], $owned['directory'] );
 			return $this->fail_pending( 'binding_fence_lost' );
@@ -1265,7 +1258,7 @@ final class NativePackageUpdater {
 			|| ! $descriptor instanceof IdentityDescriptor
 			|| ! $this->descriptor_admitted( $descriptor )
 			|| ! is_array( $this->pending_install->archive_identity() )
-			|| ! $this->archive_store->same_stat_identity( $file, $descriptor, $this->pending_install->archive_identity() )
+			|| ! $this->archive_store->verify_digest_and_stat( $file, $descriptor, $this->pending_install->archive_identity() )
 			|| ! $this->pending_install->matches_descriptor( $descriptor )
 		) {
 			return $this->fail_pending( 'archive_changed_before_extraction' );

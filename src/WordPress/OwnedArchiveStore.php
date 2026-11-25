@@ -12,7 +12,7 @@ final class OwnedArchiveStore {
 
 	/**
 	 * @param (\Closure(string,string): void)|null $on_allocate
-	 * @return array{directory:string,path:string}|null
+	 * @return array{directory:string,identity:array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int},path:string}|null
 	 */
 	public function copy( string $source, IdentityDescriptor $descriptor, ?\Closure $on_allocate = null ): ?array {
 		$facts  = $descriptor->to_array();
@@ -99,6 +99,7 @@ final class OwnedArchiveStore {
 
 		return array(
 			'directory' => $directory,
+			'identity'  => $copy,
 			'path'      => $path,
 		);
 	}
@@ -127,7 +128,10 @@ final class OwnedArchiveStore {
 		}
 	}
 
-	/** @return array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null */
+	/**
+	 * @phpstan-impure
+	 * @return array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null
+	 */
 	public function stat_identity( string $path, IdentityDescriptor $descriptor ): ?array {
 		$facts = $descriptor->to_array();
 		$stat  = RegularFileStat::read( $path );
@@ -145,9 +149,28 @@ final class OwnedArchiveStore {
 		);
 	}
 
-	/** @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity */
+	/**
+	 * @phpstan-impure
+	 * @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity
+	 */
 	public function same_stat_identity( string $path, IdentityDescriptor $descriptor, array $identity ): bool {
 		$current = $this->stat_identity( $path, $descriptor );
 		return is_array( $current ) && $current === $identity;
+	}
+
+	/**
+	 * @phpstan-impure
+	 * @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity
+	 */
+	public function verify_digest_and_stat( string $path, IdentityDescriptor $descriptor, array $identity ): bool {
+		if ( ! $this->same_stat_identity( $path, $descriptor, $identity ) ) {
+			return false;
+		}
+		$facts = $descriptor->to_array();
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Verify the exact owned archive digest immediately before extraction; failed reads reject the archive.
+		$hash = @hash_file( 'sha256', $path );
+		return is_string( $hash )
+			&& hash_equals( $facts['artifact_sha256'], $hash )
+			&& $this->same_stat_identity( $path, $descriptor, $identity );
 	}
 }

@@ -53,11 +53,29 @@ final class RuntimeCopySelector {
 		$this->version( $facts['package_version'] );
 		$this->version( $facts['php_floor'] );
 		$this->version( $facts['wordpress_floor'] );
+		$source            = $root . DIRECTORY_SEPARATOR . 'src';
+		$runtime_directory = $source . DIRECTORY_SEPARATOR . 'Runtime';
+		if (
+			is_link( $source )
+			|| ! is_dir( $source )
+			|| realpath( $source ) !== $source
+			|| is_link( $runtime_directory )
+			|| ! is_dir( $runtime_directory )
+			|| realpath( $runtime_directory ) !== $runtime_directory
+		) {
+			throw new RuntimeException( 'Invalid runtime source.' );
+		}
 		$this->regular_file( $root, 'bootstrap.php' );
 		$runtime = $this->regular_file( $root, 'runtime.php' );
-		$source  = $root . DIRECTORY_SEPARATOR . 'src';
-		if ( is_link( $source ) || ! is_dir( $source ) || realpath( $source ) !== $source ) {
-			throw new RuntimeException( 'Invalid runtime source.' );
+		foreach (
+			array(
+				'src/Runtime/RequestBroker.php',
+				'src/Runtime/RuntimeCopySelector.php',
+				'src/Runtime/RequestProtocolValidator.php',
+				'src/Runtime/SelectedRuntimeState.php',
+			) as $bootstrap_file
+		) {
+			$this->regular_file( $root, $bootstrap_file );
 		}
 		return array(
 			'package_revision' => $facts['package_revision'],

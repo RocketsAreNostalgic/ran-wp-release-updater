@@ -11,8 +11,8 @@ use RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor;
  * Request-local custody and completion evidence for one exact native upgrade.
  *
  * @internal
- * @phpstan-type OwnedCopy array{directory:string,path:string,proof:ValidatedPackage}
  * @phpstan-type ArchiveIdentity array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}
+ * @phpstan-type OwnedCopy array{directory:string,identity:ArchiveIdentity,path:string,proof:ValidatedPackage}
  * @phpstan-type Finalization array{commit:string,host_completion:string,lease:string,archive_cleanup:string}
  */
 final class ExactInstallInvocation {

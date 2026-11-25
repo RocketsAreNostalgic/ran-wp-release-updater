@@ -197,9 +197,10 @@ PHP;
 			$store = new OwnedArchiveStore();
 			$copy  = $store->copy( $source, $descriptor );
 			self::assertIsArray( $copy );
-			$identity = $store->stat_identity( $copy['path'], $descriptor );
-			self::assertIsArray( $identity );
+			$identity = $copy['identity'];
+			self::assertSame( $store->stat_identity( $copy['path'], $descriptor ), $identity );
 			self::assertTrue( $store->same_stat_identity( $copy['path'], $descriptor, $identity ) );
+			self::assertTrue( $store->verify_digest_and_stat( $copy['path'], $descriptor, $identity ) );
 
 			$store->remove( $copy['path'], $copy['directory'] );
 			self::assertFileDoesNotExist( $copy['path'] );

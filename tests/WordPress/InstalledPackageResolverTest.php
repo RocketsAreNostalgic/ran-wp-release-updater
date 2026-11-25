@@ -374,6 +374,95 @@ PHP;
 		self::assertSame( 'installed_identity_verified', $theme_result['code'] );
 	}
 
+	public function test_read_headers_rejects_ancestor_symlink_swap_after_resolve_location(): void {
+		$plugin  = $this->file( 'plugins/swap-target/main.php', $this->plugin_header() );
+		$outside = $this->file( 'outside/swap-target/main.php', $this->plugin_header( 'Description: Outside' ) );
+		unset( $outside );
+
+		$resolver = $this->resolver();
+		$location = $resolver->resolve_location( $this->declaration( 'plugin', $plugin ) );
+		self::assertSame( 'installed_location_verified', $location['code'] );
+		self::assertIsString( $location['canonical_file'] ?? null );
+		self::assertIsString( $location['containment_root'] ?? null );
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- Move the registered directory away before replacing it with a symlink outside the root.
+		self::assertTrue( rename( $this->root . '/plugins/swap-target', $this->root . '/moved-swap-target' ) );
+		if ( ! symlink( $this->root . '/outside/swap-target', $this->root . '/plugins/swap-target' ) ) {
+			self::markTestSkipped( 'Symlinks are unavailable on this platform.' );
+		}
+
+		$result = $resolver->read_headers( $location['file'], 'plugin', $location['canonical_file'], $location['containment_root'] );
+		self::assertSame( 'installed_file_outside_root', $result['code'] );
+
+		// Also verify canonical path drift fails closed with installed_file_changed.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Remove symlink before restoring original directory.
+		unlink( $this->root . '/plugins/swap-target' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- Restore original directory for canonical-path mismatch check.
+		self::assertTrue( rename( $this->root . '/moved-swap-target', $this->root . '/plugins/swap-target' ) );
+		$changed = $resolver->read_headers( $location['file'], 'plugin', $this->root . '/plugins/other/main.php', $location['containment_root'] );
+		self::assertSame( 'installed_file_changed', $changed['code'] );
+	}
+
+	public function test_read_headers_detects_duplicate_headers_when_wordpress_get_file_data_is_loaded(): void {
+		$dup_version = $this->file( 'plugins/dup-version/main.php', $this->plugin_header( 'Version: 2.0.0' ) );
+		$dup_uri     = $this->file( 'plugins/dup-uri/main.php', $this->plugin_header( 'Update URI: https://github.com/acme/other' ) );
+		$script      = $this->root . '/wp-dup-header-probe.php';
+		$facts_file  = $this->root . '/wp-dup-header-facts.json';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Encode exact fixture facts for an isolated process; WordPress JSON filters must not alter fixture bytes.
+		$encoded = json_encode(
+			array(
+				'bootstrap'   => dirname( __DIR__ ) . '/bootstrap.php',
+				'dup_uri'     => $dup_uri,
+				'dup_version' => $dup_version,
+				'plugins'     => $this->root . '/plugins',
+				'themes'      => $this->root . '/themes',
+			),
+			JSON_THROW_ON_ERROR
+		);
+		$fixture = <<<'PHP'
+<?php
+function get_file_data( string $file, array $default_headers, string $context = '' ): array {
+	unset( $context );
+	$data = (string) file_get_contents( $file, false, null, 0, 8192 );
+	$data = str_replace( "\r", "\n", $data );
+	$out  = array();
+	foreach ( $default_headers as $key => $label ) {
+		if ( preg_match( '/^(?:[ \t]*<\?php)?[ \t\/*#@]*' . preg_quote( $label, '/' ) . ':(.*)$/mi', $data, $match ) && '' !== trim( $match[1] ) ) {
+			$out[ $key ] = trim( $match[1] );
+		} else {
+			$out[ $key ] = '';
+		}
+	}
+	return $out;
+}
+$ran_facts             = json_decode( (string) file_get_contents( $argv[1] ), true, 64, JSON_THROW_ON_ERROR );
+$GLOBALS['wp_version'] = '6.8.0';
+require $ran_facts['bootstrap'];
+$ran_resolver = new \RAN\WPReleaseUpdater\V1\WordPress\InstalledPackageResolver( $ran_facts['plugins'], array(), array( $ran_facts['themes'] ), '8.2.0' );
+echo json_encode(
+	array(
+		'dup_uri'     => $ran_resolver->read_headers( $ran_facts['dup_uri'], 'plugin' ),
+		'dup_version' => $ran_resolver->read_headers( $ran_facts['dup_version'], 'plugin' ),
+	),
+	JSON_THROW_ON_ERROR
+);
+PHP;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write isolated subprocess script for get_file_data duplicate-header verification.
+		file_put_contents( $script, $fixture );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact fixture input bytes for the native subprocess.
+		file_put_contents( $facts_file, $encoded );
+		$output = array();
+		$status = 0;
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
+		exec( escapeshellarg( PHP_BINARY ) . ' -n ' . escapeshellarg( $script ) . ' ' . escapeshellarg( $facts_file ), $output, $status );
+		self::assertSame( 0, $status, implode( "\n", $output ) );
+		$result = json_decode( implode( "\n", $output ), true, 64, JSON_THROW_ON_ERROR );
+		self::assertSame( 'installed_header_ambiguous', $result['dup_version']['code'] );
+		self::assertSame( 'https://github.com/acme/example', $result['dup_version']['raw_update_uri'] ?? null );
+		self::assertSame( 'installed_header_ambiguous', $result['dup_uri']['code'] );
+		self::assertArrayNotHasKey( 'raw_update_uri', $result['dup_uri'] );
+	}
+
 	private function resolver(): InstalledPackageResolver {
 		return new InstalledPackageResolver( $this->root . '/plugins', array(), array( $this->root . '/themes' ) ); }
 	/** @return array<string,mixed> */ private function declaration( string $type, string $file ): array {

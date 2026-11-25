@@ -53,7 +53,26 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 		) {
 			return null;
 		}
-		$files   = array( 'bootstrap.php', 'runtime.php', 'src/Runtime/RequestBroker.php' );
+		$source_directory  = $root . DIRECTORY_SEPARATOR . 'src';
+		$runtime_directory = $source_directory . DIRECTORY_SEPARATOR . 'Runtime';
+		if (
+			is_link( $source_directory )
+			|| ! is_dir( $source_directory )
+			|| realpath( $source_directory ) !== $source_directory
+			|| is_link( $runtime_directory )
+			|| ! is_dir( $runtime_directory )
+			|| realpath( $runtime_directory ) !== $runtime_directory
+		) {
+			return null;
+		}
+		$files   = array(
+			'bootstrap.php',
+			'runtime.php',
+			'src/Runtime/RequestBroker.php',
+			'src/Runtime/RuntimeCopySelector.php',
+			'src/Runtime/RequestProtocolValidator.php',
+			'src/Runtime/SelectedRuntimeState.php',
+		);
 		$regular = static function ( string $relative ) use ( $root ): ?string {
 			$expected = $root . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $relative );
 			$actual   = realpath( $expected );
@@ -63,10 +82,6 @@ $ran_wp_release_updater_package_origin          = static function ( string $root
 			if ( ! is_string( $regular( $file ) ) ) {
 				return null;
 			}
-		}
-		$source_directory = $root . DIRECTORY_SEPARATOR . 'src';
-		if ( is_link( $source_directory ) || ! is_dir( $source_directory ) || realpath( $source_directory ) !== $source_directory ) {
-			return null;
 		}
 	} catch ( Throwable ) {
 		return null;
@@ -147,16 +162,26 @@ $ran_wp_release_updater_broker_class_origin      = is_array( $ran_wp_release_upd
 	: ( null === $ran_wp_release_updater_existing_broker ? $ran_wp_release_updater_broker_origin( RequestBroker::class ) : null );
 $ran_wp_release_updater_can_create_broker        = is_array( $ran_wp_release_updater_broker_class_origin ) && 11 === ( $ran_wp_release_updater_broker_class_origin['protocol'] ?? null ) && realpath( __DIR__ ) === $ran_wp_release_updater_broker_class_origin['root'];
 if ( null === $ran_wp_release_updater_existing_broker && $ran_wp_release_updater_can_create_broker ) {
-	$ran_wp_release_updater_state_source = $ran_wp_release_updater_broker_class_origin['root'] . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'SelectedRuntimeState.php';
-	if ( ! class_exists( SelectedRuntimeState::class, false ) ) {
-		require_once $ran_wp_release_updater_state_source;
-	}
-	try {
-		$ran_wp_release_updater_loaded_state_source = ( new ReflectionClass( SelectedRuntimeState::class ) )->getFileName();
-		$ran_wp_release_updater_loaded_state_source = is_string( $ran_wp_release_updater_loaded_state_source ) ? realpath( $ran_wp_release_updater_loaded_state_source ) : false;
-		$ran_wp_release_updater_can_create_broker   = is_string( $ran_wp_release_updater_loaded_state_source ) && realpath( $ran_wp_release_updater_state_source ) === $ran_wp_release_updater_loaded_state_source;
-	} catch ( Throwable ) {
+	$ran_wp_release_updater_state_source   = $ran_wp_release_updater_broker_class_origin['root'] . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'SelectedRuntimeState.php';
+	$ran_wp_release_updater_state_expected = realpath( $ran_wp_release_updater_state_source );
+	if (
+		is_link( $ran_wp_release_updater_state_source )
+		|| ! is_file( $ran_wp_release_updater_state_source )
+		|| ! is_string( $ran_wp_release_updater_state_expected )
+		|| $ran_wp_release_updater_state_expected !== $ran_wp_release_updater_state_source
+	) {
 		$ran_wp_release_updater_can_create_broker = false;
+	} else {
+		if ( ! class_exists( SelectedRuntimeState::class, false ) ) {
+			require_once $ran_wp_release_updater_state_expected;
+		}
+		try {
+			$ran_wp_release_updater_loaded_state_source = ( new ReflectionClass( SelectedRuntimeState::class ) )->getFileName();
+			$ran_wp_release_updater_loaded_state_source = is_string( $ran_wp_release_updater_loaded_state_source ) ? realpath( $ran_wp_release_updater_loaded_state_source ) : false;
+			$ran_wp_release_updater_can_create_broker   = is_string( $ran_wp_release_updater_loaded_state_source ) && $ran_wp_release_updater_state_expected === $ran_wp_release_updater_loaded_state_source;
+		} catch ( Throwable ) {
+			$ran_wp_release_updater_can_create_broker = false;
+		}
 	}
 }
 $ran_wp_release_updater_broker          = $ran_wp_release_updater_existing_broker;
@@ -361,11 +386,13 @@ return new class( $ran_wp_release_updater_broker ) {
 	public function __construct( private object $broker ) {
 	}
 
-	public function plugin( string $provider, string $plugin_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800 ): object {
+	public function plugin( string $provider, string $plugin_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $allow_working_copy = false ): object {
+		unset( $allow_working_copy );
 		return $this->target( 'plugin', $plugin_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
 	}
 
-	public function theme( string $provider, string $stylesheet_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800 ): object {
+	public function theme( string $provider, string $stylesheet_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $allow_working_copy = false ): object {
+		unset( $allow_working_copy );
 		return $this->target( 'theme', $stylesheet_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
 	}
 

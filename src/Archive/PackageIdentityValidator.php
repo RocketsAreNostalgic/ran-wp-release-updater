@@ -151,10 +151,11 @@ final class PackageIdentityValidator {
 			if ( null === $candidate ) {
 				return null === $pending ? self::rejected( 'no_package_header' ) : self::rejected( $pending[0], $pending[1] );
 			}
-			return $this->matches_archive_stat( $archive_path, $facts, $identity ) ? $candidate : null;
+			$outcome = $candidate;
 		} finally {
 			$zip->close();
 		}
+		return $this->matches_archive_stat( $archive_path, $facts, $identity ) ? $outcome : null;
 	}
 
 	/** Only a canonical, credential-free URI on the expected host may be echoed. */
@@ -574,6 +575,23 @@ final class PackageIdentityValidator {
 	}
 
 	/**
+	 * @internal Detect duplicate/ambiguous header declarations in the bounded header scopes.
+	 */
+	public static function duplicate_header( string $contents, string $type ): ?string {
+		if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) ) {
+			return null;
+		}
+		$extracted = self::extract_scoped_headers( $contents, $type );
+		foreach ( $extracted['labels'] as $key => $label ) {
+			unset( $label );
+			if ( 1 < count( $extracted['matches'][ $key ] ?? array() ) ) {
+				return $key;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * @internal
 	 * @return array{code:string,header?:string,headers?:array<string,string>,present?:array<string,bool>}
 	 * Shared bounded WordPress header projection.
@@ -582,35 +600,9 @@ final class PackageIdentityValidator {
 		if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) ) {
 			return array( 'code' => 'installed_header_invalid' );
 		}
-		if ( str_starts_with( $contents, "\xEF\xBB\xBF" ) ) {
-			$contents = substr( $contents, 3 );
-		}
-		$contents             = str_replace(
-			array( "\r\n", "\r" ),
-			"\n",
-			substr( $contents, 0, self::MAX_HEADER_BYTES )
-		);
-		$name_label           = 'theme' === $type ? 'Theme Name' : 'Plugin Name';
-		$scopes               = self::header_scopes( $contents, $name_label );
-		$primary_labels       = array(
-			'Author'      => 'Author',
-			'Description' => 'Description',
-			'Name'        => $name_label,
-			'PackageURI'  => 'theme' === $type ? 'Theme URI' : 'Plugin URI',
-			'UpdateURI'   => 'Update URI',
-			'Version'     => 'Version',
-		);
-		$compatibility_labels = array(
-			'RequiresPHP' => 'Requires PHP',
-			'RequiresWP'  => 'Requires at least',
-		);
-		if ( 'theme' === $type ) {
-			$primary_labels['Template'] = 'Template';
-		}
-		$labels = $primary_labels + $compatibility_labels;
-		ksort( $labels, SORT_STRING );
-		$extracted = WordPressHeaders::parse( $scopes['primary'], $primary_labels )
-			+ WordPressHeaders::parse( $scopes['compatibility'], $compatibility_labels );
+		$scoped    = self::extract_scoped_headers( $contents, $type );
+		$labels    = $scoped['labels'];
+		$extracted = $scoped['matches'];
 		$result    = array();
 		$present   = array();
 		foreach ( $labels as $key => $label ) {
@@ -672,6 +664,46 @@ final class PackageIdentityValidator {
 			'code'    => 'installed_header_verified',
 			'headers' => $result,
 			'present' => $present,
+		);
+	}
+
+	/**
+	 * @return array{labels:array<string,string>,matches:array<string,list<string>>}
+	 */
+	private static function extract_scoped_headers( string $contents, string $type ): array {
+		if ( str_starts_with( $contents, "\xEF\xBB\xBF" ) ) {
+			$contents = substr( $contents, 3 );
+		}
+		$contents             = str_replace(
+			array( "\r\n", "\r" ),
+			"\n",
+			substr( $contents, 0, self::MAX_HEADER_BYTES )
+		);
+		$name_label           = 'theme' === $type ? 'Theme Name' : 'Plugin Name';
+		$scopes               = self::header_scopes( $contents, $name_label );
+		$primary_labels       = array(
+			'Author'      => 'Author',
+			'Description' => 'Description',
+			'Name'        => $name_label,
+			'PackageURI'  => 'theme' === $type ? 'Theme URI' : 'Plugin URI',
+			'UpdateURI'   => 'Update URI',
+			'Version'     => 'Version',
+		);
+		$compatibility_labels = array(
+			'RequiresPHP' => 'Requires PHP',
+			'RequiresWP'  => 'Requires at least',
+		);
+		if ( 'theme' === $type ) {
+			$primary_labels['Template'] = 'Template';
+		}
+		$labels = $primary_labels + $compatibility_labels;
+		ksort( $labels, SORT_STRING );
+		$matches = WordPressHeaders::parse( $scopes['primary'], $primary_labels )
+			+ WordPressHeaders::parse( $scopes['compatibility'], $compatibility_labels );
+
+		return array(
+			'labels'  => $labels,
+			'matches' => $matches,
 		);
 	}
 

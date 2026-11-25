@@ -333,6 +333,212 @@ PHP;
 		self::assertSame( 'A lifecycle symbol was loaded outside the selected runtime root.', $result['message'] );
 	}
 
+	public function test_symlinked_bootstrap_and_runtime_dependencies_are_rejected_before_require(): void {
+		$cases = array(
+			'runtime directory'      => 'src/Runtime',
+			'runtime copy selector'  => 'src/Runtime/RuntimeCopySelector.php',
+			'selected runtime state' => 'src/Runtime/SelectedRuntimeState.php',
+			'runtime lifecycle file' => 'src/Contract/CanonicalUpdateUri.php',
+		);
+
+		foreach ( $cases as $name => $relative ) {
+			$slug     = str_replace( ' ', '-', $name );
+			$copy     = $this->package_copy( 'symlink-dep-' . $slug );
+			$outside  = $this->parent . '/outside-dep-' . $slug;
+			$sentinel = $outside . '/executed.marker';
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated symlink-rejection fixtures.
+			mkdir( $outside, 0700, true );
+
+			if ( 'src/Runtime' === $relative ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- Move real directory outside selected root to test symlink rejection before require.
+				rename( $copy . '/src/Runtime', $outside . '/Runtime' );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write sentinel payload to prove the symlinked file is never executed.
+				file_put_contents( $outside . '/Runtime/RequestBroker.php', '<?php file_put_contents(' . var_export( $sentinel, true ) . ', "executed");' );
+				symlink( $outside . '/Runtime', $copy . '/src/Runtime' );
+			} else {
+				$target = $outside . '/' . basename( $relative );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write sentinel payload to prove the symlinked file is never executed.
+				file_put_contents( $target, '<?php file_put_contents(' . var_export( $sentinel, true ) . ', "executed");' );
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- Replace target file with symlink pointing outside the selected root.
+				unlink( $copy . '/' . $relative );
+				symlink( $target, $copy . '/' . $relative );
+			}
+
+			if ( ! is_link( $copy . '/' . $relative ) ) {
+				self::markTestSkipped( 'Symlinks are unavailable on this platform.' );
+			}
+
+			if ( 'src/Contract/CanonicalUpdateUri.php' === $relative ) {
+				$result = $this->probe(
+					'try { require $data["copy"] . "/runtime.php"; echo json_encode(array("result" => "loaded")); } catch (RuntimeException $error) { echo json_encode(array("result" => "rejected", "message" => $error->getMessage())); }',
+					array( 'copy' => $copy )
+				);
+				self::assertSame( 'rejected', $result['result'], $name );
+				self::assertSame( 'A lifecycle symbol was loaded outside the selected runtime root.', $result['message'], $name );
+			} else {
+				$this->assert_provenance_rejected( $copy );
+				$selector_result = $this->probe(
+					'require $data["selector"]; $s = new \RAN\WPReleaseUpdater\V1\Runtime\RuntimeCopySelector(); try { $s->candidate($data["copy"] . "/runtime-copy.json"); echo json_encode(array("result" => "accepted")); } catch (RuntimeException $error) { echo json_encode(array("result" => "rejected", "message" => $error->getMessage())); }',
+					array(
+						'copy'     => $copy,
+						'selector' => dirname( __DIR__, 2 ) . '/src/Runtime/RuntimeCopySelector.php',
+					)
+				);
+				self::assertSame( 'rejected', $selector_result['result'], $name );
+			}
+			self::assertFileDoesNotExist( $sentinel, $name );
+		}
+	}
+
+	public function test_protocol_11_allow_working_copy_interoperability_and_refusal(): void {
+		$new_high = $this->package_copy( 'p11-new-high', '1.0.0-beta.24' );
+		$new_low  = $this->package_copy( 'p11-new-low', '1.0.0-beta.22' );
+		$old_low  = $this->package_copy( 'p11-old-low', '1.0.0-beta.22' );
+		$old_high = $this->package_copy( 'p11-old-high', '1.0.0-beta.24' );
+
+		// Simulate an earlier protocol-11 copy whose bootstrap emits allow_working_copy=true and whose validator only accepts true when present.
+		foreach ( array( $old_low, $old_high ) as $old_copy ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read local fixture bytes to construct an earlier protocol-11 peer copy.
+			$bootstrap = (string) file_get_contents( $old_copy . '/bootstrap.php' );
+			$bootstrap = str_replace(
+				array(
+					"unset( \$allow_working_copy );\n\t\treturn \$this->target( 'plugin', \$plugin_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes );",
+					"unset( \$allow_working_copy );\n\t\treturn \$this->target( 'theme', \$stylesheet_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes );",
+					'private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes ): object {',
+					"'descriptor_admission'     => \$this->descriptor_admission,\n\t\t);",
+				),
+				array(
+					"return \$this->target( 'plugin', \$plugin_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes, \$allow_working_copy );",
+					"return \$this->target( 'theme', \$stylesheet_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes, \$allow_working_copy );",
+					'private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes, bool $allow_working_copy = false ): object {',
+					"'descriptor_admission'     => \$this->descriptor_admission,\n\t\t);\n\t\tif ( \$allow_working_copy ) {\n\t\t\t\$declaration['allow_working_copy'] = true;\n\t\t}",
+				),
+				$bootstrap
+			);
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write local earlier-protocol-11 bootstrap fixture.
+			file_put_contents( $old_copy . '/bootstrap.php', $bootstrap );
+
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read local fixture validator to model pre-PR strict true-only allow_working_copy validation.
+			$validator = (string) file_get_contents( $old_copy . '/src/Runtime/RequestProtocolValidator.php' );
+			$validator = str_replace( 'if ( ! is_bool( $value[\'allow_working_copy\'] ) )', 'if ( true !== $value[\'allow_working_copy\'] )', $validator );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write local earlier-protocol-11 validator fixture.
+			file_put_contents( $old_copy . '/src/Runtime/RequestProtocolValidator.php', $validator );
+			$this->write_runtime_copy( $old_copy, $old_copy === $old_high ? '1.0.0-beta.24' : '1.0.0-beta.22' );
+		}
+
+		// Direct validator check: optional bool accepted, non-bool rejected.
+		$validator_check = $this->probe(
+			<<<'PHP'
+require $data['validator'];
+$base = array(
+	'target_type' => 'plugin',
+	'installed_file' => '/plugins/example/main.php',
+	'provider_code' => 'github',
+	'repository_locator' => 'acme/example',
+	'repository_identity' => '123',
+	'channel' => 'stable',
+	'update_policy' => 'manual',
+	'credential_resolver' => null,
+	'maximum_artifact_bytes' => 52428800,
+	'operation_guard' => null,
+	'native_mutation_begin' => null,
+	'native_mutation_complete' => null,
+	'descriptor_admission' => null,
+);
+echo json_encode( array(
+	'omitted' => \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::declaration_code( $base ),
+	'false'   => \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::declaration_code( $base + array( 'allow_working_copy' => false ) ),
+	'true'    => \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::declaration_code( $base + array( 'allow_working_copy' => true ) ),
+	'invalid' => \RAN\WPReleaseUpdater\V1\Runtime\RequestProtocolValidator::declaration_code( $base + array( 'allow_working_copy' => 'yes' ) ),
+) );
+PHP,
+			array( 'validator' => dirname( __DIR__, 2 ) . '/src/Runtime/RequestProtocolValidator.php' )
+		);
+		self::assertNull( $validator_check['omitted'] );
+		self::assertNull( $validator_check['false'] );
+		self::assertNull( $validator_check['true'] );
+		self::assertSame( 'declaration_invalid', $validator_check['invalid'] );
+
+		// Pair 1 (old registrar -> new broker) and Pair 2 (new registrar -> old protocol-11 broker), each in both load orders.
+		$pairs = array(
+			'old-first-new-winner' => array( $old_low, $new_high, 'old', 'new' ),
+			'new-first-new-winner' => array( $new_high, $old_low, 'new', 'old' ),
+			'old-first-old-winner' => array( $old_high, $new_low, 'old', 'new' ),
+			'new-first-old-winner' => array( $new_low, $old_high, 'new', 'old' ),
+		);
+		foreach ( $pairs as $label => $pair ) {
+			$installed = $this->parent . '/p11-installed-' . $label;
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create isolated installed plugin/theme fixtures with a .git working-copy marker.
+			mkdir( $installed . '/plugin/.git', 0700, true );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create isolated installed theme fixture directory.
+			mkdir( $installed . '/theme/.git', 0700, true );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write isolated plugin header fixture.
+			file_put_contents( $installed . '/plugin/main.php', "<?php\n/*\nPlugin Name: Working Plugin\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/working-plugin\n*/\n" );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write isolated theme header fixture.
+			file_put_contents( $installed . '/theme/style.css', "/*\nTheme Name: Working Theme\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/working-theme\n*/\n" );
+
+			$result = $this->probe(
+				<<<'PHP'
+define('WP_PLUGIN_DIR', $data['installed']);
+function add_filter(string $hook, mixed $callback, int $priority, int $arguments): void {
+	$GLOBALS['p11_hooks'][$hook][] = $callback;
+}
+function add_action(string $hook, mixed $callback, int $priority, int $arguments): void {
+	$GLOBALS['p11_hooks'][$hook][] = $callback;
+}
+$GLOBALS['p11_hooks'] = array();
+$GLOBALS['wpdb'] = new stdClass();
+$GLOBALS['wp_version'] = '6.8.0';
+$GLOBALS['wp_theme_directories'] = array($data['installed']);
+$first_registrar = require $data['first'] . '/bootstrap.php';
+$second_registrar = require $data['second'] . '/bootstrap.php';
+$old_registrar = 'old' === $data['first_role'] ? $first_registrar : $second_registrar;
+$new_registrar = 'new' === $data['first_role'] ? $first_registrar : $second_registrar;
+
+$from_old_true = $old_registrar->plugin('github', $data['installed'] . '/plugin/main.php', 'acme/working-plugin', '111', allow_working_copy: true);
+$from_new_dup = $new_registrar->plugin('github', $data['installed'] . '/plugin/main.php', 'acme/working-plugin', '111', allow_working_copy: false);
+$from_new_true = $new_registrar->theme('github', $data['installed'] . '/theme/style.css', 'acme/working-theme', '222', 'stable', 'manual', null, 52428800, true);
+$from_old_true->register();
+$from_new_dup->register();
+$from_new_true->register();
+
+$activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(array(
+	'php_version' => '8.2.0',
+	'runtime_protocol' => 11,
+	'wordpress_version' => '6.8.0',
+));
+$plugin_updater = $GLOBALS['p11_hooks']['update_plugins_github.com'][0][0] ?? null;
+$theme_updater = $GLOBALS['p11_hooks']['update_themes_github.com'][0][0] ?? null;
+$plugin_pre = is_object($plugin_updater) ? $plugin_updater->filter_pre_download(false, 'invalid', null, array('plugin' => 'plugin/main.php')) : null;
+$theme_pre = is_object($theme_updater) ? $theme_updater->filter_pre_download(false, 'invalid', null, array('theme' => 'theme')) : null;
+
+echo json_encode(array(
+	'activation' => $activation['loaded'],
+	'old_true_code' => $from_old_true->status()['code'],
+	'new_dup_code' => $from_new_dup->status()['code'],
+	'new_true_code' => $from_new_true->status()['code'],
+	'plugin_diag' => is_object($plugin_updater) ? $plugin_updater->diagnostics() : array(),
+	'theme_diag' => is_object($theme_updater) ? $theme_updater->diagnostics() : array(),
+	'plugin_pre' => $plugin_pre,
+	'theme_pre' => $theme_pre,
+));
+PHP,
+				array(
+					'first'      => $pair[0],
+					'second'     => $pair[1],
+					'first_role' => $pair[2],
+					'installed'  => $installed,
+				)
+			);
+			self::assertTrue( $result['activation'], $label );
+			self::assertSame( 'target_active', $result['old_true_code'], $label );
+			self::assertSame( 'target_active', $result['new_dup_code'], $label );
+			self::assertSame( 'target_active', $result['new_true_code'], $label );
+			self::assertContains( 'target_is_working_copy', $result['plugin_diag'], $label );
+			self::assertContains( 'target_is_working_copy', $result['theme_diag'], $label );
+		}
+	}
+
 	private function package_copy( string $name, ?string $version = null ): string {
 		$root = $this->parent . '/' . $name;
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for isolated runtime and installed-package fixtures with the specified permissions.

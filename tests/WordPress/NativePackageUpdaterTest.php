@@ -3597,6 +3597,54 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 0, $adapter->list_calls + $adapter->inspect_calls + $adapter->acquire_calls );
 		}
 
+		public function test_same_size_and_mtime_owned_zip_tampering_before_extraction_is_rejected(): void {
+			list( $updater, , $database, $descriptor ) = $this->subject();
+			$offer                                     = $this->offer( $updater );
+			$owned                                     = $updater->filter_pre_download( false, $offer['package'], null, $this->extra() );
+			self::assertIsString( $owned );
+
+			clearstatcache( true, $owned );
+			$before_stat = lstat( $owned );
+			self::assertIsArray( $before_stat );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Mutate one owned fixture byte in place while preserving exact inode and byte length.
+			$handle = fopen( $owned, 'r+b' );
+			self::assertIsResource( $handle );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread -- Read the first byte so the in-place mutation is guaranteed to change content without changing size.
+			$first = fread( $handle, 1 );
+			self::assertIsString( $first );
+			self::assertSame( 0, fseek( $handle, 0 ) );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- Write one altered byte in place without changing file size or inode.
+			self::assertSame( 1, fwrite( $handle, 'X' === $first ? 'Y' : 'X' ) );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Close the fixture stream after in-place mutation.
+			fclose( $handle );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_touch -- Restore the original mtime/atime so stat-only checks could be fooled if ctime matches.
+			self::assertTrue( touch( $owned, $before_stat['mtime'], $before_stat['atime'] ) );
+
+			clearstatcache( true, $owned );
+			$after_stat = lstat( $owned );
+			self::assertIsArray( $after_stat );
+			self::assertSame( $before_stat['ino'], $after_stat['ino'] );
+			self::assertSame( $before_stat['size'], $after_stat['size'] );
+			self::assertSame( $before_stat['mtime'], $after_stat['mtime'] );
+
+			// Align pending archive_identity with the post-tamper stat (including ctime) to prove digest verification rejects same-stat byte tampering.
+			$pending = ( new \ReflectionProperty( $updater, 'pending_install' ) )->getValue( $updater );
+			self::assertInstanceOf( \RAN\WPReleaseUpdater\V1\WordPress\PendingInstallState::class, $pending );
+			$store         = new \RAN\WPReleaseUpdater\V1\WordPress\OwnedArchiveStore();
+			$matching_stat = $store->stat_identity( $owned, $descriptor );
+			self::assertIsArray( $matching_stat );
+			self::assertTrue( $store->same_stat_identity( $owned, $descriptor, $matching_stat ) );
+			self::assertFalse( $store->verify_digest_and_stat( $owned, $descriptor, $matching_stat ) );
+			( new \ReflectionProperty( $pending, 'archive_identity' ) )->setValue( $pending, $matching_stat );
+
+			$result = $updater->filter_pre_unzip_file( null, $owned, '/tmp', array(), 0.0 );
+			self::assertInstanceOf( \WP_Error::class, $result );
+			self::assertSame( 'ran_wp_release_updater_archive_changed_before_extraction', $result->get_error_code() );
+			self::assertContains( 'archive_changed_before_extraction', $updater->diagnostics() );
+			self::assertFileDoesNotExist( $owned );
+			self::assertSame( array(), $database->rows() );
+		}
+
 		public function test_begin_native_mutation_failure_after_owner_assignment_completes_owner_and_clears_state(): void {
 			$database        = new FakeOptionDatabase( 100 );
 			$live            = true;
