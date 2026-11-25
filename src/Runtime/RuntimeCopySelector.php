@@ -144,6 +144,35 @@ final class RuntimeCopySelector {
 		return $compatible[0];
 	}
 
+	/** Revalidates the winning runtime entrypoint immediately before require without hashing source files. */
+	public function verify_selected_entrypoint( string $source_root, string $runtime_file ): string {
+		clearstatcache( true, $source_root );
+		clearstatcache( true, $runtime_file );
+		$actual_root = realpath( $source_root );
+		if (
+			'' === $source_root
+			|| is_link( $source_root )
+			|| ! is_dir( $source_root )
+			|| false === $actual_root
+			|| ! hash_equals( $source_root, $actual_root )
+		) {
+			throw new RuntimeException( 'Invalid runtime source.' );
+		}
+		$expected    = $source_root . DIRECTORY_SEPARATOR . 'runtime.php';
+		$actual_file = realpath( $runtime_file );
+		if (
+			! hash_equals( $expected, $runtime_file )
+			|| is_link( $runtime_file )
+			|| ! is_file( $runtime_file )
+			|| false === $actual_file
+			|| ! hash_equals( $expected, $actual_file )
+		) {
+			throw new RuntimeException( 'Invalid runtime source.' );
+		}
+
+		return $actual_file;
+	}
+
 	private function regular_file( string $root, string $relative ): string {
 		if ( '' === $relative || str_contains( $relative, "\0" ) || str_starts_with( $relative, '/' ) || preg_match( '#(?:\\A|/)\.\.(?:/|\\z)#', $relative ) ) {
 			throw new RuntimeException( 'Invalid runtime source.' );

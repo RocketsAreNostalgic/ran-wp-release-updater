@@ -390,39 +390,107 @@ PHP;
 		}
 	}
 
+	public function test_winning_runtime_entrypoint_symlink_swap_before_activate_fails_closed(): void {
+		$copy     = $this->package_copy( 'swap-entrypoint' );
+		$outside  = $this->parent . '/outside-entrypoint';
+		$sentinel = $outside . '/executed.marker';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create an external target directory for runtime.php symlink-swap testing.
+		mkdir( $outside, 0700, true );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write sentinel payload to prove the swapped external runtime.php is never executed.
+		file_put_contents( $outside . '/runtime.php', '<?php file_put_contents(' . var_export( $sentinel, true ) . ', "executed"); return new stdClass();' );
+
+		$result = $this->probe(
+			<<<'PHP'
+require $data['copy'] . '/bootstrap.php';
+$broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
+unlink($data['copy'] . '/runtime.php');
+if (!symlink($data['outside'] . '/runtime.php', $data['copy'] . '/runtime.php')) {
+	echo json_encode(array('skipped' => true));
+	return;
+}
+$activation = $broker->activate(array(
+	'php_version' => '8.2.0',
+	'runtime_protocol' => 11,
+	'wordpress_version' => '6.8.0',
+));
+echo json_encode(array(
+	'skipped' => false,
+	'activation' => $activation,
+));
+PHP,
+			array(
+				'copy'    => $copy,
+				'outside' => $outside,
+			)
+		);
+		if ( true === ( $result['skipped'] ?? false ) ) {
+			self::markTestSkipped( 'Symlinks are unavailable on this platform.' );
+		}
+
+		self::assertFalse( $result['activation']['loaded'] );
+		self::assertSame( 'inactive', $result['activation']['state'] );
+		self::assertSame( 'runtime_load_failed', $result['activation']['code'] );
+		self::assertFileDoesNotExist( $sentinel );
+	}
+
 	public function test_protocol_11_allow_working_copy_interoperability_and_refusal(): void {
 		$new_high = $this->package_copy( 'p11-new-high', '1.0.0-beta.24' );
 		$new_low  = $this->package_copy( 'p11-new-low', '1.0.0-beta.22' );
 		$old_low  = $this->package_copy( 'p11-old-low', '1.0.0-beta.22' );
 		$old_high = $this->package_copy( 'p11-old-high', '1.0.0-beta.24' );
 
-		// Simulate an earlier protocol-11 copy whose bootstrap emits allow_working_copy=true and whose validator only accepts true when present.
+		// Build a faithful base protocol-11 peer across bootstrap.php, runtime.php, RequestProtocolValidator, GitHubReleaseAdapter, and NativePackageUpdater.
 		foreach ( array( $old_low, $old_high ) as $old_copy ) {
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read local fixture bytes to construct an earlier protocol-11 peer copy.
-			$bootstrap = (string) file_get_contents( $old_copy . '/bootstrap.php' );
-			$bootstrap = str_replace(
+			$this->patch_file_strict(
+				$old_copy . '/bootstrap.php',
 				array(
-					"unset( \$allow_working_copy );\n\t\treturn \$this->target( 'plugin', \$plugin_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes );",
-					"unset( \$allow_working_copy );\n\t\treturn \$this->target( 'theme', \$stylesheet_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes );",
-					'private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes ): object {',
-					"'descriptor_admission'     => \$this->descriptor_admission,\n\t\t);",
-				),
-				array(
-					"return \$this->target( 'plugin', \$plugin_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes, \$allow_working_copy );",
-					"return \$this->target( 'theme', \$stylesheet_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes, \$allow_working_copy );",
-					'private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes, bool $allow_working_copy = false ): object {',
-					"'descriptor_admission'     => \$this->descriptor_admission,\n\t\t);\n\t\tif ( \$allow_working_copy ) {\n\t\t\t\$declaration['allow_working_copy'] = true;\n\t\t}",
-				),
-				$bootstrap
+					"unset( \$allow_working_copy );\n\t\treturn \$this->target( 'plugin', \$plugin_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes );"
+						=> "return \$this->target( 'plugin', \$plugin_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes, \$allow_working_copy );",
+					"unset( \$allow_working_copy );\n\t\treturn \$this->target( 'theme', \$stylesheet_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes );"
+						=> "return \$this->target( 'theme', \$stylesheet_file, \$provider, \$repository, \$repository_id, \$channel, \$update_policy, \$credentials, \$maximum_artifact_bytes, \$allow_working_copy );",
+					'private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes ): object {'
+						=> 'private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes, bool $allow_working_copy = false ): object {',
+					"'descriptor_admission'     => \$this->descriptor_admission,\n\t\t);"
+						=> "'descriptor_admission'     => \$this->descriptor_admission,\n\t\t);\n\t\tif ( \$allow_working_copy ) {\n\t\t\t\$declaration['allow_working_copy'] = true;\n\t\t}",
+				)
 			);
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write local earlier-protocol-11 bootstrap fixture.
-			file_put_contents( $old_copy . '/bootstrap.php', $bootstrap );
-
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read local fixture validator to model pre-PR strict true-only allow_working_copy validation.
-			$validator = (string) file_get_contents( $old_copy . '/src/Runtime/RequestProtocolValidator.php' );
-			$validator = str_replace( 'if ( ! is_bool( $value[\'allow_working_copy\'] ) )', 'if ( true !== $value[\'allow_working_copy\'] )', $validator );
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write local earlier-protocol-11 validator fixture.
-			file_put_contents( $old_copy . '/src/Runtime/RequestProtocolValidator.php', $validator );
+			$this->patch_file_strict(
+				$old_copy . '/src/Runtime/RequestProtocolValidator.php',
+				array(
+					"if ( ! is_bool( \$value['allow_working_copy'] ) )" => "if ( true !== \$value['allow_working_copy'] )",
+				)
+			);
+			$this->patch_file_strict(
+				$old_copy . '/runtime.php',
+				array(
+					"private function same_declaration( array \$first, array \$next ): bool {\n\t\tforeach ( array( 'target_type', 'provider_code', 'repository_locator', 'repository_identity', 'channel', 'update_policy', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard', 'native_mutation_begin', 'native_mutation_complete', 'descriptor_admission' ) as \$fact ) {\n\t\t\tif ( \$first[ \$fact ] !== \$next[ \$fact ] ) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t}\n\t\treturn true;\n\t}"
+						=> "private function same_declaration( array \$first, array \$next ): bool {\n\t\tforeach ( array( 'target_type', 'provider_code', 'repository_locator', 'repository_identity', 'channel', 'update_policy', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard', 'native_mutation_begin', 'native_mutation_complete', 'descriptor_admission' ) as \$fact ) {\n\t\t\tif ( \$first[ \$fact ] !== \$next[ \$fact ] ) {\n\t\t\t\treturn false;\n\t\t\t}\n\t\t}\n\t\treturn ( \$first['allow_working_copy'] ?? false ) === ( \$next['allow_working_copy'] ?? false );\n\t}",
+				)
+			);
+			$this->patch_file_strict(
+				$old_copy . '/src/Provider/GitHub/GitHubReleaseAdapter.php',
+				array(
+					"\$declaration['descriptor_admission'],\n\t\t\t\t\$header_loader,"
+						=> "\$declaration['descriptor_admission'],\n\t\t\t\t\$header_loader,\n\t\t\t\ttrue === ( \$declaration['allow_working_copy'] ?? false ),",
+					"?callable \$header_loader = null\n\t): ?NativePackageUpdater {"
+						=> "?callable \$header_loader = null,\n\t\tbool \$allow_working_copy = false\n\t): ?NativePackageUpdater {",
+					'descriptor_admission: $descriptor_admission, header_loader: $header_loader );'
+						=> 'descriptor_admission: $descriptor_admission, header_loader: $header_loader, allow_working_copy: $allow_working_copy );',
+				)
+			);
+			$this->patch_file_strict(
+				$old_copy . '/src/WordPress/NativePackageUpdater.php',
+				array(
+					"?callable \$header_loader = null\n\t) {"
+						=> "?callable \$header_loader = null,\n\t\tprivate bool \$allow_working_copy = false\n\t) {",
+					"?callable \$header_loader = null\n\t): ?self {"
+						=> "?callable \$header_loader = null,\n\t\tbool \$allow_working_copy = false\n\t): ?self {",
+					"\$descriptor_admission,\n\t\t\t\$header_loader\n\t\t);"
+						=> "\$descriptor_admission,\n\t\t\t\$header_loader,\n\t\t\t\$allow_working_copy\n\t\t);",
+					'return TargetWorkingCopy::is_working_copy( $this->installed_directory );'
+						=> 'return ! $this->allow_working_copy && TargetWorkingCopy::is_working_copy( $this->installed_directory );',
+				)
+			);
 			$this->write_runtime_copy( $old_copy, $old_copy === $old_high ? '1.0.0-beta.24' : '1.0.0-beta.22' );
 		}
 
@@ -459,11 +527,11 @@ PHP,
 		self::assertNull( $validator_check['true'] );
 		self::assertSame( 'declaration_invalid', $validator_check['invalid'] );
 
-		// Pair 1 (old registrar -> new broker) and Pair 2 (new registrar -> old protocol-11 broker), each in both load orders.
+		// Pair 1 (new copy wins, both load orders) and Pair 2 (faithful base protocol-11 copy wins, both load orders).
 		$pairs = array(
 			'old-first-new-winner' => array( $old_low, $new_high, 'old', 'new' ),
-			'new-first-new-winner' => array( $new_high, $old_low, 'new', 'old' ),
-			'old-first-old-winner' => array( $old_high, $new_low, 'old', 'new' ),
+			'new-first-new-winner' => array( $new_high, $old_low, 'new', 'new' ),
+			'old-first-old-winner' => array( $old_high, $new_low, 'old', 'old' ),
 			'new-first-old-winner' => array( $new_low, $old_high, 'new', 'old' ),
 		);
 		foreach ( $pairs as $label => $pair ) {
@@ -472,10 +540,14 @@ PHP,
 			mkdir( $installed . '/plugin/.git', 0700, true );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create isolated installed theme fixture directory.
 			mkdir( $installed . '/theme/.git', 0700, true );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create second isolated installed theme fixture directory.
+			mkdir( $installed . '/theme-two/.git', 0700, true );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write isolated plugin header fixture.
 			file_put_contents( $installed . '/plugin/main.php', "<?php\n/*\nPlugin Name: Working Plugin\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/working-plugin\n*/\n" );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write isolated theme header fixture.
 			file_put_contents( $installed . '/theme/style.css', "/*\nTheme Name: Working Theme\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/working-theme\n*/\n" );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write second isolated theme header fixture.
+			file_put_contents( $installed . '/theme-two/style.css', "/*\nTheme Name: Working Theme Two\nVersion: 1.0.0\nUpdate URI: https://github.com/acme/working-theme-two\n*/\n" );
 
 			$result = $this->probe(
 				<<<'PHP'
@@ -497,9 +569,11 @@ $new_registrar = 'new' === $data['first_role'] ? $first_registrar : $second_regi
 
 $from_old_true = $old_registrar->plugin('github', $data['installed'] . '/plugin/main.php', 'acme/working-plugin', '111', allow_working_copy: true);
 $from_new_dup = $new_registrar->plugin('github', $data['installed'] . '/plugin/main.php', 'acme/working-plugin', '111', allow_working_copy: false);
-$from_new_true = $new_registrar->theme('github', $data['installed'] . '/theme/style.css', 'acme/working-theme', '222', 'stable', 'manual', null, 52428800, true);
+$from_new_false = $new_registrar->theme('github', $data['installed'] . '/theme/style.css', 'acme/working-theme', '222', allow_working_copy: false);
+$from_new_true = $new_registrar->theme('github', $data['installed'] . '/theme-two/style.css', 'acme/working-theme-two', '333', 'stable', 'manual', null, 52428800, true);
 $from_old_true->register();
 $from_new_dup->register();
+$from_new_false->register();
 $from_new_true->register();
 
 $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(array(
@@ -509,18 +583,26 @@ $activation = $GLOBALS['ran_wp_release_updater_v1_broker']->activate(array(
 ));
 $plugin_updater = $GLOBALS['p11_hooks']['update_plugins_github.com'][0][0] ?? null;
 $theme_updater = $GLOBALS['p11_hooks']['update_themes_github.com'][0][0] ?? null;
-$plugin_pre = is_object($plugin_updater) ? $plugin_updater->filter_pre_download(false, 'invalid', null, array('plugin' => 'plugin/main.php')) : null;
-$theme_pre = is_object($theme_updater) ? $theme_updater->filter_pre_download(false, 'invalid', null, array('theme' => 'theme')) : null;
+$theme_two_updater = $GLOBALS['p11_hooks']['update_themes_github.com'][1][0] ?? null;
+if (is_object($plugin_updater)) {
+	$plugin_updater->filter_pre_download(false, 'invalid', null, array('plugin' => 'plugin/main.php'));
+}
+if (is_object($theme_updater)) {
+	$theme_updater->filter_pre_download(false, 'invalid', null, array('theme' => 'theme'));
+}
+if (is_object($theme_two_updater)) {
+	$theme_two_updater->filter_pre_download(false, 'invalid', null, array('theme' => 'theme-two'));
+}
 
 echo json_encode(array(
 	'activation' => $activation['loaded'],
 	'old_true_code' => $from_old_true->status()['code'],
 	'new_dup_code' => $from_new_dup->status()['code'],
+	'new_false_code' => $from_new_false->status()['code'],
 	'new_true_code' => $from_new_true->status()['code'],
 	'plugin_diag' => is_object($plugin_updater) ? $plugin_updater->diagnostics() : array(),
 	'theme_diag' => is_object($theme_updater) ? $theme_updater->diagnostics() : array(),
-	'plugin_pre' => $plugin_pre,
-	'theme_pre' => $theme_pre,
+	'theme_two_diag' => is_object($theme_two_updater) ? $theme_two_updater->diagnostics() : array(),
 ));
 PHP,
 				array(
@@ -532,11 +614,32 @@ PHP,
 			);
 			self::assertTrue( $result['activation'], $label );
 			self::assertSame( 'target_active', $result['old_true_code'], $label );
-			self::assertSame( 'target_active', $result['new_dup_code'], $label );
+			self::assertSame( 'target_active', $result['new_false_code'], $label );
 			self::assertSame( 'target_active', $result['new_true_code'], $label );
-			self::assertContains( 'target_is_working_copy', $result['plugin_diag'], $label );
 			self::assertContains( 'target_is_working_copy', $result['theme_diag'], $label );
+			self::assertContains( 'target_is_working_copy', $result['theme_two_diag'], $label );
+			if ( 'new' === $pair[3] ) {
+				self::assertSame( 'target_active', $result['new_dup_code'], $label );
+				self::assertContains( 'target_is_working_copy', $result['plugin_diag'], $label );
+			} else {
+				self::assertSame( 'target_declaration_conflict', $result['new_dup_code'], $label );
+				self::assertNotContains( 'target_is_working_copy', $result['plugin_diag'], $label );
+				self::assertContains( 'unverified_pre_download', $result['plugin_diag'], $label );
+			}
 		}
+	}
+
+	/** @param array<string,string> $replacements */
+	private function patch_file_strict( string $path, array $replacements ): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read local fixture file to construct a faithful earlier protocol-11 peer copy.
+		$contents = (string) file_get_contents( $path );
+		foreach ( $replacements as $search => $replace ) {
+			$count    = 0;
+			$contents = str_replace( $search, $replace, $contents, $count );
+			self::assertGreaterThan( 0, $count, $path . ': missing expected fixture snippet' );
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write local fixture file for faithful protocol-11 peer copy.
+		file_put_contents( $path, $contents );
 	}
 
 	private function package_copy( string $name, ?string $version = null ): string {
