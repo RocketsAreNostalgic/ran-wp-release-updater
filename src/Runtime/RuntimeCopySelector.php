@@ -13,6 +13,8 @@ use RuntimeException;
  */
 final class RuntimeCopySelector {
 
+	public const FULL_REALPATH_CACHE_ENTRYPOINT_VERIFICATION = true;
+
 	private const COPY_KEYS = array(
 		'package_revision',
 		'package_version',
@@ -146,8 +148,7 @@ final class RuntimeCopySelector {
 
 	/** Revalidates the winning runtime entrypoint immediately before require without hashing source files. */
 	public function verify_selected_entrypoint( string $source_root, string $runtime_file ): string {
-		clearstatcache( true, $source_root );
-		clearstatcache( true, $runtime_file );
+		clearstatcache( true );
 		$actual_root = realpath( $source_root );
 		if (
 			'' === $source_root
