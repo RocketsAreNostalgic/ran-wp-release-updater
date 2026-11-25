@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.0.0-beta.23](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.22...v1.0.0-beta.23) (2026-11-25)
+
+
+### Features
+
+* **native:** add single-target exact install and sync finalize ([#211](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/211)) ([ef3b06e](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/ef3b06e245fd95e15f477e5e0d052aef69bc166d))
+
+
+### Bug Fixes
+
+* **archive:** adopt updater-support beta.11 and harden protocol ([#227](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/227)) ([2800166](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/280016624924ec517a2e1eef3e2f343597e965e0))
+* harden archive identity checks and prospective inspection ([#207](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/207)) ([3f5a7b6](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/3f5a7b6e0be704b056cf5de49a7acc44fb38ba2d))
+* **locking:** finalize auto locks, multisite table, and bulk settle ([f90c569](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/f90c569b63c7c63d0ece19c160d591e8fd5c8c03)), closes [#215](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/215) [#203](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/203)
+* resolve version, cron filesystem, and native edge cases ([#218](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/218)) ([51f8d94](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/51f8d948dbb29beae36a62c4ae01f0ee2e5b4cbb))
+* **runtime:** enforce activation entrypoint containment ([#230](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/230)) ([ded50e7](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/ded50e7c90d341c9af99042ac77b56b0d58d8a7a))
+
+
+### Performance
+
+* streamline runtime startup, custody, and cleanup ([#228](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/228)) ([c46c786](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/c46c786677e69f69eac1c2afdf770bb3b938d753))
+
 ## [1.0.0-beta.22](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.21...v1.0.0-beta.22) (2026-11-21)
 
 
