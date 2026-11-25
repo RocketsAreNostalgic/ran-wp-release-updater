@@ -29,6 +29,7 @@ final class ReleaseWorkflowContractTest extends TestCase {
 		}
 		self::assertArrayNotHasKey( 'skip-github-release', $config );
 		self::assertArrayNotHasKey( 'skip-github-release', $config['packages']['.'] );
+		self::assertTrue( $config['always-update'] ?? false );
 		self::assertStringContainsString( 'actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0', $ci );
 		self::assertStringContainsString( "node-version: '24.21.0'", $ci );
 		self::assertSame( 'json', $config['packages']['.']['extra-files'][0]['type'] );
