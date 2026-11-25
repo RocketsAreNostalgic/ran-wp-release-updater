@@ -67,6 +67,7 @@ test('Release Please owns native tag and GitHub Release publication', () => {
 	assert.equal(config['release-type'], 'php');
 	assert.equal(Object.hasOwn(config, 'skip-github-release'), false);
 	assert.equal(Object.hasOwn(packageConfig, 'skip-github-release'), false);
+	assert.equal(config['always-update'], true);
 });
 
 test('runtime-copy version remains a narrow Release Please extra-file', () => {
