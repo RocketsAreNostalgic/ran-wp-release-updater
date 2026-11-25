@@ -55,8 +55,9 @@ final class NativePackageUpdater {
 		'repository_identity'        => 'stable_repository_identity',
 	);
 
-	private bool $registered                            = false;
-	private bool $raw_host_hook_registered              = false;
+	private bool $registered = false;
+	/** @var array<string,bool> */
+	private array $registered_raw_host_hooks            = array();
 	private ?IdentityDescriptor $descriptor             = null;
 	private ?string $lock_token                         = null;
 	private bool $lock_owned                            = false;
@@ -89,7 +90,7 @@ final class NativePackageUpdater {
 	private ?\Closure $native_mutation_begin;
 	private ?\Closure $native_mutation_complete;
 	private ?\Closure $descriptor_admission;
-	/** @var (\Closure():array{code:string,headers?:array<string,string>})|null */
+	/** @var (\Closure():array{code:string,headers?:array<string,string>,raw_update_uri?:string})|null */
 	private ?\Closure $header_loader;
 	private ?string $header_failure_code            = null;
 	private ?string $native_owner                   = null;
@@ -118,7 +119,7 @@ final class NativePackageUpdater {
 	 * @param array<string,string>|null $headers
 	 * @param TargetBinding             $target_binding
 	 * @param array<string,mixed>       $archive_policy
-	 * @param (callable():array{code:string,headers?:array<string,string>})|null $header_loader
+	 * @param (callable():array{code:string,headers?:array<string,string>,raw_update_uri?:string})|null $header_loader
 	 */
 	private function __construct(
 		private string $target_type,
@@ -155,7 +156,7 @@ final class NativePackageUpdater {
 	 * @param array<string,mixed> $configuration
 	 * @param array<string,mixed> $target_binding
 	 * @param array<string,mixed> $archive_policy
-	 * @param (callable():array{code:string,headers?:array<string,string>})|null $header_loader
+	 * @param (callable():array{code:string,headers?:array<string,string>,raw_update_uri?:string})|null $header_loader
 	 */
 	public static function from_configuration(
 		array $configuration,
@@ -347,22 +348,26 @@ final class NativePackageUpdater {
 		return $locales;
 	}
 
-	private function register_raw_host_hook(): void {
-		if ( $this->raw_host_hook_registered || ! is_array( $this->headers ) ) {
+	private function register_raw_host_hook( ?string $raw_update_uri = null ): void {
+		$candidate_uri = $raw_update_uri ?? ( is_array( $this->headers ) ? $this->headers['UpdateURI'] : null );
+		if ( ! is_string( $candidate_uri ) || '' === $candidate_uri ) {
 			return;
 		}
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
 		$canonical_host = parse_url( $this->update_uri, PHP_URL_HOST );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Native URL parsing preserves provider and bootstrap validation semantics independently of WordPress helpers.
-		$raw_host = parse_url( $this->headers['UpdateURI'], PHP_URL_HOST );
+		$raw_host = parse_url( $candidate_uri, PHP_URL_HOST );
 		if ( ! is_string( $canonical_host ) || '' === $canonical_host || ! is_string( $raw_host ) || '' === $raw_host ) {
 			return;
 		}
 		$canonical_key = strtolower( $canonical_host );
 		if ( $raw_host !== $canonical_key && 0 === strcasecmp( $raw_host, $canonical_key ) ) {
 			$prefix = 'plugin' === $this->target_type ? 'update_plugins_' : 'update_themes_';
-			add_filter( $prefix . $raw_host, array( $this, 'filter_update' ), 10, 4 );
-			$this->raw_host_hook_registered = true;
+			$hook   = $prefix . $raw_host;
+			if ( ! isset( $this->registered_raw_host_hooks[ $hook ] ) ) {
+				add_filter( $hook, array( $this, 'filter_update' ), 10, 4 );
+				$this->registered_raw_host_hooks[ $hook ] = true;
+			}
 		}
 	}
 
@@ -1592,6 +1597,12 @@ final class NativePackageUpdater {
 		if ( null !== $this->header_loader ) {
 			$this->headers             = null;
 			$this->header_failure_code = null;
+			if ( function_exists( 'remove_filter' ) ) {
+				foreach ( array_keys( $this->registered_raw_host_hooks ) as $hook ) {
+					remove_filter( $hook, array( $this, 'filter_update' ), 10 );
+					unset( $this->registered_raw_host_hooks[ $hook ] );
+				}
+			}
 		}
 		$this->clear_discovery_snapshot();
 		$this->queued_multi_run = false;
@@ -1735,14 +1746,15 @@ final class NativePackageUpdater {
 		}
 		$code    = is_string( $result['code'] ?? null ) ? $result['code'] : 'installed_header_invalid';
 		$headers = $result['headers'] ?? null;
+		$raw_uri = is_string( $result['raw_update_uri'] ?? null ) && '' !== $result['raw_update_uri']
+			? $result['raw_update_uri']
+			: ( is_array( $headers ) && is_string( $headers['UpdateURI'] ?? null ) && '' !== $headers['UpdateURI'] ? $headers['UpdateURI'] : null );
 		if ( 'installed_header_verified' !== $code || ! is_array( $headers ) ) {
-			$this->header_failure_code = $code;
-			return false;
+			return $this->fail_header_load( $code, $raw_uri );
 		}
 		$template = $headers['Template'] ?? '';
 		if ( ! self::valid_theme_template( $this->target_type, $template ) ) {
-			$this->header_failure_code = 'installed_header_invalid';
-			return false;
+			return $this->fail_header_load( 'installed_header_invalid', $raw_uri );
 		}
 		$normalized_headers = array(
 			'Author'      => is_string( $headers['Author'] ?? null ) ? $headers['Author'] : '',
@@ -1758,13 +1770,11 @@ final class NativePackageUpdater {
 		);
 		foreach ( $normalized_headers as $value ) {
 			if ( strlen( $value ) > 8192 ) {
-				$this->header_failure_code = 'installed_header_invalid';
-				return false;
+				return $this->fail_header_load( 'installed_header_invalid', $raw_uri );
 			}
 		}
 		if ( null === ReleaseVersion::normalize_header( $normalized_headers['Version'] ) ) {
-			$this->header_failure_code = 'installed_header_invalid';
-			return false;
+			return $this->fail_header_load( 'installed_header_invalid', $raw_uri );
 		}
 		if (
 			CanonicalUpdateUri::canonicalize_boundaries(
@@ -1776,15 +1786,13 @@ final class NativePackageUpdater {
 				)
 			) !== $this->update_uri
 		) {
-			$this->header_failure_code = 'installed_update_uri_mismatch';
-			return false;
+			return $this->fail_header_load( 'installed_update_uri_mismatch', $raw_uri );
 		}
 		$binding                   = $this->target_binding;
 		$binding['theme_template'] = $template;
 		$binding_hash              = self::compute_binding_hash( $binding );
 		if ( null === $binding_hash ) {
-			$this->header_failure_code = 'installed_header_invalid';
-			return false;
+			return $this->fail_header_load( 'installed_header_invalid', $raw_uri );
 		}
 		$this->headers                          = $normalized_headers;
 		$this->target_binding                   = $binding;
@@ -1795,6 +1803,14 @@ final class NativePackageUpdater {
 			$this->register_raw_host_hook();
 		}
 		return true;
+	}
+
+	private function fail_header_load( string $code, ?string $raw_update_uri ): bool {
+		$this->header_failure_code = $code;
+		if ( $this->registered && is_string( $raw_update_uri ) ) {
+			$this->register_raw_host_hook( $raw_update_uri );
+		}
+		return false;
 	}
 
 	/** @return array<string,string> */

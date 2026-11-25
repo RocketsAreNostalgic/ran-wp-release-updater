@@ -46,6 +46,13 @@ namespace {
 			return true;
 		}
 	}
+	if ( ! function_exists( 'remove_filter' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
+		function remove_filter( string $hook, mixed $callback, int $priority = 10 ): bool {
+			$GLOBALS['ran_wp_release_updater_test_removed_hooks'][] = array( 'filter', $hook, $callback, $priority );
+			return true;
+		}
+	}
 	if ( ! function_exists( 'get_current_blog_id' ) ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress site identity seam.
 		function get_current_blog_id(): int {
@@ -637,6 +644,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$GLOBALS['ran_wp_release_updater_test_observations']     = array();
 			$GLOBALS['ran_wp_release_updater_test_observer_throws']  = false;
 			$GLOBALS['ran_wp_release_updater_test_hooks']            = array();
+			$GLOBALS['ran_wp_release_updater_test_removed_hooks']    = array();
 			$GLOBALS['ran_wp_release_updater_test_filter_callbacks'] = array();
 			$GLOBALS['ran_wp_release_updater_test_doing_action']     = null;
 		}
@@ -3469,6 +3477,124 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$info = $updater->filter_plugin_information( false, 'plugin_information', (object) array( 'slug' => $slug ) );
 			self::assertInstanceOf( \stdClass::class, $info );
 			self::assertSame( 'https://homepage.example.test/package', $info->homepage );
+		}
+
+		public function test_lazy_header_loader_refresh_rotates_mixed_case_raw_host_hook_and_deduplicates(): void {
+			$current_uri       = 'https://Updates.Example.Test/owner/package';
+			$config            = $this->config( 'manual' );
+			$config['headers'] = null;
+			$archive_path      = $this->archive();
+			$descriptor        = $this->descriptor( $archive_path );
+			$binding           = $this->binding( 'manual' );
+			$adapter           = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
+			$loader_calls      = 0;
+			$updater           = NativePackageUpdater::from_configuration(
+				$config,
+				$binding,
+				$adapter,
+				new FakeOptionDatabase( 100 ),
+				$this->policy(),
+				header_loader: static function () use ( &$current_uri, &$loader_calls ): array {
+					++$loader_calls;
+					return array(
+						'code'    => 'installed_header_verified',
+						'headers' => array(
+							'Author'      => 'Installed Author',
+							'Description' => 'Installed Description',
+							'Name'        => 'Package',
+							'PackageURI'  => 'https://homepage.example.test/package',
+							'RequiresPHP' => '8.2',
+							'RequiresWP'  => '6.5',
+							'Template'    => '',
+							'UpdateURI'   => $current_uri,
+							'Version'     => '1.0.0',
+						),
+					);
+				}
+			);
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
+
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Reset controlled hook capture state used by this fixture.
+			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Reset controlled hook removal state used by this fixture.
+			$GLOBALS['ran_wp_release_updater_test_removed_hooks'] = array();
+			$updater->register();
+			$updater->prepare_update_check_routing( array( 'en_US' ) );
+			$updater->prepare_update_check_routing( array( 'en_US' ) );
+			self::assertSame( 1, $loader_calls );
+			$initial_raw_hooks = array_values(
+				array_filter(
+					array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ),
+					static fn ( string $hook ): bool => 'update_plugins_Updates.Example.Test' === $hook
+				)
+			);
+			self::assertCount( 1, $initial_raw_hooks );
+
+			self::assertTrue( $updater->refresh() );
+			self::assertContains(
+				array( 'filter', 'update_plugins_Updates.Example.Test', array( $updater, 'filter_update' ), 10 ),
+				$GLOBALS['ran_wp_release_updater_test_removed_hooks']
+			);
+
+			$current_uri = 'https://UPDATES.Example.Test/owner/package';
+			$updater->prepare_update_check_routing( array( 'en_US' ) );
+			self::assertSame( 2, $loader_calls );
+			$rotated_raw_hooks = array_values(
+				array_filter(
+					array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ),
+					static fn ( string $hook ): bool => 'update_plugins_UPDATES.Example.Test' === $hook
+				)
+			);
+			self::assertCount( 1, $rotated_raw_hooks );
+		}
+
+		public function test_lazy_header_loader_failure_preserves_mixed_case_raw_host_routing(): void {
+			$mixed_uri         = 'https://Updates.Example.Test/owner/package';
+			$config            = $this->config( 'manual' );
+			$config['headers'] = null;
+			$archive_path      = $this->archive();
+			$descriptor        = $this->descriptor( $archive_path );
+			$binding           = $this->binding( 'manual' );
+			$adapter           = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
+			$loader_calls      = 0;
+			$updater           = NativePackageUpdater::from_configuration(
+				$config,
+				$binding,
+				$adapter,
+				new FakeOptionDatabase( 100 ),
+				$this->policy(),
+				header_loader: static function () use ( $mixed_uri, &$loader_calls ): array {
+					++$loader_calls;
+					return array(
+						'code'           => 'installed_requirement_incompatible',
+						'raw_update_uri' => $mixed_uri,
+					);
+				}
+			);
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
+
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Reset controlled hook capture state used by this fixture.
+			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
+			$updater->register();
+			self::assertSame( array( 'en_US' ), $updater->prepare_update_check_routing( array( 'en_US' ) ) );
+			self::assertSame( 1, $loader_calls );
+			$hooks = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 );
+			self::assertContains( 'update_plugins_Updates.Example.Test', $hooks );
+
+			self::assertFalse(
+				$updater->filter_update(
+					false,
+					array(
+						'Version'   => '1.0.0',
+						'UpdateURI' => $mixed_uri,
+					),
+					'package/package.php',
+					array()
+				)
+			);
+			self::assertSame( 1, $loader_calls );
+			self::assertSame( array( 'runtime_package_identity_invalid' ), $updater->diagnostics() );
+			self::assertSame( 0, $adapter->list_calls + $adapter->inspect_calls + $adapter->acquire_calls );
 		}
 
 		public function test_begin_native_mutation_failure_after_owner_assignment_completes_owner_and_clears_state(): void {

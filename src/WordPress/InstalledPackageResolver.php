@@ -93,7 +93,7 @@ final class InstalledPackageResolver {
 	 * Delegates extraction to WordPress Core's get_file_data() when loaded, falling back to
 	 * a single bounded read and WordPressHeaders::parse() in standalone contexts.
 	 *
-	 * @return array{code:string,headers?:array<string,string>}
+	 * @return array{code:string,headers?:array<string,string>,raw_update_uri?:string}
 	 */
 	public function read_headers( string $file, string $type ): array {
 		if ( ! in_array( $type, array( 'plugin', 'theme' ), true ) ) {
@@ -107,6 +107,7 @@ final class InstalledPackageResolver {
 			return array( 'code' => 'installed_file_unreadable' );
 		}
 
+		$raw_update_uri = null;
 		if ( function_exists( 'get_file_data' ) ) {
 			$labels = array(
 				'Author'      => 'Author',
@@ -121,8 +122,11 @@ final class InstalledPackageResolver {
 			if ( 'theme' === $type ) {
 				$labels['Template'] = 'Template';
 			}
-			$extracted     = get_file_data( $file, $labels );
-			$header_result = PackageIdentityValidator::validate_extracted_headers( $extracted, $type );
+			$extracted      = get_file_data( $file, $labels );
+			$raw_update_uri = is_string( $extracted['UpdateURI'] ?? null ) && '' !== $extracted['UpdateURI']
+				? $extracted['UpdateURI']
+				: null;
+			$header_result  = PackageIdentityValidator::validate_extracted_headers( $extracted, $type );
 		} else {
 			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Single bounded local header read when WordPress get_file_data() is unavailable.
 			$contents = @file_get_contents( $file, false, null, 0, self::MAX_HEADER_BYTES );
@@ -130,14 +134,32 @@ final class InstalledPackageResolver {
 				return array( 'code' => 'installed_file_unreadable' );
 			}
 			$header_result = PackageIdentityValidator::parse_header( $contents, $type );
+			if ( 'installed_header_verified' !== $header_result['code'] || ! isset( $header_result['headers'] ) ) {
+				$parsed_uri = WordPressHeaders::parse(
+					str_replace( array( "\r\n", "\r" ), "\n", substr( $contents, 0, self::MAX_HEADER_BYTES ) ),
+					array( 'UpdateURI' => 'Update URI' )
+				);
+				$matches    = $parsed_uri['UpdateURI'] ?? array();
+				if ( 1 === count( $matches ) && '' !== $matches[0] ) {
+					$raw_update_uri = $matches[0];
+				}
+			}
 		}
 
 		if ( 'installed_header_verified' !== $header_result['code'] || ! isset( $header_result['headers'] ) ) {
-			return array( 'code' => $header_result['code'] );
+			$failure = array( 'code' => $header_result['code'] );
+			if ( is_string( $raw_update_uri ) ) {
+				$failure['raw_update_uri'] = $raw_update_uri;
+			}
+			return $failure;
 		}
 		$headers = $header_result['headers'];
 		if ( $this->requirements_incompatible( $headers ) ) {
-			return array( 'code' => 'installed_requirement_incompatible' );
+			$failure = array( 'code' => 'installed_requirement_incompatible' );
+			if ( '' !== $headers['UpdateURI'] ) {
+				$failure['raw_update_uri'] = $headers['UpdateURI'];
+			}
+			return $failure;
 		}
 
 		return array(

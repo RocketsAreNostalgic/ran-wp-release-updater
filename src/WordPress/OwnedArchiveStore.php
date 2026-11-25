@@ -145,37 +145,9 @@ final class OwnedArchiveStore {
 		);
 	}
 
-	/** @return array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int}|null */
-	public function identity( string $path, IdentityDescriptor $descriptor ): ?array {
-		$facts = $descriptor->to_array();
-		$stat  = $this->stat_identity( $path, $descriptor );
-		if ( null === $stat ) {
-			return null;
-		}
-
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Hash the verified regular file and recheck native identity; missing or changed files fail closed quietly.
-		$hash  = @hash_file( 'sha256', $path );
-		$after = $this->stat_identity( $path, $descriptor );
-		if (
-			! is_string( $hash )
-			|| ! hash_equals( $facts['artifact_sha256'], $hash )
-			|| $after !== $stat
-		) {
-			return null;
-		}
-
-		return $stat;
-	}
-
 	/** @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity */
 	public function same_stat_identity( string $path, IdentityDescriptor $descriptor, array $identity ): bool {
 		$current = $this->stat_identity( $path, $descriptor );
-		return is_array( $current ) && $current === $identity;
-	}
-
-	/** @param array{dev:int,ino:int,mode:int,mtime:int,ctime:int,size:int} $identity */
-	public function same_identity( string $path, IdentityDescriptor $descriptor, array $identity ): bool {
-		$current = $this->identity( $path, $descriptor );
 		return is_array( $current ) && $current === $identity;
 	}
 }

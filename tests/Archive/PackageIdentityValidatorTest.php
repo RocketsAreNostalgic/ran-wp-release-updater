@@ -39,7 +39,10 @@ final class PackageIdentityValidatorTest extends TestCase {
 	public function test_owned_identity_gate_rejects_replacement_during_hashing(): void {
 		$archive    = $this->archive( array( 'example-plugin/example-plugin.php' => $this->header( 'Plugin Name', 'Example Plugin' ) ) );
 		$descriptor = $this->descriptor( $archive, 'plugin', 'example-plugin/example-plugin.php' );
-		self::assertTrue( ( new PackageIdentityValidator() )->verify_archive_identity( $descriptor, $archive ) );
+		$policy     = $this->policy( 'plugin', 'example-plugin', 'example-plugin.php', 'Example Plugin' );
+		$initial    = ( new PackageIdentityValidator() )->validate( $descriptor, $policy, $archive );
+		self::assertTrue( $initial->is_valid() );
+		self::assertSame( 'archive_identity_verified', $initial->code() );
 		$script = tempnam( sys_get_temp_dir(), 'ran-owned-hash-race-' );
 		self::assertIsString( $script );
 		$this->archives[] = $script;
@@ -49,6 +52,7 @@ final class PackageIdentityValidatorTest extends TestCase {
 			array(
 				'archive'    => $archive,
 				'descriptor' => $descriptor->to_array(),
+				'policy'     => $policy,
 				'bootstrap'  => dirname( __DIR__ ) . '/bootstrap.php',
 			),
 			JSON_THROW_ON_ERROR
@@ -74,14 +78,16 @@ namespace {
     $GLOBALS['ran_owned_race_path'] = $ran_owned_facts['archive'];
     $GLOBALS['ran_owned_race_fired'] = false;
     $ran_owned_before = lstat($ran_owned_facts['archive']);
-    $ran_owned_accepted = (new \RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator())->verify_archive_identity(
+    $ran_owned_result = (new \RAN\WPReleaseUpdater\V1\Archive\PackageIdentityValidator())->validate(
         \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor::rehydrate($ran_owned_facts['descriptor']),
+        $ran_owned_facts['policy'],
         $ran_owned_facts['archive']
     );
     clearstatcache(true, $ran_owned_facts['archive']);
     $ran_owned_after = lstat($ran_owned_facts['archive']);
     echo json_encode([
-        'accepted' => $ran_owned_accepted,
+        'valid' => $ran_owned_result->is_valid(),
+        'code' => $ran_owned_result->code(),
         'race_fired' => $GLOBALS['ran_owned_race_fired'],
         'changed_inode' => $ran_owned_before['ino'] !== $ran_owned_after['ino'],
         'same_mode' => $ran_owned_before['mode'] === $ran_owned_after['mode'],
@@ -102,7 +108,8 @@ PHP;
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 		$result = json_decode( implode( "\n", $output ), true, 64, JSON_THROW_ON_ERROR );
 		self::assertIsArray( $result );
-		self::assertFalse( $result['accepted'] );
+		self::assertFalse( $result['valid'] );
+		self::assertSame( 'archive_file_identity_mismatch', $result['code'] );
 		self::assertTrue( $result['race_fired'] );
 		self::assertTrue( $result['changed_inode'] );
 		self::assertTrue( $result['same_mode'] );

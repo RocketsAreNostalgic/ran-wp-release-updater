@@ -202,6 +202,17 @@ PHP;
 		self::assertTrue( $result['activation']['loaded'] );
 		self::assertSame( 'active', $result['state'] );
 		self::assertSame( 0, $result['hash_calls'] );
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read local bootstrap source bytes to statically assert no hash_file invocation exists in the global-namespace entrypoint.
+		$bootstrap_source = file_get_contents( $copy . '/bootstrap.php' );
+		self::assertIsString( $bootstrap_source );
+		$hash_file_tokens = array();
+		foreach ( token_get_all( $bootstrap_source ) as $token ) {
+			if ( is_array( $token ) && T_STRING === $token[0] && 'hash_file' === strtolower( $token[1] ) ) {
+				$hash_file_tokens[] = $token[1];
+			}
+		}
+		self::assertSame( array(), $hash_file_tokens );
 	}
 
 	public function test_invalid_copy_does_not_invoke_an_autoloader_for_the_broker(): void {

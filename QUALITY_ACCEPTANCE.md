@@ -641,7 +641,8 @@ qualified with the final tuple. No merge/release or manual acceptance is implied
 ## Working-copy refusal runtime boundary
 
 The native `target_is_working_copy` reason extends the broker's closed status and
-diagnostics vocabulary, and `allow_working_copy` extends its target declaration.
+diagnostics vocabulary, and `allow_working_copy` extends its target declaration
+(historical protocol-8 record; `allow_working_copy` was later removed so working copies are always refused).
 The first bootstrap loads the broker validator before runtime election, so these
 changes require protocol 8. Bootstrap, broker, selector, selected state and runtime
 metadata advance together. Purpose-built protocol-7 coexistence fixtures join the

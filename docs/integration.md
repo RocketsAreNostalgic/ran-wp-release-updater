@@ -762,7 +762,6 @@ The foreign-code `identifier()` rule is unsuitable for numeric-leading tags,
 upper case, `+`, and the 120-byte tag bound. The strict credential screen is retained;
 nothing is truncated, rewritten or redacted. Consumers must escape display context.
 
-
 ### Package folder names
 
 Installed plugin/theme folders, archive roots, theme-parent folder names and

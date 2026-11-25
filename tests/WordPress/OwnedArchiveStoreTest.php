@@ -68,6 +68,18 @@ final class OwnedArchiveStoreTest extends TestCase {
 			$fixture = <<<'PHP'
 <?php
 namespace RAN\WPReleaseUpdater\V1\WordPress {
+	function mkdir( string $directory, int $permissions = 0777, bool $recursive = false, mixed $context = null ): bool {
+		++$GLOBALS['ran_owned_store_mkdir_calls'];
+		return null === $context ? \mkdir( $directory, $permissions, $recursive ) : \mkdir( $directory, $permissions, $recursive, $context );
+	}
+	function fopen( string $filename, string $mode, bool $use_include_path = false, mixed $context = null ): mixed {
+		++$GLOBALS['ran_owned_store_fopen_calls'];
+		return null === $context ? \fopen( $filename, $mode, $use_include_path ) : \fopen( $filename, $mode, $use_include_path, $context );
+	}
+	function hash_init( string $algo, int $flags = 0, string $key = '', array $options = array() ): \HashContext {
+		++$GLOBALS['ran_owned_store_hash_calls'];
+		return \hash_init( $algo, $flags, $key, $options );
+	}
 	function hash_file( string $algorithm, string $filename, bool $binary = false ): string|false {
 		++$GLOBALS['ran_owned_store_hash_calls'];
 		return \hash_file( $algorithm, $filename, $binary );
@@ -76,16 +88,29 @@ namespace RAN\WPReleaseUpdater\V1\WordPress {
 namespace {
 	$ran_facts = json_decode( (string) file_get_contents( $argv[1] ), true, 64, JSON_THROW_ON_ERROR );
 	require $ran_facts['bootstrap'];
-	$GLOBALS['ran_owned_store_hash_calls'] = 0;
-	$ran_store                             = new \RAN\WPReleaseUpdater\V1\WordPress\OwnedArchiveStore();
-	$ran_identity                          = $ran_store->identity(
+	$GLOBALS['ran_owned_store_mkdir_calls'] = 0;
+	$GLOBALS['ran_owned_store_fopen_calls'] = 0;
+	$GLOBALS['ran_owned_store_hash_calls']  = 0;
+	$ran_allocate_calls                     = 0;
+	$ran_store                              = new \RAN\WPReleaseUpdater\V1\WordPress\OwnedArchiveStore();
+	$ran_descriptor                         = \RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor::rehydrate( $ran_facts['descriptor'] );
+	$ran_identity                           = $ran_store->stat_identity( $ran_facts['path'], $ran_descriptor );
+	$ran_copy                               = $ran_store->copy(
 		$ran_facts['path'],
-		\RAN\WPReleaseUpdater\V1\Contract\IdentityDescriptor::rehydrate( $ran_facts['descriptor'] )
+		$ran_descriptor,
+		static function ( string $path, string $directory ) use ( &$ran_allocate_calls ): void {
+			unset( $path, $directory );
+			++$ran_allocate_calls;
+		}
 	);
 	echo json_encode(
 		array(
-			'hash_calls' => $GLOBALS['ran_owned_store_hash_calls'],
-			'identity'   => $ran_identity,
+			'allocate_calls' => $ran_allocate_calls,
+			'copy'           => $ran_copy,
+			'fopen_calls'    => $GLOBALS['ran_owned_store_fopen_calls'],
+			'hash_calls'     => $GLOBALS['ran_owned_store_hash_calls'],
+			'identity'       => $ran_identity,
+			'mkdir_calls'    => $GLOBALS['ran_owned_store_mkdir_calls'],
 		),
 		JSON_THROW_ON_ERROR
 	);
@@ -103,6 +128,10 @@ PHP;
 			$result = json_decode( implode( "\n", $output ), true, 64, JSON_THROW_ON_ERROR );
 			self::assertIsArray( $result );
 			self::assertNull( $result['identity'] );
+			self::assertNull( $result['copy'] );
+			self::assertSame( 0, $result['allocate_calls'] );
+			self::assertSame( 0, $result['mkdir_calls'] );
+			self::assertSame( 0, $result['fopen_calls'] );
 			self::assertSame( 0, $result['hash_calls'] );
 		} finally {
 			foreach ( array( $link_path, $target, $script, $facts_file ) as $cleanup_path ) {

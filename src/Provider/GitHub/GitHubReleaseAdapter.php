@@ -24,7 +24,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 	 * @internal Selected-runtime GitHub declaration composition.
 	 * @param array<string,mixed> $declaration
 	 * @param array<string,mixed> $resolved
-	 * @param \Closure():array{code:string,headers?:array<string,string>} $header_loader
+	 * @param \Closure():array{code:string,headers?:array<string,string>,raw_update_uri?:string} $header_loader
 	 * @return array{native:?NativePackageUpdater,code:string}
 	 */
 	public static function compose_from_declaration(
@@ -143,7 +143,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 	 * @param array<string, mixed> $configuration
 	 * @param array<string, mixed> $target_binding
 	 * @param array<string, mixed> $archive_policy
-	 * @param (callable():array{code:string,headers?:array<string,string>})|null $header_loader
+	 * @param (callable():array{code:string,headers?:array<string,string>,raw_update_uri?:string})|null $header_loader
 	 */
 	public static function register_from_configuration(
 		array $configuration,
