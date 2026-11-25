@@ -224,10 +224,11 @@ $ran_wp_release_updater_selector_verifies_entrypoint = static function ( string 
 		return false;
 	}
 	try {
-		$selector_class  = new ReflectionClass( \RAN\WPReleaseUpdater\V1\Runtime\RuntimeCopySelector::class );
-		$selector_source = $selector_class->getFileName();
-		$selector_source = is_string( $selector_source ) ? realpath( $selector_source ) : false;
-		$expected_source = realpath( $root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RuntimeCopySelector.php' );
+		$selector_class      = new ReflectionClass( \RAN\WPReleaseUpdater\V1\Runtime\RuntimeCopySelector::class );
+		$selector_source     = $selector_class->getFileName();
+		$selector_source     = is_string( $selector_source ) ? realpath( $selector_source ) : false;
+		$expected_source     = realpath( $root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Runtime' . DIRECTORY_SEPARATOR . 'RuntimeCopySelector.php' );
+		$full_cache_constant = $selector_class->getReflectionConstant( 'FULL_REALPATH_CACHE_ENTRYPOINT_VERIFICATION' );
 	} catch ( Throwable ) {
 		return false;
 	}
@@ -236,7 +237,10 @@ $ran_wp_release_updater_selector_verifies_entrypoint = static function ( string 
 		&& is_string( $expected_source )
 		&& $selector_source === $expected_source
 		&& $selector_class->hasMethod( 'verify_selected_entrypoint' )
-		&& $selector_class->getMethod( 'verify_selected_entrypoint' )->isPublic();
+		&& $selector_class->getMethod( 'verify_selected_entrypoint' )->isPublic()
+		&& false !== $full_cache_constant
+		&& $full_cache_constant->isPublic()
+		&& true === $full_cache_constant->getValue();
 };
 $ran_wp_release_updater_broker_compatible            = is_array( $ran_wp_release_updater_broker_provenance )
 	&& $ran_wp_release_updater_broker instanceof RequestBroker

@@ -13,6 +13,8 @@ use RuntimeException;
  */
 final class RuntimeCopySelector {
 
+	public const FULL_REALPATH_CACHE_ENTRYPOINT_VERIFICATION = true;
+
 	private const COPY_KEYS = array(
 		'package_revision',
 		'package_version',
