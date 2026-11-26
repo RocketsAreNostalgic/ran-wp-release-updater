@@ -1,6 +1,6 @@
 {
     "package_revision": "e9c495f06af17c4abb77f1828abc73dd8ae59a48ccf28527ac05aa893371ec1b",
-    "package_version": "1.0.0-beta.23",
+    "package_version": "1.0.0-beta.24",
     "php_floor": "8.2.0",
     "runtime_file": "runtime.php",
     "runtime_protocol": 11,
