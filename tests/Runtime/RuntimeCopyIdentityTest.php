@@ -809,7 +809,7 @@ PHP,
 		$source = $this->metadata_discovery_probe( 'write', $type, 'newer', 'newer', $from );
 		self::assertIsArray( $source['offer'] );
 		self::assertIsArray( $source['stored'] );
-		$metadata = 'valid' === $from;
+		$metadata = 'default' !== $from;
 		self::assertSame( ! $metadata, $source['ordinary_entry'] );
 		self::assertSame( ! $metadata, $source['ordinary_checked'] );
 		self::assertSame( $metadata, $source['advisory_entry'] );
@@ -839,6 +839,8 @@ PHP,
 
 	/** @return iterable<string,array{string,string,string,string,string,bool,bool}> */
 	public static function cached_discovery_cases(): iterable {
+		yield 'unchanged child theme on first cached read' => array( 'theme', 'child_theme', 'newer', 'newer', 'child_theme', true, true );
+		yield 'standalone theme gains a parent before first cached read' => array( 'theme', 'valid', 'newer', 'newer', 'became_child', false, false );
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
 			yield "$type metadata to verified default" => array( $type, 'valid', 'newer', 'newer', 'default', false, false );
 			yield "$type metadata to old broker fallback" => array( $type, 'valid', 'older', 'newer', 'valid', false, false );
@@ -922,7 +924,8 @@ mkdir($directory, 0700, true);
 $main = $directory . '/' . $header;
 $uri = 'https://github.com/acme/example';
 $name_header = $is_plugin ? 'Plugin Name' : 'Theme Name';
-$installed = ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: 1.0.0\nRequires PHP: 8.2\nRequires at least: 6.6\nUpdate URI: $uri\n*/\n";
+$template = in_array($data['scenario'], array('child_theme', 'became_child'), true) ? "Template: parent-theme\n" : '';
+$installed = ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: 1.0.0\n{$template}Requires PHP: 8.2\nRequires at least: 6.6\nUpdate URI: $uri\n*/\n";
 file_put_contents($main, $installed);
 $option_registrar = $registrars['newer'];
 $handle = 'default' === $data['scenario']
@@ -964,7 +967,8 @@ $zip = new ZipArchive();
 if (true !== $zip->open($archive, ZipArchive::CREATE | ZipArchive::OVERWRITE)) {
 	throw new RuntimeException('Could not create the release archive fixture.');
 }
-$zip->addFromString('example/' . $header, ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: 2.0.0\n$requirements\nUpdate URI: $uri\n*/\n");
+$archive_template = 'child_theme' === $data['scenario'] ? $template : '';
+$zip->addFromString('example/' . $header, ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: 2.0.0\n{$archive_template}$requirements\nUpdate URI: $uri\n*/\n");
 $zip->setMtimeName('example/' . $header, 1700000000);
 $zip->close();
 $bytes = file_get_contents($archive);

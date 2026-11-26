@@ -495,9 +495,12 @@ final class NativePackageUpdater {
 		if ( 'plugin' === $this->target_type ? ! $entry instanceof \stdClass : ! is_array( $entry ) ) {
 			return $transient;
 		}
-		$package    = $this->entry_package( $entry );
-		$descriptor = is_string( $package ) && str_starts_with( $package, self::METADATA_TOKEN_PREFIX ) ? $this->parse_token( $package ) : null;
-		if ( null === $descriptor || ! $this->ensure_headers_loaded() || $this->installed_version() !== $cached['checked'] || ! $this->newer_than_installed( $descriptor ) || ! $this->descriptor_admitted( $descriptor ) ) {
+		$package = $this->entry_package( $entry );
+		if ( ! is_string( $package ) || ! str_starts_with( $package, self::METADATA_TOKEN_PREFIX ) || ! $this->ensure_headers_loaded() ) {
+			return $transient;
+		}
+		$descriptor = $this->parse_token( $package );
+		if ( null === $descriptor || $this->installed_version() !== $cached['checked'] || ! $this->newer_than_installed( $descriptor ) || ! $this->descriptor_admitted( $descriptor ) ) {
 			return $transient;
 		}
 		// Leave the raw cache untouched. A later save can repack this view or drop a removed offer.
