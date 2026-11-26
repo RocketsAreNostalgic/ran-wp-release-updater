@@ -29,6 +29,7 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
 final class NativePackageUpdater {
 	private const VERIFIED_TOKEN_PREFIX = 'ran-wp-release-updater:v1:';
 	private const METADATA_TOKEN_PREFIX = 'ran-wp-release-updater:metadata:v1:';
+	private const METADATA_CACHE        = 'ran_wp_release_updater_metadata_offers';
 	private const MAX_DIAGNOSTICS       = 16;
 	private const CONFIGURATION_KEYS    = array( 'headers', 'installed_directory', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
 	private const HEADER_KEYS           = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
@@ -324,7 +325,11 @@ final class NativePackageUpdater {
 		add_filter( $prefix . $canonical_key, array( $this, 'filter_update' ), 10, 4 );
 		$this->register_raw_host_hook();
 		add_filter( 'plugin' === $this->target_type ? 'plugins_update_check_locales' : 'themes_update_check_locales', array( $this, 'prepare_update_check_routing' ), 10, 1 );
-		add_filter( 'site_transient_update_' . ( 'plugin' === $this->target_type ? 'plugins' : 'themes' ), array( $this, 'filter_cached_update' ), 10, 1 );
+		$transient = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
+		add_filter( 'site_transient_' . $transient, array( $this, 'filter_cached_update' ), 10, 1 );
+		if ( $this->metadata_only_discovery ) {
+			add_filter( 'pre_set_site_transient_' . $transient, array( $this, 'filter_store_update' ), PHP_INT_MAX, 1 );
+		}
 		if ( 'plugin' === $this->target_type ) {
 			add_filter( 'plugins_api', array( $this, 'filter_plugin_information' ), 10, 3 );
 		}
@@ -388,7 +393,7 @@ final class NativePackageUpdater {
 			}
 		}
 		if ( ! is_object( $transient ) || ! is_array( $transient->response ?? null ) || ! array_key_exists( $this->installed_identity, $transient->response ) ) {
-			return $transient;
+			return $this->project_metadata_offer( $transient );
 		}
 		$package = $this->cached_package( $transient );
 		if ( ! $this->metadata_only_discovery && is_string( $package ) && str_starts_with( $package, self::METADATA_TOKEN_PREFIX ) ) {
@@ -417,16 +422,26 @@ final class NativePackageUpdater {
 		return $transient;
 	}
 
-	/** Removes any release authorised in this request from the update check before WordPress saves it, so no offer outlives the request. */
+	/** Keep metadata advisories out of the native cache and request-authorised releases out of storage. */
 	public function filter_store_update( mixed $transient ): mixed {
-		$package = $this->cached_package( $transient );
+		if ( ! is_object( $transient ) || ! is_array( $transient->response ?? null ) ) {
+			return $transient;
+		}
+		$entry   = $this->cached_entry( $transient );
+		$package = $this->entry_package( $entry );
+		if ( is_string( $package ) && str_starts_with( $package, self::METADATA_TOKEN_PREFIX ) ) {
+			unset( $transient->response[ $this->installed_identity ] );
+			return $this->store_metadata_offer( $transient, $entry, $package );
+		}
 		if ( is_string( $package ) && str_starts_with( $package, self::EXACT_TOKEN_PREFIX ) ) {
 			unset( $transient->response[ $this->installed_identity ] );
 			return $transient;
 		}
-		$descriptor = array() === $this->authorized_fingerprints ? null : $this->cached_descriptor( $transient );
-		if ( is_object( $transient ) && is_array( $transient->response ?? null ) && null !== $descriptor && isset( $this->authorized_fingerprints[ $descriptor->fingerprint_value() ] ) ) {
+		$descriptor = array() !== $this->authorized_fingerprints && is_string( $package ) ? $this->parse_token( $package ) : null;
+		if ( null !== $descriptor && isset( $this->authorized_fingerprints[ $descriptor->fingerprint_value() ] ) ) {
 			unset( $transient->response[ $this->installed_identity ] );
+		} elseif ( $transient instanceof \stdClass && null !== $entry && is_array( $transient->{self::METADATA_CACHE} ?? null ) ) {
+			unset( $transient->{self::METADATA_CACHE}[ $this->installed_identity ] );
 		}
 		return $transient;
 	}
@@ -437,8 +452,65 @@ final class NativePackageUpdater {
 	}
 
 	private function cached_package( mixed $transient ): mixed {
-		$entry = is_object( $transient ) && is_array( $transient->response ?? null ) ? ( $transient->response[ $this->installed_identity ] ?? null ) : null;
+		return $this->entry_package( $this->cached_entry( $transient ) );
+	}
+
+	private function cached_entry( mixed $transient ): mixed {
+		return is_object( $transient ) && is_array( $transient->response ?? null ) ? ( $transient->response[ $this->installed_identity ] ?? null ) : null;
+	}
+
+	private function entry_package( mixed $entry ): mixed {
 		return is_object( $entry ) ? ( $entry->package ?? null ) : ( is_array( $entry ) ? ( $entry['package'] ?? null ) : null );
+	}
+
+	private function store_metadata_offer( object $transient, mixed $entry, string $package ): object {
+		$checked = is_array( $transient->checked ?? null ) ? ( $transient->checked[ $this->installed_identity ] ?? null ) : null;
+		if ( is_array( $transient->checked ?? null ) ) {
+			unset( $transient->checked[ $this->installed_identity ] );
+		}
+		// Cold plugin checks on the WordPress floor can omit checked entirely.
+		$checked    = is_string( $checked ) ? $checked : $this->installed_version();
+		$descriptor = $this->parse_token( $package );
+		if ( $transient instanceof \stdClass && '' !== $checked && null !== $descriptor && $this->live() && ! $this->policy_blocked() && ! isset( $this->authorized_fingerprints[ $descriptor->fingerprint_value() ] ) ) {
+			$advisories                              = $transient->{self::METADATA_CACHE} ?? null;
+			$advisories                              = is_array( $advisories ) ? $advisories : array();
+			$advisories[ $this->installed_identity ] = array(
+				'offer'   => $entry,
+				'checked' => $checked,
+			);
+			$transient->{self::METADATA_CACHE}       = $advisories;
+		}
+		return $transient;
+	}
+
+	private function project_metadata_offer( mixed $transient ): mixed {
+		if ( ! $this->metadata_only_discovery || ! $transient instanceof \stdClass || ! is_array( $transient->{self::METADATA_CACHE} ?? null ) ) {
+			return $transient;
+		}
+		$cached = $transient->{self::METADATA_CACHE}[ $this->installed_identity ] ?? null;
+		if ( ! is_array( $cached ) || ! is_string( $cached['checked'] ?? null ) || ! $this->live() || $this->policy_blocked() ) {
+			return $transient;
+		}
+		$entry = $cached['offer'] ?? null;
+		if ( 'plugin' === $this->target_type ? ! $entry instanceof \stdClass : ! is_array( $entry ) ) {
+			return $transient;
+		}
+		$package    = $this->entry_package( $entry );
+		$descriptor = is_string( $package ) && str_starts_with( $package, self::METADATA_TOKEN_PREFIX ) ? $this->parse_token( $package ) : null;
+		if ( null === $descriptor || ! $this->ensure_headers_loaded() || $this->installed_version() !== $cached['checked'] || ! $this->newer_than_installed( $descriptor ) || ! $this->descriptor_admitted( $descriptor ) ) {
+			return $transient;
+		}
+		// Leave the raw cache untouched. A later save can repack this view or drop a removed offer.
+		$view                                        = clone $transient;
+		$view->response                              = is_array( $view->response ?? null ) ? $view->response : array();
+		$view->checked                               = is_array( $view->checked ?? null ) ? $view->checked : array();
+		$view->response[ $this->installed_identity ] = $entry instanceof \stdClass ? clone $entry : $entry;
+		$view->checked[ $this->installed_identity ]  = $cached['checked'];
+		unset( $view->{self::METADATA_CACHE}[ $this->installed_identity ] );
+		if ( array() === $view->{self::METADATA_CACHE} ) {
+			unset( $view->{self::METADATA_CACHE} );
+		}
+		return $view;
 	}
 
 	/**

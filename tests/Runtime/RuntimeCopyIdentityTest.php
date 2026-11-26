@@ -807,13 +807,29 @@ PHP,
 	#[DataProvider( 'cached_discovery_cases' )]
 	public function test_cached_discovery_respects_the_next_requests_effective_mode( string $type, string $from, string $first, string $winner, string $next, bool $visible, bool $allowed ): void {
 		$source = $this->metadata_discovery_probe( 'write', $type, 'newer', 'newer', $from );
-		$offer  = $source['offer'];
-		self::assertIsArray( $offer );
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Pass the prior request's ordinary WordPress update entry across process isolation.
-		$cached = $this->metadata_discovery_probe( 'read', $type, $first, $winner, $next, json_encode( $offer, JSON_THROW_ON_ERROR ) );
+		self::assertIsArray( $source['offer'] );
+		self::assertIsArray( $source['stored'] );
+		$metadata = 'valid' === $from;
+		self::assertSame( ! $metadata, $source['ordinary_entry'] );
+		self::assertSame( ! $metadata, $source['ordinary_checked'] );
+		self::assertSame( $metadata, $source['advisory_entry'] );
+		self::assertTrue( $source['sibling_advisory'] );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Transfer the persisted transient and stale package between isolated requests.
+		$stored = json_encode(
+			array(
+				'offer'  => $source['offer'],
+				'stored' => $source['stored'],
+			),
+			JSON_THROW_ON_ERROR
+		);
+		$cached = $this->metadata_discovery_probe( 'read', $type, $first, $winner, $next, $stored );
 		self::assertSame( $visible, $cached['visible'] );
 		self::assertSame( $visible, $cached['checked'] );
 		self::assertTrue( $cached['other_preserved'] );
+		self::assertTrue( $cached['raw_unchanged'] );
+		self::assertTrue( $cached['repeats_without_duplication'] );
+		self::assertTrue( $cached['removed_advisory_stays_removed'] );
+		self::assertTrue( $cached['reads_without_provider_work'] );
 		self::assertSame( $allowed, $cached['automatic'] );
 		self::assertSame( $allowed, $cached['handoff'] );
 		self::assertSame( $allowed ? 1 : 0, $cached['install_zips'] );
@@ -826,7 +842,7 @@ PHP,
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
 			yield "$type metadata to verified default" => array( $type, 'valid', 'newer', 'newer', 'default', false, false );
 			yield "$type metadata to old broker fallback" => array( $type, 'valid', 'older', 'newer', 'valid', false, false );
-			yield "$type metadata to old runtime fallback" => array( $type, 'valid', 'newer', 'older', 'valid', true, false );
+			yield "$type metadata to old runtime fallback" => array( $type, 'valid', 'newer', 'older', 'valid', false, false );
 			yield "$type metadata to metadata" => array( $type, 'valid', 'newer', 'newer', 'valid', true, true );
 			yield "$type verified to metadata" => array( $type, 'default', 'newer', 'newer', 'valid', true, true );
 			yield "$type verified to verified" => array( $type, 'default', 'newer', 'newer', 'default', true, true );
@@ -912,8 +928,19 @@ $option_registrar = $registrars['newer'];
 $handle = 'default' === $data['scenario']
 	? $registrars[$data['load_order'][0]]->$type('github', $main, 'acme/example', '42', update_policy: 'automatic')
 	: $option_registrar->$type('github', $main, 'acme/example', '42', update_policy: 'automatic', metadata_only_discovery: true);
-if (!$handle->register()) {
-	throw new RuntimeException('The public registration was rejected.');
+$registrations = array($handle);
+$sibling = $is_plugin ? 'advisory/advisory.php' : 'advisory';
+if ($data['cache_request']) {
+	$sibling_directory = $data['installed'] . '/advisory';
+	$sibling_file = $sibling_directory . ($is_plugin ? '/advisory.php' : '/style.css');
+	mkdir($sibling_directory, 0700, true);
+	file_put_contents($sibling_file, $installed);
+	$registrations[] = $option_registrar->$type('github', $sibling_file, 'acme/example', '42', update_policy: 'automatic', metadata_only_discovery: true);
+}
+foreach ($is_plugin ? $registrations : array_reverse($registrations) as $registration) {
+	if (!$registration->register()) {
+		throw new RuntimeException('The public registration was rejected.');
+	}
 }
 
 $legacy_type = $is_plugin ? 'theme' : 'plugin';
@@ -959,23 +986,52 @@ $GLOBALS['ran_wp_release_updater_metadata_fixture'] = array(
 );
 $fixture = &$GLOBALS['ran_wp_release_updater_metadata_fixture'];
 $update_hook = $is_plugin ? 'update_plugins_github.com' : 'update_themes_github.com';
+$transient_name = $is_plugin ? 'update_plugins' : 'update_themes';
+$cache_key = 'ran_wp_release_updater_metadata_offers';
+$other = $is_plugin ? 'foreign/foreign.php' : 'foreign';
 if ('' !== $data['cached']) {
 	$cached = json_decode($data['cached'], true, 32, JSON_THROW_ON_ERROR);
-	$previous = $is_plugin ? (object) $cached : $cached;
-	$other = $is_plugin ? 'foreign/foreign.php' : 'foreign';
-	$transient = (object) array('response' => array($identity => $previous, $other => 'foreign'), 'checked' => array($identity => '1.0.0', $other => '1.0.0'));
-	$visible = apply_filters('site_transient_update_' . ($is_plugin ? 'plugins' : 'themes'), $transient);
-	$automatic = apply_filters('auto_update_' . $type, true, (object) $cached);
-	$result = apply_filters('upgrader_pre_download', false, $cached['package'], null, array('type' => $type, 'action' => 'update', $type => $identity));
+	$previous = $cached['offer'];
+	$transient = (object) $cached['stored'];
+	if ($is_plugin && isset($transient->response[$identity])) {
+		$transient->response[$identity] = (object) $transient->response[$identity];
+	}
+	if ($is_plugin) {
+		foreach (array($identity, $sibling) as $key) {
+			if (isset($transient->{$cache_key}[$key])) {
+				$transient->{$cache_key}[$key]['offer'] = (object) $transient->{$cache_key}[$key]['offer'];
+			}
+		}
+	}
+	$stored = json_encode($transient, JSON_THROW_ON_ERROR);
+	$visible = apply_filters('site_transient_' . $transient_name, $transient);
+	$again = apply_filters('site_transient_' . $transient_name, $transient);
+	$visible_entry = isset($visible->response[$identity]);
+	$visible_checked = isset($visible->checked[$identity]);
+	$other_preserved = 'foreign' === $visible->response[$other] && '1.0.0' === $visible->checked[$other];
+	$raw_unchanged = $stored === json_encode($transient, JSON_THROW_ON_ERROR);
+	$repacked = apply_filters('pre_set_site_transient_' . $transient_name, $visible);
+	$repacked_again = apply_filters('pre_set_site_transient_' . $transient_name, $again);
+	$removed = apply_filters('site_transient_' . $transient_name, $transient);
+	$projected = $visible_entry && isset($transient->{$cache_key}[$identity]);
+	unset($removed->response[$identity], $removed->checked[$identity]);
+	$removed = apply_filters('pre_set_site_transient_' . $transient_name, $removed);
+	$reads_without_provider_work = 0 === $fixture['provider_requests'];
+	$automatic = apply_filters('auto_update_' . $type, true, (object) $previous);
+	$result = apply_filters('upgrader_pre_download', false, $previous['package'], null, array('type' => $type, 'action' => 'update', $type => $identity));
 	$handoff = is_string($result) && hash_file('sha256', $result) === hash('sha256', $bytes);
-	$install_zips = $fixture['zip_requests'];
 	echo json_encode(array(
-		'visible' => isset($visible->response[$identity]),
-		'checked' => isset($visible->checked[$identity]),
-		'other_preserved' => 'foreign' === $visible->response[$other] && '1.0.0' === $visible->checked[$other],
+		'visible' => $visible_entry,
+		'checked' => $visible_checked,
+		'other_preserved' => $other_preserved && isset($repacked->{$cache_key}[$sibling]),
+		'raw_unchanged' => $raw_unchanged,
+		'repeats_without_duplication' => $repacked == $repacked_again
+			&& (!$projected || (!isset($repacked->response[$identity]) && !isset($repacked->checked[$identity]) && isset($repacked->{$cache_key}[$identity]))),
+		'removed_advisory_stays_removed' => !$projected || !isset($removed->{$cache_key}[$identity]),
+		'reads_without_provider_work' => $reads_without_provider_work,
 		'automatic' => $automatic,
 		'handoff' => $handoff,
-		'install_zips' => $install_zips,
+		'install_zips' => $fixture['zip_requests'],
 		'provider_requests' => $fixture['provider_requests'],
 		'failure' => is_wp_error($result) ? $result->get_error_code() : null,
 	), JSON_THROW_ON_ERROR);
@@ -983,6 +1039,20 @@ if ('' !== $data['cached']) {
 	return;
 }
 $offer = apply_filters($update_hook, false, array('Version' => '1.0.0', 'UpdateURI' => $uri), $identity, array());
+$data_at_check = array('Version' => '1.0.0', 'UpdateURI' => $uri);
+$raw = (object) array(
+	'response' => array($identity => $is_plugin ? (object) $offer : $offer, $other => 'foreign'),
+	'checked' => array($identity => '1.0.0', $other => '1.0.0'),
+);
+if ($data['cache_request']) {
+	$sibling_offer = apply_filters($update_hook, false, $data_at_check, $sibling, array());
+	if (!is_array($sibling_offer)) {
+		throw new RuntimeException('The sibling did not offer its release.');
+	}
+	$raw->response[$sibling] = $is_plugin ? (object) $sibling_offer : $sibling_offer;
+	$raw->checked[$sibling] = '1.0.0';
+}
+$stored = apply_filters('pre_set_site_transient_' . $transient_name, $raw);
 $status = $handle->status();
 $check_zips = $fixture['zip_requests'];
 $automatic = apply_filters('auto_update_' . $type, null, (object) $offer);
@@ -1016,6 +1086,11 @@ echo json_encode(array(
 	'registered' => $legacy_registered,
 	'legacy' => $legacy['state'],
 	'offer' => $offer,
+	'stored' => $stored,
+	'ordinary_entry' => isset($stored->response[$identity]),
+	'ordinary_checked' => isset($stored->checked[$identity]),
+	'advisory_entry' => isset($stored->{$cache_key}[$identity]),
+	'sibling_advisory' => isset($stored->{$cache_key}[$sibling]) && !isset($stored->response[$sibling]) && !isset($stored->checked[$sibling]),
 	'status' => $status,
 	'validation' => $read_only['candidate_validation_code'],
 	'check_zips' => $check_zips,
@@ -1033,15 +1108,16 @@ echo json_encode(array(
 ), JSON_THROW_ON_ERROR);
 PHP,
 			array(
-				'older'      => $older,
-				'newer'      => $newer,
-				'load_order' => array( $first, 'older' === $first ? 'newer' : 'older' ),
-				'type'       => $type,
-				'scenario'   => $scenario,
-				'installed'  => $this->parent . '/' . $request,
-				'cached'     => $cached,
-				'hooks'      => dirname( __DIR__ ) . '/Support/WordPressHookFixture.php',
-				'database'   => dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php',
+				'older'         => $older,
+				'newer'         => $newer,
+				'load_order'    => array( $first, 'older' === $first ? 'newer' : 'older' ),
+				'type'          => $type,
+				'scenario'      => $scenario,
+				'installed'     => $this->parent . '/' . $request,
+				'cached'        => $cached,
+				'cache_request' => 'probe' !== $request,
+				'hooks'         => dirname( __DIR__ ) . '/Support/WordPressHookFixture.php',
+				'database'      => dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php',
 			),
 			load_extensions: true
 		);
@@ -1516,7 +1592,7 @@ PHP,
 		}
 	}
 
-	/** @param array<string, string|list<string>> $data
+	/** @param array<string, bool|string|list<string>> $data
 	 * @return array<string, mixed>
 	 */
 	private function probe( string $body, array $data, bool $load_extensions = false ): array {

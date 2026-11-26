@@ -228,14 +228,15 @@ If an older bundled broker or selected runtime cannot honor the option, the
 registration uses verified discovery and its target handle reports
 `metadata_only_discovery_unavailable` in `diagnostics()`.
 
-A current runtime using verified discovery suppresses a prior metadata-only
-offer from the WordPress update transient and makes that target eligible for a
-fresh check. It also rejects the stale offer at automatic-update and download
-admission. Earlier runtimes reject the metadata-only download token but may
-show the cached entry until a fresh check replaces it. Call `refresh()` when
-rolling back to a runtime that predates this option and an immediate cache
-refresh is required. Previously verified offers can still be used under either
-discovery mode, subject to the normal admission and fresh install checks.
+WordPress stores the advisory and its checked version for this target in the
+existing update transient. A current opted-in runtime projects them into the
+native update response on read. A verified registration or an older elected
+runtime sees neither the advisory nor its checked version, so the next native
+check can verify the ZIP before offering it. Those runtimes also reject a stale
+metadata-only token passed directly to automatic-update or download admission.
+Previously verified offers remain usable under either discovery mode, subject
+to normal admission and fresh install checks. WordPress's usual transient
+freshness and `refresh()` behavior apply.
 
 ### Checking without offering
 
