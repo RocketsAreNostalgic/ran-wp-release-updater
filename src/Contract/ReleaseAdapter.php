@@ -21,6 +21,7 @@ interface ReleaseAdapter {
 	 * @return array<string,mixed>
 	 */
 	public function list_releases( array $conditional = array() ): array;
+	/** Resolve and bind exact release and asset metadata without acquiring the archive. */
 	public function inspect( string $release_identity, ?string $expected_tag = null ): IdentityDescriptor;
 	public function acquire( IdentityDescriptor $descriptor ): TemporaryArtifact;
 }

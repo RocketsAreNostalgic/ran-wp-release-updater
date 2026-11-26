@@ -134,6 +134,7 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 				$declaration['native_mutation_complete'],
 				$declaration['descriptor_admission'],
 				$header_loader,
+				(bool) ( $declaration['metadata_only_discovery'] ?? false ),
 			),
 			'code'   => 'target_composition_failed',
 		);
@@ -158,14 +159,15 @@ final class GitHubReleaseAdapter implements ReleaseAdapter {
 		?callable $native_mutation_begin = null,
 		?callable $native_mutation_complete = null,
 		?callable $descriptor_admission = null,
-		?callable $header_loader = null
+		?callable $header_loader = null,
+		bool $metadata_only_discovery = false
 	): ?NativePackageUpdater {
 		try {
 			$adapter = new self( $target_binding, $credentials, $operation_guard, null === $selected_runtime_state ? null : static fn(): ?string => $selected_runtime_state->liveness_code() );
 		} catch ( InvalidArgumentException ) {
 			return null;
 		}
-		$updater = NativePackageUpdater::from_configuration( $configuration, $target_binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse, operation_guard: $operation_guard, native_mutation_begin: $native_mutation_begin, native_mutation_complete: $native_mutation_complete, descriptor_admission: $descriptor_admission, header_loader: $header_loader );
+		$updater = NativePackageUpdater::from_configuration( $configuration, $target_binding, $adapter, $wpdb, archive_policy: $archive_policy, validator: $validator, selected_runtime_state: $selected_runtime_state, native_discovery_reuse: $native_discovery_reuse, operation_guard: $operation_guard, native_mutation_begin: $native_mutation_begin, native_mutation_complete: $native_mutation_complete, descriptor_admission: $descriptor_admission, header_loader: $header_loader, metadata_only_discovery: $metadata_only_discovery );
 		if ( $updater instanceof NativePackageUpdater ) {
 			$updater->register();
 		}

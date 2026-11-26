@@ -410,14 +410,14 @@ return new class( $ran_wp_release_updater_broker ) {
 	public function __construct( private object $broker ) {
 	}
 
-	public function plugin( string $provider, string $plugin_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $allow_working_copy = false ): object {
+	public function plugin( string $provider, string $plugin_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $allow_working_copy = false, bool $metadata_only_discovery = false ): object {
 		unset( $allow_working_copy );
-		return $this->target( 'plugin', $plugin_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
+		return $this->target( 'plugin', $plugin_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes, $metadata_only_discovery );
 	}
 
-	public function theme( string $provider, string $stylesheet_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $allow_working_copy = false ): object {
+	public function theme( string $provider, string $stylesheet_file, string $repository, string $repository_id, string $channel = 'stable', string $update_policy = 'manual', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $allow_working_copy = false, bool $metadata_only_discovery = false ): object {
 		unset( $allow_working_copy );
-		return $this->target( 'theme', $stylesheet_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes );
+		return $this->target( 'theme', $stylesheet_file, $provider, $repository, $repository_id, $channel, $update_policy, $credentials, $maximum_artifact_bytes, $metadata_only_discovery );
 	}
 
 	public function releases( string $provider, string $package_type, string $repository, string $repository_id, string $channel = 'stable', ?callable $credentials = null, mixed $maximum_artifact_bytes = 52428800, bool $rejection_reasons = false ): object {
@@ -834,7 +834,7 @@ return new class( $ran_wp_release_updater_broker ) {
 		return $this->broker->diagnostics();
 	}
 
-	private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes ): object {
+	private function target( string $type, string $file, string $provider, string $repository, string $repository_id, string $channel, string $policy, ?callable $credentials, mixed $maximum_artifact_bytes, bool $metadata_only_discovery ): object {
 		$declaration = array(
 			'target_type'              => $type,
 			'installed_file'           => $file,
@@ -850,14 +850,14 @@ return new class( $ran_wp_release_updater_broker ) {
 			'native_mutation_complete' => $this->native_mutation_complete,
 			'descriptor_admission'     => $this->descriptor_admission,
 		);
-		return new class( $this->broker, $declaration ) {
+		return new class( $this->broker, $declaration, $metadata_only_discovery ) {
 			private int $submission_id = 0;
 			private bool $submitted    = false;
 			private bool $accepted     = false;
 			private ?string $code      = null;
 
 			/** @param array<string,mixed> $declaration */
-			public function __construct( private object $broker, private array $declaration ) {
+			public function __construct( private object $broker, private array $declaration, private bool $metadata_only_discovery ) {
 			}
 
 			public function register(): bool {
@@ -874,7 +874,11 @@ return new class( $ran_wp_release_updater_broker ) {
 				if ( ! is_callable( array( $this->broker, 'register_target' ) ) ) {
 					throw new RuntimeException( 'Invalid broker handle.' );
 				}
-				$result              = $this->broker->register_target( $this->declaration );
+				$declaration = $this->declaration;
+				if ( $this->metadata_only_discovery && defined( $this->broker::class . '::ACCEPTS_METADATA_ONLY_DISCOVERY' ) ) {
+					$declaration['metadata_only_discovery'] = true;
+				}
+				$result              = $this->broker->register_target( $declaration );
 				$this->submission_id = $result['submission_id'];
 				$this->accepted      = $result['accepted'];
 				$this->code          = $result['code'];
@@ -913,7 +917,13 @@ return new class( $ran_wp_release_updater_broker ) {
 					if ( ! is_callable( array( $this->broker, 'target_diagnostics' ) ) ) {
 						throw new RuntimeException( 'Invalid broker handle.' );
 					}
-					return $this->broker->target_diagnostics( $this->submission_id );
+					$result = $this->broker->target_diagnostics( $this->submission_id );
+					if ( $this->metadata_only_discovery && 'active' === $result['state']
+						&& ! defined( $this->broker::class . '::ACCEPTS_METADATA_ONLY_DISCOVERY' ) ) {
+						$result['diagnostics']   = array_slice( $result['diagnostics'], -15 );
+						$result['diagnostics'][] = array( 'code' => 'metadata_only_discovery_unavailable' );
+					}
+					return $result;
 				}
 				if ( $this->submitted ) {
 					return array(

@@ -210,6 +210,24 @@ $release_updater->refresh();
 - A refresh is not proof that the provider was contacted. The native filter still returns early for a `disabled` or `forced-off` policy, an unavailable filesystem, or when discovery is not admitted; use the read-only check below to learn the newest release without offering it.
 - `status()['native']['last_check']` is stamped as soon as the filter runs, before those early exits, so it does not show what a check did. Read `status()['native']` (`failure_code`, `candidate_validation_code`, the `offered_*` fields) and `diagnostics()` instead.
 
+### Metadata-only discovery
+
+Pass `metadata_only_discovery: true` to the `plugin()` or `theme()` method of
+the registrar returned by this package’s `bootstrap.php`. Omit it to keep
+verifying the candidate archive before offering an update.
+
+For an opted-in registration, WordPress update checks and the read-only release
+check use provider metadata to bind the exact release and asset. These checks
+make no ZIP requests. GitHub release metadata has no WordPress or PHP
+requirements, so the offer leaves both fields empty until archive inspection
+supplies them. Explicit selected-release inspection still acquires and validates
+the ZIP. Every install rechecks the offered identity and validates the freshly
+downloaded archive before WordPress can replace installed files.
+
+If an older bundled broker or selected runtime cannot honor the option, the
+registration uses verified discovery and its target handle reports
+`metadata_only_discovery_unavailable` in `diagnostics()`.
+
 ### Checking without offering
 
 `refresh()` followed by a WordPress update check is an offer path: a `disabled`

@@ -18,6 +18,8 @@ require_once __DIR__ . '/RequestProtocolValidator.php';
  */
 final class RequestBroker {
 
+	public const ACCEPTS_METADATA_ONLY_DISCOVERY = true;
+
 	private const MAX_DIAGNOSTICS = 16;
 
 	/** @var list<array{package_revision:string,package_version:string,php_floor:string,runtime_file:string,source_root:string,wordpress_floor:string}> */
@@ -44,6 +46,21 @@ final class RequestBroker {
 
 	public function protocol_version(): int {
 		return 11;
+	}
+
+	private function supports_metadata_only_discovery(): bool {
+		return null !== $this->handoff && defined( $this->handoff::class . '::SUPPORTS_METADATA_ONLY_DISCOVERY' );
+	}
+
+	/**
+	 * @param array<string,mixed> $declaration
+	 * @return array<string,mixed>
+	 */
+	private function runtime_declaration( array $declaration ): array {
+		if ( ! $this->supports_metadata_only_discovery() ) {
+			unset( $declaration['metadata_only_discovery'] );
+		}
+		return $declaration;
 	}
 
 	/** Register a physical runtime-copy.json without loading its runtime. */
@@ -134,7 +151,7 @@ final class RequestBroker {
 		foreach ( $this->submissions as $id => $submission ) {
 			$batch[] = array(
 				'submission_id' => $id,
-				'declaration'   => $submission['declaration'],
+				'declaration'   => $this->runtime_declaration( $submission['declaration'] ),
 			);
 		}
 		try {
@@ -179,7 +196,7 @@ final class RequestBroker {
 				$item = $this->handoff->register_target(
 					array(
 						'submission_id' => $id,
-						'declaration'   => $submission['declaration'],
+						'declaration'   => $this->runtime_declaration( $submission['declaration'] ),
 					)
 				);
 				if ( ! is_array( $item ) ) {
@@ -234,7 +251,7 @@ final class RequestBroker {
 				$result = $this->handoff->register_target(
 					array(
 						'submission_id' => $id,
-						'declaration'   => $declaration,
+						'declaration'   => $this->runtime_declaration( $declaration ),
 					)
 				);
 				if ( ! is_array( $result ) ) {
@@ -338,6 +355,10 @@ final class RequestBroker {
 			if ( ! RequestProtocolValidator::valid_diagnostics( $diagnostics, $status['state'] ) ) {
 				$this->disable( 'runtime_handoff_invalid' );
 				return $this->inactive_diagnostics( $this->submissions[ $submission_id ] );
+			}
+			if ( true === ( $item['declaration']['metadata_only_discovery'] ?? false ) && ! $this->supports_metadata_only_discovery() ) {
+				$diagnostics['diagnostics']   = array_slice( $diagnostics['diagnostics'], 1 - self::MAX_DIAGNOSTICS );
+				$diagnostics['diagnostics'][] = array( 'code' => 'metadata_only_discovery_unavailable' );
 			}
 			return $diagnostics;
 		} catch ( Throwable ) {

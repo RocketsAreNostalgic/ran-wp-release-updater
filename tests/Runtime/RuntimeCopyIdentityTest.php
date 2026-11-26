@@ -599,6 +599,7 @@ PHP,
 					"\t\tclearstatcache( true );" => "\t\tclearstatcache( true, \$source_root );\n\t\tclearstatcache( true, \$runtime_file );",
 				)
 			);
+			$this->restore_pre_discovery_files( $old_copy, true );
 			$this->patch_file_strict(
 				$old_copy . '/bootstrap.php',
 				array(
@@ -773,6 +774,260 @@ PHP,
 		self::assertFileDoesNotExist( $sentinel );
 	}
 
+	#[DataProvider( 'metadata_discovery_cases' )]
+	public function test_public_registrations_negotiate_metadata_only_discovery( string $type, string $first, string $winner, string $scenario, int $check_zips, int $install_zips, ?string $failure ): void {
+		$older = $this->parent . '/older';
+		$this->restore_pre_discovery_files( $older );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the immutable manifest to verify that the older fixture reconstructs the exact original runtime.
+		$old_manifest = json_decode( (string) file_get_contents( $older . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
+		self::assertSame( $old_manifest['package_revision'], $this->identity( $older ) );
+		$newer = $this->package_copy( 'newer', 'newer' === $winner ? '1.0.0-beta.24' : '1.0.0-beta.22' );
+
+		$result = $this->probe(
+			<<<'PHP'
+require $data['hooks'];
+require $data['database'];
+define('WP_PLUGIN_DIR', $data['installed']);
+$GLOBALS['wp_theme_directories'] = array($data['installed']);
+$GLOBALS['wpdb'] = new \RAN\WPReleaseUpdater\V1\Tests\Support\FakeOptionDatabase(100);
+$GLOBALS['wp_version'] = '6.8.0';
+function get_filesystem_method(): string { return 'direct'; }
+function get_temp_dir(): string { return realpath(sys_get_temp_dir()); }
+function wp_tempnam(string $name): string|false { return tempnam(get_temp_dir(), $name); }
+function wp_normalize_path(string $path): string { return str_replace('\\', '/', $path); }
+function wp_remote_retrieve_header(array $response, string $name): string { return ''; }
+function wp_remote_retrieve_response_code(array $response): int { return $response['status']; }
+function wp_remote_retrieve_body(array $response): string { return $response['body']; }
+function is_wp_error(mixed $value): bool { return $value instanceof WP_Error; }
+class WP_Error {
+	public function __construct(private string $code, string $message) {}
+	public function get_error_code(): string { return $this->code; }
+}
+function wp_safe_remote_get(string $url, array $arguments): array {
+	$fixture = &$GLOBALS['ran_wp_release_updater_metadata_fixture'];
+	$asset = $fixture['release']['assets'][0];
+	$path = parse_url($url, PHP_URL_PATH);
+	if (isset($arguments['filename'])) {
+		if ("/repos/acme/example/releases/assets/{$asset['id']}" !== $path) {
+			throw new RuntimeException('Unexpected asset identity.');
+		}
+		++$fixture['zip_requests'];
+		$bytes = $fixture['bytes'];
+		if ('digest_mismatch' === $fixture['phase']) {
+			$bytes[0] = 'X';
+		}
+		file_put_contents($arguments['filename'], $bytes);
+		return array('status' => 200, 'body' => '');
+	}
+	if ('/repos/acme/example/releases/7' === $path && 'withdrawn' === $fixture['phase']) {
+		return array('status' => 404, 'body' => '');
+	}
+	$body = match ($path) {
+		'/repos/acme/example' => json_encode(array('id' => 42), JSON_THROW_ON_ERROR),
+		'/repos/acme/example/releases' => json_encode(array($fixture['release']), JSON_THROW_ON_ERROR),
+		'/repos/acme/example/releases/7' => json_encode($fixture['release'], JSON_THROW_ON_ERROR),
+		'/repos/acme/example/commits/v2.0.0' => str_repeat('a', 40),
+		default => throw new RuntimeException('Unexpected GitHub metadata request.'),
+	};
+	return array('status' => 200, 'body' => $body);
+}
+$registrars = array();
+foreach ($data['load_order'] as $copy) {
+	$registrars[$copy] = require $data[$copy] . '/bootstrap.php';
+}
+
+$type = $data['type'];
+$is_plugin = 'plugin' === $type;
+$header = $is_plugin ? 'main.php' : 'style.css';
+$identity = $is_plugin ? 'example/main.php' : 'example';
+$directory = $data['installed'] . '/example';
+mkdir($directory, 0700, true);
+$main = $directory . '/' . $header;
+$uri = 'https://github.com/acme/example';
+$name_header = $is_plugin ? 'Plugin Name' : 'Theme Name';
+$installed = ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: 1.0.0\nRequires PHP: 8.2\nRequires at least: 6.6\nUpdate URI: $uri\n*/\n";
+file_put_contents($main, $installed);
+$option_registrar = $registrars['newer'];
+$handle = 'default' === $data['scenario']
+	? $registrars[$data['load_order'][0]]->$type('github', $main, 'acme/example', '42', update_policy: 'automatic')
+	: $option_registrar->$type('github', $main, 'acme/example', '42', update_policy: 'automatic', metadata_only_discovery: true);
+if (!$handle->register()) {
+	throw new RuntimeException('The public registration was rejected.');
+}
+
+$legacy_type = $is_plugin ? 'theme' : 'plugin';
+$legacy_header = 'theme' === $legacy_type ? 'style.css' : 'main.php';
+$legacy_directory = $data['installed'] . '/legacy';
+mkdir($legacy_directory, 0700, true);
+$legacy_main = $legacy_directory . '/' . $legacy_header;
+$legacy_name_header = 'theme' === $legacy_type ? 'Theme Name' : 'Plugin Name';
+file_put_contents($legacy_main, "/*\n$legacy_name_header: Legacy\nVersion: 1.0.0\nUpdate URI: $uri\n*/\n");
+$legacy = $registrars['older']->$legacy_type('github', $legacy_main, 'acme/example', '42');
+$legacy_registered = $legacy->register();
+do_action('after_setup_theme');
+
+$requirements = match ($data['scenario']) {
+	'incompatible_php' => "Requires PHP: 99.0\nRequires at least: 6.7",
+	'incompatible_wp' => "Requires PHP: 8.2\nRequires at least: 99.0",
+	default => "Requires PHP: 8.2\nRequires at least: 6.7",
+};
+$archive = $data['installed'] . '/package.zip';
+$zip = new ZipArchive();
+if (true !== $zip->open($archive, ZipArchive::CREATE | ZipArchive::OVERWRITE)) {
+	throw new RuntimeException('Could not create the release archive fixture.');
+}
+$zip->addFromString('example/' . $header, ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: 2.0.0\n$requirements\nUpdate URI: $uri\n*/\n");
+$zip->close();
+$bytes = file_get_contents($archive);
+$GLOBALS['ran_wp_release_updater_metadata_fixture'] = array(
+	'bytes' => $bytes,
+	'zip_requests' => 0,
+	'phase' => 'check',
+	'release' => array(
+		'id' => 7,
+		'tag_name' => 'v2.0.0',
+		'draft' => false,
+		'prerelease' => false,
+		'immutable' => true,
+		'published_at' => '2026-11-25T00:00:00Z',
+		'html_url' => $uri . '/releases/tag/v2.0.0',
+		'assets' => array(array('id' => 8, 'name' => 'package.zip', 'size' => strlen($bytes), 'state' => 'uploaded', 'digest' => 'sha256:' . hash('sha256', $bytes))),
+	),
+);
+$fixture = &$GLOBALS['ran_wp_release_updater_metadata_fixture'];
+$update_hook = $is_plugin ? 'update_plugins_github.com' : 'update_themes_github.com';
+$offer = apply_filters($update_hook, false, array('Version' => '1.0.0', 'UpdateURI' => $uri), $identity, array());
+$status = $handle->status();
+$check_zips = $fixture['zip_requests'];
+$automatic = apply_filters('auto_update_' . $type, null, (object) $offer);
+$read_only = apply_filters('ran_wp_release_updater_check_releases_v1', null, $type, $identity);
+$read_only_zips = $fixture['zip_requests'] - $check_zips;
+$source_zips = 0;
+$inspected = null;
+if ('explicit' === $data['scenario']) {
+	$source = $option_registrar->releases('github', $type, 'acme/example', '42');
+	$before = $fixture['zip_requests'];
+	$inspected = $source->inspect('7', 'v2.0.0')['code'];
+	$source_zips = $fixture['zip_requests'] - $before;
+}
+$fixture['phase'] = $data['scenario'];
+if ('changed_id' === $fixture['phase']) {
+	$fixture['release']['assets'][0]['id'] = 9;
+}
+if ('changed_digest' === $fixture['phase']) {
+	$fixture['release']['assets'][0]['digest'] = 'sha256:' . str_repeat('b', 64);
+}
+$before_install = $fixture['zip_requests'];
+$result = is_array($offer) ? apply_filters('upgrader_pre_download', false, $offer['package'], null, array('type' => $type, 'action' => 'update', $type => $identity)) : false;
+$install_status = $handle->status();
+$diagnostics = $handle->diagnostics();
+$owned = is_string($result) && hash_file('sha256', $result) === hash('sha256', $bytes);
+$handle->refresh();
+$legacy = $legacy->status();
+$broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
+echo json_encode(array(
+	'selected' => (new ReflectionProperty($broker, 'selected_root'))->getValue($broker),
+	'registered' => $legacy_registered,
+	'legacy' => $legacy['state'],
+	'offer' => $offer,
+	'status' => $status,
+	'validation' => $read_only['candidate_validation_code'],
+	'check_zips' => $check_zips,
+	'automatic' => $automatic,
+	'read_only_zips' => $read_only_zips,
+	'explicit' => $inspected,
+	'explicit_zips' => $source_zips,
+	'install_zips' => $fixture['zip_requests'] - $before_install,
+	'owned' => $owned,
+	'owned_cleaned' => !is_string($result) || !file_exists($result),
+	'failure' => is_wp_error($result) ? $result->get_error_code() : null,
+	'install_status' => $install_status,
+	'diagnostics' => array_column($diagnostics['diagnostics'], 'code'),
+	'installed_unchanged' => $installed === file_get_contents($main),
+), JSON_THROW_ON_ERROR);
+PHP,
+			array(
+				'older'      => $older,
+				'newer'      => $newer,
+				'load_order' => array( $first, 'older' === $first ? 'newer' : 'older' ),
+				'type'       => $type,
+				'scenario'   => $scenario,
+				'installed'  => $this->parent . '/installed',
+				'hooks'      => dirname( __DIR__ ) . '/Support/WordPressHookFixture.php',
+				'database'   => dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php',
+			),
+			load_extensions: true
+		);
+
+		self::assertSame( realpath( 'newer' === $winner ? $newer : $older ), $result['selected'] );
+		self::assertTrue( $result['registered'] );
+		self::assertSame( 'active', $result['legacy'] );
+		self::assertSame( 'active', $result['status']['state'] );
+		self::assertSame( '7', $result['status']['native']['offered_release_identity'] );
+		self::assertSame( '2.0.0', $result['offer']['version'] );
+		self::assertTrue( $result['offer']['autoupdate'] );
+		self::assertTrue( $result['automatic'] );
+		self::assertSame( $check_zips, $result['check_zips'] );
+		self::assertSame( $check_zips, $result['read_only_zips'] );
+		self::assertSame( 0 === $check_zips ? '' : '6.7', $result['offer']['requires'] );
+		self::assertSame( 0 === $check_zips ? '' : '8.2', $result['offer']['requires_php'] );
+		self::assertSame( 0 === $check_zips ? null : '2.0.0', $result['status']['native']['candidate_header_version'] );
+		self::assertSame( 0 === $check_zips ? null : 'archive_identity_verified', $result['validation'] );
+		self::assertSame( 'explicit' === $scenario ? 'release_inspected' : null, $result['explicit'] );
+		self::assertSame( 'explicit' === $scenario ? 1 : 0, $result['explicit_zips'] );
+		self::assertSame( $install_zips, $result['install_zips'] );
+		self::assertSame( null === $failure, $result['owned'] );
+		self::assertTrue( $result['owned_cleaned'] );
+		self::assertTrue( $result['installed_unchanged'] );
+		self::assertSame( 'active', $result['install_status']['state'] );
+		self::assertSame( null === $failure ? null : 'ran_wp_release_updater_' . $failure, $result['failure'] );
+		self::assertSame( $failure, $result['install_status']['native']['failure_code'] );
+		self::assertSame( 1 === $check_zips && 'default' !== $scenario, in_array( 'metadata_only_discovery_unavailable', $result['diagnostics'], true ) );
+	}
+
+	/** @return iterable<string,array{string,string,string,string,int,int,?string}> */
+	public static function metadata_discovery_cases(): iterable {
+		foreach ( array( 'plugin', 'theme' ) as $type ) {
+			yield "$type new broker and runtime" => array( $type, 'newer', 'newer', 'explicit', 0, 1, null );
+			yield "$type old broker and new runtime" => array( $type, 'older', 'newer', 'valid', 1, 1, null );
+			yield "$type new broker and old runtime" => array( $type, 'newer', 'older', 'valid', 1, 1, null );
+			yield "$type old registrar default" => array( $type, 'older', 'newer', 'default', 1, 1, null );
+			yield "$type new registrar default" => array( $type, 'newer', 'newer', 'default', 1, 1, null );
+			yield "$type replaced asset" => array( $type, 'newer', 'newer', 'changed_id', 0, 0, 'remote_release_changed' );
+			yield "$type replaced digest" => array( $type, 'newer', 'newer', 'changed_digest', 0, 0, 'remote_release_changed' );
+			yield "$type withdrawn release" => array( $type, 'newer', 'newer', 'withdrawn', 0, 0, 'remote_release_changed' );
+			yield "$type digest mismatch" => array( $type, 'newer', 'newer', 'digest_mismatch', 0, 1, 'download_digest_mismatch' );
+			yield "$type incompatible PHP" => array( $type, 'newer', 'newer', 'incompatible_php', 0, 1, 'archive_php_requirement_incompatible' );
+			yield "$type incompatible WordPress" => array( $type, 'newer', 'newer', 'incompatible_wp', 0, 1, 'archive_wordpress_requirement_incompatible' );
+		}
+	}
+
+	private function restore_pre_discovery_files( string $copy, bool $bootstrap_only = false ): void {
+		$fixture = dirname( __DIR__ ) . '/Fixtures/protocol11-pre-discovery/runtime.json.gz.base64';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Decode frozen runtime files from the reviewed historical source for separate-process interoperability tests.
+		$compressed = base64_decode( (string) file_get_contents( $fixture ), true );
+		self::assertIsString( $compressed );
+		self::assertSame( '5b4ab74fea8230c8d344e778de7987504a0484e7ac96f13b800c7c919152b2ce', hash( 'sha256', $compressed ) );
+		$payload = gzdecode( $compressed );
+		self::assertIsString( $payload );
+		$files = json_decode( $payload, true, 512, JSON_THROW_ON_ERROR );
+		self::assertIsArray( $files );
+		foreach ( $files as $path => $contents ) {
+			self::assertIsString( $path );
+			self::assertIsString( $contents );
+			if ( $bootstrap_only && 'bootstrap.php' !== $path ) {
+				continue;
+			}
+			$directory = dirname( $copy . '/' . $path );
+			if ( ! is_dir( $directory ) ) {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create actual isolated fixture paths with private permissions.
+				self::assertTrue( mkdir( $directory, 0700, true ) );
+			}
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Restore exact frozen bytes in the disposable runtime candidate fixture.
+			file_put_contents( $copy . '/' . $path, $contents );
+		}
+	}
+
 	public function test_protocol_11_allow_working_copy_interoperability_and_refusal(): void {
 		$new_high = $this->package_copy( 'p11-new-high', '1.0.0-beta.24' );
 		$new_low  = $this->package_copy( 'p11-new-low', '1.0.0-beta.22' );
@@ -781,6 +1036,7 @@ PHP,
 
 		// Build a faithful base protocol-11 peer (without entrypoint verification) across bootstrap, broker, selector, validator, adapter, and updater.
 		foreach ( array( $old_low, $old_high ) as $old_copy ) {
+			$this->restore_pre_discovery_files( $old_copy );
 			$this->patch_file_strict(
 				$old_copy . '/src/Runtime/RequestBroker.php',
 				array(
@@ -1201,12 +1457,13 @@ PHP,
 	/** @param array<string, string|list<string>> $data
 	 * @return array<string, mixed>
 	 */
-	private function probe( string $body, array $data ): array {
+	private function probe( string $body, array $data, bool $load_extensions = false ): array {
 		$file = $this->parent . '/probe-' . bin2hex( random_bytes( 4 ) ) . '.php';
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Write exact bytes for isolated runtime and installed-package fixtures; WordPress helpers would alter the boundary under test. Encode controlled fixture values as PHP literals for the isolated child script; this is not debug output.
 		file_put_contents( $file, '<?php $data = ' . var_export( $data, true ) . '; ' . $body );
+		$ini_option = $load_extensions ? '' : ' -n';
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Run the fixture in a separate PHP process with escaped arguments; assertions inspect its exit status and output.
-		exec( escapeshellarg( PHP_BINARY ) . ' -n -d sys_temp_dir=' . escapeshellarg( dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp' ) . ' ' . escapeshellarg( $file ), $output, $status );
+		exec( escapeshellarg( PHP_BINARY ) . $ini_option . ' -d sys_temp_dir=' . escapeshellarg( dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp' ) . ' ' . escapeshellarg( $file ), $output, $status );
 		self::assertSame( 0, $status, implode( "\n", $output ) );
 
 		return json_decode( implode( "\n", $output ), true, 512, JSON_THROW_ON_ERROR );
