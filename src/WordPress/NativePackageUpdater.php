@@ -27,10 +27,12 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
  * @phpstan-type TargetBinding array{canonical_repository_locator:string,canonical_update_uri:string,installed_package_identity:string,maximum_artifact_bytes:int,network_id:int,php_runtime_version:string,provider_code:string,release_channel:string,stable_repository_identity:string,target_type:string,theme_template:string,update_policy:string,wordpress_runtime_version:string}
  */
 final class NativePackageUpdater {
-	private const MAX_DIAGNOSTICS     = 16;
-	private const CONFIGURATION_KEYS  = array( 'headers', 'installed_directory', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
-	private const HEADER_KEYS         = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
-	private const TARGET_BINDING_KEYS = array(
+	private const VERIFIED_TOKEN_PREFIX = 'ran-wp-release-updater:v1:';
+	private const METADATA_TOKEN_PREFIX = 'ran-wp-release-updater:metadata:v1:';
+	private const MAX_DIAGNOSTICS       = 16;
+	private const CONFIGURATION_KEYS    = array( 'headers', 'installed_directory', 'installed_package_identity', 'policy', 'target_type', 'update_uri' );
+	private const HEADER_KEYS           = array( 'Author', 'Description', 'Name', 'PluginURI', 'RequiresPHP', 'RequiresWP', 'UpdateURI', 'Version' );
+	private const TARGET_BINDING_KEYS   = array(
 		'canonical_repository_locator',
 		'canonical_update_uri',
 		'installed_package_identity',
@@ -45,7 +47,7 @@ final class NativePackageUpdater {
 		'update_policy',
 		'wordpress_runtime_version',
 	);
-	private const DESCRIPTOR_PAIRS    = array(
+	private const DESCRIPTOR_PAIRS      = array(
 		'installed_package_identity' => 'installed_package_identity',
 		'target_type'                => 'target_type',
 		'provider_code'              => 'provider_code',
@@ -322,9 +324,7 @@ final class NativePackageUpdater {
 		add_filter( $prefix . $canonical_key, array( $this, 'filter_update' ), 10, 4 );
 		$this->register_raw_host_hook();
 		add_filter( 'plugin' === $this->target_type ? 'plugins_update_check_locales' : 'themes_update_check_locales', array( $this, 'prepare_update_check_routing' ), 10, 1 );
-		if ( null !== $this->descriptor_admission || $this->policy_blocked() ) {
-			add_filter( 'site_transient_update_' . ( 'plugin' === $this->target_type ? 'plugins' : 'themes' ), array( $this, 'filter_cached_update' ), 10, 1 );
-		}
+		add_filter( 'site_transient_update_' . ( 'plugin' === $this->target_type ? 'plugins' : 'themes' ), array( $this, 'filter_cached_update' ), 10, 1 );
 		if ( 'plugin' === $this->target_type ) {
 			add_filter( 'plugins_api', array( $this, 'filter_plugin_information' ), 10, 3 );
 		}
@@ -387,12 +387,23 @@ final class NativePackageUpdater {
 				return $transient;
 			}
 		}
-		$blocked = $this->policy_blocked();
-		if ( ( null === $this->descriptor_admission && ! $blocked ) || ! is_object( $transient ) || ! is_array( $transient->response ?? null ) || ! array_key_exists( $this->installed_identity, $transient->response ) ) {
+		if ( ! is_object( $transient ) || ! is_array( $transient->response ?? null ) || ! array_key_exists( $this->installed_identity, $transient->response ) ) {
 			return $transient;
 		}
-		if ( $blocked ) {
+		$package = $this->cached_package( $transient );
+		if ( ! $this->metadata_only_discovery && is_string( $package ) && str_starts_with( $package, self::METADATA_TOKEN_PREFIX ) ) {
 			unset( $transient->response[ $this->installed_identity ] );
+			// Let the next native check bypass WordPress's recent-check shortcut for this target.
+			if ( is_array( $transient->checked ?? null ) ) {
+				unset( $transient->checked[ $this->installed_identity ] );
+			}
+			return $transient;
+		}
+		if ( $this->policy_blocked() ) {
+			unset( $transient->response[ $this->installed_identity ] );
+			return $transient;
+		}
+		if ( null === $this->descriptor_admission ) {
 			return $transient;
 		}
 		if ( ! $this->ensure_headers_loaded() ) {
@@ -491,7 +502,7 @@ final class NativePackageUpdater {
 			$reason = 'candidate_not_eligible';
 			return $update;
 		}
-		$token = $this->token( $descriptor );
+		$token = $this->token( $descriptor, $this->metadata_only_discovery );
 		if ( null === $token ) {
 			$reason = 'offer_token_unavailable';
 			return $update;
@@ -2264,7 +2275,7 @@ final class NativePackageUpdater {
 		$this->discovery_snapshot                 = null;
 		$this->status['offered_release_identity'] = null;
 		$this->status['offered_version']          = null; }
-	private function token( IdentityDescriptor $descriptor ): ?string {
+	private function token( IdentityDescriptor $descriptor, bool $metadata_only = false ): ?string {
 		$value = array(
 			'binding_hash' => $this->binding_hash,
 			'descriptor'   => $descriptor->to_array(),
@@ -2275,12 +2286,15 @@ final class NativePackageUpdater {
 			$json = json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
 		} catch ( \JsonException ) {
 			return null; }
+		$prefix = $metadata_only ? self::METADATA_TOKEN_PREFIX : self::VERIFIED_TOKEN_PREFIX;
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- URL-safe base64 represents the bounded opaque operation token or its fixture; it does not encode executable code.
-		$token = 'ran-wp-release-updater:v1:' . rtrim( strtr( base64_encode( $json ), '+/', '-_' ), '=' );
+		$token = $prefix . rtrim( strtr( base64_encode( $json ), '+/', '-_' ), '=' );
 		return strlen( $token ) <= 8192 ? $token : null;
 	}
 	private function parse_token( string $token ): ?IdentityDescriptor {
-		$prefix = 'ran-wp-release-updater:v1:';
+		$prefix = $this->metadata_only_discovery && str_starts_with( $token, self::METADATA_TOKEN_PREFIX )
+			? self::METADATA_TOKEN_PREFIX
+			: self::VERIFIED_TOKEN_PREFIX;
 		if ( ! str_starts_with( $token, $prefix ) || strlen( $token ) > 8192 ) {
 			return null;
 		}

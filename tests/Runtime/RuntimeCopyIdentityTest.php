@@ -126,7 +126,7 @@ PHP,
 		self::assertSame( $result['before'], $result['after'] );
 		self::assertSame( 'target_active', $result['plugin']['code'] );
 		self::assertSame( 'target_active', $result['theme']['code'] );
-		self::assertSame( 29, $result['hooks'] );
+		self::assertSame( 31, $result['hooks'] );
 	}
 
 	public function test_later_genuine_copy_reuses_verified_broker_provenance_without_rehashing_its_established_root(): void {
@@ -151,7 +151,7 @@ PHP,
 		self::assertSame( 2, $result['candidates'] );
 		self::assertSame( $second, $result['selected'] );
 		self::assertSame( 'target_active', $result['target']['code'] );
-		self::assertSame( 15, $result['hooks'] );
+		self::assertSame( 16, $result['hooks'] );
 	}
 
 	public function test_bootstrap_and_selection_do_not_hash_source_files_on_request(): void {
@@ -776,14 +776,74 @@ PHP,
 
 	#[DataProvider( 'metadata_discovery_cases' )]
 	public function test_public_registrations_negotiate_metadata_only_discovery( string $type, string $first, string $winner, string $scenario, int $check_zips, int $install_zips, ?string $failure ): void {
-		$older = $this->parent . '/older';
+		$result = $this->metadata_discovery_probe( 'probe', $type, $first, $winner, $scenario );
+
+		self::assertSame( realpath( $this->parent . '/' . $winner . '-probe' ), $result['selected'] );
+		self::assertTrue( $result['registered'] );
+		self::assertSame( 'active', $result['legacy'] );
+		self::assertSame( 'active', $result['status']['state'] );
+		self::assertSame( '7', $result['status']['native']['offered_release_identity'] );
+		self::assertSame( '2.0.0', $result['offer']['version'] );
+		self::assertTrue( $result['offer']['autoupdate'] );
+		self::assertTrue( $result['automatic'] );
+		self::assertSame( $check_zips, $result['check_zips'] );
+		self::assertSame( $check_zips, $result['read_only_zips'] );
+		self::assertSame( 0 === $check_zips ? '' : '6.7', $result['offer']['requires'] );
+		self::assertSame( 0 === $check_zips ? '' : '8.2', $result['offer']['requires_php'] );
+		self::assertSame( 0 === $check_zips ? null : '2.0.0', $result['status']['native']['candidate_header_version'] );
+		self::assertSame( 0 === $check_zips ? null : 'archive_identity_verified', $result['validation'] );
+		self::assertSame( 'explicit' === $scenario ? 'release_inspected' : null, $result['explicit'] );
+		self::assertSame( 'explicit' === $scenario ? 1 : 0, $result['explicit_zips'] );
+		self::assertSame( $install_zips, $result['install_zips'] );
+		self::assertSame( null === $failure, $result['owned'] );
+		self::assertTrue( $result['owned_cleaned'] );
+		self::assertTrue( $result['installed_unchanged'] );
+		self::assertSame( 'active', $result['install_status']['state'] );
+		self::assertSame( null === $failure ? null : 'ran_wp_release_updater_' . $failure, $result['failure'] );
+		self::assertSame( $failure, $result['install_status']['native']['failure_code'] );
+		self::assertSame( 1 === $check_zips && 'default' !== $scenario, in_array( 'metadata_only_discovery_unavailable', $result['diagnostics'], true ) );
+	}
+
+	#[DataProvider( 'cached_discovery_cases' )]
+	public function test_cached_discovery_respects_the_next_requests_effective_mode( string $type, string $from, string $first, string $winner, string $next, bool $visible, bool $allowed ): void {
+		$source = $this->metadata_discovery_probe( 'write', $type, 'newer', 'newer', $from );
+		$offer  = $source['offer'];
+		self::assertIsArray( $offer );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Pass the prior request's ordinary WordPress update entry across process isolation.
+		$cached = $this->metadata_discovery_probe( 'read', $type, $first, $winner, $next, json_encode( $offer, JSON_THROW_ON_ERROR ) );
+		self::assertSame( $visible, $cached['visible'] );
+		self::assertSame( $visible, $cached['checked'] );
+		self::assertTrue( $cached['other_preserved'] );
+		self::assertSame( $allowed, $cached['automatic'] );
+		self::assertSame( $allowed, $cached['handoff'] );
+		self::assertSame( $allowed ? 1 : 0, $cached['install_zips'] );
+		self::assertSame( $allowed, 0 < $cached['provider_requests'] );
+		self::assertSame( $allowed ? null : 'ran_wp_release_updater_unverified_pre_download', $cached['failure'] );
+	}
+
+	/** @return iterable<string,array{string,string,string,string,string,bool,bool}> */
+	public static function cached_discovery_cases(): iterable {
+		foreach ( array( 'plugin', 'theme' ) as $type ) {
+			yield "$type metadata to verified default" => array( $type, 'valid', 'newer', 'newer', 'default', false, false );
+			yield "$type metadata to old broker fallback" => array( $type, 'valid', 'older', 'newer', 'valid', false, false );
+			yield "$type metadata to old runtime fallback" => array( $type, 'valid', 'newer', 'older', 'valid', true, false );
+			yield "$type metadata to metadata" => array( $type, 'valid', 'newer', 'newer', 'valid', true, true );
+			yield "$type verified to metadata" => array( $type, 'default', 'newer', 'newer', 'valid', true, true );
+			yield "$type verified to verified" => array( $type, 'default', 'newer', 'newer', 'default', true, true );
+			yield "$type verified to old runtime fallback" => array( $type, 'default', 'newer', 'older', 'valid', true, true );
+		}
+	}
+
+	/** @return array<string,mixed> */
+	private function metadata_discovery_probe( string $request, string $type, string $first, string $winner, string $scenario, string $cached = '' ): array {
+		$older = $this->parent . '/older-' . $request;
 		$this->restore_pre_discovery_files( $older );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Read the immutable manifest to verify that the older fixture reconstructs the exact original runtime.
 		$old_manifest = json_decode( (string) file_get_contents( $older . '/runtime-copy.json' ), true, 512, JSON_THROW_ON_ERROR );
 		self::assertSame( $old_manifest['package_revision'], $this->identity( $older ) );
-		$newer = $this->package_copy( 'newer', 'newer' === $winner ? '1.0.0-beta.24' : '1.0.0-beta.22' );
+		$newer = $this->package_copy( 'newer-' . $request, 'newer' === $winner ? '1.0.0-beta.24' : '1.0.0-beta.22' );
 
-		$result = $this->probe(
+		return $this->probe(
 			<<<'PHP'
 require $data['hooks'];
 require $data['database'];
@@ -805,6 +865,7 @@ class WP_Error {
 }
 function wp_safe_remote_get(string $url, array $arguments): array {
 	$fixture = &$GLOBALS['ran_wp_release_updater_metadata_fixture'];
+	++$fixture['provider_requests'];
 	$asset = $fixture['release']['assets'][0];
 	$path = parse_url($url, PHP_URL_PATH);
 	if (isset($arguments['filename'])) {
@@ -877,11 +938,13 @@ if (true !== $zip->open($archive, ZipArchive::CREATE | ZipArchive::OVERWRITE)) {
 	throw new RuntimeException('Could not create the release archive fixture.');
 }
 $zip->addFromString('example/' . $header, ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: 2.0.0\n$requirements\nUpdate URI: $uri\n*/\n");
+$zip->setMtimeName('example/' . $header, 1700000000);
 $zip->close();
 $bytes = file_get_contents($archive);
 $GLOBALS['ran_wp_release_updater_metadata_fixture'] = array(
 	'bytes' => $bytes,
 	'zip_requests' => 0,
+	'provider_requests' => 0,
 	'phase' => 'check',
 	'release' => array(
 		'id' => 7,
@@ -896,6 +959,29 @@ $GLOBALS['ran_wp_release_updater_metadata_fixture'] = array(
 );
 $fixture = &$GLOBALS['ran_wp_release_updater_metadata_fixture'];
 $update_hook = $is_plugin ? 'update_plugins_github.com' : 'update_themes_github.com';
+if ('' !== $data['cached']) {
+	$cached = json_decode($data['cached'], true, 32, JSON_THROW_ON_ERROR);
+	$previous = $is_plugin ? (object) $cached : $cached;
+	$other = $is_plugin ? 'foreign/foreign.php' : 'foreign';
+	$transient = (object) array('response' => array($identity => $previous, $other => 'foreign'), 'checked' => array($identity => '1.0.0', $other => '1.0.0'));
+	$visible = apply_filters('site_transient_update_' . ($is_plugin ? 'plugins' : 'themes'), $transient);
+	$automatic = apply_filters('auto_update_' . $type, true, (object) $cached);
+	$result = apply_filters('upgrader_pre_download', false, $cached['package'], null, array('type' => $type, 'action' => 'update', $type => $identity));
+	$handoff = is_string($result) && hash_file('sha256', $result) === hash('sha256', $bytes);
+	$install_zips = $fixture['zip_requests'];
+	echo json_encode(array(
+		'visible' => isset($visible->response[$identity]),
+		'checked' => isset($visible->checked[$identity]),
+		'other_preserved' => 'foreign' === $visible->response[$other] && '1.0.0' === $visible->checked[$other],
+		'automatic' => $automatic,
+		'handoff' => $handoff,
+		'install_zips' => $install_zips,
+		'provider_requests' => $fixture['provider_requests'],
+		'failure' => is_wp_error($result) ? $result->get_error_code() : null,
+	), JSON_THROW_ON_ERROR);
+	$handle->refresh();
+	return;
+}
 $offer = apply_filters($update_hook, false, array('Version' => '1.0.0', 'UpdateURI' => $uri), $identity, array());
 $status = $handle->status();
 $check_zips = $fixture['zip_requests'];
@@ -952,37 +1038,13 @@ PHP,
 				'load_order' => array( $first, 'older' === $first ? 'newer' : 'older' ),
 				'type'       => $type,
 				'scenario'   => $scenario,
-				'installed'  => $this->parent . '/installed',
+				'installed'  => $this->parent . '/' . $request,
+				'cached'     => $cached,
 				'hooks'      => dirname( __DIR__ ) . '/Support/WordPressHookFixture.php',
 				'database'   => dirname( __DIR__ ) . '/Support/FakeOptionDatabase.php',
 			),
 			load_extensions: true
 		);
-
-		self::assertSame( realpath( 'newer' === $winner ? $newer : $older ), $result['selected'] );
-		self::assertTrue( $result['registered'] );
-		self::assertSame( 'active', $result['legacy'] );
-		self::assertSame( 'active', $result['status']['state'] );
-		self::assertSame( '7', $result['status']['native']['offered_release_identity'] );
-		self::assertSame( '2.0.0', $result['offer']['version'] );
-		self::assertTrue( $result['offer']['autoupdate'] );
-		self::assertTrue( $result['automatic'] );
-		self::assertSame( $check_zips, $result['check_zips'] );
-		self::assertSame( $check_zips, $result['read_only_zips'] );
-		self::assertSame( 0 === $check_zips ? '' : '6.7', $result['offer']['requires'] );
-		self::assertSame( 0 === $check_zips ? '' : '8.2', $result['offer']['requires_php'] );
-		self::assertSame( 0 === $check_zips ? null : '2.0.0', $result['status']['native']['candidate_header_version'] );
-		self::assertSame( 0 === $check_zips ? null : 'archive_identity_verified', $result['validation'] );
-		self::assertSame( 'explicit' === $scenario ? 'release_inspected' : null, $result['explicit'] );
-		self::assertSame( 'explicit' === $scenario ? 1 : 0, $result['explicit_zips'] );
-		self::assertSame( $install_zips, $result['install_zips'] );
-		self::assertSame( null === $failure, $result['owned'] );
-		self::assertTrue( $result['owned_cleaned'] );
-		self::assertTrue( $result['installed_unchanged'] );
-		self::assertSame( 'active', $result['install_status']['state'] );
-		self::assertSame( null === $failure ? null : 'ran_wp_release_updater_' . $failure, $result['failure'] );
-		self::assertSame( $failure, $result['install_status']['native']['failure_code'] );
-		self::assertSame( 1 === $check_zips && 'default' !== $scenario, in_array( 'metadata_only_discovery_unavailable', $result['diagnostics'], true ) );
 	}
 
 	/** @return iterable<string,array{string,string,string,string,int,int,?string}> */

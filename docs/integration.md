@@ -228,6 +228,15 @@ If an older bundled broker or selected runtime cannot honor the option, the
 registration uses verified discovery and its target handle reports
 `metadata_only_discovery_unavailable` in `diagnostics()`.
 
+A current runtime using verified discovery suppresses a prior metadata-only
+offer from the WordPress update transient and makes that target eligible for a
+fresh check. It also rejects the stale offer at automatic-update and download
+admission. Earlier runtimes reject the metadata-only download token but may
+show the cached entry until a fresh check replaces it. Call `refresh()` when
+rolling back to a runtime that predates this option and an immediate cache
+refresh is required. Previously verified offers can still be used under either
+discovery mode, subject to the normal admission and fresh install checks.
+
 ### Checking without offering
 
 `refresh()` followed by a WordPress update check is an offer path: a `disabled`
@@ -297,9 +306,11 @@ Guarantees:
   targets are declared. For every policy except `forced-off` it also claims the
   discovery lease (the 600-second binding claim) and holds it for the rest of
   the request, as a native check does.
-- Every call does provider discovery, archive inspection and validation and
-  keeps no reusable result. Do not wire it to unauthenticated or high-frequency
-  paths.
+- A check that reaches provider discovery uses the target's discovery mode.
+  Verified discovery inspects and validates the candidate ZIP. Metadata-only
+  discovery makes zero ZIP requests and leaves archive validation unknown.
+  Neither mode keeps a reusable result. Do not wire the check to unauthenticated
+  or high-frequency paths.
 - Remote text is never returned; only the finite codes and validated versions
   above.
 

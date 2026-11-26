@@ -920,10 +920,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertContains( 'site_transient_update_plugins', $hooks );
 		}
 
-		public function test_manual_policy_cached_filter_is_unchanged_without_a_descriptor_admission(): void {
+		public function test_cached_filter_preserves_legacy_offers_without_descriptor_admission(): void {
 			list( $updater ) = $this->subject();
 			$updater->register();
-			self::assertNotContains( 'site_transient_update_plugins', array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ) );
+			self::assertContains( 'site_transient_update_plugins', array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 1 ) );
 			$transient = (object) array( 'response' => array( 'package/package.php' => (object) array( 'package' => $this->offer( $updater )['package'] ) ) );
 			self::assertSame( $transient, $updater->filter_cached_update( $transient ) );
 			self::assertArrayHasKey( 'package/package.php', $transient->response );
@@ -1098,7 +1098,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array(), $database->read_option_names() );
 			$updater->register();
 			$updater->register();
-			self::assertCount( 15, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 16, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertContains( array( 'filter', 'ran_wp_release_updater_install_exact_release_v1', array( $updater, 'filter_install_exact_release' ), 10, 7 ), $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
@@ -1884,7 +1884,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$property->setValue( $broker, 'active' );
 			list( $updater, $adapter, $database ) = $this->subject( 'manual', null, 'stable', false, $state );
 			$updater->register();
-			self::assertCount( 15, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 16, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
 			foreach ( array( 'stale_global', 'wrong_protocol' ) as $failure ) {
 				if ( 'stale_global' === $failure ) {
@@ -2218,7 +2218,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
-			self::assertCount( 14, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 15, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$offer = $updater->filter_update(
 				false,
 				array(
@@ -2243,7 +2243,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$stock = new \Theme_Upgrader();
 				$GLOBALS['ran_wp_release_updater_test_doing_action'] = $automatic_action ? 'wp_maybe_auto_update' : null;
 				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', $stock, $extra ) );
-				self::assertCount( 15, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+				self::assertCount( 16, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 				if ( $failed_result ) {
 					$original      = new \WP_Error( 'post_copy_failed', 'Post-copy failure.' );
 					$stock->result = $original;
@@ -2255,11 +2255,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					self::assertNotSame( $original, $outgoing );
 					$bridged = ! $automatic_action && ! $replace_skin;
 					self::assertSame( $bridged ? array() : $original, $stock->result );
-					self::assertSame( $bridged ? 16 : 15, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
+					self::assertSame( $bridged ? 17 : 16, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
 					if ( $bridged ) {
 						self::assertSame(
 							array( 'action', 'upgrader_process_complete', array( $updater, 'restore_theme_error_result' ), PHP_INT_MIN, 2 ),
-							$GLOBALS['ran_wp_release_updater_test_hooks'][15]
+							$GLOBALS['ran_wp_release_updater_test_hooks'][16]
 						);
 					}
 					$stock->skin->result = $outgoing;

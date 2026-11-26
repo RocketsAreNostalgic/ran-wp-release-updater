@@ -336,6 +336,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$hooks = array(
 				'plugin' === $target_type ? 'update_plugins_updates.example.test' : 'update_themes_updates.example.test',
 				'plugin' === $target_type ? 'plugins_update_check_locales' : 'themes_update_check_locales',
+				'plugin' === $target_type ? 'site_transient_update_plugins' : 'site_transient_update_themes',
 			);
 			if ( 'plugin' === $target_type ) {
 				$hooks[] = 'plugins_api';

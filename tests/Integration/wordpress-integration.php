@@ -49,7 +49,7 @@ try {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$suite_bytes = '';
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/automatic-example.php', __DIR__ . '/wordpress-integration/automatic-example-http.php', __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-integration/offer-release.php', __DIR__ . '/wordpress-integration/exact-install.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
+	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/automatic-example.php', __DIR__ . '/wordpress-integration/automatic-example-http.php', __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/metadata-cache.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-integration/offer-release.php', __DIR__ . '/wordpress-integration/exact-install.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$suite_bytes .= basename( $file ) . "\0" . hash_file( 'sha256', $file ) . "\n";
 	}
@@ -194,6 +194,9 @@ try {
 		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ), 'Installed distribution assertions failed.' );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$result['scenarios']['distribution']['duration_ms'] = (int) ( ( hrtime( true ) - $started ) / 1000000 );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Preserve the existing integration report identity for this additional tested scenario.
+		$result['scenarios']['native_metadata_cache'] = array();
+		ran_wp_release_updater_test_installed_metadata_cache( $arguments, $site, $run, $result['scenarios']['native_metadata_cache'] );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Preserve the existing integration report identity for this additional tested scenario.
 		$result['scenarios']['native_mixed_bulk'] = array();
 		ran_wp_release_updater_test_installed_mixed_bulk( $source, $wordpress, $run, $database, $socket, $wp_command, $password, $result['scenarios']['native_mixed_bulk'] );
@@ -775,8 +778,11 @@ function ran_wp_release_updater_test_consumer_archives( string $source, string $
 		$php   .= "\$GLOBALS['ran_updater_credential_calls']['" . $type . "'] = 0;\n"
 			. "\$registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';\n"
 			. "\$credentials = static function (): ?string { ++\$GLOBALS['ran_updater_credential_calls']['" . $type . "']; return null; };\n"
+			. "\$phase = 'plugin' === '" . $type . "' ? getenv('RAN_UPDATER_METADATA_CACHE_PHASE') : false;\n"
+			. "\$options = 'write' === \$phase ? array('metadata_only_discovery' => true) : array();\n"
+			. "\$policy = in_array(\$phase, array('write', 'verify'), true) ? 'automatic' : 'manual';\n"
 			. "\$GLOBALS['ran_updater_" . $type . "_handle'] = \$registrar->" . $type . "('github', " . $entry
-			. ", 'fixture/neutral-" . $type . "', '" . ( 'plugin' === $type ? '123456789' : '123456790' ) . "', 'stable', 'manual', \$credentials);\n"
+			. ", 'fixture/neutral-" . $type . "', '" . ( 'plugin' === $type ? '123456789' : '123456790' ) . "', 'stable', \$policy, \$credentials, ...\$options);\n"
 			. "\$GLOBALS['ran_updater_" . $type . "_handle']->register();\n";
 		if ( 'plugin' === $type ) {
 			ran_wp_release_updater_test_write_file( $root . '/' . $slug . '.php', $php );
@@ -1166,6 +1172,30 @@ function ran_wp_release_updater_test_installed_mixed_bulk( string $source, strin
 		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ) && ( $proof['candidate_revision'] ?? null ) === $runtime['package_revision'], 'Installed native mixed-bulk ' . $type . '-' . $mode . ' assertions or candidate identity failed.' );
 	}
 }
+/**
+ * @param list<string> $arguments
+ * @param array<string,array<array-key,mixed>> $proof
+ */
+function ran_wp_release_updater_test_installed_metadata_cache( array $arguments, string $site, string $run, array &$proof ): void {
+	$metadata_cache = $run . '/metadata-cache';
+	foreach ( array( 'write', 'verify' ) as $phase ) {
+		$output = $metadata_cache . '-' . $phase . '.json';
+		ran_wp_release_updater_test_command(
+			array_merge( $arguments, array( 'eval-file', __DIR__ . '/wordpress-integration/metadata-cache.php' ) ),
+			$site,
+			'metadata-cache-' . $phase,
+			array(
+				'RAN_UPDATER_METADATA_CACHE_PHASE'  => $phase,
+				'RAN_UPDATER_METADATA_CACHE_ZIP'    => $metadata_cache . '.zip',
+				'RAN_UPDATER_METADATA_CACHE_OUTPUT' => $output,
+			)
+		);
+		$evidence        = ran_wp_release_updater_test_read_json( $output );
+		$proof[ $phase ] = $evidence;
+		ran_wp_release_updater_test_require_fact( true === ( $evidence['pass'] ?? null ), 'Installed metadata cache ' . $phase . ' assertions failed.' );
+	}
+}
+
 /**
  * Authorised same-version installs on the active target, after success and after a restored failure.
  *
