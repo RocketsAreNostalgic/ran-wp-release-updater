@@ -2252,8 +2252,8 @@ final class NativePackageUpdater {
 		return null;
 	}
 	/**
-	 * Admits an inspected, bound release as discovery admits a candidate: host admission, exact descriptor
-	 * match, acquisition, archive validation and discard, then host admission again.
+	 * Metadata-only discovery admits the candidate once the host accepts the matching descriptor.
+	 * Verified discovery also acquires, validates and discards the archive before checking host admission again.
 	 *
 	 * @param array{release_identity:string,tag:string,version:string} $candidate
 	 * @return bool|null True when admitted, false when another candidate may be tried, null when discovery must stop.
