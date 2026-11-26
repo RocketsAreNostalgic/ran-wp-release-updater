@@ -43,15 +43,16 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	}
 
 	$observed = (object) array(
-		'downloads'         => 0,
-		'inspections'       => 0,
-		'deletions'         => 0,
-		'upgrader'          => null,
-		'package'           => null,
-		'completions'       => array(),
-		'foreign_restore'   => 0,
-		'stdout_bytes'      => 0,
-		'block_backup_move' => $backup_move_failed,
+		'downloads'          => 0,
+		'inspections'        => 0,
+		'deletions'          => 0,
+		'upgrader'           => null,
+		'package'            => null,
+		'offer_requirements' => null,
+		'completions'        => array(),
+		'foreign_restore'    => 0,
+		'stdout_bytes'       => 0,
+		'block_backup_move'  => $backup_move_failed,
 	);
 	ran_wp_release_updater_test_exact_http( $archive, $mode, $observed );
 	$standalone_lock_fault = in_array( $mode, array( 'exact-lease-fail', 'exact-early-lease-fail' ), true );
@@ -90,6 +91,22 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	}
 
 	ran_wp_release_updater_test_exact_wordpress_faults( $mode, $type, $identity, $backup, $observed );
+	add_filter(
+		'upgrader_pre_download',
+		static function ( mixed $reply, string $package, WP_Upgrader $upgrader, array $extra ) use ( $type, $identity, $transient, $observed ): mixed {
+			unset( $upgrader );
+			if ( ( $extra[ $type ] ?? null ) === $identity ) {
+				$offer = (array) ( get_site_transient( $transient )->response[ $identity ] ?? array() );
+				if ( ( $offer['package'] ?? null ) === $package ) {
+					$observed->offer_requirements = array( $offer['requires'] ?? null, $offer['requires_php'] ?? null );
+				}
+			}
+			return $reply;
+		},
+		PHP_INT_MIN,
+		4
+	);
+
 	$alternate_destination  = 'exact-alternate-destination' === $mode ? ran_wp_release_updater_test_exact_alternate_destination( dirname( $main_file ), $observed ) : null;
 	$translation            = 'exact-pending-translation' === $mode ? ran_wp_release_updater_test_exact_translation( $type, $observed ) : null;
 	$credentials_refused    = 'exact-credentials-refused' === $mode;
@@ -196,11 +213,11 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 	$expected_installed_bytes = $keeps_old_bytes ? $before : $release;
 	$expected_status          = $success ? 'installed' : ( $pending ? 'pending' : ( $refused ? 'refused' : 'failed' ) );
 	$checks                   = array(
-		'unsupported_default'   => null === $no_target,
-		'one_zip_body'          => ( $refused ? 0 : 1 ) === $observed->downloads,
-		'fresh_metadata'        => ( $refused || $credentials_refused ? 1 : 2 ) === $observed->inspections,
-		'installed_runtime'     => ( new ReflectionClass( $updater ) )->getFileName() === $source_root . '/src/WordPress/NativePackageUpdater.php',
-		'safe_report'           => array(
+		'unsupported_default'         => null === $no_target,
+		'one_zip_body'                => ( $refused ? 0 : 1 ) === $observed->downloads,
+		'fresh_metadata'              => ( $refused || $credentials_refused ? 1 : 2 ) === $observed->inspections,
+		'installed_runtime'           => ( new ReflectionClass( $updater ) )->getFileName() === $source_root . '/src/WordPress/NativePackageUpdater.php',
+		'safe_report'                 => array(
 			'status'               => $expected_status,
 			'code'                 => $expected_code,
 			'version'              => '2.0.0',
@@ -208,14 +225,15 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 			'finalization_pending' => $pending,
 			'finalization'         => $finalization,
 		) === $report,
-		'offer_removed'         => $offer_absent && null === $stored_offer,
-		'quiet_response'        => $buffer_preserved && '' === $output && 0 === $observed->stdout_bytes,
-		'bytes_before'          => $before_shutdown === $expected_installed_bytes && ( $keeps_old_bytes || $before !== $before_shutdown ),
-		'commit_before'         => $completions_before === $host_completed && ( $success ? 'verified_success' === ( $native_record['outcome'] ?? null ) : 'verified_success' !== ( $native_record['outcome'] ?? null ) ),
-		'shutdown_ownership'    => $pending === $owns_finalizer && $core_restoring === $owns_restore_hook && $backup_moved === $owns_backup_hook && 0 === $deletions_before,
-		'backup_present_before' => ( $backup_moved || $stale_seeded ) === $backup_present,
-		'stale_backup_before'   => ! $stale_seeded || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
-		'private_custody'       => ( $pending || 'exact-archive-fail' === $mode ) ? is_array( $private_before ) && 1 === count( $private_before ) : array() === $private_before,
+		'verified_offer_requirements' => ! $success || array( '6.5', '8.2' ) === $observed->offer_requirements,
+		'offer_removed'               => $offer_absent && null === $stored_offer,
+		'quiet_response'              => $buffer_preserved && '' === $output && 0 === $observed->stdout_bytes,
+		'bytes_before'                => $before_shutdown === $expected_installed_bytes && ( $keeps_old_bytes || $before !== $before_shutdown ),
+		'commit_before'               => $completions_before === $host_completed && ( $success ? 'verified_success' === ( $native_record['outcome'] ?? null ) : 'verified_success' !== ( $native_record['outcome'] ?? null ) ),
+		'shutdown_ownership'          => $pending === $owns_finalizer && $core_restoring === $owns_restore_hook && $backup_moved === $owns_backup_hook && 0 === $deletions_before,
+		'backup_present_before'       => ( $backup_moved || $stale_seeded ) === $backup_present,
+		'stale_backup_before'         => ! $stale_seeded || ( is_file( $stale_file ) && $read_bytes( $stale_file ) === $stale_bytes ),
+		'private_custody'             => ( $pending || 'exact-archive-fail' === $mode ) ? is_array( $private_before ) && 1 === count( $private_before ) : array() === $private_before,
 	);
 	if ( $observed->upgrader instanceof WP_Upgrader ) {
 		$instance                            = $observed->upgrader;

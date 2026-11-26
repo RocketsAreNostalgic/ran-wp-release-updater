@@ -220,7 +220,7 @@ export RAN_UPDATER_SOCKET_ROOT=/path/to/short/durable/socket-root
 composer test:wordpress-integration
 ```
 
-`RAN_UPDATER_INTEGRATION_ROOT` and `RAN_UPDATER_SOCKET_ROOT` must already be writable, non-symlink directories. Keep them outside disposable OS temp locations. The suite creates marker-owned children and removes only state it can prove it owns.
+`RAN_UPDATER_INTEGRATION_ROOT` and `RAN_UPDATER_SOCKET_ROOT` must already be writable, non-symlink directories that stay available for the entire run. Use an integration root with no version-controlled ancestor so WordPress Core admits the automatic update attempt. The installed CI job uses its runner temporary directory and uploads the report from there. The suite creates marker-owned children and removes only state it can prove it owns.
 
 If the normal repository workspace makes MySQL's Unix socket path too long, use a separately authorized short directory for `RAN_UPDATER_SOCKET_ROOT`.
 

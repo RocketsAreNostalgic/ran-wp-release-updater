@@ -433,17 +433,26 @@ final class NativePackageUpdater {
 			unset( $transient->response[ $this->installed_identity ] );
 			return $this->store_metadata_offer( $transient, $entry, $package );
 		}
-		if ( is_string( $package ) && str_starts_with( $package, self::EXACT_TOKEN_PREFIX ) ) {
-			unset( $transient->response[ $this->installed_identity ] );
-			return $transient;
-		}
 		$descriptor = array() !== $this->authorized_fingerprints && is_string( $package ) ? $this->parse_token( $package ) : null;
-		if ( null !== $descriptor && isset( $this->authorized_fingerprints[ $descriptor->fingerprint_value() ] ) ) {
+		if (
+			( is_string( $package ) && str_starts_with( $package, self::EXACT_TOKEN_PREFIX ) )
+			|| ( null !== $descriptor && isset( $this->authorized_fingerprints[ $descriptor->fingerprint_value() ] ) )
+		) {
 			unset( $transient->response[ $this->installed_identity ] );
-		} elseif ( $transient instanceof \stdClass && null !== $entry && is_array( $transient->{self::METADATA_CACHE} ?? null ) ) {
-			unset( $transient->{self::METADATA_CACHE}[ $this->installed_identity ] );
+			if ( is_array( $transient->checked ?? null ) ) {
+				unset( $transient->checked[ $this->installed_identity ] );
+			}
+		}
+		if ( null !== $entry ) {
+			$this->forget_metadata_offer( $transient );
 		}
 		return $transient;
+	}
+
+	private function forget_metadata_offer( object $transient ): void {
+		if ( $transient instanceof \stdClass && is_array( $transient->{self::METADATA_CACHE} ?? null ) ) {
+			unset( $transient->{self::METADATA_CACHE}[ $this->installed_identity ] );
+		}
 	}
 
 	private function cached_descriptor( mixed $transient ): ?IdentityDescriptor {
@@ -479,6 +488,8 @@ final class NativePackageUpdater {
 				'checked' => $checked,
 			);
 			$transient->{self::METADATA_CACHE}       = $advisories;
+		} else {
+			$this->forget_metadata_offer( $transient );
 		}
 		return $transient;
 	}
@@ -488,7 +499,7 @@ final class NativePackageUpdater {
 			return $transient;
 		}
 		$cached = $transient->{self::METADATA_CACHE}[ $this->installed_identity ] ?? null;
-		if ( ! is_array( $cached ) || ! is_string( $cached['checked'] ?? null ) || ! $this->live() || $this->policy_blocked() ) {
+		if ( ! is_array( $cached ) || ! is_string( $cached['checked'] ?? null ) || ! $this->live() || $this->policy_blocked() || ! $this->direct_filesystem() ) {
 			return $transient;
 		}
 		$entry = $cached['offer'] ?? null;
@@ -500,7 +511,7 @@ final class NativePackageUpdater {
 			return $transient;
 		}
 		$descriptor = $this->parse_token( $package );
-		if ( null === $descriptor || $this->installed_version() !== $cached['checked'] || ! $this->newer_than_installed( $descriptor ) || ! $this->descriptor_admitted( $descriptor ) ) {
+		if ( null === $descriptor || $this->installed_version() !== $cached['checked'] || ! $this->newer_than_installed( $descriptor ) || ! $this->descriptor_admitted( $descriptor ) || ! $this->live() ) {
 			return $transient;
 		}
 		// Leave the raw cache untouched. A later save can repack this view or drop a removed offer.
@@ -687,9 +698,6 @@ final class NativePackageUpdater {
 		$this->authorized_offer       = $this->offer_entry( $descriptor, $token, false, $this->candidate_headers_for( $descriptor ) ) + array( 'new_version' => $version );
 		$this->authorized_fingerprint = $descriptor->fingerprint_value();
 		$this->authorized_fingerprints[ $this->authorized_fingerprint ] = true;
-		$transient = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
-		add_filter( 'site_transient_' . $transient, array( $this, 'filter_cached_update' ), 10, 1 );
-		add_filter( 'pre_set_site_transient_' . $transient, array( $this, 'filter_store_update' ), PHP_INT_MAX, 1 );
 		return $this->offer_report( 'release_authorized', $version, $relationship );
 	}
 
@@ -793,7 +801,8 @@ final class NativePackageUpdater {
 			return 'binding_fence_lost';
 		}
 
-		$result = $this->run_exact_upgrade( $exact, $this->offer_entry( $descriptor, $exact->token, false ) + array( 'new_version' => $facts['version'] ) );
+		$offer  = $this->offer_entry( $descriptor, $exact->token, false, $this->candidate_headers_for( $descriptor ) );
+		$result = $this->run_exact_upgrade( $exact, $offer + array( 'new_version' => $facts['version'] ) );
 		if ( null === $exact->finalization && $exact->restore_pending() ) {
 			return 'backup_restore_pending';
 		}
@@ -834,7 +843,6 @@ final class NativePackageUpdater {
 		};
 		$this->authorized_offer = null;
 		add_filter( $hook, $overlay, PHP_INT_MAX, 1 );
-		add_filter( 'pre_set_site_transient_' . $transient, array( $this, 'filter_store_update' ), PHP_INT_MAX, 1 );
 		try {
 			return $exact->run( $this->installed_identity );
 		} finally {

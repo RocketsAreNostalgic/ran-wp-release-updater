@@ -56,8 +56,10 @@ $ran_wp_release_updater_test_installed = match ( $ran_wp_release_updater_test_di
 	'newer' => '1.0.0',
 	default => '2.0.0',
 };
-$ran_wp_release_updater_test_bytes     = static function ( string $name, string $version ) use ( $ran_wp_release_updater_test_uri ): string {
-	$header = "Version: {$version}\nUpdate URI: {$ran_wp_release_updater_test_uri}\nRequires PHP: 8.2\nRequires at least: 6.5\n*/\n";
+$ran_wp_release_updater_test_bytes     = static function ( string $name, string $version, bool $release ) use ( $ran_wp_release_updater_test_uri ): string {
+	$php    = $release ? '8.2' : '8.1';
+	$wp     = $release ? '6.5' : '6.4';
+	$header = "Version: {$version}\nUpdate URI: {$ran_wp_release_updater_test_uri}\nRequires PHP: {$php}\nRequires at least: {$wp}\n*/\n";
 	return match ( $name ) {
 		'offer-target.php' => "<?php\n/*\nPlugin Name: Offer Target\n{$header}",
 		'style.css'        => "/*\nTheme Name: Offer Target\n{$header}",
@@ -72,8 +74,8 @@ if ( ! wp_mkdir_p( $ran_wp_release_updater_test_directory ) || true !== $ran_wp_
 }
 foreach ( 'plugin' === $type ? array( 'offer-target.php' ) : array( 'style.css', 'index.php' ) as $ran_wp_release_updater_test_name ) {
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Write exact bytes for the disposable integration fixture; WordPress helpers would alter the boundary under test.
-	file_put_contents( $ran_wp_release_updater_test_directory . '/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes( $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_installed ) . "// installed\n" );
-	$ran_wp_release_updater_test_zip->addFromString( $ran_wp_release_updater_test_slug . '/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes( $ran_wp_release_updater_test_name, '2.0.0' ) . "// release\n" );
+	file_put_contents( $ran_wp_release_updater_test_directory . '/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes( $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_installed, false ) . "// installed\n" );
+	$ran_wp_release_updater_test_zip->addFromString( $ran_wp_release_updater_test_slug . '/' . $ran_wp_release_updater_test_name, $ran_wp_release_updater_test_bytes( $ran_wp_release_updater_test_name, '2.0.0', true ) . "// release\n" );
 }
 $ran_wp_release_updater_test_zip->close();
 if ( 'plugin' === $type ) {

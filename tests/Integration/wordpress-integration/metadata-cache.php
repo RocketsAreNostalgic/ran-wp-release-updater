@@ -250,6 +250,19 @@ Requires PHP: 8.2
 			}
 		);
 		add_filter( 'pre_wp_mail', '__return_true' );
+		$vcs_checkout = 'unchecked';
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Record Core's actual VCS admission without overriding it.
+		add_filter(
+			'automatic_updates_is_vcs_checkout',
+			static function ( bool $checkout, string $context ) use ( &$vcs_checkout ): bool {
+				if ( WP_PLUGIN_DIR === $context ) {
+					$vcs_checkout = $checkout ? 'detected' : 'clear';
+				}
+				return $checkout;
+			},
+			PHP_INT_MAX,
+			2
+		);
 		$automatic_decision = null;
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Observe the automatic decision without modifying it.
 		add_filter(
@@ -280,6 +293,7 @@ Requires PHP: 8.2
 		add_filter( 'wp_doing_cron', '__return_true' );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Dispatch the same Core action as the scheduled automatic updater.
 		do_action( 'wp_maybe_auto_update' );
+		$proof['core_vcs_checkout']       = $vcs_checkout;
 		$proof['core_automatic_decision'] = $automatic_decision;
 		$result                           = $results[0]->result ?? null;
 		$proof['install_zip_requests']    = $zip_calls - $before_install;
@@ -297,7 +311,8 @@ Requires PHP: 8.2
 			$proof['verified_install']          = 1 === $preinstall && ! is_wp_error( $result ) && null !== $result
 				&& 'verified_success' === ( $status['native']['last_native_outcome']['outcome'] ?? null );
 		}
-		$proof['pass'] = $proof['pass'] && ! in_array( false, $proof, true ) && true === $automatic_decision && 1 === $proof['install_zip_requests'];
+		$proof['pass'] = $proof['pass'] && ! in_array( false, $proof, true )
+			&& 'clear' === $vcs_checkout && true === $automatic_decision && 1 === $proof['install_zip_requests'];
 	}
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Save only the bounded redacted assertions for the parent installed test process.
 	file_put_contents(

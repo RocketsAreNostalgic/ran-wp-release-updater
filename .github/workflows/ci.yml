@@ -156,7 +156,8 @@ jobs:
           system_mysqld="$(command -v mysqld)"
           php -m | grep -Fx mysqli
 
-          integration_root="$GITHUB_WORKSPACE/.workspaces/wordpress-integration"
+          # Core checks for VCS directories in every ancestor of the installed site.
+          integration_root="$RUNNER_TEMP/ran-updater-wordpress-integration"
           socket_root="$GITHUB_WORKSPACE/.workspaces/sock"
           php_tmp="$integration_root/php-tmp"
           wp_cache="$integration_root/wp-cli-cache"
@@ -190,7 +191,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: wordpress-installed-integration-${{ matrix.wordpress }}
-          path: ${{ github.workspace }}/.workspaces/wordpress-integration/ran-wp-release-updater-result-*.json
+          path: ${{ runner.temp }}/ran-updater-wordpress-integration/ran-wp-release-updater-result-*.json
           if-no-files-found: ignore
           retention-days: 7
 

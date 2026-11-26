@@ -84,7 +84,7 @@ namespace {
 	if ( ! function_exists( 'get_filesystem_method' ) ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- WordPress calls this global stub by its exact foreign function name.
 		function get_filesystem_method(): string {
-			return 'direct';
+			return $GLOBALS['ran_wp_release_updater_test_filesystem_method'] ?? 'direct';
 		}
 	}
 }
@@ -2887,7 +2887,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$updater->register();
 			// WordPress passes the host's sixth argument, the older-release intent, only if it is registered.
 			self::assertSame( 6, array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 4, 1 )[ self::OFFER_FILTER ] ?? null );
-			$GLOBALS['ran_wp_release_updater_test_hooks'] = array();
+			$hooks = $GLOBALS['ran_wp_release_updater_test_hooks'];
 			self::assertSame(
 				array(
 					'status'       => 'authorized',
@@ -2899,8 +2899,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			// One inspection and one validated acquisition, with no listing.
 			self::assertSame( array( 0, 1, 1 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
-			// The read supply and the save-time strip are registered once something is authorised.
-			$registered = array_column( $GLOBALS['ran_wp_release_updater_test_hooks'], 3, 1 );
+			// The usual target registration owns both transient filters.
+			self::assertSame( $hooks, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			$registered = array_column( $hooks, 3, 1 );
 			self::assertSame( 10, $registered['site_transient_update_plugins'] );
 			self::assertSame( PHP_INT_MAX, $registered['pre_set_site_transient_update_plugins'] );
 			$entry = $this->supplied( $updater );
@@ -3063,6 +3064,82 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$after = (object) array( 'response' => array( 'package/package.php' => (object) $entry ) );
 			self::assertSame( array(), $updater->filter_store_update( $after )->response );
 		}
+		private function stored_advisory( NativePackageUpdater $updater ): \stdClass {
+			$stored = $updater->filter_store_update(
+				(object) array(
+					'checked'  => array( 'package/package.php' => '1.0.0' ),
+					'response' => array( 'package/package.php' => (object) $this->offer( $updater ) ),
+				)
+			);
+			self::assertInstanceOf( \stdClass::class, $stored );
+			self::assertArrayHasKey( 'package/package.php', $stored->ran_wp_release_updater_metadata_offers );
+			return $stored;
+		}
+
+		public function test_authorized_offer_save_clears_the_advisory_and_checked_version(): void {
+			list( $updater, $adapter ) = $this->subject();
+			$stored                    = $this->stored_advisory( $updater );
+			$sibling                   = array(
+				'offer'   => (object) array( 'package' => 'sibling' ),
+				'checked' => '3.0.0',
+			);
+			$stored->ran_wp_release_updater_metadata_offers['other/other.php'] = $sibling;
+			$stored->checked = array(
+				'package/package.php' => '1.0.0',
+				'other/other.php'     => '3.0.0',
+			);
+			$this->offer_release( $updater );
+
+			$written = $updater->filter_store_update( $updater->filter_cached_update( $stored ) );
+			self::assertInstanceOf( \stdClass::class, $written );
+			self::assertSame( array( 'other/other.php' => $sibling ), $written->ran_wp_release_updater_metadata_offers );
+			self::assertSame( array( 'other/other.php' => '3.0.0' ), $written->checked );
+			$this->assert_refused( 'candidate_descriptor_mismatch', $this->offer_release( $updater, 'release:2', 'v9.9.9' ) );
+			self::assertSame( $written, $updater->filter_cached_update( $written ) );
+			self::assertArrayNotHasKey( 'package/package.php', $written->response );
+			self::assertSame( 1, $adapter->list_calls );
+			self::assertSame( 1, $adapter->acquire_calls );
+		}
+
+		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
+		#[\PHPUnit\Framework\Attributes\PreserveGlobalState( false )]
+		public function test_warm_advisory_requires_direct_filesystem(): void {
+			list( $updater, $adapter ) = $this->subject();
+			$stored                    = $this->stored_advisory( $updater );
+			self::assertNotSame( $stored, $updater->filter_cached_update( $stored ) );
+			$GLOBALS['ran_wp_release_updater_test_filesystem_method'] = 'ssh2';
+			try {
+				self::assertSame( $stored, $updater->filter_cached_update( $stored ) );
+			} finally {
+				unset( $GLOBALS['ran_wp_release_updater_test_filesystem_method'] );
+			}
+			self::assertArrayNotHasKey( 'package/package.php', $stored->response );
+			self::assertArrayNotHasKey( 'package/package.php', $stored->checked );
+			self::assertSame( array( 1, 1, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+		}
+
+		public function test_warm_advisory_rechecks_liveness_after_descriptor_admission(): void {
+			$host                      = (object) array(
+				'live'   => true,
+				'revoke' => false,
+			);
+			list( $updater, $adapter ) = $this->subject(
+				operation_guard: static fn (): bool => $host->live,
+				descriptor_admission: static function () use ( $host ): bool {
+					$host->live = ! $host->revoke;
+					return true;
+				}
+			);
+			$stored                    = $this->stored_advisory( $updater );
+			self::assertNotSame( $stored, $updater->filter_cached_update( $stored ) );
+			$host->revoke = true;
+			self::assertSame( $stored, $updater->filter_cached_update( $stored ) );
+			self::assertFalse( $host->live );
+			self::assertArrayNotHasKey( 'package/package.php', $stored->response );
+			self::assertArrayNotHasKey( 'package/package.php', $stored->checked );
+			self::assertSame( array( 1, 1, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
+		}
+
 		public function test_offer_release_strip_covers_every_release_authorised_in_the_request(): void {
 			list( $updater, $adapter, , $descriptor ) = $this->subject( installed_version: '2.0.0' );
 			$adapter->inspect_outcomes['release:3']   = $this->with_release_identity( $descriptor, 'release:3', 'v3.0.0' );
@@ -3167,17 +3244,17 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 		public function test_orphaned_exact_install_offer_cannot_be_saved_or_replayed(): void {
 			list( $updater, $adapter ) = $this->subject();
 			$package                   = 'ran-wp-release-updater:exact:v1:' . str_repeat( 'b', 64 );
-			$stored                    = $updater->filter_store_update(
-				(object) array(
-					'response' => array(
-						'package/package.php' => (object) array( 'package' => $package ),
-						'other/other.php'     => (object) array( 'package' => 'another-offer' ),
-					),
-				)
+			$stored                    = $this->stored_advisory( $updater );
+			$stored->checked           = array( 'package/package.php' => '1.0.0' );
+			$stored->response          = array(
+				'package/package.php' => (object) array( 'package' => $package ),
+				'other/other.php'     => (object) array( 'package' => 'another-offer' ),
 			);
-			self::assertInstanceOf( \stdClass::class, $stored );
-			self::assertIsArray( $stored->response );
-			self::assertSame( array( 'other/other.php' ), array_keys( $stored->response ) );
+			$written                   = $updater->filter_store_update( $stored );
+			self::assertInstanceOf( \stdClass::class, $written );
+			self::assertSame( array( 'other/other.php' ), array_keys( $written->response ) );
+			self::assertSame( array(), $written->checked );
+			self::assertSame( array(), $written->ran_wp_release_updater_metadata_offers );
 			$reply = $updater->filter_pre_download( false, $package, null, $this->extra() );
 			self::assertInstanceOf( \WP_Error::class, $reply );
 			self::assertSame( 'ran_wp_release_updater_unverified_pre_download', $reply->get_error_code() );
