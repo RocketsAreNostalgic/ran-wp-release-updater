@@ -126,7 +126,7 @@ PHP,
 		self::assertSame( $result['before'], $result['after'] );
 		self::assertSame( 'target_active', $result['plugin']['code'] );
 		self::assertSame( 'target_active', $result['theme']['code'] );
-		self::assertSame( 31, $result['hooks'] );
+		self::assertSame( 33, $result['hooks'] );
 	}
 
 	public function test_later_genuine_copy_reuses_verified_broker_provenance_without_rehashing_its_established_root(): void {
@@ -151,7 +151,7 @@ PHP,
 		self::assertSame( 2, $result['candidates'] );
 		self::assertSame( $second, $result['selected'] );
 		self::assertSame( 'target_active', $result['target']['code'] );
-		self::assertSame( 16, $result['hooks'] );
+		self::assertSame( 17, $result['hooks'] );
 	}
 
 	public function test_bootstrap_and_selection_do_not_hash_source_files_on_request(): void {
@@ -775,7 +775,7 @@ PHP,
 	}
 
 	#[DataProvider( 'metadata_discovery_cases' )]
-	public function test_public_registrations_negotiate_metadata_only_discovery( string $type, string $first, string $winner, string $scenario, int $check_zips, int $install_zips, ?string $failure ): void {
+	public function test_elected_runtime_owns_discovery_behavior( string $type, string $first, string $winner, string $scenario, int $check_zips, int $install_zips, ?string $failure ): void {
 		$result = $this->metadata_discovery_probe( 'probe', $type, $first, $winner, $scenario );
 
 		self::assertSame( realpath( $this->parent . '/' . $winner . '-probe' ), $result['selected'] );
@@ -783,6 +783,9 @@ PHP,
 		self::assertSame( 'active', $result['legacy'] );
 		self::assertSame( 'active', $result['status']['state'] );
 		self::assertSame( '7', $result['status']['native']['offered_release_identity'] );
+		self::assertSame( 'v2.0.0', $result['status']['native']['candidate_tag'] );
+		self::assertSame( '2.0.0', $result['status']['native']['offered_version'] );
+		self::assertSame( 0 === $check_zips ? null : 'archive_identity_verified', $result['status']['native']['candidate_validation_code'] );
 		self::assertSame( '2.0.0', $result['offer']['version'] );
 		self::assertTrue( $result['offer']['autoupdate'] );
 		self::assertTrue( $result['automatic'] );
@@ -800,20 +803,25 @@ PHP,
 		self::assertTrue( $result['installed_unchanged'] );
 		self::assertSame( 'active', $result['install_status']['state'] );
 		self::assertSame( null === $failure ? null : 'ran_wp_release_updater_' . $failure, $result['failure'] );
-		self::assertSame( $failure, $result['install_status']['native']['failure_code'] );
-		self::assertSame( 1 === $check_zips && 'default' !== $scenario, in_array( 'metadata_only_discovery_unavailable', $result['diagnostics'], true ) );
+		$diagnostic = 'older' === $first && 'archive_php_requirement_incompatible' === $failure ? 'acquisition_identity_invalid' : $failure;
+		self::assertSame( $diagnostic, $result['install_status']['native']['failure_code'] );
+		self::assertTrue( null === $diagnostic || in_array( $diagnostic, $result['diagnostics'], true ) );
 	}
 
 	#[DataProvider( 'cached_discovery_cases' )]
-	public function test_cached_discovery_respects_the_next_requests_effective_mode( string $type, string $from, string $first, string $winner, string $next, bool $visible, bool $allowed ): void {
-		$source = $this->metadata_discovery_probe( 'write', $type, 'newer', 'newer', $from );
+	public function test_cached_discovery_respects_the_next_elected_runtime( string $type, string $from, string $first, string $winner, string $next, bool $visible, bool $allowed ): void {
+		$writer = 'verified' === $from ? 'older' : 'newer';
+		$source = $this->metadata_discovery_probe( 'write', $type, $writer, $writer, $from );
 		self::assertIsArray( $source['offer'] );
 		self::assertIsArray( $source['stored'] );
-		$metadata = 'default' !== $from;
+		$metadata = 'newer' === $writer;
 		self::assertSame( ! $metadata, $source['ordinary_entry'] );
 		self::assertSame( ! $metadata, $source['ordinary_checked'] );
 		self::assertSame( $metadata, $source['advisory_entry'] );
-		self::assertTrue( $source['sibling_advisory'] );
+		self::assertSame( 'core_no_update' === $from, $source['core_bucketed_no_update'] );
+		self::assertFalse( $source['ordinary_no_update_entry'] );
+		self::assertTrue( $source['foreign_no_update_preserved'] );
+		self::assertSame( $metadata, $source['sibling_advisory'] );
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Transfer the persisted transient and stale package between isolated requests.
 		$stored = json_encode(
 			array(
@@ -842,13 +850,13 @@ PHP,
 		yield 'unchanged child theme on first cached read' => array( 'theme', 'child_theme', 'newer', 'newer', 'child_theme', true, true );
 		yield 'standalone theme gains a parent before first cached read' => array( 'theme', 'valid', 'newer', 'newer', 'became_child', false, false );
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
-			yield "$type metadata to verified default" => array( $type, 'valid', 'newer', 'newer', 'default', false, false );
-			yield "$type metadata to old broker fallback" => array( $type, 'valid', 'older', 'newer', 'valid', false, false );
+			yield "$type metadata to old broker with new runtime" => array( $type, 'valid', 'older', 'newer', 'valid', true, true );
 			yield "$type metadata to old runtime fallback" => array( $type, 'valid', 'newer', 'older', 'valid', false, false );
 			yield "$type metadata to metadata" => array( $type, 'valid', 'newer', 'newer', 'valid', true, true );
-			yield "$type verified to metadata" => array( $type, 'default', 'newer', 'newer', 'valid', true, true );
-			yield "$type verified to verified" => array( $type, 'default', 'newer', 'newer', 'default', true, true );
-			yield "$type verified to old runtime fallback" => array( $type, 'default', 'newer', 'older', 'valid', true, true );
+			yield "$type Core no_update preserves advisory" => array( $type, 'core_no_update', 'newer', 'newer', 'core_no_update', true, true );
+			yield "$type Core no_update stays hidden after rollback" => array( $type, 'core_no_update', 'newer', 'older', 'core_no_update', false, false );
+			yield "$type verified to metadata" => array( $type, 'verified', 'newer', 'newer', 'valid', true, true );
+			yield "$type verified to old runtime fallback" => array( $type, 'verified', 'newer', 'older', 'valid', true, true );
 		}
 	}
 
@@ -905,7 +913,7 @@ function wp_safe_remote_get(string $url, array $arguments): array {
 		'/repos/acme/example' => json_encode(array('id' => 42), JSON_THROW_ON_ERROR),
 		'/repos/acme/example/releases' => json_encode(array($fixture['release']), JSON_THROW_ON_ERROR),
 		'/repos/acme/example/releases/7' => json_encode($fixture['release'], JSON_THROW_ON_ERROR),
-		'/repos/acme/example/commits/v2.0.0' => str_repeat('a', 40),
+		'/repos/acme/example/commits/' . $fixture['release']['tag_name'] => str_repeat('a', 40),
 		default => throw new RuntimeException('Unexpected GitHub metadata request.'),
 	};
 	return array('status' => 200, 'body' => $body);
@@ -924,13 +932,15 @@ mkdir($directory, 0700, true);
 $main = $directory . '/' . $header;
 $uri = 'https://github.com/acme/example';
 $name_header = $is_plugin ? 'Plugin Name' : 'Theme Name';
+$prerelease = 'core_no_update' === $data['scenario'];
+$installed_version = $prerelease ? '1.0.0-alpha' : '1.0.0';
+$candidate_version = $prerelease ? '1.0.0-dev' : '2.0.0';
+$channel = $prerelease ? 'prerelease' : 'stable';
 $template = in_array($data['scenario'], array('child_theme', 'became_child'), true) ? "Template: parent-theme\n" : '';
-$installed = ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: 1.0.0\n{$template}Requires PHP: 8.2\nRequires at least: 6.6\nUpdate URI: $uri\n*/\n";
+$installed = ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: $installed_version\n{$template}Requires PHP: 8.2\nRequires at least: 6.6\nUpdate URI: $uri\n*/\n";
 file_put_contents($main, $installed);
-$option_registrar = $registrars['newer'];
-$handle = 'default' === $data['scenario']
-	? $registrars[$data['load_order'][0]]->$type('github', $main, 'acme/example', '42', update_policy: 'automatic')
-	: $option_registrar->$type('github', $main, 'acme/example', '42', update_policy: 'automatic', metadata_only_discovery: true);
+$registrar = $registrars[$data['load_order'][0]];
+$handle = $registrar->$type('github', $main, 'acme/example', '42', channel: $channel, update_policy: 'automatic');
 $registrations = array($handle);
 $sibling = $is_plugin ? 'advisory/advisory.php' : 'advisory';
 if ($data['cache_request']) {
@@ -938,7 +948,7 @@ if ($data['cache_request']) {
 	$sibling_file = $sibling_directory . ($is_plugin ? '/advisory.php' : '/style.css');
 	mkdir($sibling_directory, 0700, true);
 	file_put_contents($sibling_file, $installed);
-	$registrations[] = $option_registrar->$type('github', $sibling_file, 'acme/example', '42', update_policy: 'automatic', metadata_only_discovery: true);
+	$registrations[] = $registrar->$type('github', $sibling_file, 'acme/example', '42', channel: $channel, update_policy: 'automatic');
 }
 foreach ($is_plugin ? $registrations : array_reverse($registrations) as $registration) {
 	if (!$registration->register()) {
@@ -968,7 +978,7 @@ if (true !== $zip->open($archive, ZipArchive::CREATE | ZipArchive::OVERWRITE)) {
 	throw new RuntimeException('Could not create the release archive fixture.');
 }
 $archive_template = 'child_theme' === $data['scenario'] ? $template : '';
-$zip->addFromString('example/' . $header, ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: 2.0.0\n{$archive_template}$requirements\nUpdate URI: $uri\n*/\n");
+$zip->addFromString('example/' . $header, ($is_plugin ? "<?php\n" : '') . "/*\n$name_header: Example\nVersion: $candidate_version\n{$archive_template}$requirements\nUpdate URI: $uri\n*/\n");
 $zip->setMtimeName('example/' . $header, 1700000000);
 $zip->close();
 $bytes = file_get_contents($archive);
@@ -979,12 +989,12 @@ $GLOBALS['ran_wp_release_updater_metadata_fixture'] = array(
 	'phase' => 'check',
 	'release' => array(
 		'id' => 7,
-		'tag_name' => 'v2.0.0',
+		'tag_name' => 'v' . $candidate_version,
 		'draft' => false,
-		'prerelease' => false,
+		'prerelease' => $prerelease,
 		'immutable' => true,
 		'published_at' => '2026-11-25T00:00:00Z',
-		'html_url' => $uri . '/releases/tag/v2.0.0',
+		'html_url' => $uri . '/releases/tag/v' . $candidate_version,
 		'assets' => array(array('id' => 8, 'name' => 'package.zip', 'size' => strlen($bytes), 'state' => 'uploaded', 'digest' => 'sha256:' . hash('sha256', $bytes))),
 	),
 );
@@ -993,6 +1003,7 @@ $update_hook = $is_plugin ? 'update_plugins_github.com' : 'update_themes_github.
 $transient_name = $is_plugin ? 'update_plugins' : 'update_themes';
 $cache_key = 'ran_wp_release_updater_metadata_offers';
 $other = $is_plugin ? 'foreign/foreign.php' : 'foreign';
+$other_no_update = $is_plugin ? 'same/same.php' : 'same';
 if ('' !== $data['cached']) {
 	$cached = json_decode($data['cached'], true, 32, JSON_THROW_ON_ERROR);
 	$previous = $cached['offer'];
@@ -1012,7 +1023,7 @@ if ('' !== $data['cached']) {
 	$again = apply_filters('site_transient_' . $transient_name, $transient);
 	$visible_entry = isset($visible->response[$identity]);
 	$visible_checked = isset($visible->checked[$identity]);
-	$other_preserved = 'foreign' === $visible->response[$other] && '1.0.0' === $visible->checked[$other];
+	$other_preserved = 'foreign' === $visible->response[$other] && '1.0.0' === $visible->checked[$other] && 'foreign no update' === $visible->no_update[$other_no_update];
 	$raw_unchanged = $stored === json_encode($transient, JSON_THROW_ON_ERROR);
 	$repacked = apply_filters('pre_set_site_transient_' . $transient_name, $visible);
 	$repacked_again = apply_filters('pre_set_site_transient_' . $transient_name, $again);
@@ -1027,7 +1038,7 @@ if ('' !== $data['cached']) {
 	echo json_encode(array(
 		'visible' => $visible_entry,
 		'checked' => $visible_checked,
-		'other_preserved' => $other_preserved && isset($repacked->{$cache_key}[$sibling]),
+		'other_preserved' => $other_preserved && (!isset($transient->{$cache_key}[$sibling]) || isset($repacked->{$cache_key}[$sibling])),
 		'raw_unchanged' => $raw_unchanged,
 		'repeats_without_duplication' => $repacked == $repacked_again
 			&& (!$projected || (!isset($repacked->response[$identity]) && !isset($repacked->checked[$identity]) && isset($repacked->{$cache_key}[$identity]))),
@@ -1042,19 +1053,25 @@ if ('' !== $data['cached']) {
 	$handle->refresh();
 	return;
 }
-$offer = apply_filters($update_hook, false, array('Version' => '1.0.0', 'UpdateURI' => $uri), $identity, array());
-$data_at_check = array('Version' => '1.0.0', 'UpdateURI' => $uri);
+$data_at_check = array('Version' => $installed_version, 'UpdateURI' => $uri);
+$offer = apply_filters($update_hook, false, $data_at_check, $identity, array());
 $raw = (object) array(
 	'response' => array($identity => $is_plugin ? (object) $offer : $offer, $other => 'foreign'),
-	'checked' => array($identity => '1.0.0', $other => '1.0.0'),
+	'checked' => array($identity => $installed_version, $other => '1.0.0'),
+	'no_update' => array($other_no_update => 'foreign no update'),
 );
-if ($data['cache_request']) {
+$core_bucketed_no_update = is_array($offer) && !version_compare($offer['version'], $installed_version, '>');
+if ($core_bucketed_no_update) {
+	$raw->no_update[$identity] = $raw->response[$identity];
+	unset($raw->response[$identity]);
+}
+if ($data['cache_request'] && 'verified' !== $data['scenario']) {
 	$sibling_offer = apply_filters($update_hook, false, $data_at_check, $sibling, array());
 	if (!is_array($sibling_offer)) {
 		throw new RuntimeException('The sibling did not offer its release.');
 	}
 	$raw->response[$sibling] = $is_plugin ? (object) $sibling_offer : $sibling_offer;
-	$raw->checked[$sibling] = '1.0.0';
+	$raw->checked[$sibling] = $installed_version;
 }
 $stored = apply_filters('pre_set_site_transient_' . $transient_name, $raw);
 $status = $handle->status();
@@ -1065,7 +1082,7 @@ $read_only_zips = $fixture['zip_requests'] - $check_zips;
 $source_zips = 0;
 $inspected = null;
 if ('explicit' === $data['scenario']) {
-	$source = $option_registrar->releases('github', $type, 'acme/example', '42');
+	$source = $registrar->releases('github', $type, 'acme/example', '42');
 	$before = $fixture['zip_requests'];
 	$inspected = $source->inspect('7', 'v2.0.0')['code'];
 	$source_zips = $fixture['zip_requests'] - $before;
@@ -1093,6 +1110,9 @@ echo json_encode(array(
 	'stored' => $stored,
 	'ordinary_entry' => isset($stored->response[$identity]),
 	'ordinary_checked' => isset($stored->checked[$identity]),
+	'ordinary_no_update_entry' => isset($stored->no_update[$identity]),
+	'foreign_no_update_preserved' => 'foreign no update' === $stored->no_update[$other_no_update],
+	'core_bucketed_no_update' => $core_bucketed_no_update,
 	'advisory_entry' => isset($stored->{$cache_key}[$identity]),
 	'sibling_advisory' => isset($stored->{$cache_key}[$sibling]) && !isset($stored->response[$sibling]) && !isset($stored->checked[$sibling]),
 	'status' => $status,
@@ -1131,10 +1151,10 @@ PHP,
 	public static function metadata_discovery_cases(): iterable {
 		foreach ( array( 'plugin', 'theme' ) as $type ) {
 			yield "$type new broker and runtime" => array( $type, 'newer', 'newer', 'explicit', 0, 1, null );
-			yield "$type old broker and new runtime" => array( $type, 'older', 'newer', 'valid', 1, 1, null );
+			yield "$type old broker and new runtime" => array( $type, 'older', 'newer', 'valid', 0, 1, null );
+			yield "$type old broker reports incompatible attempt" => array( $type, 'older', 'newer', 'incompatible_php', 0, 1, 'archive_php_requirement_incompatible' );
 			yield "$type new broker and old runtime" => array( $type, 'newer', 'older', 'valid', 1, 1, null );
-			yield "$type old registrar default" => array( $type, 'older', 'newer', 'default', 1, 1, null );
-			yield "$type new registrar default" => array( $type, 'newer', 'newer', 'default', 1, 1, null );
+			yield "$type old broker and runtime" => array( $type, 'older', 'older', 'valid', 1, 1, null );
 			yield "$type replaced asset" => array( $type, 'newer', 'newer', 'changed_id', 0, 0, 'remote_release_changed' );
 			yield "$type replaced digest" => array( $type, 'newer', 'newer', 'changed_digest', 0, 0, 'remote_release_changed' );
 			yield "$type withdrawn release" => array( $type, 'newer', 'newer', 'withdrawn', 0, 0, 'remote_release_changed' );

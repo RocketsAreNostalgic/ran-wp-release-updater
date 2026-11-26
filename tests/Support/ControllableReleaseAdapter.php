@@ -19,6 +19,8 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 	/** @var array<int|string,TemporaryArtifact|\Throwable> */
 	public array $acquire_outcomes = array();
 	public IdentityDescriptor $inspect_descriptor;
+	/** @var (\Closure():void)|null */
+	public ?\Closure $on_inspect = null;
 	public function __construct(
 		private IdentityDescriptor $descriptor,
 		private string $archive,
@@ -45,6 +47,9 @@ final class ControllableReleaseAdapter implements ReleaseAdapter {
 	}
 	public function inspect( string $release_identity, ?string $expected_tag = null ): IdentityDescriptor {
 		++$this->inspect_calls;
+		if ( null !== $this->on_inspect ) {
+			( $this->on_inspect )();
+		}
 		if ( array_key_exists( $release_identity, $this->inspect_outcomes ) ) {
 			$outcome = $this->inspect_outcomes[ $release_identity ];
 			if ( $outcome instanceof \Throwable ) {

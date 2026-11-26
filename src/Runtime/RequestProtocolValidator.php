@@ -256,7 +256,6 @@ final class RequestProtocolValidator {
 		$runtime_codes = array(
 			'activation_in_progress',
 			'late_candidate_rejected',
-			'metadata_only_discovery_unavailable',
 			'runtime_active',
 			'declaration_deferred_operation_started',
 			'target_queued',
@@ -287,12 +286,6 @@ final class RequestProtocolValidator {
 			'native_mutation_complete',
 			'descriptor_admission',
 		);
-		if ( array_key_exists( 'metadata_only_discovery', $value ) ) {
-			if ( ! is_bool( $value['metadata_only_discovery'] ) ) {
-				return 'declaration_invalid';
-			}
-			$keys[] = 'metadata_only_discovery';
-		}
 		if ( array_key_exists( 'allow_working_copy', $value ) ) {
 			if ( ! is_bool( $value['allow_working_copy'] ) ) {
 				return 'declaration_invalid';

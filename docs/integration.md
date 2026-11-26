@@ -212,31 +212,29 @@ $release_updater->refresh();
 
 ### Metadata-only discovery
 
-Pass `metadata_only_discovery: true` to the `plugin()` or `theme()` method of
-the registrar returned by this package’s `bootstrap.php`. Omit it to keep
-verifying the candidate archive before offering an update.
+WordPress plugin and theme update checks, the plugin information dialog, and the
+read-only release check use provider metadata to bind the exact release and
+asset. They make no ZIP requests for either manual or automatic update policies.
+GitHub release metadata has no WordPress or PHP requirements, so advisory offers
+leave both fields empty. The native check records the release ID, tag and version
+with null `candidate_header_version` and `candidate_validation_code`.
 
-For an opted-in registration, WordPress update checks and the read-only release
-check use provider metadata to bind the exact release and asset. These checks
-make no ZIP requests. GitHub release metadata has no WordPress or PHP
-requirements, so the offer leaves both fields empty until archive inspection
-supplies them. Explicit selected-release inspection still acquires and validates
-the ZIP. Every install rechecks the offered identity and validates the freshly
-downloaded archive before WordPress can replace installed files.
-
-If an older bundled broker or selected runtime cannot honor the option, the
-registration uses verified discovery and its target handle reports
-`metadata_only_discovery_unavailable` in `diagnostics()`.
+Hosts can explicitly inspect a selected release ZIP. Every install rechecks
+the exact release and asset and validates freshly downloaded bytes, including
+platform requirements, before WordPress can replace installed files. WordPress
+may attempt an automatic update when the advisory has unknown requirements. An
+incompatible archive is refused before installation.
 
 WordPress stores the advisory and its checked version for this target in the
-existing update transient. A current opted-in runtime projects them into the
-native update response on read. A verified registration or an older elected
-runtime sees neither the advisory nor its checked version, so the next native
-check can verify the ZIP before offering it. Those runtimes also reject a stale
-metadata-only token passed directly to automatic-update or download admission.
-Previously verified offers remain usable under either discovery mode, subject
-to normal admission and fresh install checks. WordPress's usual transient
-freshness and `refresh()` behavior apply.
+existing update transient. It collects its own advisories from either native
+bucket because WordPress can order prereleases differently. The elected
+runtime applies the updater's release ordering and projects eligible
+advisories into the native update response on read. If an older runtime is elected, it ignores the stored
+advisory and checked version and rejects a stale advisory token at automatic
+update or download admission. Its next native check uses its original verified
+discovery. Previously verified offers remain usable subject to normal admission
+and fresh install checks. WordPress's usual transient freshness and
+`refresh()` behavior apply.
 
 ### Checking without offering
 
@@ -307,11 +305,9 @@ Guarantees:
   targets are declared. For every policy except `forced-off` it also claims the
   discovery lease (the 600-second binding claim) and holds it for the rest of
   the request, as a native check does.
-- A check that reaches provider discovery uses the target's discovery mode.
-  Verified discovery inspects and validates the candidate ZIP. Metadata-only
-  discovery makes zero ZIP requests and leaves archive validation unknown.
-  Neither mode keeps a reusable result. Do not wire the check to unauthenticated
-  or high-frequency paths.
+- A check that reaches provider discovery makes zero ZIP requests and leaves
+  archive validation unknown. It keeps no reusable result. Do not wire the check
+  to unauthenticated or high-frequency paths.
 - Remote text is never returned; only the finite codes and validated versions
   above.
 
@@ -356,9 +352,9 @@ answering target returns exactly `status` (`authorized` or `refused`), `code`,
 the release is inspected).
 
 The target inspects the release afresh, binds it, requires the manual assurance
-facts and validates it as discovery validates a candidate: host descriptor
-admission, an exact release identity and tag match, one acquisition,
-archive validation and discard, then admission again. Codes:
+facts and checks host descriptor admission and an exact release identity and tag
+match. It acquires the ZIP once, validates and discards it, then checks admission
+again. Codes:
 
 | Code | Meaning |
 | --- | --- |
@@ -370,7 +366,7 @@ archive validation and discard, then admission again. Codes:
 | `release_older` | The release is older than installed and `$older_intended` is not `true` |
 | `release_invalid` | The installed or release version cannot be compared |
 | `candidate_not_eligible` | The release lacks the manual assurance facts |
-| `candidate_*` and archive validation codes | As reported for a discovery candidate |
+| `candidate_*` and archive validation codes | Descriptor admission, exact identity, acquisition or archive validation failed |
 | `offer_token_unavailable`, `runtime_liveness_lost` | No offer could be built, or the runtime was displaced |
 
 Guarantees:
@@ -510,6 +506,8 @@ Important native failure codes include:
 | `acquisition_failed` | The provider release/archive could not be freshly inspected or acquired |
 | `remote_release_changed` | The release no longer matches the exact release previously offered |
 | `acquisition_identity_invalid` | Acquired bytes failed the expected archive/provider identity checks |
+| `archive_php_requirement_incompatible` / `archive_wordpress_requirement_incompatible` | Acquired headers require a newer PHP or WordPress version |
+| `download_digest_mismatch` / `download_size_mismatch` | The download differs from the bound asset metadata |
 | `archive_changed_before_extraction` | The controlled archive changed before Core extraction |
 | `staged_package_identity_invalid` | Core's staged package does not match the admitted package identity or headers |
 | `runtime_liveness_lost` | The selected physical runtime is no longer authoritative for the operation |
@@ -517,7 +515,10 @@ Important native failure codes include:
 | `unverified_install_result` | Core did not produce an install result the updater can safely accept |
 | `outcome_uncertain` | Core ran, but final postconditions were insufficient to claim a verified completion |
 
-Discovery can also reject candidates without turning the whole update check into a WordPress error. `status()` exposes the candidate-validation state for that case. A missing/incompatible individual release can be skipped in favour of a later candidate; provider, authentication, malformed-data, or other authority failures stop discovery rather than being silently treated as an absent release.
+Discovery can reject a candidate without turning the whole update check into a
+WordPress error. `status()` exposes descriptor admission failures. Discovery can
+skip a release that is unavailable during metadata resolution. Provider,
+authentication, malformed-data or other authority failures stop discovery.
 
 ## Multisite
 

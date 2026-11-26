@@ -2,7 +2,7 @@
 
 `ran/wp-release-updater` is a Composer library that lets a WordPress plugin or theme receive verified updates from versioned release assets through WordPress Core's native update lifecycle.
 
-GitHub Releases is currently the only built-in provider. The package validates repository/release identity, release ZIP metadata and package identity before handing an update to WordPress, then verifies the installed package before accepting completion. WordPress remains the installer.
+GitHub Releases is currently the only built-in provider. Update checks bind the exact release and asset using metadata. At installation the package validates the freshly downloaded ZIP before handing it to WordPress, then verifies the installed package before accepting completion. WordPress remains the installer.
 
 The package is currently in beta. Use a tagged beta release and test the complete update journey in the plugin or theme you actually distribute.
 

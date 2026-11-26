@@ -5,13 +5,14 @@
 	$phase   = getenv( 'RAN_UPDATER_METADATA_CACHE_PHASE' );
 	$archive = getenv( 'RAN_UPDATER_METADATA_CACHE_ZIP' );
 	$output  = getenv( 'RAN_UPDATER_METADATA_CACHE_OUTPUT' );
-	if ( ! in_array( $phase, array( 'write', 'warm', 'verify', 'rewrite', 'historical' ), true ) || ! is_string( $archive ) || ! is_string( $output ) || ! isset( $GLOBALS['ran_updater_plugin_handle'] ) ) {
+	if ( ! in_array( $phase, array( 'write', 'warm', 'historical', 'incompatible', 'install' ), true ) || ! is_string( $archive ) || ! is_string( $output ) || ! isset( $GLOBALS['ran_updater_plugin_handle'] ) ) {
 		throw new RuntimeException( 'Metadata cache proof requires the installed distribution fixture.' );
 	}
 
 	$identity = 'ran-neutral-plugin/ran-neutral-plugin.php';
 	$uri      = 'https://github.com/fixture/neutral-plugin';
-	$writer   = in_array( $phase, array( 'write', 'rewrite' ), true );
+	$attempt  = in_array( $phase, array( 'incompatible', 'install' ), true );
+	$writer   = 'write' === $phase || $attempt;
 	$warm     = 'warm' === $phase;
 	if ( 'write' === $phase ) {
 		$zip = new ZipArchive();
@@ -30,6 +31,25 @@ Requires PHP: 8.2
 			)
 			|| ! $zip->close() ) {
 			throw new RuntimeException( 'Could not create the metadata cache release fixture.' );
+		}
+	}
+	if ( $attempt ) {
+		$original = getenv( 'RAN_UPDATER_METADATA_CACHE_ORIGINAL' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_copy -- Copy the installed distribution fixture to an owned candidate archive.
+		if ( ! is_string( $original ) || ! copy( $original, $archive ) ) {
+			throw new RuntimeException( 'Could not copy the installed distribution fixture.' );
+		}
+		$zip = new ZipArchive();
+		if ( true !== $zip->open( $archive ) ) {
+			throw new RuntimeException( 'Could not open the candidate archive.' );
+		}
+		$entry = $zip->getFromName( $identity );
+		$entry = is_string( $entry ) ? str_replace( 'Version: 1.0.0', 'Version: 2.0.0', $entry ) : '';
+		if ( 'incompatible' === $phase ) {
+			$entry = str_replace( 'Requires PHP: 8.2', 'Requires PHP: 99.0', $entry );
+		}
+		if ( '' === $entry || ! $zip->addFromString( $identity, $entry ) || ! $zip->close() ) {
+			throw new RuntimeException( 'Could not finish the candidate archive.' );
 		}
 	}
 	if ( $writer ) {
@@ -67,6 +87,17 @@ Requires PHP: 8.2
 						'no_update'    => array(),
 					)
 				);
+			} elseif ( str_starts_with( $url, 'http://example.test/' ) ) {
+				// Core's automatic update sandbox probes the activated fixture through loopback.
+				$query = wp_parse_url( $url, PHP_URL_QUERY );
+				parse_str( is_string( $query ) ? $query : '', $parts );
+				$key   = $parts['wp_scrape_key'] ?? null;
+				$nonce = $parts['wp_scrape_nonce'] ?? null;
+				$body  = is_string( $key ) && preg_match( '/\A[a-f0-9]{32}\z/', $key ) && is_string( $nonce ) && ctype_digit( $nonce )
+					? "###### wp_scraping_result_start:$key ######
+[]
+###### wp_scraping_result_end:$key ######"
+					: null;
 			} elseif ( str_starts_with( $url, $api ) ) {
 				++$provider_calls;
 				$body = match ( $url ) {
@@ -151,6 +182,123 @@ Requires PHP: 8.2
 		: null === $saved;
 	$proof['pass']                     = ! in_array( false, $proof, true ) && ( $metadata ? 0 : 1 ) === $zip_calls
 		&& ( $warm ? 0 === $provider_calls : 0 < $provider_calls );
+	if ( $attempt ) {
+		$site = getenv( 'RAN_UPDATER_METADATA_CACHE_SITE' );
+		$root = is_string( $site ) ? realpath( $site ) : false;
+		$path = WP_PLUGIN_DIR . '/' . $identity;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Verify the parent harness's exact ownership marker before running Core's installer.
+		if ( ! is_string( $root ) || $site !== $root || ABSPATH !== $root . '/' || WP_CONTENT_DIR !== $root . '/wp-content' || 'http://example.test' !== site_url() || realpath( $path ) !== $root . '/wp-content/plugins/' . $identity || 'ran-wp-release-updater-integration-v1' !== file_get_contents( dirname( $output ) . '/.integration-owner' ) ) {
+			throw new RuntimeException( 'Automatic metadata proof requires an owned disposable site.' );
+		}
+		require_once ABSPATH . 'wp-admin/includes/admin.php';
+		require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
+
+		$manifest                  = static function ( string $directory ): array {
+			$files = array();
+			foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $directory, FilesystemIterator::SKIP_DOTS ) ) as $file ) {
+				if ( $file->isLink() || ! $file->isFile() ) {
+					throw new RuntimeException( 'Expected regular installed package files.' );
+				}
+				$files[ $file->getPathname() ] = hash_file( 'sha256', $file->getPathname() );
+			}
+			ksort( $files );
+			return $files;
+		};
+		$installed                 = $manifest( dirname( $path ) );
+		$active                    = get_option( 'active_plugins' );
+		$status                    = $GLOBALS['ran_updater_plugin_handle']->status();
+		$candidate                 = $status['native'] ?? array();
+		$proof['candidate_status'] = '7' === ( $candidate['offered_release_identity'] ?? null )
+			&& 'v2.0.0' === ( $candidate['candidate_tag'] ?? null )
+			&& '2.0.0' === ( $candidate['offered_version'] ?? null )
+			&& array_key_exists( 'candidate_header_version', $candidate ) && null === $candidate['candidate_header_version']
+			&& array_key_exists( 'candidate_validation_code', $candidate ) && null === $candidate['candidate_validation_code'];
+		if ( 'install' === $phase ) {
+			$registrar                    = require dirname( $path ) . '/vendor/ran/wp-release-updater/bootstrap.php';
+			$source                       = $registrar->releases( 'github', 'plugin', 'fixture/neutral-plugin', '123456789' );
+			$inspection                   = $source->inspect( '7', 'v2.0.0' );
+			$proof['explicit_inspection'] = 'release_inspected' === ( $inspection['code'] ?? null ) && 1 === $zip_calls;
+		}
+		$before_install = $zip_calls;
+		$preinstall     = 0;
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Observe Core's unmodified installation boundary.
+		add_filter(
+			'upgrader_pre_install',
+			static function ( mixed $result, array $extra ) use ( $identity, &$preinstall ): mixed {
+				if ( ( $extra['plugin'] ?? null ) === $identity ) {
+					++$preinstall;
+				}
+				return $result;
+			},
+			1,
+			2
+		);
+		$activation_writes = 0;
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Observe writes to the actual WordPress activation option.
+		add_action(
+			'update_option_active_plugins',
+			static function () use ( &$activation_writes ): void {
+				++$activation_writes;
+			}
+		);
+		$results = array();
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Observe Core's real automatic update results for the fixture target.
+		add_action(
+			'automatic_updates_complete',
+			static function ( array $updates ) use ( &$results ): void {
+				$results = $updates['plugin'] ?? array();
+			}
+		);
+		add_filter( 'pre_wp_mail', '__return_true' );
+		$automatic_decision = null;
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Observe the automatic decision without modifying it.
+		add_filter(
+			'auto_update_plugin',
+			static function ( ?bool $decision, object $item ) use ( $identity, &$automatic_decision ): ?bool {
+				if ( ( $item->plugin ?? null ) === $identity ) {
+					$automatic_decision = $decision;
+				}
+				return $decision;
+			},
+			PHP_INT_MAX,
+			2
+		);
+		$download_error = null;
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Observe the native reply before older Core discards the download error.
+		add_filter(
+			'upgrader_pre_download',
+			static function ( mixed $reply, string $package, mixed $upgrader, array $extra ) use ( $identity, &$download_error ): mixed {
+				unset( $package, $upgrader );
+				if ( ( $extra['plugin'] ?? null ) === $identity && is_wp_error( $reply ) ) {
+					$download_error = $reply->get_error_code();
+				}
+				return $reply;
+			},
+			PHP_INT_MAX,
+			4
+		);
+		add_filter( 'wp_doing_cron', '__return_true' );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Dispatch the same Core action as the scheduled automatic updater.
+		do_action( 'wp_maybe_auto_update' );
+		$proof['core_automatic_decision'] = $automatic_decision;
+		$result                           = $results[0]->result ?? null;
+		$proof['install_zip_requests']    = $zip_calls - $before_install;
+		$proof['activation_preserved']    = is_plugin_active( $identity ) && get_option( 'active_plugins' ) === $active;
+		if ( 'incompatible' === $phase ) {
+			$proof['failure']                  = $download_error;
+			$proof['before_install_boundary']  = 0 === $preinstall && 0 === $activation_writes;
+			$proof['original_bytes_preserved'] = $installed === $manifest( dirname( $path ) );
+			$proof['pass']                     = $proof['pass'] && 'ran_wp_release_updater_archive_php_requirement_incompatible' === $proof['failure'];
+		} else {
+			$zip                                = new ZipArchive();
+			$entry                              = true === $zip->open( $archive ) ? $zip->getFromName( $identity ) : false;
+			$proof['candidate_bytes_installed'] = is_string( $entry ) && hash( 'sha256', $entry ) === hash_file( 'sha256', $path );
+			$status                             = $GLOBALS['ran_updater_plugin_handle']->status();
+			$proof['verified_install']          = 1 === $preinstall && ! is_wp_error( $result ) && null !== $result
+				&& 'verified_success' === ( $status['native']['last_native_outcome']['outcome'] ?? null );
+		}
+		$proof['pass'] = $proof['pass'] && ! in_array( false, $proof, true ) && true === $automatic_decision && 1 === $proof['install_zip_requests'];
+	}
 	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Save only the bounded redacted assertions for the parent installed test process.
 	file_put_contents(
 		$output,

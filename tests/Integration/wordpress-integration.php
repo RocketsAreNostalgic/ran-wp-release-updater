@@ -781,10 +781,9 @@ function ran_wp_release_updater_test_consumer_archives( string $source, string $
 			. "\$registrar = require \$runtime . '/bootstrap.php';\n"
 			. "\$credentials = static function (): ?string { ++\$GLOBALS['ran_updater_credential_calls']['" . $type . "']; return null; };\n"
 			. "\$phase = 'plugin' === '" . $type . "' ? getenv('RAN_UPDATER_METADATA_CACHE_PHASE') : false;\n"
-			. "\$options = in_array(\$phase, array('write', 'warm', 'rewrite'), true) ? array('metadata_only_discovery' => true) : array();\n"
-			. "\$policy = in_array(\$phase, array('write', 'warm', 'verify', 'rewrite', 'historical'), true) ? 'automatic' : 'manual';\n"
+			. "\$policy = in_array(\$phase, array('write', 'warm', 'historical', 'incompatible', 'install'), true) ? 'automatic' : 'manual';\n"
 			. "\$GLOBALS['ran_updater_" . $type . "_handle'] = \$registrar->" . $type . "('github', " . $entry
-			. ", 'fixture/neutral-" . $type . "', '" . ( 'plugin' === $type ? '123456789' : '123456790' ) . "', 'stable', \$policy, \$credentials, ...\$options);\n"
+			. ", 'fixture/neutral-" . $type . "', '" . ( 'plugin' === $type ? '123456789' : '123456790' ) . "', 'stable', \$policy, \$credentials);\n"
 			. "\$GLOBALS['ran_updater_" . $type . "_handle']->register();\n";
 		if ( 'plugin' === $type ) {
 			ran_wp_release_updater_test_write_file( $root . '/' . $slug . '.php', $php );
@@ -1200,7 +1199,7 @@ function ran_wp_release_updater_test_installed_metadata_cache( array $arguments,
 		ran_wp_release_updater_test_write_file( $path, $bytes );
 	}
 	ran_wp_release_updater_test_verify_runtime( $historical );
-	foreach ( array( 'write', 'warm', 'verify', 'rewrite', 'historical' ) as $phase ) {
+	foreach ( array( 'write', 'warm', 'historical', 'incompatible', 'install' ) as $phase ) {
 		$output = $metadata_cache . '-' . $phase . '.json';
 		ran_wp_release_updater_test_command(
 			array_merge( $arguments, array( 'eval-file', __DIR__ . '/wordpress-integration/metadata-cache.php' ) ),
@@ -1208,7 +1207,9 @@ function ran_wp_release_updater_test_installed_metadata_cache( array $arguments,
 			'metadata-cache-' . $phase,
 			array(
 				'RAN_UPDATER_METADATA_CACHE_PHASE'      => $phase,
-				'RAN_UPDATER_METADATA_CACHE_ZIP'        => $metadata_cache . '.zip',
+				'RAN_UPDATER_METADATA_CACHE_ZIP'        => $metadata_cache . ( in_array( $phase, array( 'incompatible', 'install' ), true ) ? '-' . $phase : '' ) . '.zip',
+				'RAN_UPDATER_METADATA_CACHE_ORIGINAL'   => $run . '/ran-neutral-plugin.zip',
+				'RAN_UPDATER_METADATA_CACHE_SITE'       => $site,
 				'RAN_UPDATER_METADATA_CACHE_OUTPUT'     => $output,
 				'RAN_UPDATER_METADATA_CACHE_HISTORICAL' => $historical,
 			)

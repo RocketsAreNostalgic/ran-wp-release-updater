@@ -27,7 +27,7 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
  * @phpstan-type TargetBinding array{canonical_repository_locator:string,canonical_update_uri:string,installed_package_identity:string,maximum_artifact_bytes:int,network_id:int,php_runtime_version:string,provider_code:string,release_channel:string,stable_repository_identity:string,target_type:string,theme_template:string,update_policy:string,wordpress_runtime_version:string}
  */
 final class NativePackageUpdater {
-	private const VERIFIED_TOKEN_PREFIX = 'ran-wp-release-updater:v1:';
+	private const LEGACY_TOKEN_PREFIX   = 'ran-wp-release-updater:v1:';
 	private const METADATA_TOKEN_PREFIX = 'ran-wp-release-updater:metadata:v1:';
 	private const METADATA_CACHE        = 'ran_wp_release_updater_metadata_offers';
 	private const MAX_DIAGNOSTICS       = 16;
@@ -83,7 +83,7 @@ final class NativePackageUpdater {
 	);
 	/** @var array{outcome:string,source:string,wordpress_code:string|null,release_identity:string,version:string,last_observed_step:string|null,recorded_at:int}|null */
 	private ?array $last_native_outcome = null;
-	/** @var array{descriptor:IdentityDescriptor,installed:string,metadata_only:bool}|null */
+	/** @var array{descriptor:IdentityDescriptor,installed:string}|null */
 	private ?array $discovery_snapshot = null;
 	private int $discovery_epoch       = 0;
 	private OwnedArchiveStore $archive_store;
@@ -143,8 +143,7 @@ final class NativePackageUpdater {
 		?callable $native_mutation_begin = null,
 		?callable $native_mutation_complete = null,
 		?callable $descriptor_admission = null,
-		?callable $header_loader = null,
-		private bool $metadata_only_discovery = false
+		?callable $header_loader = null
 	) {
 		$this->archive_store            = new OwnedArchiveStore();
 		$this->pending_install          = new PendingInstallState();
@@ -175,8 +174,7 @@ final class NativePackageUpdater {
 		?callable $native_mutation_begin = null,
 		?callable $native_mutation_complete = null,
 		?callable $descriptor_admission = null,
-		?callable $header_loader = null,
-		bool $metadata_only_discovery = false
+		?callable $header_loader = null
 	): ?self {
 		if ( ( null === $native_mutation_begin ) !== ( null === $native_mutation_complete ) || ( null === $operation_guard && null !== $native_mutation_begin ) ) {
 			return null;
@@ -221,8 +219,7 @@ final class NativePackageUpdater {
 			$native_mutation_begin,
 			$native_mutation_complete,
 			$descriptor_admission,
-			$header_loader,
-			$metadata_only_discovery
+			$header_loader
 		);
 	}
 
@@ -327,9 +324,7 @@ final class NativePackageUpdater {
 		add_filter( 'plugin' === $this->target_type ? 'plugins_update_check_locales' : 'themes_update_check_locales', array( $this, 'prepare_update_check_routing' ), 10, 1 );
 		$transient = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
 		add_filter( 'site_transient_' . $transient, array( $this, 'filter_cached_update' ), 10, 1 );
-		if ( $this->metadata_only_discovery ) {
-			add_filter( 'pre_set_site_transient_' . $transient, array( $this, 'filter_store_update' ), PHP_INT_MAX, 1 );
-		}
+		add_filter( 'pre_set_site_transient_' . $transient, array( $this, 'filter_store_update' ), PHP_INT_MAX, 1 );
 		if ( 'plugin' === $this->target_type ) {
 			add_filter( 'plugins_api', array( $this, 'filter_plugin_information' ), 10, 3 );
 		}
@@ -395,15 +390,6 @@ final class NativePackageUpdater {
 		if ( ! is_object( $transient ) || ! is_array( $transient->response ?? null ) || ! array_key_exists( $this->installed_identity, $transient->response ) ) {
 			return $this->project_metadata_offer( $transient );
 		}
-		$package = $this->cached_package( $transient );
-		if ( ! $this->metadata_only_discovery && is_string( $package ) && str_starts_with( $package, self::METADATA_TOKEN_PREFIX ) ) {
-			unset( $transient->response[ $this->installed_identity ] );
-			// Let the next native check bypass WordPress's recent-check shortcut for this target.
-			if ( is_array( $transient->checked ?? null ) ) {
-				unset( $transient->checked[ $this->installed_identity ] );
-			}
-			return $transient;
-		}
 		if ( $this->policy_blocked() ) {
 			unset( $transient->response[ $this->installed_identity ] );
 			return $transient;
@@ -424,10 +410,24 @@ final class NativePackageUpdater {
 
 	/** Keep metadata advisories out of the native cache and request-authorised releases out of storage. */
 	public function filter_store_update( mixed $transient ): mixed {
-		if ( ! is_object( $transient ) || ! is_array( $transient->response ?? null ) ) {
+		if ( ! is_object( $transient ) ) {
 			return $transient;
 		}
-		$entry   = $this->cached_entry( $transient );
+		$entry = $this->cached_entry( $transient );
+		if ( is_array( $transient->no_update ?? null ) ) {
+			$no_update       = $transient->no_update[ $this->installed_identity ] ?? null;
+			$no_update_token = $this->entry_package( $no_update );
+			if ( is_string( $no_update_token ) && str_starts_with( $no_update_token, self::METADATA_TOKEN_PREFIX ) ) {
+				// Core's version comparison can place an eligible prerelease advisory in no_update.
+				unset( $transient->no_update[ $this->installed_identity ] );
+				if ( null === $entry ) {
+					return $this->store_metadata_offer( $transient, $no_update, $no_update_token );
+				}
+			}
+		}
+		if ( ! is_array( $transient->response ?? null ) ) {
+			return $transient;
+		}
 		$package = $this->entry_package( $entry );
 		if ( is_string( $package ) && str_starts_with( $package, self::METADATA_TOKEN_PREFIX ) ) {
 			unset( $transient->response[ $this->installed_identity ] );
@@ -484,7 +484,7 @@ final class NativePackageUpdater {
 	}
 
 	private function project_metadata_offer( mixed $transient ): mixed {
-		if ( ! $this->metadata_only_discovery || ! $transient instanceof \stdClass || ! is_array( $transient->{self::METADATA_CACHE} ?? null ) ) {
+		if ( ! $transient instanceof \stdClass || ! is_array( $transient->{self::METADATA_CACHE} ?? null ) ) {
 			return $transient;
 		}
 		$cached = $transient->{self::METADATA_CACHE}[ $this->installed_identity ] ?? null;
@@ -567,8 +567,7 @@ final class NativePackageUpdater {
 			$reason,
 			function () use ( &$check_id ): void {
 				$check_id = $this->start_check_observation();
-			},
-			$this->metadata_only_discovery
+			}
 		);
 		if ( ! $descriptor instanceof IdentityDescriptor ) {
 			return 'candidate_admission_rejected' === $this->status['candidate_validation_code'] ? false : $update;
@@ -577,7 +576,7 @@ final class NativePackageUpdater {
 			$reason = 'candidate_not_eligible';
 			return $update;
 		}
-		$token = $this->token( $descriptor, $this->metadata_only_discovery );
+		$token = $this->token( $descriptor );
 		if ( null === $token ) {
 			$reason = 'offer_token_unavailable';
 			return $update;
@@ -588,11 +587,11 @@ final class NativePackageUpdater {
 		return $this->offer_entry( $descriptor, $token, $this->automatic_eligible( $descriptor ) );
 	}
 
-	/** @return array<string,mixed> */
-	private function offer_entry( IdentityDescriptor $descriptor, string $token, bool $autoupdate ): array {
-		$headers = $this->metadata_only_discovery
-			? ( $this->candidate_headers[ $descriptor->fingerprint_value() ] ?? array() )
-			: $this->candidate_headers_for( $descriptor );
+	/**
+	 * @param array<string,string> $headers Archive headers from explicit inspection, if available.
+	 * @return array<string,mixed>
+	 */
+	private function offer_entry( IdentityDescriptor $descriptor, string $token, bool $autoupdate, array $headers = array() ): array {
 		return array(
 			'id'                                  => $this->update_uri,
 			'slug'                                => $this->information_slug(),
@@ -611,7 +610,7 @@ final class NativePackageUpdater {
 	 * Host-requested authorisation of one exact release for this request: the same version as installed or newer,
 	 * or older only when $older_intended is exactly true, which the host passes after the operator confirmed it.
 	 *
-	 * The release is freshly inspected, bound and validated as discovery validates a candidate. Until a download
+	 * The release is freshly inspected, bound and verified against the archive. Until a download
 	 * attempt consumes it, reads of the update check supply its offer; saves of the update check never keep it.
 	 * Another target's request, or a runtime that is not live, is returned unchanged.
 	 *
@@ -676,12 +675,16 @@ final class NativePackageUpdater {
 		if ( true !== $this->admit_candidate( $descriptor, $candidate, $reason ) ) {
 			return $this->offer_report( $this->status['candidate_validation_code'] ?? $reason, $version, $relationship );
 		}
-		$token = $this->token( $descriptor );
+		$failure = $this->verify_selected_archive( $descriptor );
+		if ( null !== $failure ) {
+			return $this->offer_report( $failure, $version, $relationship );
+		}
+		$token = $this->token( $descriptor, self::LEGACY_TOKEN_PREFIX );
 		if ( null === $token || ! $this->live() ) {
 			return $this->offer_report( null === $token ? 'offer_token_unavailable' : 'runtime_liveness_lost', $version, $relationship );
 		}
 		// WordPress adds new_version when it saves a check; a supplied offer is never saved, so it carries its own.
-		$this->authorized_offer       = $this->offer_entry( $descriptor, $token, false ) + array( 'new_version' => $version );
+		$this->authorized_offer       = $this->offer_entry( $descriptor, $token, false, $this->candidate_headers_for( $descriptor ) ) + array( 'new_version' => $version );
 		$this->authorized_fingerprint = $descriptor->fingerprint_value();
 		$this->authorized_fingerprints[ $this->authorized_fingerprint ] = true;
 		$transient = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
@@ -937,8 +940,7 @@ final class NativePackageUpdater {
 					$reason,
 					function () use ( &$check_id ): void {
 						$check_id = $this->start_check_observation();
-					},
-					$this->metadata_only_discovery
+					}
 				);
 				if ( $descriptor instanceof IdentityDescriptor ) {
 					$reason = $this->manual_eligible( $descriptor ) ? 'newer_release_observed' : 'candidate_not_eligible';
@@ -1073,15 +1075,15 @@ final class NativePackageUpdater {
 				return $result;
 			}
 			$facts               = $descriptor->to_array();
-			$headers             = $this->candidate_headers_for( $descriptor );
+			$headers             = $this->loaded_headers();
 			$info                = new \stdClass();
 			$info->name          = $headers['Name'];
 			$info->slug          = $this->information_slug();
 			$info->version       = $facts['version'];
 			$info->author        = $headers['Author'];
 			$info->homepage      = $headers['PluginURI'];
-			$info->requires      = $headers['RequiresWP'];
-			$info->requires_php  = $headers['RequiresPHP'];
+			$info->requires      = '';
+			$info->requires_php  = '';
 			$info->download_link = $this->token( $descriptor ) ?? '';
 			$info->external      = true;
 			$info->sections      = array(
@@ -1193,7 +1195,7 @@ final class NativePackageUpdater {
 			return $this->fail_pending( $fresh );
 		}
 		$owned   = null;
-		$failure = $this->acquire_owned_archive( $fresh, $owned, report_rejection: $this->metadata_only_discovery && ! $authorized );
+		$failure = $this->acquire_owned_archive( $fresh, $owned, report_rejection: ! $authorized );
 		if ( null !== $failure || null === $owned ) {
 			if ( is_array( $owned ) ) {
 				$this->archive_store->remove( $owned['path'], $owned['directory'] );
@@ -1290,7 +1292,7 @@ final class NativePackageUpdater {
 			$fresh = $this->adapter->inspect( $token->release_identity(), $token->to_array()['tag'] );
 			self::assert_descriptor_binding( $fresh, $this->target_binding );
 		} catch ( ReleaseFailure $failure ) {
-			if ( $this->metadata_only_discovery && ! $authorized && self::can_reject_candidate( $failure ) ) {
+			if ( ! $authorized && self::can_reject_candidate( $failure ) ) {
 				return 'remote_release_changed';
 			}
 			return 'acquisition_failed';
@@ -2153,14 +2155,14 @@ final class NativePackageUpdater {
 	/**
 	 * @param (\Closure(): void)|null $on_discovery
 	 */
-	private function discover( string $installed, string &$reason = '', ?\Closure $on_discovery = null, bool $metadata_only = false ): ?IdentityDescriptor {
+	private function discover( string $installed, string &$reason = '', ?\Closure $on_discovery = null ): ?IdentityDescriptor {
 		$reason               = 'release_list_failed';
 		$rejected             = false;
 		$normalized_installed = ReleaseVersion::normalize_header( $installed );
 		if ( ! is_string( $normalized_installed ) ) {
 			return null;
 		}
-		$reused = $this->reusable_discovery( $normalized_installed, $metadata_only );
+		$reused = $this->reusable_discovery( $normalized_installed );
 		if ( $reused instanceof IdentityDescriptor ) {
 			return $reused;
 		}
@@ -2227,21 +2229,19 @@ final class NativePackageUpdater {
 				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
 				return null;
 			}
-			$admitted = $this->admit_candidate( $descriptor, $candidate, $reason, $metadata_only );
+			$admitted = $this->admit_candidate( $descriptor, $candidate, $reason );
 			if ( true !== $admitted ) {
 				if ( false === $admitted ) {
 					continue;
 				}
 				return null;
 			}
-			$facts                                    = $descriptor->to_array();
-			$this->status['candidate_header_version'] = $metadata_only ? null : $facts['version'];
-			$this->descriptor                         = $descriptor;
+			$this->status['candidate_validation_code'] = null;
+			$this->descriptor                          = $descriptor;
 			if ( $this->native_discovery_reuse && $this->live() && $this->discovery_epoch === $discovery_epoch ) {
 				$this->discovery_snapshot = array(
-					'descriptor'    => $descriptor,
-					'installed'     => $normalized_installed,
-					'metadata_only' => $metadata_only,
+					'descriptor' => $descriptor,
+					'installed'  => $normalized_installed,
 				);
 			}
 			return $this->live() ? $descriptor : null;
@@ -2252,13 +2252,10 @@ final class NativePackageUpdater {
 		return null;
 	}
 	/**
-	 * Metadata-only discovery admits the candidate once the host accepts the matching descriptor.
-	 * Verified discovery also acquires, validates and discards the archive before checking host admission again.
-	 *
 	 * @param array{release_identity:string,tag:string,version:string} $candidate
 	 * @return bool|null True when admitted, false when another candidate may be tried, null when discovery must stop.
 	 */
-	private function admit_candidate( IdentityDescriptor $descriptor, array $candidate, string &$reason, bool $metadata_only = false ): ?bool {
+	private function admit_candidate( IdentityDescriptor $descriptor, array $candidate, string &$reason ): ?bool {
 		if ( ! $this->descriptor_admitted( $descriptor ) ) {
 			$reason                                    = 'candidate_rejected';
 			$this->status['candidate_validation_code'] = 'candidate_admission_rejected';
@@ -2269,64 +2266,38 @@ final class NativePackageUpdater {
 			$reason                                    = 'candidate_descriptor_mismatch';
 			$this->status['candidate_validation_code'] = 'candidate_descriptor_mismatch';
 			return null; }
-		if ( $metadata_only ) {
-			// The descriptor binds release and asset metadata. Compatibility is still unknown.
-			$this->status['candidate_validation_code'] = null;
-			return true;
-		}
+		return true;
+	}
+
+	/** Verify a specifically requested release and discard its inspection bytes. */
+	private function verify_selected_archive( IdentityDescriptor $descriptor ): ?string {
 		$artifact = null;
 		try {
 			$artifact = $this->adapter->acquire( $descriptor );
-			$valid    = $artifact->inspect( fn( string $path ) => $this->validator->validate( $descriptor, $this->archive_policy, $path ) );
-		} catch ( ReleaseFailure $failure ) {
-			$reason                                    = 'candidate_validation_failed';
-			$this->status['candidate_validation_code'] = 'candidate_validation_failed';
-			if ( $artifact instanceof \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact && ! $artifact->discard() ) {
-				return null;
-			}
-			if ( self::can_reject_candidate( $failure ) ) {
-				$reason = 'candidate_rejected';
-				return false;
-			}
-			return null;
+			$proof    = $artifact->inspect( fn( string $path ) => $this->validator->validate( $descriptor, $this->archive_policy, $path ) );
 		} catch ( \Throwable ) {
-			$reason                                    = 'candidate_validation_failed';
-			$this->status['candidate_validation_code'] = 'candidate_validation_failed';
-			if ( $artifact instanceof \RAN\WPReleaseUpdater\V1\Archive\TemporaryArtifact ) {
-				$artifact->discard();
-			}
-			return null;
-		}
-		$this->status['candidate_validation_code'] = $valid->code();
-		if ( ! $valid->is_valid() ) {
-			$reason = 'candidate_rejected';
-			if ( ! $artifact->discard() ) {
-				$reason                                    = 'candidate_validation_failed';
-				$this->status['candidate_validation_code'] = 'candidate_validation_failed';
-				return null;
-			}
-			return false;
+			$artifact?->discard();
+			return 'candidate_validation_failed';
 		}
 		if ( ! $artifact->discard() ) {
-			$reason                                    = 'candidate_validation_failed';
-			$this->status['candidate_validation_code'] = 'candidate_validation_failed';
-			return null;
+			return 'candidate_validation_failed';
+		}
+		if ( ! $proof->is_valid() ) {
+			return $proof->code();
 		}
 		if ( ! $this->descriptor_admitted( $descriptor ) ) {
-			$reason                                    = 'candidate_rejected';
-			$this->status['candidate_validation_code'] = 'candidate_admission_rejected';
-			return false;
+			return 'candidate_admission_rejected';
 		}
-		$this->remember_candidate_headers( $descriptor, $valid );
-		return true;
+		$this->remember_candidate_headers( $descriptor, $proof );
+		return null;
 	}
 
 	private static function can_reject_candidate( ReleaseFailure $failure ): bool {
 		return in_array( $failure->release_code, array( 'release_unavailable', 'package_incompatible' ), true )
 			&& in_array( $failure->cleanup_status, array( 'not_applicable', 'complete' ), true );
 	}
-	private function reusable_discovery( string $installed, bool $metadata_only ): ?IdentityDescriptor {
-		if ( ! $this->live() || ! $this->native_discovery_reuse || ! is_array( $this->discovery_snapshot ) || $this->discovery_snapshot['installed'] !== $installed || $this->discovery_snapshot['metadata_only'] !== $metadata_only ) {
+	private function reusable_discovery( string $installed ): ?IdentityDescriptor {
+		if ( ! $this->live() || ! $this->native_discovery_reuse || ! is_array( $this->discovery_snapshot ) || $this->discovery_snapshot['installed'] !== $installed ) {
 			return null;
 		}
 		$descriptor = $this->discovery_snapshot['descriptor'];
@@ -2339,8 +2310,7 @@ final class NativePackageUpdater {
 		$facts                                     = $descriptor->to_array();
 		$this->status['candidate_tag']             = $facts['tag'];
 		$this->status['candidate_version']         = $facts['version'];
-		$this->status['candidate_header_version']  = $metadata_only ? null : $facts['version'];
-		$this->status['candidate_validation_code'] = $metadata_only ? null : 'archive_identity_verified';
+		$this->status['candidate_validation_code'] = null;
 		$this->status['relationship']              = ReleaseVersion::relationship( $facts['version'], $installed );
 		$this->descriptor                          = $descriptor;
 		return $descriptor;
@@ -2350,7 +2320,7 @@ final class NativePackageUpdater {
 		$this->discovery_snapshot                 = null;
 		$this->status['offered_release_identity'] = null;
 		$this->status['offered_version']          = null; }
-	private function token( IdentityDescriptor $descriptor, bool $metadata_only = false ): ?string {
+	private function token( IdentityDescriptor $descriptor, string $prefix = self::METADATA_TOKEN_PREFIX ): ?string {
 		$value = array(
 			'binding_hash' => $this->binding_hash,
 			'descriptor'   => $descriptor->to_array(),
@@ -2361,15 +2331,14 @@ final class NativePackageUpdater {
 			$json = json_encode( $value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES );
 		} catch ( \JsonException ) {
 			return null; }
-		$prefix = $metadata_only ? self::METADATA_TOKEN_PREFIX : self::VERIFIED_TOKEN_PREFIX;
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- URL-safe base64 represents the bounded opaque operation token or its fixture; it does not encode executable code.
 		$token = $prefix . rtrim( strtr( base64_encode( $json ), '+/', '-_' ), '=' );
 		return strlen( $token ) <= 8192 ? $token : null;
 	}
 	private function parse_token( string $token ): ?IdentityDescriptor {
-		$prefix = $this->metadata_only_discovery && str_starts_with( $token, self::METADATA_TOKEN_PREFIX )
+		$prefix = str_starts_with( $token, self::METADATA_TOKEN_PREFIX )
 			? self::METADATA_TOKEN_PREFIX
-			: self::VERIFIED_TOKEN_PREFIX;
+			: self::LEGACY_TOKEN_PREFIX;
 		if ( ! str_starts_with( $token, $prefix ) || strlen( $token ) > 8192 ) {
 			return null;
 		}
@@ -2625,7 +2594,13 @@ final class NativePackageUpdater {
 			'relationship'              => null,
 		); }
 	private function failure( string $code, bool $record_attempt = true ): mixed {
-		$this->diagnose( $code, null, $record_attempt );
+		// An older broker can elect this runtime while still validating protocol 11 with its original code list.
+		$diagnostic = match ( $code ) {
+			'archive_php_requirement_incompatible', 'archive_wordpress_requirement_incompatible' => 'acquisition_identity_invalid',
+			'download_digest_mismatch', 'download_size_mismatch' => 'acquisition_failed',
+			default => $code,
+		};
+		$this->diagnose( RequestProtocolValidator::is_native_failure_code( $code ) ? $code : $diagnostic, null, $record_attempt );
 		return class_exists( '\\WP_Error' ) ? new \WP_Error( 'ran_wp_release_updater_' . $code, 'The update operation was not admitted.' ) : false; }
 	private function direct_filesystem(): bool {
 		return SelectedRuntimeState::direct_filesystem_available(); }

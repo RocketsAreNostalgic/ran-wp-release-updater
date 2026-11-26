@@ -131,8 +131,6 @@ return new class(
 	private array $targets = array();
 	private ?int $network_id;
 
-	public const SUPPORTS_METADATA_ONLY_DISCOVERY = true;
-
 	/** @param array<string,array{native:Closure,release:Closure}> $provider_catalog */
 	public function __construct( private mixed $broker, private mixed $broker_provenance, private mixed $selected_runtime_state, private array $provider_catalog, private Closure $broker_origin ) {
 		$this->network_id = $this->network_id();
@@ -378,9 +376,6 @@ return new class(
 	 * @param array<string,mixed> $next
 	 */
 	private function same_declaration( array $first, array $next ): bool {
-		if ( ( $first['metadata_only_discovery'] ?? false ) !== ( $next['metadata_only_discovery'] ?? false ) ) {
-			return false;
-		}
 		foreach ( array( 'target_type', 'provider_code', 'repository_locator', 'repository_identity', 'channel', 'update_policy', 'credential_resolver', 'maximum_artifact_bytes', 'operation_guard', 'native_mutation_begin', 'native_mutation_complete', 'descriptor_admission' ) as $fact ) {
 			if ( $first[ $fact ] !== $next[ $fact ] ) {
 				return false;
