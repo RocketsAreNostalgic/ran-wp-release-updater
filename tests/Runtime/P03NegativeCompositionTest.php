@@ -68,7 +68,7 @@ PHP,
 		self::assertTrue( $result['registered'] );
 		self::assertSame( 'target_active', $result['before']['code'] );
 		self::assertTrue( $result['before']['hooks_registered'] );
-		self::assertSame( 'plugin' === $type ? 15 : 14, $result['hooks'] );
+		self::assertSame( 'plugin' === $type ? 17 : 16, $result['hooks'] );
 		self::assertFalse( $result['answer'] );
 		self::assertSame( 'runtime_package_identity_invalid', $result['status']['native']['failure_code'] );
 		self::assertSame( 0, $result['credentials'] );
@@ -153,7 +153,7 @@ PHP,
 			)
 		);
 
-		self::assertSame( 15, $result['hooks'], $method );
+		self::assertSame( 17, $result['hooks'], $method );
 		self::assertSame( 0, $result['credentials'], $method );
 		self::assertSame( 0, $result['http'], $method );
 		self::assertSame( 0, $result['database'], $method );

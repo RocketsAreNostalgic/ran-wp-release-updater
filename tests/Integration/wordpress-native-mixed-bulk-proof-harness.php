@@ -292,9 +292,9 @@ add_action(
 			&& array_values( $results ) === $expected_results
 			&& ! in_array( false, $observation_evidence, true )
 			&& $manifest_exact
-			&& ! str_starts_with( $archives['ordinary'], 'ran-wp-release-updater:v1:' )
-			&& array( 1, 2, 2 ) === $adapter_evidence['managed-a']['calls']
-			&& array( 1, 2, 2 ) === $adapter_evidence['managed-b']['calls']
+			&& ! str_starts_with( $archives['ordinary'], 'ran-wp-release-updater:' )
+			&& array( 1, 2, 1 ) === $adapter_evidence['managed-a']['calls']
+			&& array( 1, 2, 1 ) === $adapter_evidence['managed-b']['calls']
 			&& $adapter_evidence['managed-a']['acquired_paths_absent']
 			&& $adapter_evidence['managed-b']['acquired_paths_absent']
 			&& $leases_released
@@ -459,7 +459,7 @@ function ran_wp_release_updater_test_build_mixed_bulk_target( string $type, stri
 		$identity,
 		array()
 	);
-	if ( ! is_array( $offer ) || ! is_string( $offer ['package'] ?? null ) || ! str_starts_with( $offer ['package'], 'ran-wp-release-updater:v1:' ) ) {
+	if ( ! is_array( $offer ) || ! is_string( $offer ['package'] ?? null ) || ! str_starts_with( $offer ['package'], 'ran-wp-release-updater:metadata:v1:' ) ) {
 		throw new RuntimeException( 'The managed mixed-bulk offer is invalid.' );
 	}
 	return array(

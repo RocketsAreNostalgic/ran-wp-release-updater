@@ -45,12 +45,12 @@ final class P03PairedCompositionTest extends TestCase {
 		self::assertTrue( $result['handle']['hooks_registered'] );
 		self::assertSame( '7', $result['public_status']['native']['offered_release_identity'] );
 		self::assertSame( '2.0.0', $result['public_status']['native']['offered_version'] );
-		self::assertSame( 'archive_identity_verified', $result['public_status']['native']['candidate_validation_code'] );
+		self::assertNull( $result['public_status']['native']['candidate_validation_code'] );
 		self::assertSame( 'newer', $result['public_status']['native']['relationship'] );
 		self::assertSame( $result['provider_calls_before_status'], $result['provider_calls_after_status'] );
-		self::assertSame( 'archive_identity_verified', $result['concise']['status']['candidate_validation_code'] );
+		self::assertNull( $result['concise']['status']['candidate_validation_code'] );
 		self::assertSame( '2.0.0', $result['concise']['offer']['version'] );
-		self::assertSame( 'plugin' === $type ? 15 : 14, $result['concise']['hook_count'] );
+		self::assertSame( 'plugin' === $type ? 17 : 16, $result['concise']['hook_count'] );
 	}
 
 	#[DataProvider( 'target_types' )]

@@ -66,7 +66,7 @@ PHP,
 		self::assertSame( 'target_active', $result['first']['code'] );
 		self::assertSame( 'target_active', $result['second']['code'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 15, $result['hooks'] );
+		self::assertSame( 17, $result['hooks'] );
 	}
 
 	public function test_main_and_subsite_declarations_share_one_network_target_and_fence_key(): void {
@@ -102,7 +102,7 @@ PHP,
 		self::assertSame( 'target_active', $result['main']['code'] );
 		self::assertSame( 'target_active', $result['subsite']['code'] );
 		self::assertSame( 1, $result['logical'] );
-		self::assertSame( 15, $result['hooks'] );
+		self::assertSame( 17, $result['hooks'] );
 		self::assertSame( array(), $result['diagnostics']['diagnostics'] );
 		self::assertArrayNotHasKey( 'blog_id', $result['main'] );
 		self::assertArrayNotHasKey( 'blog_id', $result['subsite'] );
@@ -157,7 +157,7 @@ PHP,
 		self::assertSame( 'runtime_active', $result['activation'] );
 		self::assertSame( $count, $result['logical'] );
 		self::assertSame(
-			15 * (int) ceil( $count / 2 ) + 14 * (int) floor( $count / 2 ),
+			17 * (int) ceil( $count / 2 ) + 16 * (int) floor( $count / 2 ),
 			$result['hooks']
 		);
 		self::assertSame( array_fill( 0, $count, 'target_active' ), $result['statuses'] );

@@ -49,7 +49,7 @@ try {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 	$suite_bytes = '';
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
-	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/automatic-example.php', __DIR__ . '/wordpress-integration/automatic-example-http.php', __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-integration/offer-release.php', __DIR__ . '/wordpress-integration/exact-install.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
+	foreach ( array( __FILE__, __DIR__ . '/wordpress-integration/automatic-example.php', __DIR__ . '/wordpress-integration/automatic-example-http.php', __DIR__ . '/wordpress-integration/distribution.php', __DIR__ . '/wordpress-integration/metadata-cache.php', __DIR__ . '/wordpress-integration/multisite.php', __DIR__ . '/wordpress-integration/offer-release.php', __DIR__ . '/wordpress-integration/exact-install.php', __DIR__ . '/wordpress-native-mixed-bulk-proof-harness.php', __DIR__ . '/wordpress-native-mixed-bulk-fixtures.php' ) as $file ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$suite_bytes .= basename( $file ) . "\0" . hash_file( 'sha256', $file ) . "\n";
 	}
@@ -194,6 +194,9 @@ try {
 		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ), 'Installed distribution assertions failed.' );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI or shared fixture state retains its existing variable identity; this occurrence does not authorize new globals.
 		$result['scenarios']['distribution']['duration_ms'] = (int) ( ( hrtime( true ) - $started ) / 1000000 );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Preserve the existing integration report identity for this additional tested scenario.
+		$result['scenarios']['native_metadata_cache'] = array();
+		ran_wp_release_updater_test_installed_metadata_cache( $arguments, $source, $site, $run, $result['scenarios']['native_metadata_cache'] );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Preserve the existing integration report identity for this additional tested scenario.
 		$result['scenarios']['native_mixed_bulk'] = array();
 		ran_wp_release_updater_test_installed_mixed_bulk( $source, $wordpress, $run, $database, $socket, $wp_command, $password, $result['scenarios']['native_mixed_bulk'] );
@@ -773,10 +776,14 @@ function ran_wp_release_updater_test_consumer_archives( string $source, string $
 		$entry  = 'plugin' === $type ? '__FILE__' : "__DIR__ . '/style.css'";
 		$php    = "<?php\n" . ( 'plugin' === $type ? $header : '' );
 		$php   .= "\$GLOBALS['ran_updater_credential_calls']['" . $type . "'] = 0;\n"
-			. "\$registrar = require __DIR__ . '/vendor/ran/wp-release-updater/bootstrap.php';\n"
+			. "\$legacy = 'historical' === getenv('RAN_UPDATER_METADATA_CACHE_PHASE') ? getenv('RAN_UPDATER_METADATA_CACHE_HISTORICAL') : false;\n"
+			. "\$runtime = is_string(\$legacy) ? \$legacy : __DIR__ . '/vendor/ran/wp-release-updater';\n"
+			. "\$registrar = require \$runtime . '/bootstrap.php';\n"
 			. "\$credentials = static function (): ?string { ++\$GLOBALS['ran_updater_credential_calls']['" . $type . "']; return null; };\n"
+			. "\$phase = 'plugin' === '" . $type . "' ? getenv('RAN_UPDATER_METADATA_CACHE_PHASE') : false;\n"
+			. "\$policy = in_array(\$phase, array('write', 'warm', 'historical', 'incompatible', 'install'), true) ? 'automatic' : 'manual';\n"
 			. "\$GLOBALS['ran_updater_" . $type . "_handle'] = \$registrar->" . $type . "('github', " . $entry
-			. ", 'fixture/neutral-" . $type . "', '" . ( 'plugin' === $type ? '123456789' : '123456790' ) . "', 'stable', 'manual', \$credentials);\n"
+			. ", 'fixture/neutral-" . $type . "', '" . ( 'plugin' === $type ? '123456789' : '123456790' ) . "', 'stable', \$policy, \$credentials);\n"
 			. "\$GLOBALS['ran_updater_" . $type . "_handle']->register();\n";
 		if ( 'plugin' === $type ) {
 			ran_wp_release_updater_test_write_file( $root . '/' . $slug . '.php', $php );
@@ -1166,6 +1173,53 @@ function ran_wp_release_updater_test_installed_mixed_bulk( string $source, strin
 		ran_wp_release_updater_test_require_fact( true === ( $proof['pass'] ?? null ) && ( $proof['candidate_revision'] ?? null ) === $runtime['package_revision'], 'Installed native mixed-bulk ' . $type . '-' . $mode . ' assertions or candidate identity failed.' );
 	}
 }
+/**
+ * @param list<string> $arguments
+ * @param array<string,array<array-key,mixed>> $proof
+ */
+function ran_wp_release_updater_test_installed_metadata_cache( array $arguments, string $source, string $site, string $run, array &$proof ): void {
+	$metadata_cache = $run . '/metadata-cache';
+	$historical     = $site . '/wp-content/historical-updater';
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Reconstruct the pinned historical copy for one disposable installed request.
+	$compressed = base64_decode( (string) file_get_contents( $source . '/tests/Fixtures/protocol11-pre-discovery/runtime.json.gz.base64' ), true );
+	ran_wp_release_updater_test_require_fact( is_string( $compressed ) && '5b4ab74fea8230c8d344e778de7987504a0484e7ac96f13b800c7c919152b2ce' === hash( 'sha256', $compressed ), 'The historical updater fixture digest did not match.' );
+	$contents = gzdecode( $compressed );
+	ran_wp_release_updater_test_require_fact( is_string( $contents ), 'The historical updater fixture could not be decoded.' );
+	$files = json_decode( $contents, true, 32, JSON_THROW_ON_ERROR );
+	ran_wp_release_updater_test_require_fact( is_array( $files ) && 43 === count( $files ), 'The historical updater fixture path map did not match.' );
+	foreach ( $files as $name => $bytes ) {
+		ran_wp_release_updater_test_require_fact(
+			is_string( $name ) && 1 === preg_match( '~\A(?:bootstrap\.php|runtime\.php|runtime-copy\.json|src/(?:[A-Za-z]+/)*[A-Za-z]+\.php)\z~D', $name ) && is_string( $bytes ),
+			'The historical updater fixture contained an invalid path or file.'
+		);
+		$path = $historical . '/' . $name;
+		if ( ! is_dir( dirname( $path ) ) ) {
+			ran_wp_release_updater_test_make_directory( dirname( $path ) );
+		}
+		ran_wp_release_updater_test_write_file( $path, $bytes );
+	}
+	ran_wp_release_updater_test_verify_runtime( $historical );
+	foreach ( array( 'write', 'warm', 'historical', 'incompatible', 'install' ) as $phase ) {
+		$output = $metadata_cache . '-' . $phase . '.json';
+		ran_wp_release_updater_test_command(
+			array_merge( $arguments, array( 'eval-file', __DIR__ . '/wordpress-integration/metadata-cache.php' ) ),
+			$site,
+			'metadata-cache-' . $phase,
+			array(
+				'RAN_UPDATER_METADATA_CACHE_PHASE'      => $phase,
+				'RAN_UPDATER_METADATA_CACHE_ZIP'        => $metadata_cache . ( in_array( $phase, array( 'incompatible', 'install' ), true ) ? '-' . $phase : '' ) . '.zip',
+				'RAN_UPDATER_METADATA_CACHE_ORIGINAL'   => $run . '/ran-neutral-plugin.zip',
+				'RAN_UPDATER_METADATA_CACHE_SITE'       => $site,
+				'RAN_UPDATER_METADATA_CACHE_OUTPUT'     => $output,
+				'RAN_UPDATER_METADATA_CACHE_HISTORICAL' => $historical,
+			)
+		);
+		$evidence        = ran_wp_release_updater_test_read_json( $output );
+		$proof[ $phase ] = $evidence;
+		ran_wp_release_updater_test_require_fact( true === ( $evidence['pass'] ?? null ), 'Installed metadata cache ' . $phase . ' assertions failed.' );
+	}
+}
+
 /**
  * Authorised same-version installs on the active target, after success and after a restored failure.
  *
