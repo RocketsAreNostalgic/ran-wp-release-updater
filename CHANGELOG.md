@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.24](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.23...v1.0.0-beta.24) (2026-11-26)
+
+
+### Features
+
+* **discovery:** use metadata for routine checks ([#233](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/233)) ([f9164c3](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/f9164c3280d0ddcdc7b7b2d0398c8966948d1e53))
+
 ## [1.0.0-beta.23](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.22...v1.0.0-beta.23) (2026-11-25)
 
 
