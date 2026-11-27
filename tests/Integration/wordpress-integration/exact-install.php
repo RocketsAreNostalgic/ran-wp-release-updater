@@ -55,6 +55,15 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		'block_backup_move'  => $backup_move_failed,
 	);
 	ran_wp_release_updater_test_exact_http( $archive, $mode, $observed );
+	$confirmation = array(
+		'artifact_identity' => '401',
+		'artifact_sha256'   => hash_file( 'sha256', $archive ),
+		'installed_version' => $installed,
+	);
+	if ( 'exact-late-branch-change' === $mode ) {
+		ran_wp_release_updater_test_mixed_late_refusal( $type, $identity, $header_file, $source_root, $backup, $read_bytes, $confirmation, $observed );
+		return;
+	}
 	$standalone_lock_fault = in_array( $mode, array( 'exact-lease-fail', 'exact-early-lease-fail' ), true );
 	$composition           = GitHubReleaseAdapter::compose_from_declaration(
 		array(
@@ -68,14 +77,7 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 			'credential_resolver'      => null,
 			'descriptor_admission'     => null,
 			'operation_guard'          => $standalone_lock_fault ? null : static fn (): bool => true,
-			'native_mutation_begin'    => $standalone_lock_fault ? null : static function () use ( $mode, $header_file, $installed, $read_bytes ): string {
-				if ( 'exact-late-branch-change' === $mode ) {
-					$bytes = str_replace( 'Version: ' . $installed, 'Version: 8.0.0', $read_bytes( $header_file ) );
-					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Simulate a Branch deployment during host ownership acquisition.
-					file_put_contents( $header_file, $bytes );
-				}
-				return 'exact-install-proof';
-			},
+			'native_mutation_begin'    => $standalone_lock_fault ? null : static fn (): string => 'exact-install-proof',
 			'native_mutation_complete' => $standalone_lock_fault ? null : static function ( string $owner, string $target_type, string $installed_identity, string $outcome ) use ( $observed, $mode ): void {
 				$observed->completions[] = array( $owner, $target_type, $installed_identity, $outcome );
 				if ( 'exact-host-fail' === $mode ) {
@@ -97,11 +99,6 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		throw new RuntimeException( 'The exact-install fixture could not register its target.' );
 	}
 
-	$confirmation = array(
-		'artifact_identity' => '401',
-		'artifact_sha256'   => hash_file( 'sha256', $archive ),
-		'installed_version' => $installed,
-	);
 	if ( 'exact-success' === $mode ) {
 		foreach ( array(
 			'artifact_identity' => '402',
@@ -118,22 +115,20 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		$observed->inspections = 0;
 	}
 
-	if ( in_array( $mode, array( 'exact-branch-change', 'exact-acquire-branch-change', 'exact-late-branch-change' ), true ) ) {
+	if ( in_array( $mode, array( 'exact-branch-change', 'exact-acquire-branch-change' ), true ) ) {
 		$branch_bytes = str_replace( 'Version: ' . $installed, 'Version: 8.0.0', $read_bytes( $header_file ) );
-		if ( 'exact-late-branch-change' !== $mode ) {
-			add_filter(
-				'exact-branch-change' === $mode ? 'upgrader_pre_install' : 'upgrader_pre_download',
-				static function ( mixed $response ) use ( $header_file, $branch_bytes ): mixed {
-				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Simulate a Branch deployment to the disposable installed header at the final WordPress handoff.
-					file_put_contents( $header_file, $branch_bytes );
-					return $response;
-				},
-				0
-			);
-		}
+		add_filter(
+			'exact-branch-change' === $mode ? 'upgrader_pre_install' : 'upgrader_pre_download',
+			static function ( mixed $response ) use ( $header_file, $branch_bytes ): mixed {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Simulate a Branch deployment to the disposable installed header at the final WordPress handoff.
+				file_put_contents( $header_file, $branch_bytes );
+				return $response;
+			},
+			0
+		);
 		$report = apply_filters( 'ran_wp_release_updater_install_confirmed_release_v1', null, $type, $identity, '301', 'v2.0.0', '2.0.0', true, $confirmation );
 		$proof  = array(
-			'pass'      => 'confirmation_changed' === ( $report['code'] ?? null ) && $read_bytes( $header_file ) === $branch_bytes && 1 === $observed->downloads && ! is_dir( $backup ) && ( 'exact-late-branch-change' !== $mode || 1 === count( $observed->completions ) ),
+			'pass'      => 'confirmation_changed' === ( $report['code'] ?? null ) && $read_bytes( $header_file ) === $branch_bytes && 1 === $observed->downloads && ! is_dir( $backup ),
 			'report'    => $report,
 			'downloads' => $observed->downloads,
 		);
@@ -346,6 +341,65 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		},
 		PHP_INT_MAX
 	);
+}
+
+/**
+ * Inspect the same refused attempt through public broker handles after WordPress finalizes it.
+ *
+ * @param callable(string):string $read_bytes
+ * @param array{artifact_identity:string,artifact_sha256:string|false,installed_version:string} $confirmation
+ */
+function ran_wp_release_updater_test_mixed_late_refusal( string $type, string $identity, string $header_file, string $source_root, string $backup, callable $read_bytes, array $confirmation, stdClass $observed ): void {
+	$registrar    = require $source_root . '/bootstrap.php';
+	$broker_file  = ( new ReflectionClass( $GLOBALS['ran_wp_release_updater_v1_broker'] ) )->getFileName();
+	$runtime_file = ( new ReflectionClass( NativePackageUpdater::class ) )->getFileName();
+	$broker_root  = (string) getenv( 'RAN_UPDATER_BROKER_ROOT' );
+	if ( realpath( $broker_root . '/src/Runtime/RequestBroker.php' ) !== $broker_file || realpath( $source_root . '/src/WordPress/NativePackageUpdater.php' ) !== $runtime_file ) {
+		throw new RuntimeException( 'Unexpected broker or elected runtime in the mixed-copy install.' );
+	}
+
+	$sibling_directory = WP_PLUGIN_DIR . '/broker-sibling';
+	$sibling_file      = $sibling_directory . '/sibling.php';
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Create a separate, locally owned plugin target for the elected broker.
+	if ( ! wp_mkdir_p( $sibling_directory ) || false === file_put_contents( $sibling_file, "<?php\n/*\nPlugin Name: Broker sibling\nVersion: 1.0.0\nUpdate URI: https://github.com/exact-fixture/broker-sibling\n*/\n" ) ) {
+		throw new RuntimeException( 'Could not create the sibling plugin.' );
+	}
+	$sibling      = $registrar->plugin( 'github', $sibling_file, 'exact-fixture/broker-sibling', '102' );
+	$branch_bytes = str_replace( 'Version: ' . $confirmation['installed_version'], 'Version: 8.0.0', $read_bytes( $header_file ) );
+	$host         = $registrar->with_operation_guard( static fn (): bool => true )->with_native_mutation_callbacks(
+		static function () use ( $header_file, $branch_bytes ): string {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Simulate a Branch deployment as the host grants ownership.
+			file_put_contents( $header_file, $branch_bytes );
+			return 'exact-install-proof';
+		},
+		static function ( string $owner, string $kind, string $package, string $outcome ) use ( $observed ): void {
+			$observed->completions[] = array( $owner, $kind, $package, $outcome );
+		}
+	);
+	$target       = $host->$type( 'github', $header_file, 'exact-fixture/offer-target', '101' );
+	if ( ! $target->register() || ! $sibling->register() ) {
+		throw new RuntimeException( 'The mixed-copy targets did not register.' );
+	}
+	$report      = apply_filters( 'ran_wp_release_updater_install_confirmed_release_v1', null, $type, $identity, '301', 'v2.0.0', '2.0.0', true, $confirmation );
+	$status      = $target->status();
+	$diagnostics = array_column( $target->diagnostics()['diagnostics'], 'code' );
+	$sibling_now = $sibling->status()['state'];
+	$pass        = 'confirmation_changed' === ( $report['code'] ?? null ) && 'not_attempted' === $report['finalization']['commit']
+		&& 'completed' === $report['finalization']['host_completion'] && 'clean' === $report['finalization']['archive_cleanup']
+		&& $branch_bytes === $read_bytes( $header_file ) && ! is_dir( $backup ) && 1 === $observed->downloads && 1 === count( $observed->completions )
+		&& 'active' === $status['state'] && 'runtime_package_identity_invalid' === ( $status['native']['last_native_outcome']['outcome'] ?? null )
+		&& '301' === $status['native']['last_native_outcome']['release_identity'] && 'staging_verified' === $status['native']['last_native_outcome']['last_observed_step']
+		&& in_array( 'runtime_package_identity_invalid', $diagnostics, true ) && 'active' === $sibling_now;
+	$proof       = array(
+		'pass'        => $pass,
+		'report'      => $report,
+		'status'      => $status,
+		'diagnostics' => $diagnostics,
+		'sibling'     => $sibling_now,
+		'downloads'   => $observed->downloads,
+	);
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write bounded evidence for the disposable mixed-copy case.
+	file_put_contents( (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' ), json_encode( $proof, JSON_THROW_ON_ERROR ) );
 }
 
 /** Report a byte-identical package under the same slug at an alternate path. */
