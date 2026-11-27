@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.25](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.24...v1.0.0-beta.25) (2026-11-27)
+
+
+### Features
+
+* **native:** bind confirmed installs to inspected assets ([#236](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/236)) ([60925d5](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/60925d5b96201e9393767c4a08adaa33a6523e33))
+
 ## [1.0.0-beta.24](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.23...v1.0.0-beta.24) (2026-11-26)
 
 
