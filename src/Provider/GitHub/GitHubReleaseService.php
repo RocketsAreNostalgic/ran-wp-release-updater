@@ -1008,12 +1008,16 @@ final class GitHubReleaseService {
 		$reset       = GitHubApiClient::response_header( $response, 'x-ratelimit-reset' );
 		$reset_at    = self::non_negative_header( $reset );
 		$retry       = GitHubApiClient::response_header( $response, 'retry-after' );
+		$retry_date  = in_array( $status, array( 403, 429 ), true ) ? self::retry_date_header( $retry ) : null;
 		$retry_after = in_array( $status, array( 403, 429 ), true )
 			? self::positive_delay_header( $retry )
 			: null;
-		$limited     = 429 === $status
-			|| ( 403 === $status && ( null !== $retry_after || 0 === $remaining || self::secondary_limit_header( $retry ) ) );
-		$cooldown    = 0;
+		if ( null === $retry_after && null !== $retry_date && $retry_date > $now ) {
+			$retry_after = min( 86400, $retry_date - $now );
+		}
+		$limited  = 429 === $status
+			|| ( 403 === $status && ( null !== $retry_after || 0 === $remaining || ( '0' === $retry || null !== $retry_date ) ) );
+		$cooldown = 0;
 		if ( $limited ) {
 			$delays = array();
 			if ( null !== $retry_after ) {
@@ -1163,16 +1167,13 @@ final class GitHubReleaseService {
 		return (int) $whole;
 	}
 
-	private static function secondary_limit_header( ?string $value ): bool {
-		if ( '0' === $value ) {
-			return true;
-		}
+	private static function retry_date_header( ?string $value ): ?int {
 		if ( null === $value || ! self::valid_last_modified( $value ) ) {
-			return false;
+			return null;
 		}
 		$format = 'D, d M Y H:i:s \\G\\M\\T';
 		$date   = \DateTimeImmutable::createFromFormat( '!' . $format, $value, new \DateTimeZone( 'GMT' ) );
-		return false !== $date && $date->format( $format ) === $value;
+		return false !== $date && $date->format( $format ) === $value ? $date->getTimestamp() : null;
 	}
 
 	private static function version_from_tag( string $tag ): ?string {

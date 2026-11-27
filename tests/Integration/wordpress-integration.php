@@ -1231,6 +1231,8 @@ function ran_wp_release_updater_test_installed_offer_release( string $source, st
 	$cases = array(
 		array( 'newer', 'plugin', 'exact-success' ),
 		array( 'newer', 'theme', 'exact-success' ),
+		array( 'newer', 'plugin', 'exact-late-branch-change' ),
+		array( 'newer', 'theme', 'exact-late-branch-change' ),
 		array( 'newer', 'plugin', 'exact-branch-change' ),
 		array( 'newer', 'theme', 'exact-branch-change' ),
 		array( 'newer', 'plugin', 'exact-acquire-branch-change' ),

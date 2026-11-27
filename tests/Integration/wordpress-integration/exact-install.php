@@ -68,7 +68,14 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 			'credential_resolver'      => null,
 			'descriptor_admission'     => null,
 			'operation_guard'          => $standalone_lock_fault ? null : static fn (): bool => true,
-			'native_mutation_begin'    => $standalone_lock_fault ? null : static fn (): string => 'exact-install-proof',
+			'native_mutation_begin'    => $standalone_lock_fault ? null : static function () use ( $mode, $header_file, $installed, $read_bytes ): string {
+				if ( 'exact-late-branch-change' === $mode ) {
+					$bytes = str_replace( 'Version: ' . $installed, 'Version: 8.0.0', $read_bytes( $header_file ) );
+					// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Simulate a Branch deployment during host ownership acquisition.
+					file_put_contents( $header_file, $bytes );
+				}
+				return 'exact-install-proof';
+			},
 			'native_mutation_complete' => $standalone_lock_fault ? null : static function ( string $owner, string $target_type, string $installed_identity, string $outcome ) use ( $observed, $mode ): void {
 				$observed->completions[] = array( $owner, $target_type, $installed_identity, $outcome );
 				if ( 'exact-host-fail' === $mode ) {
@@ -111,20 +118,22 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		$observed->inspections = 0;
 	}
 
-	if ( in_array( $mode, array( 'exact-branch-change', 'exact-acquire-branch-change' ), true ) ) {
+	if ( in_array( $mode, array( 'exact-branch-change', 'exact-acquire-branch-change', 'exact-late-branch-change' ), true ) ) {
 		$branch_bytes = str_replace( 'Version: ' . $installed, 'Version: 8.0.0', $read_bytes( $header_file ) );
-		add_filter(
-			'exact-branch-change' === $mode ? 'upgrader_pre_install' : 'upgrader_pre_download',
-			static function ( mixed $response ) use ( $header_file, $branch_bytes ): mixed {
+		if ( 'exact-late-branch-change' !== $mode ) {
+			add_filter(
+				'exact-branch-change' === $mode ? 'upgrader_pre_install' : 'upgrader_pre_download',
+				static function ( mixed $response ) use ( $header_file, $branch_bytes ): mixed {
 				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Simulate a Branch deployment to the disposable installed header at the final WordPress handoff.
-				file_put_contents( $header_file, $branch_bytes );
-				return $response;
-			},
-			0
-		);
+					file_put_contents( $header_file, $branch_bytes );
+					return $response;
+				},
+				0
+			);
+		}
 		$report = apply_filters( 'ran_wp_release_updater_install_confirmed_release_v1', null, $type, $identity, '301', 'v2.0.0', '2.0.0', true, $confirmation );
 		$proof  = array(
-			'pass'      => 'confirmation_changed' === ( $report['code'] ?? null ) && $read_bytes( $header_file ) === $branch_bytes && 1 === $observed->downloads && ! is_dir( $backup ),
+			'pass'      => 'confirmation_changed' === ( $report['code'] ?? null ) && $read_bytes( $header_file ) === $branch_bytes && 1 === $observed->downloads && ! is_dir( $backup ) && ( 'exact-late-branch-change' !== $mode || 1 === count( $observed->completions ) ),
 			'report'    => $report,
 			'downloads' => $observed->downloads,
 		);

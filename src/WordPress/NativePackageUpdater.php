@@ -1446,6 +1446,11 @@ final class NativePackageUpdater {
 		if ( ! $this->begin_native_mutation() ) {
 			return $this->fail_pending( 'runtime_liveness_lost', ! $had_native_owner && null !== $this->native_owner );
 		}
+		$exact = $this->exact_install;
+		if ( null !== $exact && $exact->confirmed && $this->bound_package_version( $this->installed_directory, true ) !== $exact->installed_version ) {
+			$exact->download_failure = 'confirmation_changed';
+			return $this->fail_pending( 'confirmation_changed', true );
+		}
 		if ( $this->working_copy_blocked() ) {
 			$this->diagnose( 'target_is_working_copy', null, true );
 			$this->finalize_pending_install();
@@ -2633,6 +2638,7 @@ final class NativePackageUpdater {
 		$diagnostic = match ( $code ) {
 			'archive_php_requirement_incompatible', 'archive_wordpress_requirement_incompatible' => 'acquisition_identity_invalid',
 			'download_digest_mismatch', 'download_size_mismatch' => 'acquisition_failed',
+			'confirmation_changed' => 'runtime_package_identity_invalid',
 			default => $code,
 		};
 		$this->diagnose( RequestProtocolValidator::is_native_failure_code( $code ) ? $code : $diagnostic, null, $record_attempt );

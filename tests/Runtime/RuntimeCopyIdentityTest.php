@@ -784,6 +784,12 @@ PHP,
 		self::assertSame( 'newer' === $winner ? '8' : null, $result['current_listed_asset'] );
 		self::assertTrue( $result['registered'] );
 		self::assertSame( 'active', $result['legacy'] );
+		if ( 'newer' === $winner ) {
+			self::assertSame( 'runtime_package_identity_invalid', $result['confirmation_status']['native']['failure_code'] );
+			self::assertSame( 'active', $result['confirmation_status']['state'] );
+			self::assertContains( 'runtime_package_identity_invalid', $result['confirmation_diagnostics'] );
+			self::assertSame( 'active', $result['confirmation_sibling'] );
+		}
 		self::assertSame( 'active', $result['status']['state'] );
 		self::assertSame( '7', $result['status']['native']['offered_release_identity'] );
 		self::assertSame( 'v2.0.0', $result['status']['native']['candidate_tag'] );
@@ -1116,9 +1122,24 @@ $install_status = $handle->status();
 $diagnostics = $handle->diagnostics();
 $owned = is_string($result) && hash_file('sha256', $result) === hash('sha256', $bytes);
 $handle->refresh();
+$legacy_handle = $legacy;
 $legacy = $legacy->status();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
+$confirmation_status = null;
+$confirmation_diagnostics = array();
+$confirmation_sibling = null;
+if ('newer' === $data['winner']) {
+	$callbacks = $GLOBALS['wp_filter']['ran_wp_release_updater_install_confirmed_release_v1']->callbacks[10];
+	$native = $callbacks[0]['function'][0];
+	(new ReflectionMethod($native, 'failure'))->invoke($native, 'confirmation_changed');
+	$confirmation_status = $handle->status();
+	$confirmation_diagnostics = array_column($handle->diagnostics()['diagnostics'], 'code');
+	$confirmation_sibling = $legacy_handle->status()['state'];
+}
 echo json_encode(array(
+	'confirmation_status' => $confirmation_status,
+	'confirmation_diagnostics' => $confirmation_diagnostics,
+	'confirmation_sibling' => $confirmation_sibling,
 	'confirmation_refusal' => $confirmation_refusal['code'] ?? null,
 	'listed_asset' => $listed['value']['candidates'][0]['artifact_identity'] ?? null,
 	'current_listed_asset' => $current_listing['value']['candidates'][0]['artifact_identity'] ?? null,
@@ -1154,6 +1175,7 @@ PHP,
 				'older'         => $older,
 				'newer'         => $newer,
 				'load_order'    => array( $first, 'older' === $first ? 'newer' : 'older' ),
+				'winner'        => $winner,
 				'type'          => $type,
 				'scenario'      => $scenario,
 				'installed'     => $this->parent . '/' . $request,
