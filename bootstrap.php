@@ -453,7 +453,7 @@ return new class( $ran_wp_release_updater_broker ) {
 				if ( ! $this->valid_conditional( $conditional ) ) {
 					return $this->failure( 'invalid_configuration' );
 				}
-				return $this->call( 'list', array( $conditional ) );
+				return $this->call( 'list', array( $conditional, true ) );
 			}
 
 			/** @return array<string,mixed> */
@@ -650,6 +650,12 @@ return new class( $ran_wp_release_updater_broker ) {
 					}
 				}
 				foreach ( $value['candidates'] as $candidate ) {
+					if ( is_array( $candidate ) && array_key_exists( 'artifact_identity', $candidate ) ) {
+						if ( ! $this->bounded_identity( $candidate['artifact_identity'] ) || ! $this->matches( $candidate['artifact_sha256'] ?? null, '/\A[a-f0-9]{64}\z/D' ) ) {
+							return false;
+						}
+						unset( $candidate['artifact_identity'], $candidate['artifact_sha256'] );
+					}
 					if ( ! $this->keys( $candidate, array( 'details_url', 'expected_asset_names', 'prerelease', 'publication_immutable', 'published_at', 'release_identity', 'tag', 'version' ) )
 						|| ! $this->public_url( $candidate['details_url'] ) || ! is_array( $candidate['expected_asset_names'] )
 						|| ! array_is_list( $candidate['expected_asset_names'] ) || 2 < count( $candidate['expected_asset_names'] )

@@ -306,9 +306,9 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			}
 			self::assertSame( 0, $calls );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
-			self::assertCount( 17, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 18, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$updater->register();
-			self::assertCount( 17, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 18, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
 			$invalid           = $configuration;
 			$invalid['policy'] = 'unsupported';
@@ -318,7 +318,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			self::assertNull( GitHubReleaseAdapter::register_from_configuration( $configuration, $facts, null, new class() {}, array() ) );
 			self::assertSame( 0, $calls );
 			self::assertSame( array(), $GLOBALS['ran_github_requests'] );
-			self::assertCount( 17, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 18, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 		}
 
 		#[\PHPUnit\Framework\Attributes\RunInSeparateProcess]
@@ -1021,7 +1021,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 					array(
 						$this->release( 2, 'v1.1.0' ),
 						$this->release( 3, 'v2.0.0-beta.1', true ),
-						$this->release( 1, 'v1.0.0' ),
+						$this->release( 1, 'v1.0.0', false, false ),
 					),
 					array(
 						'etag'          => '"release-list"',
@@ -1030,7 +1030,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				),
 			);
 
-			$result = ( new GitHubReleaseAdapter( $this->binding() ) )->list_releases();
+			$result = $this->service( $this->binding() )->list( array(), true );
 
 			self::assertSame(
 				array( '1.1.0', '1.0.0' ),
@@ -1048,6 +1048,10 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 				'https://github.com/owner/repository/releases/tag/v1.1.0',
 				$result['candidates'][0]['details_url']
 			);
+			self::assertSame( '8', $result['candidates'][0]['artifact_identity'] ?? null );
+			self::assertSame( hash( 'sha256', 'zip-data' ), $result['candidates'][0]['artifact_sha256'] ?? null );
+			self::assertArrayNotHasKey( 'artifact_identity', $result['candidates'][1] );
+			self::assertArrayNotHasKey( 'artifact_sha256', $result['candidates'][1] );
 			self::assertSame( '"release-list"', $result['conditional']['etag'] );
 			self::assertFalse( $result['not_modified'] );
 			self::assertFalse( $result['search_exhausted'] );
@@ -1142,13 +1146,16 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 			$release               = $this->release( 7, 'v1.2.3' );
 			unset( $release['assets'][0]['digest'] );
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled shared provider fixture state retains its established global identity.
-			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( $draft, $release ) ), $this->response( 200, array( 'id' => 99 ) ), $this->response( 200, $release ) );
+			$GLOBALS['ran_github_responses'] = array( $this->response( 200, array( $draft, $release, $this->release( 8, 'v1.2.4' ) ) ), $this->response( 200, array( 'id' => 99 ) ), $this->response( 200, $release ) );
 			$listed                          = $this->prospective_operation( $source, 'list', array() );
 			self::assertTrue( $listed['ok'] );
-			self::assertSame( array( '7' ), array_column( $listed['value']['candidates'], 'release_identity' ) );
+			self::assertSame( array( '8', '7' ), array_column( $listed['value']['candidates'], 'release_identity' ) );
+			self::assertSame( '8', $listed['value']['candidates'][0]['artifact_identity'] );
+			self::assertSame( hash( 'sha256', 'zip-data' ), $listed['value']['candidates'][0]['artifact_sha256'] );
+			self::assertArrayNotHasKey( 'artifact_identity', $listed['value']['candidates'][1] );
 			self::assertSame(
 				array(
-					'scanned_count' => 2,
+					'scanned_count' => 3,
 					'dropped_count' => 1,
 					'drops'         => array(
 						array(

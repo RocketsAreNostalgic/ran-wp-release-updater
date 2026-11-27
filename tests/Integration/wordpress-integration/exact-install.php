@@ -90,6 +90,49 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		throw new RuntimeException( 'The exact-install fixture could not register its target.' );
 	}
 
+	$confirmation = array(
+		'artifact_identity' => '401',
+		'artifact_sha256'   => hash_file( 'sha256', $archive ),
+		'installed_version' => $installed,
+	);
+	if ( 'exact-success' === $mode ) {
+		foreach ( array(
+			'artifact_identity' => '402',
+			'artifact_sha256'   => str_repeat( '0', 64 ),
+			'installed_version' => '9.9.9',
+		) as $field => $changed_value ) {
+			$stale           = $confirmation;
+			$stale[ $field ] = $changed_value;
+			$refusal         = apply_filters( 'ran_wp_release_updater_install_confirmed_release_v1', null, $type, $identity, '301', 'v2.0.0', '2.0.0', true, $stale );
+			if ( 'confirmation_changed' !== ( $refusal['code'] ?? null ) || 0 !== $observed->downloads || $read_bytes( $main_file ) !== $before ) {
+				throw new RuntimeException( 'A stale confirmation was accepted.' );
+			}
+		}
+		$observed->inspections = 0;
+	}
+
+	if ( in_array( $mode, array( 'exact-branch-change', 'exact-acquire-branch-change' ), true ) ) {
+		$branch_bytes = str_replace( 'Version: ' . $installed, 'Version: 8.0.0', $read_bytes( $header_file ) );
+		add_filter(
+			'exact-branch-change' === $mode ? 'upgrader_pre_install' : 'upgrader_pre_download',
+			static function ( mixed $response ) use ( $header_file, $branch_bytes ): mixed {
+				// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- Simulate a Branch deployment to the disposable installed header at the final WordPress handoff.
+				file_put_contents( $header_file, $branch_bytes );
+				return $response;
+			},
+			0
+		);
+		$report = apply_filters( 'ran_wp_release_updater_install_confirmed_release_v1', null, $type, $identity, '301', 'v2.0.0', '2.0.0', true, $confirmation );
+		$proof  = array(
+			'pass'      => 'confirmation_changed' === ( $report['code'] ?? null ) && $read_bytes( $header_file ) === $branch_bytes && 1 === $observed->downloads && ! is_dir( $backup ),
+			'report'    => $report,
+			'downloads' => $observed->downloads,
+		);
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPress.WP.AlternativeFunctions.json_encode_json_encode -- Write bounded evidence for this disposable integration case.
+		file_put_contents( (string) getenv( 'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT' ), json_encode( $proof, JSON_THROW_ON_ERROR ) );
+		return;
+	}
+
 	ran_wp_release_updater_test_exact_wordpress_faults( $mode, $type, $identity, $backup, $observed );
 	add_filter(
 		'upgrader_pre_download',
@@ -151,7 +194,10 @@ function ran_wp_release_updater_test_install_exact( string $type, string $mode, 
 		add_filter( 'request_filesystem_credentials', '__return_false' );
 	}
 	try {
-		$report = apply_filters( 'ran_wp_release_updater_install_exact_release_v1', null, $type, $identity, '301', 'v2.0.0', $expected_version, 'exact-refuse' !== $mode && 'older' === $direction );
+		$allow_older = 'exact-refuse' !== $mode && 'older' === $direction;
+		$report      = 'exact-success' === $mode
+			? apply_filters( 'ran_wp_release_updater_install_confirmed_release_v1', null, $type, $identity, '301', 'v2.0.0', $expected_version, $allow_older, $confirmation )
+			: apply_filters( 'ran_wp_release_updater_install_exact_release_v1', null, $type, $identity, '301', 'v2.0.0', $expected_version, $allow_older );
 	} finally {
 		$observed->block_backup_move = false;
 		if ( $credentials_refused ) {

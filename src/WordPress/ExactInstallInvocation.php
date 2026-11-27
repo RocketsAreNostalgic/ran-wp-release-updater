@@ -37,10 +37,11 @@ final class ExactInstallInvocation {
 		public readonly \Plugin_Upgrader|\Theme_Upgrader $upgrader,
 		public readonly string $token,
 		public readonly string $installed_version,
+		public readonly bool $confirmed,
 		private readonly \WP_Upgrader_Skin $skin
 	) {}
 
-	public static function create( string $target_type, string $token, string $installed_version ): self {
+	public static function create( string $target_type, string $token, string $installed_version, bool $confirmed = false ): self {
 		if ( 'plugin' === $target_type ) {
 			$skin     = new class() extends \Bulk_Plugin_Upgrader_Skin {
 				public function flush_output(): void {
@@ -57,7 +58,7 @@ final class ExactInstallInvocation {
 			};
 			$upgrader = new \Theme_Upgrader( $skin );
 		}
-		return new self( $upgrader, $token, $installed_version, $skin );
+		return new self( $upgrader, $token, $installed_version, $confirmed, $skin );
 	}
 
 	public function run( string $identity ): mixed {

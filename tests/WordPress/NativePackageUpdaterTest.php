@@ -69,7 +69,7 @@ namespace {
 	if ( ! function_exists( 'do_action' ) ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress observation seam.
 		function do_action( string $hook, mixed ...$arguments ): void {
-			$GLOBALS['ran_wp_release_updater_test_observations'][] = array( $hook, $arguments[0] );
+			$GLOBALS['ran_wp_release_updater_test_observations'][] = array( $hook, ...$arguments );
 			if ( true === ( $GLOBALS['ran_wp_release_updater_test_observer_throws'] ?? false ) ) {
 				throw new \RuntimeException( 'Observer failed.' );
 			}
@@ -1071,7 +1071,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array(), $database->read_option_names() );
 			$updater->register();
 			$updater->register();
-			self::assertCount( 17, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 18, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertContains( array( 'filter', 'ran_wp_release_updater_install_exact_release_v1', array( $updater, 'filter_install_exact_release' ), 10, 7 ), $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
@@ -1329,6 +1329,13 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			self::assertSame( array( 1, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 			self::assertSame( 'release_list_failed', $updater->status()['candidate_validation_code'] );
+			$report = $this->manual_check( $updater );
+			self::assertSame( 'release_list_failed', $report['reason'] );
+			self::assertSame( 'release_list_failed', $report['candidate_validation_code'] );
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			$event  = end( $events );
+			self::assertSame( 'release_list_failed', $event[1]['reason'] );
+			self::assertTrue( $event[2] );
 		}
 		public function test_theme_listing_rate_limit_facts_stop_before_any_candidate_inspection(): void {
 			$archive = $this->archive();
@@ -1454,6 +1461,12 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			self::assertSame( array( 1, 1, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 			self::assertSame( 'candidate_inspection_failed', $updater->status()['candidate_validation_code'] );
+			$report = $this->manual_check( $updater );
+			self::assertSame( 'candidate_inspection_failed', $report['reason'] );
+			$events = $GLOBALS['ran_wp_release_updater_test_observations'];
+			$event  = end( $events );
+			self::assertSame( 'candidate_inspection_failed', $event[1]['reason'] );
+			self::assertSame( $failure instanceof ReleaseFailure && 'rate_limited' === $failure->release_code ? array( true ) : array(), array_slice( $event, 2 ) );
 		}
 		/** @return array<string,array{\Throwable}> */
 		public static function operation_stopping_inspection_failures(): array {
@@ -1757,7 +1770,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$property->setValue( $broker, 'active' );
 			list( $updater, $adapter, $database ) = $this->subject( 'manual', null, 'stable', false, $state );
 			$updater->register();
-			self::assertCount( 17, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 18, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
 			foreach ( array( 'stale_global', 'wrong_protocol' ) as $failure ) {
 				if ( 'stale_global' === $failure ) {
@@ -2091,7 +2104,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
-			self::assertCount( 16, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 17, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$offer = $updater->filter_update(
 				false,
 				array(
@@ -2116,7 +2129,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$stock = new \Theme_Upgrader();
 				$GLOBALS['ran_wp_release_updater_test_doing_action'] = $automatic_action ? 'wp_maybe_auto_update' : null;
 				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', $stock, $extra ) );
-				self::assertCount( 17, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+				self::assertCount( 18, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 				if ( $failed_result ) {
 					$original      = new \WP_Error( 'post_copy_failed', 'Post-copy failure.' );
 					$stock->result = $original;
@@ -2128,11 +2141,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					self::assertNotSame( $original, $outgoing );
 					$bridged = ! $automatic_action && ! $replace_skin;
 					self::assertSame( $bridged ? array() : $original, $stock->result );
-					self::assertSame( $bridged ? 18 : 17, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
+					self::assertSame( $bridged ? 19 : 18, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
 					if ( $bridged ) {
 						self::assertSame(
 							array( 'action', 'upgrader_process_complete', array( $updater, 'restore_theme_error_result' ), PHP_INT_MIN, 2 ),
-							$GLOBALS['ran_wp_release_updater_test_hooks'][17]
+							$GLOBALS['ran_wp_release_updater_test_hooks'][18]
 						);
 					}
 					$stock->skin->result = $outgoing;
