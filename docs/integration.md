@@ -426,6 +426,17 @@ an older release, with the same operator confirmation as the offer filter.
 An older elected runtime or an inactive target leaves the `null` default
 unanswered. Treat that as unavailable before attempting a native upgrade.
 
+When the operator confirms a particular asset and installed header, use
+`ran_wp_release_updater_install_confirmed_release_v1`. Pass the same arguments
+and append an array containing `artifact_identity`, `artifact_sha256` and
+`installed_version`. Use the asset ID and lowercase SHA-256 hex digest from
+the selected listing row or prospective inspection, and the exact installed
+version shown at confirmation. Bind all three to the host's authorized request.
+A listing supplies the pair only when the selected runtime can identify one
+eligible uploaded ZIP from metadata. An unavailable pair requires a fresh
+selection or inspection. An unanswered filter requires an updated runtime.
+A changed confirmation requires the operator to review the current values.
+
 The updater checks the live installed identity, descriptor, policy and manual
 assurance, acquires the ZIP once, and validates it into private custody.
 WordPress receives the verified copy only for the matching invocation. The
@@ -577,9 +588,14 @@ The selected runtime emits `ran_wp_release_updater_check_started_v1` and
 native update check, and around the read-only check described above. Start precedes remote discovery, after any reusable request
 snapshot is ruled out; local validation/policy/admission failures also emit a
 pair. Reusing an already verified request snapshot emits neither action. Each
-action receives one array. `refresh()` and information reads
+action receives a payload array as its first argument. `refresh()` and information reads
 are not checks and emit neither action. These hooks do not change runtime selection, native eligibility, or the public
 handle status shape.
+
+The completion action supplies an optional second argument, `true`, when the
+provider explicitly rate-limited listing or candidate inspection. The first
+argument and read-only report keep their existing failure reason. All other
+completions pass only the original payload.
 
 The start array contains exactly `check_id`, `network_id`, `blog_id`,
 `target_type`, `installed_identity`, `provider_code`, `repository_identity`,

@@ -77,6 +77,19 @@ final class GitHubResponseRoutingTest extends TestCase {
 		$GLOBALS['ran_github_responses'] = $this->inspection_rate_responses( $endpoint );
 		$this->assert_failure( fn() => $this->service()->inspect_installed( installed_package_identity: 'repository/repository.php', release_identity: '7', expected_tag: 'v1.2.3' ), 'rate_limited', $requests, 60 );
 	}
+	#[\PHPUnit\Framework\Attributes\DataProvider( 'secondary_retry_headers' )]
+	public function test_inspection_recognizes_explicit_secondary_rate_limits( string $retry ): void {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled HTTP response fixture for this inspection.
+		$GLOBALS['ran_github_responses'] = array( $this->response( 403, null, array( 'retry-after' => $retry ) ) );
+		$this->assert_failure( fn() => $this->service()->inspect_installed( 'repository/repository.php', '7', 'v1.2.3' ), 'rate_limited', 1, 900 );
+	}
+	/** @return array<string,array{string}> */
+	public static function secondary_retry_headers(): array {
+		return array(
+			'elapsed delay' => array( '0' ),
+			'elapsed date'  => array( 'Wed, 21 Oct 2015 07:28:00 GMT' ),
+		);
+	}
 	/** @return array<string,array{string,int}> */
 	public static function inspection_rate_provider(): array {
 		return array(

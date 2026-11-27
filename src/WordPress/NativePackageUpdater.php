@@ -331,6 +331,7 @@ final class NativePackageUpdater {
 		add_filter( 'ran_wp_release_updater_check_releases_v1', array( $this, 'filter_check_releases' ), 10, 3 );
 		add_filter( 'ran_wp_release_updater_offer_release_v1', array( $this, 'filter_offer_release' ), 10, 6 );
 		add_filter( 'ran_wp_release_updater_install_exact_release_v1', array( $this, 'filter_install_exact_release' ), 10, 7 );
+		add_filter( 'ran_wp_release_updater_install_confirmed_release_v1', array( $this, 'filter_install_confirmed_release' ), 10, 8 );
 		add_filter( 'plugin' === $this->target_type ? 'auto_update_plugin' : 'auto_update_theme', array( $this, 'filter_auto_update' ), 10, 2 );
 		add_filter( 'upgrader_package_options', array( $this, 'capture_package_options' ), PHP_INT_MAX, 1 );
 		add_filter( 'upgrader_pre_download', array( $this, 'filter_pre_download' ), PHP_INT_MAX, 4 );
@@ -711,8 +712,19 @@ final class NativePackageUpdater {
 		);
 	}
 
-	/** Runs one explicitly selected release through the registered target's native lifecycle. */
-	public function filter_install_exact_release( mixed $result, mixed $target_type, mixed $installed_identity, mixed $release_identity, mixed $tag, mixed $expected_version, mixed $older_intended = false ): mixed {
+	/** Requires the host's confirmed inspection and installed header. */
+	public function filter_install_confirmed_release( mixed $result, mixed $target_type, mixed $installed_identity, mixed $release_identity, mixed $tag, mixed $expected_version, mixed $older_intended = false, mixed $confirmation = null ): mixed {
+		if ( null !== $result || $target_type !== $this->target_type || $installed_identity !== $this->installed_identity || ! $this->live() ) {
+			return $result;
+		}
+		if ( ! is_array( $confirmation ) || ! is_string( $confirmation['artifact_identity'] ?? null ) || ! is_string( $confirmation['artifact_sha256'] ?? null ) || ! is_string( $confirmation['installed_version'] ?? null ) ) {
+			return $this->exact_report( 'confirmation_changed' );
+		}
+		return $this->filter_install_exact_release( $result, $target_type, $installed_identity, $release_identity, $tag, $expected_version, $older_intended, $confirmation );
+	}
+
+	/** @param array<array-key,mixed>|null $confirmation */
+	public function filter_install_exact_release( mixed $result, mixed $target_type, mixed $installed_identity, mixed $release_identity, mixed $tag, mixed $expected_version, mixed $older_intended = false, ?array $confirmation = null ): mixed {
 		if ( null !== $result || $target_type !== $this->target_type || $installed_identity !== $this->installed_identity || ! $this->live() ) {
 			return $result;
 		}
@@ -735,6 +747,9 @@ final class NativePackageUpdater {
 			return $this->exact_report( 'runtime_package_identity_invalid' );
 		}
 		$installed = $this->bound_package_version( $this->installed_directory, true );
+		if ( null !== $confirmation && $installed !== $confirmation['installed_version'] ) {
+			return $this->exact_report( 'confirmation_changed' );
+		}
 		if ( null === $installed || null === ReleaseVersion::normalize_header( $installed ) ) {
 			return $this->exact_report( 'runtime_package_identity_invalid' );
 		}
@@ -744,13 +759,13 @@ final class NativePackageUpdater {
 		}
 
 		try {
-			$exact = ExactInstallInvocation::create( $this->target_type, self::EXACT_TOKEN_PREFIX . bin2hex( random_bytes( 32 ) ), $installed );
+			$exact = ExactInstallInvocation::create( $this->target_type, self::EXACT_TOKEN_PREFIX . bin2hex( random_bytes( 32 ) ), $installed, null !== $confirmation );
 		} catch ( \Throwable ) {
 			return $this->exact_report( 'wordpress_unavailable' );
 		}
 		$this->exact_install = $exact;
 		try {
-			$code = $this->install_exact_release( $exact, $release_identity, $tag, $expected_version, true === $older_intended );
+			$code = $this->install_exact_release( $exact, $release_identity, $tag, $expected_version, true === $older_intended, $confirmation );
 		} catch ( \Throwable ) {
 			$code = 'unexpected_failure';
 		} finally {
@@ -764,7 +779,8 @@ final class NativePackageUpdater {
 		return $this->exact_report( $code, $exact );
 	}
 
-	private function install_exact_release( ExactInstallInvocation $exact, string $release_identity, string $tag, string $expected_version, bool $older_intended ): string {
+	/** @param array<array-key,mixed>|null $confirmation */
+	private function install_exact_release( ExactInstallInvocation $exact, string $release_identity, string $tag, string $expected_version, bool $older_intended, ?array $confirmation ): string {
 		$this->begin_operation();
 		if ( ! $this->acquire_mutation_lock( false ) ) {
 			return 'binding_fence_lost';
@@ -781,6 +797,9 @@ final class NativePackageUpdater {
 		$exact->descriptor = $descriptor;
 		if ( $release_identity !== $facts['release_identity'] || $tag !== $facts['tag'] || 0 !== ReleaseVersion::compare( $expected_version, $facts['version'] ) ) {
 			return 'candidate_descriptor_mismatch';
+		}
+		if ( null !== $confirmation && ( $facts['artifact_identity'] !== $confirmation['artifact_identity'] || $facts['artifact_sha256'] !== $confirmation['artifact_sha256'] ) ) {
+			return 'confirmation_changed';
 		}
 		$relationship = ReleaseVersion::relationship( $facts['version'], $exact->installed_version );
 		if ( ! $older_intended && ReleaseVersion::RELATIONSHIP_OLDER === $relationship ) {
@@ -971,7 +990,7 @@ final class NativePackageUpdater {
 		$payload = $this->check_facts( $reason );
 		return array(
 			'status'                    => $payload['status'],
-			'reason'                    => $reason,
+			'reason'                    => $payload['reason'],
 			'policy'                    => $this->policy,
 			'relationship'              => $payload['relationship'],
 			'installed_version'         => $payload['installed_version'],
@@ -985,6 +1004,9 @@ final class NativePackageUpdater {
 	 * @return array{status:string,reason:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,offered_version:string|null,candidate_validation_code:string|null}
 	 */
 	private function check_facts( string $reason ): array {
+		if ( 'rate_limited' === $reason ) {
+			$reason = $this->status['candidate_validation_code'] ?? 'release_list_failed';
+		}
 		$payload = array(
 			'status' => 'failed',
 			'reason' => $reason,
@@ -1056,15 +1078,15 @@ final class NativePackageUpdater {
 			return;
 		}
 		$payload = array( 'check_id' => $check_id ) + $this->check_facts( $reason );
-		self::observe_check( 'completed', $payload );
+		self::observe_check( 'completed', $payload, 'rate_limited' === $reason );
 	}
 
 	/**
 	 * @param 'started'|'completed' $stage
 	 * @param array<string,mixed> $payload
 	 */
-	private static function observe_check( string $stage, array $payload ): void {
-		do_action( 'ran_wp_release_updater_check_' . $stage . '_v1', $payload );
+	private static function observe_check( string $stage, array $payload, bool $rate_limited = false ): void {
+		do_action( 'ran_wp_release_updater_check_' . $stage . '_v1', $payload, ...( $rate_limited ? array( true ) : array() ) );
 	}
 
 	public function filter_plugin_information( mixed $result, string $action, mixed $arguments ): mixed {
@@ -1260,7 +1282,7 @@ final class NativePackageUpdater {
 			return $this->exact_download_failure( $exact, $fresh );
 		}
 		if ( $this->bound_package_version( $this->installed_directory, true ) !== $exact->installed_version ) {
-			return $this->exact_download_failure( $exact, 'runtime_package_identity_invalid' );
+			return $this->exact_download_failure( $exact, $exact->confirmed ? 'confirmation_changed' : 'runtime_package_identity_invalid' );
 		}
 		if ( ! $this->verify_mutation_lock() || ! $this->live() ) {
 			return $this->exact_download_failure( $exact, 'binding_fence_lost' );
@@ -1424,6 +1446,11 @@ final class NativePackageUpdater {
 		if ( ! $this->begin_native_mutation() ) {
 			return $this->fail_pending( 'runtime_liveness_lost', ! $had_native_owner && null !== $this->native_owner );
 		}
+		$exact = $this->exact_install;
+		if ( null !== $exact && $exact->confirmed && $this->bound_package_version( $this->installed_directory, true ) !== $exact->installed_version ) {
+			$exact->download_failure = 'confirmation_changed';
+			return $this->fail_pending( 'confirmation_changed', true );
+		}
 		if ( $this->working_copy_blocked() ) {
 			$this->diagnose( 'target_is_working_copy', null, true );
 			$this->finalize_pending_install();
@@ -1462,6 +1489,11 @@ final class NativePackageUpdater {
 		}
 		if ( ! $this->live() ) {
 			return $this->fail_pending( 'runtime_liveness_lost' );
+		}
+		$exact = $this->exact_install;
+		if ( null !== $exact && $exact->confirmed && $this->bound_package_version( $this->installed_directory, true ) !== $exact->installed_version ) {
+			$exact->download_failure = 'confirmation_changed';
+			return $this->fail_pending( 'confirmation_changed' );
 		}
 		return $response;
 	}
@@ -2182,14 +2214,14 @@ final class NativePackageUpdater {
 		try {
 			$listed     = $this->adapter->list_releases();
 			$candidates = $listed['candidates'] ?? null;
-		} catch ( \Throwable ) {
-			$reason                                    = 'release_list_failed';
+		} catch ( \Throwable $failure ) {
+			$reason                                    = $failure instanceof ReleaseFailure && 'rate_limited' === $failure->release_code ? 'rate_limited' : 'release_list_failed';
 			$this->status['candidate_validation_code'] = 'release_list_failed';
 			return null;
 		}
 		$rate_limit = $listed['rate_limit'] ?? null;
 		if ( is_array( $rate_limit ) && true === ( $rate_limit['limited'] ?? null ) ) {
-			$reason                                    = 'release_list_failed';
+			$reason                                    = 'rate_limited';
 			$this->status['candidate_validation_code'] = 'release_list_failed';
 			return null;
 		}
@@ -2225,7 +2257,7 @@ final class NativePackageUpdater {
 				$descriptor = $this->adapter->inspect( $candidate['release_identity'], $candidate['tag'] );
 				self::assert_descriptor_binding( $descriptor, $this->target_binding );
 			} catch ( ReleaseFailure $failure ) {
-				$reason                                    = 'candidate_inspection_failed';
+				$reason                                    = 'rate_limited' === $failure->release_code ? 'rate_limited' : 'candidate_inspection_failed';
 				$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
 				if ( self::can_reject_candidate( $failure ) ) {
 					$reason = 'candidate_rejected';
@@ -2606,6 +2638,7 @@ final class NativePackageUpdater {
 		$diagnostic = match ( $code ) {
 			'archive_php_requirement_incompatible', 'archive_wordpress_requirement_incompatible' => 'acquisition_identity_invalid',
 			'download_digest_mismatch', 'download_size_mismatch' => 'acquisition_failed',
+			'confirmation_changed' => 'runtime_package_identity_invalid',
 			default => $code,
 		};
 		$this->diagnose( RequestProtocolValidator::is_native_failure_code( $code ) ? $code : $diagnostic, null, $record_attempt );

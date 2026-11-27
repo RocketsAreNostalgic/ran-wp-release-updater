@@ -18,13 +18,13 @@ final class ReleaseSource {
 	 * @param array<string,mixed> $conditional Caller-provided conditional request values.
 	 * @return array<string,mixed>
 	 */
-	public function list( array $conditional = array() ): array {
+	public function list( array $conditional = array(), bool $asset_binding = false ): array {
 		foreach ( $conditional as $key => $value ) {
 			if ( ! in_array( $key, array( 'etag', 'last_modified' ), true ) || ( null !== $value && ! is_string( $value ) ) ) {
 				return $this->invalid( 'invalid_configuration' );
 			}
 		}
-		return $this->operate( 'list', array( $conditional ) );
+		return $this->operate( 'list', array( $conditional, $asset_binding ) );
 	}
 
 	/**

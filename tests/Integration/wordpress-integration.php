@@ -202,7 +202,7 @@ try {
 		ran_wp_release_updater_test_installed_mixed_bulk( $source, $wordpress, $run, $database, $socket, $wp_command, $password, $result['scenarios']['native_mixed_bulk'] );
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Preserve the existing integration report identity for this additional tested scenario.
 		$result['scenarios']['native_offer_release'] = array();
-		ran_wp_release_updater_test_installed_offer_release( $source, $wordpress, $run, $database, $socket, $wp_command, $password, $result['scenarios']['native_offer_release'] );
+		ran_wp_release_updater_test_installed_offer_release( $source, $site . '/wp-content/historical-updater', $wordpress, $run, $database, $socket, $wp_command, $password, $result['scenarios']['native_offer_release'] );
 	}
 	if ( 'automatic-example' === $scenario ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Controlled CLI integration state retains the existing report identity.
@@ -1226,11 +1226,19 @@ function ran_wp_release_updater_test_installed_metadata_cache( array $arguments,
  * @param list<string> $wp_command
  * @param array<string,array<array-key,mixed>> $proofs
  */
-function ran_wp_release_updater_test_installed_offer_release( string $source, string $wordpress, string $run, mysqli $database, string $socket, array $wp_command, string $password, array &$proofs ): void {
+function ran_wp_release_updater_test_installed_offer_release( string $source, string $historical, string $wordpress, string $run, mysqli $database, string $socket, array $wp_command, string $password, array &$proofs ): void {
 	global $runtime;
 	$cases = array(
 		array( 'newer', 'plugin', 'exact-success' ),
 		array( 'newer', 'theme', 'exact-success' ),
+		array( 'newer', 'plugin', 'exact-late-branch-change', 'current' ),
+		array( 'newer', 'plugin', 'exact-late-branch-change', 'historical' ),
+		array( 'newer', 'theme', 'exact-late-branch-change', 'current' ),
+		array( 'newer', 'theme', 'exact-late-branch-change', 'historical' ),
+		array( 'newer', 'plugin', 'exact-branch-change' ),
+		array( 'newer', 'theme', 'exact-branch-change' ),
+		array( 'newer', 'plugin', 'exact-acquire-branch-change' ),
+		array( 'newer', 'theme', 'exact-acquire-branch-change' ),
 		array( 'same', 'plugin', 'exact-success' ),
 		array( 'same', 'theme', 'exact-success' ),
 		array( 'older', 'plugin', 'exact-success' ),
@@ -1263,15 +1271,19 @@ function ran_wp_release_updater_test_installed_offer_release( string $source, st
 			}
 		}
 	}
-	foreach ( $cases as list( $direction, $type, $mode ) ) {
-		$case        = $direction . '-' . $type . '-' . $mode;
-		$base        = ran_wp_release_updater_test_make_directory( $run . '/offer-' . $case );
-		$marker_file = $base . '/RAN_WP_RELEASE_UPDATER_OFFER_RELEASE.marker';
+	foreach ( $cases as $scenario ) {
+		list( $direction, $type, $mode ) = $scenario;
+		$first                           = $scenario[3] ?? null;
+		$case                            = $direction . '-' . $type . '-' . $mode . ( null === $first ? '' : '-' . $first );
+		$base                            = ran_wp_release_updater_test_make_directory( $run . '/offer-' . $case );
+		$marker_file                     = $base . '/RAN_WP_RELEASE_UPDATER_OFFER_RELEASE.marker';
 		ran_wp_release_updater_test_write_file( $marker_file, "RAN_WP_RELEASE_UPDATER_OFFER_RELEASE\n" );
 		$site = ran_wp_release_updater_test_create_site( $wordpress, $base . '/site', $database, $socket );
 		ran_wp_release_updater_test_install_wordpress( $wp_command, $site, $password, false );
 		ran_wp_release_updater_test_copy_runtime( $source, $site . '/wp-content/plugins/ran-wp-release-updater' );
-		ran_wp_release_updater_test_write_file( $site . '/wp-content/mu-plugins/offer-release-runtime.php', "<?php\nrequire_once WP_PLUGIN_DIR . '/ran-wp-release-updater/bootstrap.php';\n" );
+		$current_boot = "require_once WP_PLUGIN_DIR . '/ran-wp-release-updater/bootstrap.php';\n";
+		$old_boot     = null === $first ? '' : "require_once getenv( 'RAN_UPDATER_METADATA_CACHE_HISTORICAL' ) . '/bootstrap.php';\n";
+		ran_wp_release_updater_test_write_file( $site . '/wp-content/mu-plugins/offer-release-runtime.php', "<?php\n" . ( 'historical' === $first ? $old_boot . $current_boot : $current_boot . $old_boot ) );
 		$output = $base . '/evidence.json';
 		ran_wp_release_updater_test_command(
 			array_merge( $wp_command, array( '--path=' . $site, 'eval-file', __DIR__ . '/wordpress-integration/offer-release.php' ) ),
@@ -1282,6 +1294,8 @@ function ran_wp_release_updater_test_installed_offer_release( string $source, st
 				'RAN_WP_RELEASE_UPDATER_OFFER_TYPE'      => $type,
 				'RAN_WP_RELEASE_UPDATER_OFFER_MODE'      => $mode,
 				'RAN_WP_RELEASE_UPDATER_OFFER_DIRECTION' => $direction,
+				'RAN_UPDATER_METADATA_CACHE_HISTORICAL'  => $historical,
+				'RAN_UPDATER_BROKER_ROOT'                => 'historical' === $first ? $historical : $site . '/wp-content/plugins/ran-wp-release-updater',
 				'RAN_WP_RELEASE_UPDATER_OFFER_OUTPUT'    => $output,
 			)
 		);

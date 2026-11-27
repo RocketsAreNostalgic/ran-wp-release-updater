@@ -20,6 +20,8 @@ use RAN\WPReleaseUpdater\V1\Runtime\SelectedRuntimeState;
  * Shared, request-local GitHub release protocol for installed and prospective packages.
  *
  * @phpstan-type ListedRelease array{
+ *   artifact_identity?:string,
+ *   artifact_sha256?:string,
  *   details_url:string,
  *   expected_asset_names:list<string>,
  *   prerelease:bool,
@@ -145,10 +147,10 @@ final class GitHubReleaseService {
 	 * @param array{etag?:string,last_modified?:string} $conditional
 	 * @return ReleaseListing
 	 */
-	public function list( array $conditional = array() ): array {
+	public function list( array $conditional = array(), bool $asset_binding = false ): array {
 		try {
 			$this->assert_live();
-			$result = $this->list_releases( $conditional );
+			$result = $this->list_releases( $conditional, $asset_binding );
 			$this->assert_live();
 			if ( $result['rate_limit']['limited'] ) {
 				throw new ReleaseFailure( 'rate_limited', $result['rate_limit']['retry_after'] );
@@ -212,7 +214,7 @@ final class GitHubReleaseService {
 	 * @param array{etag?:string,last_modified?:string} $conditional
 	 * @return ReleaseListing
 	 */
-	public function list_releases( array $conditional = array() ): array {
+	public function list_releases( array $conditional = array(), bool $asset_binding = false ): array {
 		$conditional = self::conditional( $conditional );
 		try {
 			$token            = $this->resolve_credentials();
@@ -278,7 +280,7 @@ final class GitHubReleaseService {
 				foreach ( $decoded as $release ) {
 					++$diagnostics['scanned_count'];
 					$reason    = '';
-					$candidate = $this->listed_release( $release, $reason );
+					$candidate = $this->listed_release( $release, $reason, $asset_binding );
 					if ( null === $candidate ) {
 						++$diagnostics['dropped_count'];
 						if ( count( $diagnostics['drops'] ) < self::MAX_CANDIDATES ) {
@@ -697,7 +699,7 @@ final class GitHubReleaseService {
 	}
 
 	/** @return ListedRelease|null */
-	private function listed_release( mixed $release, string &$reason = '' ): ?array {
+	private function listed_release( mixed $release, string &$reason, bool $include_binding ): ?array {
 		$reason = 'release_metadata_invalid';
 		if ( ! is_array( $release ) || ! is_bool( $release['draft'] ?? null ) || ! is_bool( $release['prerelease'] ?? null )
 			|| ! is_string( $release['tag_name'] ?? null ) ) {
@@ -741,7 +743,22 @@ final class GitHubReleaseService {
 			}
 		}
 
-		return array(
+		if ( $include_binding && 1 === count( $asset_names ) ) {
+			try {
+				$asset         = $this->zip_asset( $release['assets'] ?? null );
+				$asset_binding = array(
+					'artifact_identity' => $asset['identity'],
+					'artifact_sha256'   => $asset['sha256'],
+				);
+			} catch ( ReleaseFailure ) {
+				// Keep metadata-only rows visible when their ZIP cannot be confirmed.
+				$asset_binding = array();
+			}
+		} else {
+			$asset_binding = array();
+		}
+
+		return $asset_binding + array(
 			'details_url'           => $release['html_url'],
 			'expected_asset_names'  => array_slice( $asset_names, 0, 2 ),
 			'prerelease'            => $prerelease,
@@ -990,12 +1007,17 @@ final class GitHubReleaseService {
 		);
 		$reset       = GitHubApiClient::response_header( $response, 'x-ratelimit-reset' );
 		$reset_at    = self::non_negative_header( $reset );
+		$retry       = GitHubApiClient::response_header( $response, 'retry-after' );
+		$retry_date  = in_array( $status, array( 403, 429 ), true ) ? self::retry_date_header( $retry ) : null;
 		$retry_after = in_array( $status, array( 403, 429 ), true )
-			? self::positive_delay_header( GitHubApiClient::response_header( $response, 'retry-after' ) )
+			? self::positive_delay_header( $retry )
 			: null;
-		$limited     = 429 === $status
-			|| ( 403 === $status && ( null !== $retry_after || 0 === $remaining ) );
-		$cooldown    = 0;
+		if ( null === $retry_after && null !== $retry_date && $retry_date > $now ) {
+			$retry_after = min( 86400, $retry_date - $now );
+		}
+		$limited  = 429 === $status
+			|| ( 403 === $status && ( null !== $retry_after || 0 === $remaining || ( '0' === $retry || null !== $retry_date ) ) );
+		$cooldown = 0;
 		if ( $limited ) {
 			$delays = array();
 			if ( null !== $retry_after ) {
@@ -1143,6 +1165,15 @@ final class GitHubReleaseService {
 			throw new RuntimeException( 'The GitHub rate-limit delay is invalid.' );
 		}
 		return (int) $whole;
+	}
+
+	private static function retry_date_header( ?string $value ): ?int {
+		if ( null === $value || ! self::valid_last_modified( $value ) ) {
+			return null;
+		}
+		$format = 'D, d M Y H:i:s \\G\\M\\T';
+		$date   = \DateTimeImmutable::createFromFormat( '!' . $format, $value, new \DateTimeZone( 'GMT' ) );
+		return false !== $date && $date->format( $format ) === $value ? $date->getTimestamp() : null;
 	}
 
 	private static function version_from_tag( string $tag ): ?string {

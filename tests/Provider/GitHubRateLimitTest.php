@@ -140,9 +140,42 @@ namespace RAN\WPReleaseUpdater\V1\Tests\Provider {
 						'retry_after' => 900,
 					),
 				),
-				'HTTP date Retry-After falls back for 429' => array(
+				'HTTP date Retry-After is bounded for 429' => array(
 					429,
-					array( 'retry-after' => 'Sun, 06 Sep 2026 12:00:00 GMT' ),
+					array( 'retry-after' => 'Thu, 01 Jan 1970 00:18:20 GMT' ),
+					1000,
+					array(
+						'limited'     => true,
+						'remaining'   => null,
+						'reset_at'    => null,
+						'retry_after' => 100,
+					),
+				),
+				'future HTTP date on 403 uses remaining time' => array(
+					403,
+					array( 'retry-after' => 'Thu, 01 Jan 1970 00:18:20 GMT' ),
+					1000,
+					array(
+						'limited'     => true,
+						'remaining'   => null,
+						'reset_at'    => null,
+						'retry_after' => 100,
+					),
+				),
+				'far future HTTP date is bounded'          => array(
+					403,
+					array( 'retry-after' => 'Sat, 03 Jan 1970 00:00:00 GMT' ),
+					1000,
+					array(
+						'limited'     => true,
+						'remaining'   => null,
+						'reset_at'    => null,
+						'retry_after' => 86400,
+					),
+				),
+				'elapsed HTTP date uses fallback'          => array(
+					403,
+					array( 'retry-after' => 'Thu, 01 Jan 1970 00:10:00 GMT' ),
 					1000,
 					array(
 						'limited'     => true,

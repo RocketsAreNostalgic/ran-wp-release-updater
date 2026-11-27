@@ -126,7 +126,7 @@ PHP,
 		self::assertSame( $result['before'], $result['after'] );
 		self::assertSame( 'target_active', $result['plugin']['code'] );
 		self::assertSame( 'target_active', $result['theme']['code'] );
-		self::assertSame( 33, $result['hooks'] );
+		self::assertSame( 35, $result['hooks'] );
 	}
 
 	public function test_later_genuine_copy_reuses_verified_broker_provenance_without_rehashing_its_established_root(): void {
@@ -151,7 +151,7 @@ PHP,
 		self::assertSame( 2, $result['candidates'] );
 		self::assertSame( $second, $result['selected'] );
 		self::assertSame( 'target_active', $result['target']['code'] );
-		self::assertSame( 17, $result['hooks'] );
+		self::assertSame( 18, $result['hooks'] );
 	}
 
 	public function test_bootstrap_and_selection_do_not_hash_source_files_on_request(): void {
@@ -779,6 +779,9 @@ PHP,
 		$result = $this->metadata_discovery_probe( 'probe', $type, $first, $winner, $scenario );
 
 		self::assertSame( realpath( $this->parent . '/' . $winner . '-probe' ), $result['selected'] );
+		self::assertSame( 'newer' === $winner ? 'confirmation_changed' : null, $result['confirmation_refusal'] );
+		self::assertSame( 'newer' === $first && 'newer' === $winner ? '8' : null, $result['listed_asset'] );
+		self::assertSame( 'newer' === $winner ? '8' : null, $result['current_listed_asset'] );
 		self::assertTrue( $result['registered'] );
 		self::assertSame( 'active', $result['legacy'] );
 		self::assertSame( 'active', $result['status']['state'] );
@@ -999,6 +1002,19 @@ $GLOBALS['ran_wp_release_updater_metadata_fixture'] = array(
 	),
 );
 $fixture = &$GLOBALS['ran_wp_release_updater_metadata_fixture'];
+if (!$data['cache_request']) {
+	$source = $registrar->releases('github', $type, 'acme/example', '42', $channel);
+	$listed = $source->list();
+	if (!$listed['ok']) {
+		throw new RuntimeException('Mixed-version release listing unavailable.');
+	}
+	$current_source = $registrars['newer']->releases('github', $type, 'acme/example', '42', $channel);
+	$current_listing = $current_source->list();
+	if (!$current_listing['ok']) {
+		throw new RuntimeException('Current registrar could not read through the elected broker.');
+	}
+	$confirmation_refusal = apply_filters('ran_wp_release_updater_install_confirmed_release_v1', null, $type, $identity, '7', 'v2.0.0', '2.0.0', false, array());
+}
 $update_hook = $is_plugin ? 'update_plugins_github.com' : 'update_themes_github.com';
 $transient_name = $is_plugin ? 'update_plugins' : 'update_themes';
 $cache_key = 'ran_wp_release_updater_metadata_offers';
@@ -1103,6 +1119,9 @@ $handle->refresh();
 $legacy = $legacy->status();
 $broker = $GLOBALS['ran_wp_release_updater_v1_broker'];
 echo json_encode(array(
+	'confirmation_refusal' => $confirmation_refusal['code'] ?? null,
+	'listed_asset' => $listed['value']['candidates'][0]['artifact_identity'] ?? null,
+	'current_listed_asset' => $current_listing['value']['candidates'][0]['artifact_identity'] ?? null,
 	'selected' => (new ReflectionProperty($broker, 'selected_root'))->getValue($broker),
 	'registered' => $legacy_registered,
 	'legacy' => $legacy['state'],
@@ -1135,6 +1154,7 @@ PHP,
 				'older'         => $older,
 				'newer'         => $newer,
 				'load_order'    => array( $first, 'older' === $first ? 'newer' : 'older' ),
+				'winner'        => $winner,
 				'type'          => $type,
 				'scenario'      => $scenario,
 				'installed'     => $this->parent . '/' . $request,
