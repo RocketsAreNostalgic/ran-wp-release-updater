@@ -605,7 +605,7 @@ final class NativePackageUpdater {
 	}
 
 	/** @return array{descriptor:IdentityDescriptor,token:string}|null */
-	private function discover_offer( ?string $installed, ?string $runtime_uri, string &$reason, ?string &$check_id, bool $recheck_on_exhausted ): ?array {
+	private function discover_offer( ?string $installed, ?string $runtime_uri, string &$reason, ?string &$check_id, bool $recheck_on_exhausted, bool &$evict_cached = false ): ?array {
 		$this->begin_operation();
 		$this->status   = self::empty_status();
 		$headers_loaded = $this->ensure_headers_loaded();
@@ -644,7 +644,7 @@ final class NativePackageUpdater {
 			$search_exhausted
 		);
 		if ( ! $descriptor instanceof IdentityDescriptor && $recheck_on_exhausted && $search_exhausted ) {
-			$descriptor = $this->recheck_cached_offer_on_exhausted_search( $installed, $reason );
+			$descriptor = $this->recheck_cached_offer_on_exhausted_search( $installed, $reason, $evict_cached );
 		}
 		if ( ! $descriptor instanceof IdentityDescriptor ) {
 			return null;
@@ -1081,10 +1081,11 @@ final class NativePackageUpdater {
 			$this->header_failure_code = null;
 		}
 		$this->clear_discovery_snapshot();
-		$reason   = 'unexpected_failure';
-		$check_id = null;
-		$offered  = false;
-		$found    = $this->discover_offer( null, null, $reason, $check_id, true );
+		$reason       = 'unexpected_failure';
+		$check_id     = null;
+		$offered      = false;
+		$evict_cached = false;
+		$found        = $this->discover_offer( null, null, $reason, $check_id, true, $evict_cached );
 		if ( null !== $found && $this->live() ) {
 			if ( $this->upsert_target_offer( $found['descriptor'], $found['token'], $this->status['installed_version'] ?? '' ) ) {
 				$offered                                  = true;
@@ -1094,7 +1095,7 @@ final class NativePackageUpdater {
 			} else {
 				$reason = 'unexpected_failure';
 			}
-		} elseif ( $this->live() && in_array( $reason, array( 'no_candidates', 'no_newer_candidate', 'candidate_rejected', 'candidate_not_eligible' ), true ) ) {
+		} elseif ( $this->live() && ( $evict_cached || in_array( $reason, array( 'no_candidates', 'no_newer_candidate', 'candidate_rejected', 'candidate_not_eligible' ), true ) ) ) {
 			$this->evict_target_offer( $this->status['installed_version'] ?? '' );
 		}
 		$report = $this->check_report( $reason, $offered );
@@ -1167,7 +1168,7 @@ final class NativePackageUpdater {
 		return is_object( $transient ) ? $this->cached_descriptor( $transient ) : null;
 	}
 
-	private function recheck_cached_offer_on_exhausted_search( string $installed, string &$reason ): ?IdentityDescriptor {
+	private function recheck_cached_offer_on_exhausted_search( string $installed, string &$reason, bool &$evict_cached = false ): ?IdentityDescriptor {
 		$cached = $this->cached_offer_descriptor();
 		if ( ! $cached instanceof IdentityDescriptor ) {
 			return null;
@@ -1175,8 +1176,11 @@ final class NativePackageUpdater {
 		$facts        = $cached->to_array();
 		$relationship = ReleaseVersion::relationship( $facts['version'], $installed );
 		if ( ReleaseVersion::RELATIONSHIP_NEWER !== $relationship ) {
-			$reason                                    = ReleaseVersion::RELATIONSHIP_INVALID === $relationship ? 'candidate_invalid' : 'no_newer_candidate';
+			$evict_cached                              = true;
 			$this->status['candidate_validation_code'] = ReleaseVersion::RELATIONSHIP_INVALID === $relationship ? 'candidate_invalid' : 'candidate_not_newer';
+			if ( ReleaseVersion::RELATIONSHIP_INVALID === $relationship ) {
+				$reason = 'candidate_invalid';
+			}
 			return null;
 		}
 		$previous                          = array( $this->status['candidate_tag'], $this->status['candidate_version'], $this->status['candidate_validation_code'], $this->status['relationship'] );
@@ -1189,7 +1193,7 @@ final class NativePackageUpdater {
 		} catch ( \Throwable $failure ) {
 			if ( $failure instanceof ReleaseFailure && self::can_reject_candidate( $failure ) && 'release_unavailable' === $failure->release_code ) {
 				list( $this->status['candidate_tag'], $this->status['candidate_version'], $this->status['candidate_validation_code'], $this->status['relationship'] ) = $previous;
-				$reason = 'candidate_rejected' === $reason ? 'candidate_rejected' : 'no_newer_candidate';
+				$evict_cached = true;
 				return null;
 			}
 			$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
@@ -1222,17 +1226,20 @@ final class NativePackageUpdater {
 		}
 		$payload      = $this->check_facts( $reason );
 		$this->status = $saved;
-		return array(
+		$report       = array(
 			'status'            => $payload['status'],
 			'reason'            => $payload['reason'],
 			'policy'            => $this->policy,
 			'relationship'      => $payload['relationship'],
 			'installed_version' => $payload['installed_version'],
 			'candidate_version' => $payload['candidate_version'],
-		) + ( null !== $offered ? array( 'offered_version' => $payload['offered_version'] ) : array() ) + array(
-			'candidate_validation_code' => $payload['candidate_validation_code'],
-			'offered'                   => $offered ?? false,
 		);
+		if ( null !== $offered ) {
+			$report['offered_version'] = $payload['offered_version'];
+		}
+		$report['candidate_validation_code'] = $payload['candidate_validation_code'];
+		$report['offered']                   = $offered ?? false;
+		return $report;
 	}
 
 	/**

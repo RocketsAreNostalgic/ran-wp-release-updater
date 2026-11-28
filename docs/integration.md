@@ -335,9 +335,11 @@ metadata offer was written to the site transient).
 
 Guarantees:
 
-- Only this target's request-local state is reset (reloading lazy headers and
-  clearing any reusable discovery snapshot) without calling
-  `delete_site_transient()`.
+- Only this target's request-local state is reset (reloading lazy headers,
+  clearing any reusable discovery snapshot, and dropping any pending
+  exact-release authorization and cached candidate headers) without calling
+  `delete_site_transient()`; a host that called
+  `ran_wp_release_updater_offer_release_v1` must offer again after refreshing.
 - Routine discovery uses provider metadata only (zero ZIP downloads) and emits
   `ran_wp_release_updater_check_started_v1` and
   `ran_wp_release_updater_check_completed_v1` with the existing v1 reason codes.
@@ -353,9 +355,13 @@ Guarantees:
   when `checked` is present so WordPress does not force a type-wide recheck.
 - When a listing succeeds with `search_exhausted` and this target already has a
   cached offer, that exact offered release is re-inspected via metadata (zero
-  ZIP downloads) so withdrawn or invalidated offers are evicted while transient
-  errors preserve the cached offer and still-valid offers stay available.
-- On `failed` or `skipped` results (including `policy_disabled`,
+  ZIP downloads): still-valid offers stay available, transient errors preserve
+  the cached offer, invalidated offers are evicted as `candidate_rejected`, and
+  withdrawn (`release_unavailable`) or no-longer-newer offers are evicted while
+  retaining the incomplete-search failure reason (`release_list_failed`, or
+  `candidate_rejected` when a newer listed candidate was rejected) so a
+  page-limited scan never reports up to date.
+- On other `failed` or `skipped` results (including `policy_disabled`,
   `policy_forced_off`, `rate_limited`, `runtime_busy`, and transient provider
   errors), the site transient is left untouched.
 
