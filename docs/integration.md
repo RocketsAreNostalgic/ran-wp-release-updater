@@ -311,6 +311,54 @@ Guarantees:
 - Remote text is never returned; only the finite codes and validated versions
   above.
 
+### Refreshing one target's cached offer
+
+`refresh()` clears the whole `update_plugins` or `update_themes` site transient,
+so a subsequent `wp_update_plugins()` or `wp_update_themes()` call queries
+WordPress.org and every managed target of that type. A host that needs a manual
+single-package check for an enabled target calls the optional scoped refresh
+filter. As with the read-only check filter, no handle method or protocol change
+is involved, and an older elected runtime returns `null` unchanged.
+
+```text
+$report = apply_filters( 'ran_wp_release_updater_refresh_target_v1', null, 'plugin', 'package/package.php' );
+```
+
+Arguments are the unanswered default (`null`), the target type (`plugin` or
+`theme`) and the installed identity. Only the matching live target answers;
+`null` back means unsupported. The host must authorize the caller itself.
+
+An answering target returns the closed keys `status`, `reason`, `policy`,
+`relationship`, `installed_version`, `candidate_version`, `offered_version`,
+`candidate_validation_code`, and `offered` (`true` only when an eligible
+metadata offer was written to the site transient).
+
+Guarantees:
+
+- Only this target's request-local state is reset (reloading lazy headers and
+  clearing any reusable discovery snapshot) without calling
+  `delete_site_transient()`.
+- Routine discovery uses provider metadata only (zero ZIP downloads) and emits
+  `ran_wp_release_updater_check_started_v1` and
+  `ran_wp_release_updater_check_completed_v1` with the existing v1 reason codes.
+- On `update_available`, only this target's offer is upserted into
+  `update_plugins` or `update_themes` (and packed into the metadata-offer cache
+  on save). Unrelated cached offers, `last_checked`, and `translations` stay
+  intact. On a cold cache (`get_site_transient()` returns `false`), `last_checked`
+  is left unset so WordPress's normal check schedule remains intact.
+- On a definitive no-update (`no_candidates`, `no_newer_candidate`) or
+  `rejected` (`candidate_rejected`, `candidate_not_eligible`) check, any stale
+  offer for this target is removed from `response`, `no_update`, and the
+  metadata-offer cache, and `checked[$id]` is restored to the installed version
+  when `checked` is present so WordPress does not force a type-wide recheck.
+- When a listing succeeds with `search_exhausted` and this target already has a
+  cached offer, that exact offered release is re-inspected via metadata (zero
+  ZIP downloads) so withdrawn or invalidated offers are evicted while transient
+  errors preserve the cached offer and still-valid offers stay available.
+- On `failed` or `skipped` results (including `policy_disabled`,
+  `policy_forced_off`, `rate_limited`, `runtime_busy`, and transient provider
+  errors), the site transient is left untouched.
+
 ### Offering one exact release
 
 Native offers are newest-and-newer only. A host that must install one chosen

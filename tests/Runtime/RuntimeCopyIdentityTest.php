@@ -126,7 +126,7 @@ PHP,
 		self::assertSame( $result['before'], $result['after'] );
 		self::assertSame( 'target_active', $result['plugin']['code'] );
 		self::assertSame( 'target_active', $result['theme']['code'] );
-		self::assertSame( 35, $result['hooks'] );
+		self::assertSame( 37, $result['hooks'] );
 	}
 
 	public function test_later_genuine_copy_reuses_verified_broker_provenance_without_rehashing_its_established_root(): void {
@@ -151,7 +151,7 @@ PHP,
 		self::assertSame( 2, $result['candidates'] );
 		self::assertSame( $second, $result['selected'] );
 		self::assertSame( 'target_active', $result['target']['code'] );
-		self::assertSame( 18, $result['hooks'] );
+		self::assertSame( 19, $result['hooks'] );
 	}
 
 	public function test_bootstrap_and_selection_do_not_hash_source_files_on_request(): void {
