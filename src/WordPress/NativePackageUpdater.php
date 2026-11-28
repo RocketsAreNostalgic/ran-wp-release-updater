@@ -322,7 +322,7 @@ final class NativePackageUpdater {
 		add_filter( $prefix . $canonical_key, array( $this, 'filter_update' ), 10, 4 );
 		$this->register_raw_host_hook();
 		add_filter( 'plugin' === $this->target_type ? 'plugins_update_check_locales' : 'themes_update_check_locales', array( $this, 'prepare_update_check_routing' ), 10, 1 );
-		$transient = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
+		$transient = $this->transient_name();
 		add_filter( 'site_transient_' . $transient, array( $this, 'filter_cached_update' ), 10, 1 );
 		add_filter( 'pre_set_site_transient_' . $transient, array( $this, 'filter_store_update' ), PHP_INT_MAX, 1 );
 		if ( 'plugin' === $this->target_type ) {
@@ -460,14 +460,14 @@ final class NativePackageUpdater {
 			$transient instanceof \stdClass
 			&& is_array( $transient->{self::METADATA_CACHE} ?? null )
 			&& array_key_exists( $this->installed_identity, $transient->{self::METADATA_CACHE} )
-			&& null === $this->valid_metadata_offer( $transient->{self::METADATA_CACHE}[ $this->installed_identity ], true )
+			&& null === $this->valid_metadata_offer( $transient->{self::METADATA_CACHE}[ $this->installed_identity ] )
 		) {
 			$this->forget_metadata_offer( $transient );
 		}
 	}
 
 	/** @return array{offer:object|array<string,mixed>,checked:string}|null */
-	private function valid_metadata_offer( mixed $cached, bool $check_authorized = false ): ?array {
+	private function valid_metadata_offer( mixed $cached ): ?array {
 		if ( ! is_array( $cached ) || ! is_string( $cached['checked'] ?? null ) || ! $this->live() || $this->policy_blocked() ) {
 			return null;
 		}
@@ -484,7 +484,6 @@ final class NativePackageUpdater {
 		$descriptor = $this->parse_token( $package );
 		if (
 			null === $descriptor
-			|| ( $check_authorized && isset( $this->authorized_fingerprints[ $descriptor->fingerprint_value() ] ) )
 			|| $this->installed_version() !== $cached['checked']
 			|| ! $this->newer_than_installed( $descriptor )
 			|| ! $this->descriptor_admitted( $descriptor )
@@ -589,50 +588,80 @@ final class NativePackageUpdater {
 
 	/** @param array<string,mixed> $package_data */
 	private function checked_update( mixed $update, array $package_data, string &$reason, ?string &$check_id ): mixed {
+		$installed   = is_string( $package_data['Version'] ?? null ) ? $package_data['Version'] : '';
+		$runtime_uri = is_string( $package_data['UpdateURI'] ?? null ) ? $package_data['UpdateURI'] : '';
+		$found       = $this->discover_offer( $installed, $runtime_uri, $reason, $check_id, false );
+		if ( null === $found ) {
+			return match ( true ) {
+				'policy_disabled' === $reason, 'policy_forced_off' === $reason,
+				'candidate_admission_rejected' === $this->status['candidate_validation_code'] => false,
+				default => $update,
+			};
+		}
+		$this->status['offered_version']          = $found['descriptor']->to_array()['version'];
+		$this->status['offered_release_identity'] = $found['descriptor']->release_identity();
+		$reason                                   = 'update_available';
+		return $this->offer_entry( $found['descriptor'], $found['token'], $this->automatic_eligible( $found['descriptor'] ) );
+	}
+
+	/** @return array{descriptor:IdentityDescriptor,token:string}|null */
+	private function discover_offer( ?string $installed, ?string $runtime_uri, string &$reason, ?string &$check_id, bool $recheck_on_exhausted ): ?array {
 		$this->begin_operation();
-		$installed                         = is_string( $package_data['Version'] ?? null ) ? $package_data['Version'] : '';
-		$this->status                      = self::empty_status();
+		$this->status   = self::empty_status();
+		$headers_loaded = $this->ensure_headers_loaded();
+		if ( null === $installed ) {
+			$installed = $headers_loaded ? $this->installed_version() : '';
+		}
 		$this->status['installed_version'] = $installed;
 		$this->status['last_check']        = time();
-		$runtime_uri                       = is_string( $package_data['UpdateURI'] ?? null ) ? $package_data['UpdateURI'] : '';
-		if ( ! $this->ensure_headers_loaded() || null === ReleaseVersion::normalize_header( $installed ) || ! $this->matches_runtime_uri( $runtime_uri ) ) {
+		if (
+			! $headers_loaded
+			|| null === ReleaseVersion::normalize_header( $installed )
+			|| ( null !== $runtime_uri && ! $this->matches_runtime_uri( $runtime_uri ) )
+		) {
 			$reason   = 'runtime_identity_invalid';
 			$check_id = $this->start_check_observation();
-			return $this->diagnose( 'runtime_package_identity_invalid', $update );
+			$this->diagnose( 'runtime_package_identity_invalid', null );
+			return null;
 		}
 		if ( $this->policy_blocked() ) {
 			$reason   = 'disabled' === $this->policy ? 'policy_disabled' : 'policy_forced_off';
 			$check_id = $this->start_check_observation();
-			return false;
+			return null;
 		}
 		if ( ! $this->direct_filesystem() ) {
 			$reason   = 'filesystem_unavailable';
 			$check_id = $this->start_check_observation();
-			return $update;
+			return null;
 		}
-		$descriptor = $this->discover(
+		$search_exhausted = false;
+		$descriptor       = $this->discover(
 			$installed,
 			$reason,
 			function () use ( &$check_id ): void {
 				$check_id = $this->start_check_observation();
-			}
+			},
+			$search_exhausted
 		);
+		if ( ! $descriptor instanceof IdentityDescriptor && $recheck_on_exhausted && $search_exhausted ) {
+			$descriptor = $this->recheck_cached_offer_on_exhausted_search( $installed, $reason );
+		}
 		if ( ! $descriptor instanceof IdentityDescriptor ) {
-			return 'candidate_admission_rejected' === $this->status['candidate_validation_code'] ? false : $update;
+			return null;
 		}
 		if ( ! $this->manual_eligible( $descriptor ) ) {
 			$reason = 'candidate_not_eligible';
-			return $update;
+			return null;
 		}
 		$token = $this->token( $descriptor );
 		if ( null === $token ) {
 			$reason = 'offer_token_unavailable';
-			return $update;
+			return null;
 		}
-		$this->status['offered_version']          = $descriptor->to_array()['version'];
-		$this->status['offered_release_identity'] = $descriptor->release_identity();
-		$reason                                   = 'update_available';
-		return $this->offer_entry( $descriptor, $token, $this->automatic_eligible( $descriptor ) );
+		return array(
+			'descriptor' => $descriptor,
+			'token'      => $token,
+		);
 	}
 
 	/**
@@ -885,7 +914,7 @@ final class NativePackageUpdater {
 
 	/** @param array<string,mixed> $offer */
 	private function run_exact_upgrade( ExactInstallInvocation $exact, array $offer ): mixed {
-		$transient              = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
+		$transient              = $this->transient_name();
 		$hook                   = 'site_transient_' . $transient;
 		$overlay                = function ( mixed $current ) use ( $exact, $offer ): mixed {
 			if ( $exact->download_consumed || doing_action( 'shutdown' ) || ! $this->live() ) {
@@ -972,7 +1001,7 @@ final class NativePackageUpdater {
 		}
 	}
 
-	/** @return array{status:string,reason:string,policy:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,candidate_validation_code:string|null,offered:false} */
+	/** @return array{status:string,reason:string,policy:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,offered_version?:string|null,candidate_validation_code:string|null,offered:bool} */
 	private function read_only_check(): array {
 		$reason       = 'unexpected_failure';
 		$check_id     = null;
@@ -1030,115 +1059,63 @@ final class NativePackageUpdater {
 	 * @return mixed Unchanged $result, or the refresh report array for this target.
 	 */
 	public function filter_refresh_target( mixed $result, mixed $target_type, mixed $installed_identity ): mixed {
-		if ( $target_type !== $this->target_type || ! is_string( $installed_identity ) || ! hash_equals( $this->installed_identity, $installed_identity ) ) {
-			return $result;
-		}
-		if ( ! $this->live() ) {
+		if ( $target_type !== $this->target_type || ! is_string( $installed_identity ) || ! hash_equals( $this->installed_identity, $installed_identity ) || ! $this->live() ) {
 			return $result;
 		}
 		if ( null !== $this->exact_install || $this->native_beginning || null !== $this->native_owner || $this->pending_install->active() ) {
-			return array(
-				'status'                    => 'failed',
-				'reason'                    => 'runtime_busy',
-				'policy'                    => $this->policy,
-				'relationship'              => null,
-				'installed_version'         => null,
-				'candidate_version'         => null,
-				'offered_version'           => null,
-				'candidate_validation_code' => null,
-				'offered'                   => false,
-			);
+			return $this->check_report( 'runtime_busy', false, true );
 		}
 		return $this->refresh_single_target();
 	}
 
-	/** @return array{status:string,reason:string,policy:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,offered_version:string|null,candidate_validation_code:string|null,offered:bool} */
+	/** @return array{status:string,reason:string,policy:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,offered_version?:string|null,candidate_validation_code:string|null,offered:bool} */
 	private function refresh_single_target(): array {
-		$this->reset_target_state();
-		$reason           = 'unexpected_failure';
-		$check_id         = null;
-		$offered          = false;
-		$descriptor       = null;
-		$search_exhausted = false;
-		$this->begin_operation();
-		$headers_loaded                    = $this->ensure_headers_loaded();
-		$installed                         = $headers_loaded ? $this->installed_version() : '';
-		$this->status['installed_version'] = $installed;
-		$this->status['last_check']        = time();
-		if ( ! $headers_loaded || null === ReleaseVersion::normalize_header( $installed ) ) {
-			$reason   = 'runtime_identity_invalid';
-			$check_id = $this->start_check_observation();
-			$this->diagnose( 'runtime_package_identity_invalid', null );
-		} elseif ( $this->policy_blocked() ) {
-			$reason   = 'disabled' === $this->policy ? 'policy_disabled' : 'policy_forced_off';
-			$check_id = $this->start_check_observation();
-		} elseif ( ! $this->direct_filesystem() ) {
-			$reason   = 'filesystem_unavailable';
-			$check_id = $this->start_check_observation();
-		} else {
-			$descriptor = $this->discover(
-				$installed,
-				$reason,
-				function () use ( &$check_id ): void {
-					$check_id = $this->start_check_observation();
-				},
-				$search_exhausted
-			);
-			if ( ! $descriptor instanceof IdentityDescriptor && $search_exhausted ) {
-				$descriptor = $this->recheck_cached_offer_on_exhausted_search( $installed, $reason );
-			}
-			if ( $descriptor instanceof IdentityDescriptor ) {
-				if ( ! $this->manual_eligible( $descriptor ) ) {
-					$reason = 'candidate_not_eligible';
-				} else {
-					$token = $this->token( $descriptor );
-					if ( null === $token ) {
-						$reason = 'offer_token_unavailable';
-					} elseif ( $this->live() ) {
-						$offered = $this->upsert_target_offer( $descriptor, $token, $installed );
-						if ( $offered ) {
-							$this->status['offered_version']          = $descriptor->to_array()['version'];
-							$this->status['offered_release_identity'] = $descriptor->release_identity();
-							$reason                                   = 'update_available';
-						}
-					}
-				}
-			}
+		$this->authorized_offer        = null;
+		$this->authorized_fingerprint  = null;
+		$this->authorized_fingerprints = array();
+		$this->candidate_headers       = array();
+		$this->diagnostics             = array();
+		$this->descriptor              = null;
+		if ( null !== $this->header_loader ) {
+			$this->headers             = null;
+			$this->header_failure_code = null;
 		}
-		if ( ! $offered && $this->live() && in_array( $reason, array( 'no_candidates', 'no_newer_candidate', 'candidate_rejected', 'candidate_not_eligible' ), true ) ) {
-			$this->evict_target_offer( $installed );
+		$this->clear_discovery_snapshot();
+		$reason   = 'unexpected_failure';
+		$check_id = null;
+		$offered  = false;
+		$found    = $this->discover_offer( null, null, $reason, $check_id, true );
+		if ( null !== $found && $this->live() ) {
+			if ( $this->upsert_target_offer( $found['descriptor'], $found['token'], $this->status['installed_version'] ?? '' ) ) {
+				$offered                                  = true;
+				$this->status['offered_version']          = $found['descriptor']->to_array()['version'];
+				$this->status['offered_release_identity'] = $found['descriptor']->release_identity();
+				$reason                                   = 'update_available';
+			} else {
+				$reason = 'unexpected_failure';
+			}
+		} elseif ( $this->live() && in_array( $reason, array( 'no_candidates', 'no_newer_candidate', 'candidate_rejected', 'candidate_not_eligible' ), true ) ) {
+			$this->evict_target_offer( $this->status['installed_version'] ?? '' );
 		}
-		$report = $this->refresh_report( $reason, $offered );
+		$report = $this->check_report( $reason, $offered );
 		$this->complete_check_observation( $check_id, $reason );
 		if ( ! $this->live() ) {
 			$this->descriptor = null;
 			$this->status     = self::empty_status();
-			return $this->refresh_report( 'runtime_liveness_lost', false );
+			return $this->check_report( 'runtime_liveness_lost', false );
 		}
 		return $report;
 	}
 
-	/** @return array{status:string,reason:string,policy:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,offered_version:string|null,candidate_validation_code:string|null,offered:bool} */
-	private function refresh_report( string $reason, bool $offered ): array {
-		$payload = $this->check_facts( $reason );
-		return array(
-			'status'                    => $payload['status'],
-			'reason'                    => $payload['reason'],
-			'policy'                    => $this->policy,
-			'relationship'              => $payload['relationship'],
-			'installed_version'         => $payload['installed_version'],
-			'candidate_version'         => $payload['candidate_version'],
-			'offered_version'           => $payload['offered_version'],
-			'candidate_validation_code' => $payload['candidate_validation_code'],
-			'offered'                   => $offered,
-		);
+	private function transient_name(): string {
+		return 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
 	}
 
 	private function upsert_target_offer( IdentityDescriptor $descriptor, string $token, string $installed ): bool {
 		if ( ! function_exists( 'get_site_transient' ) || ! function_exists( 'set_site_transient' ) ) {
 			return false;
 		}
-		$name      = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
+		$name      = $this->transient_name();
 		$transient = get_site_transient( $name );
 		if ( ! is_object( $transient ) ) {
 			$transient = (object) array(
@@ -1151,8 +1128,7 @@ final class NativePackageUpdater {
 		if ( ! is_array( $transient->response ?? null ) ) {
 			return false;
 		}
-		$version = $descriptor->to_array()['version'];
-		$offer   = $this->offer_entry( $descriptor, $token, $this->automatic_eligible( $descriptor ) ) + array( 'new_version' => $version );
+		$offer = $this->offer_entry( $descriptor, $token, $this->automatic_eligible( $descriptor ) ) + array( 'new_version' => $descriptor->to_array()['version'] );
 		if ( is_array( $transient->no_update ?? null ) ) {
 			unset( $transient->no_update[ $this->installed_identity ] );
 		}
@@ -1168,30 +1144,18 @@ final class NativePackageUpdater {
 		if ( ! function_exists( 'get_site_transient' ) || ! function_exists( 'set_site_transient' ) ) {
 			return;
 		}
-		$name      = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
+		$name      = $this->transient_name();
 		$transient = get_site_transient( $name );
 		if ( ! is_object( $transient ) ) {
 			return;
 		}
-		$had_response  = is_array( $transient->response ?? null ) && array_key_exists( $this->installed_identity, $transient->response );
-		$had_no_update = is_array( $transient->no_update ?? null ) && array_key_exists( $this->installed_identity, $transient->no_update );
-		$had_metadata  = $transient instanceof \stdClass
-			&& is_array( $transient->{self::METADATA_CACHE} ?? null )
-			&& array_key_exists( $this->installed_identity, $transient->{self::METADATA_CACHE} );
-		$checked_needs = is_array( $transient->checked ?? null )
-			&& ( ! array_key_exists( $this->installed_identity, $transient->checked ) || $transient->checked[ $this->installed_identity ] !== $installed );
-		if ( ! $had_response && ! $had_no_update && ! $had_metadata && ! $checked_needs ) {
-			return;
-		}
-		if ( $had_response ) {
+		if ( is_array( $transient->response ?? null ) ) {
 			unset( $transient->response[ $this->installed_identity ] );
 		}
-		if ( $had_no_update ) {
+		if ( is_array( $transient->no_update ?? null ) ) {
 			unset( $transient->no_update[ $this->installed_identity ] );
 		}
-		if ( $had_metadata ) {
-			$this->forget_metadata_offer( $transient );
-		}
+		$this->forget_metadata_offer( $transient );
 		if ( is_array( $transient->checked ?? null ) ) {
 			$transient->checked[ $this->installed_identity ] = $installed;
 		}
@@ -1199,24 +1163,8 @@ final class NativePackageUpdater {
 	}
 
 	private function cached_offer_descriptor(): ?IdentityDescriptor {
-		if ( ! function_exists( 'get_site_transient' ) ) {
-			return null;
-		}
-		$name      = 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes';
-		$transient = get_site_transient( $name );
-		if ( ! is_object( $transient ) ) {
-			return null;
-		}
-		$descriptor = $this->cached_descriptor( $transient );
-		if ( $descriptor instanceof IdentityDescriptor ) {
-			return $descriptor;
-		}
-		if ( ! $transient instanceof \stdClass || ! is_array( $transient->{self::METADATA_CACHE} ?? null ) ) {
-			return null;
-		}
-		$cached  = $transient->{self::METADATA_CACHE}[ $this->installed_identity ] ?? null;
-		$package = is_array( $cached ) ? $this->entry_package( $cached['offer'] ?? null ) : null;
-		return is_string( $package ) ? $this->parse_token( $package ) : null;
+		$transient = function_exists( 'get_site_transient' ) ? get_site_transient( $this->transient_name() ) : false;
+		return is_object( $transient ) ? $this->cached_descriptor( $transient ) : null;
 	}
 
 	private function recheck_cached_offer_on_exhausted_search( string $installed, string &$reason ): ?IdentityDescriptor {
@@ -1224,58 +1172,41 @@ final class NativePackageUpdater {
 		if ( ! $cached instanceof IdentityDescriptor ) {
 			return null;
 		}
-		$previous_candidate                = array(
-			'candidate_tag'             => $this->status['candidate_tag'],
-			'candidate_version'         => $this->status['candidate_version'],
-			'candidate_validation_code' => $this->status['candidate_validation_code'],
-			'relationship'              => $this->status['relationship'],
-		);
-		$facts                             = $cached->to_array();
-		$this->status['candidate_tag']     = $facts['tag'];
-		$this->status['candidate_version'] = $facts['version'];
-		$this->status['relationship']      = ReleaseVersion::relationship( $facts['version'], $installed );
-		try {
-			$fresh = $this->adapter->inspect( $cached->release_identity(), $facts['tag'] );
-			self::assert_descriptor_binding( $fresh, $this->target_binding );
-		} catch ( ReleaseFailure $failure ) {
-			if ( self::can_reject_candidate( $failure ) ) {
-				if ( 'release_unavailable' === $failure->release_code ) {
-					$this->status['candidate_tag']             = $previous_candidate['candidate_tag'];
-					$this->status['candidate_version']         = $previous_candidate['candidate_version'];
-					$this->status['candidate_validation_code'] = $previous_candidate['candidate_validation_code'];
-					$this->status['relationship']              = $previous_candidate['relationship'];
-					$reason                                    = 'no_newer_candidate';
-				} else {
-					$reason                                    = 'candidate_rejected';
-					$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
-				}
-				return null;
-			}
-			$reason                                    = 'rate_limited' === $failure->release_code ? 'rate_limited' : 'candidate_inspection_failed';
-			$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
-			return null;
-		} catch ( InvalidArgumentException ) {
-			$reason                                    = 'candidate_rejected';
-			$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
-			return null;
-		} catch ( \Throwable ) {
-			$reason                                    = 'candidate_inspection_failed';
-			$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
-			return null;
-		}
-		$fresh_facts                       = $fresh->to_array();
-		$relationship                      = ReleaseVersion::relationship( $fresh_facts['version'], $installed );
-		$this->status['candidate_tag']     = $fresh_facts['tag'];
-		$this->status['candidate_version'] = $fresh_facts['version'];
-		$this->status['relationship']      = $relationship;
+		$facts        = $cached->to_array();
+		$relationship = ReleaseVersion::relationship( $facts['version'], $installed );
 		if ( ReleaseVersion::RELATIONSHIP_NEWER !== $relationship ) {
 			$reason                                    = ReleaseVersion::RELATIONSHIP_INVALID === $relationship ? 'candidate_invalid' : 'no_newer_candidate';
 			$this->status['candidate_validation_code'] = ReleaseVersion::RELATIONSHIP_INVALID === $relationship ? 'candidate_invalid' : 'candidate_not_newer';
 			return null;
 		}
-		if ( ! $this->descriptor_admitted( $fresh ) ) {
-			$reason                                    = 'candidate_rejected';
-			$this->status['candidate_validation_code'] = 'candidate_admission_rejected';
+		$previous                          = array( $this->status['candidate_tag'], $this->status['candidate_version'], $this->status['candidate_validation_code'], $this->status['relationship'] );
+		$this->status['candidate_tag']     = $facts['tag'];
+		$this->status['candidate_version'] = $facts['version'];
+		$this->status['relationship']      = $relationship;
+		try {
+			$fresh = $this->adapter->inspect( $cached->release_identity(), $facts['tag'] );
+			self::assert_descriptor_binding( $fresh, $this->target_binding );
+		} catch ( \Throwable $failure ) {
+			if ( $failure instanceof ReleaseFailure && self::can_reject_candidate( $failure ) && 'release_unavailable' === $failure->release_code ) {
+				list( $this->status['candidate_tag'], $this->status['candidate_version'], $this->status['candidate_validation_code'], $this->status['relationship'] ) = $previous;
+				$reason = 'candidate_rejected' === $reason ? 'candidate_rejected' : 'no_newer_candidate';
+				return null;
+			}
+			$this->status['candidate_validation_code'] = 'candidate_inspection_failed';
+			$reason                                    = match ( true ) {
+				$failure instanceof InvalidArgumentException,
+				$failure instanceof ReleaseFailure && self::can_reject_candidate( $failure ) => 'candidate_rejected',
+				$failure instanceof ReleaseFailure && 'rate_limited' === $failure->release_code => 'rate_limited',
+				default => 'candidate_inspection_failed',
+			};
+			return null;
+		}
+		$candidate = array(
+			'release_identity' => $facts['release_identity'],
+			'tag'              => $facts['tag'],
+			'version'          => $facts['version'],
+		);
+		if ( true !== $this->admit_candidate( $fresh, $candidate, $reason ) ) {
 			return null;
 		}
 		$this->status['candidate_validation_code'] = null;
@@ -1283,18 +1214,24 @@ final class NativePackageUpdater {
 		return $this->live() ? $fresh : null;
 	}
 
-	/** @return array{status:string,reason:string,policy:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,candidate_validation_code:string|null,offered:false} */
-	private function check_report( string $reason ): array {
-		$payload = $this->check_facts( $reason );
+	/** @return array{status:string,reason:string,policy:string,relationship:string|null,installed_version:string|null,candidate_version:string|null,offered_version?:string|null,candidate_validation_code:string|null,offered:bool} */
+	private function check_report( string $reason, ?bool $offered = null, bool $clear_facts = false ): array {
+		$saved = $this->status;
+		if ( $clear_facts ) {
+			$this->status = self::empty_status();
+		}
+		$payload      = $this->check_facts( $reason );
+		$this->status = $saved;
 		return array(
-			'status'                    => $payload['status'],
-			'reason'                    => $payload['reason'],
-			'policy'                    => $this->policy,
-			'relationship'              => $payload['relationship'],
-			'installed_version'         => $payload['installed_version'],
-			'candidate_version'         => $payload['candidate_version'],
+			'status'            => $payload['status'],
+			'reason'            => $payload['reason'],
+			'policy'            => $this->policy,
+			'relationship'      => $payload['relationship'],
+			'installed_version' => $payload['installed_version'],
+			'candidate_version' => $payload['candidate_version'],
+		) + ( null !== $offered ? array( 'offered_version' => $payload['offered_version'] ) : array() ) + array(
 			'candidate_validation_code' => $payload['candidate_validation_code'],
-			'offered'                   => false,
+			'offered'                   => $offered ?? false,
 		);
 	}
 
@@ -2028,24 +1965,8 @@ final class NativePackageUpdater {
 			$this->clear_pending();
 			return false;
 		}
-		$this->reset_target_state();
-		$this->clear_pending();
-		// WordPress caches the whole update check in this site transient and answers from it
-		// for up to twelve hours, so without this the next check would never reach the provider.
-		if ( function_exists( 'delete_site_transient' ) ) {
-			delete_site_transient( 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes' );
-		}
-		return true;
-	}
-
-	private function reset_target_state(): void {
-		$this->authorized_offer        = null;
-		$this->authorized_fingerprint  = null;
-		$this->authorized_fingerprints = array();
-		$this->candidate_headers       = array();
-		$this->diagnostics             = array();
-		$this->status                  = self::empty_status();
-		$this->descriptor              = null;
+		$this->diagnostics = array();
+		$this->status      = self::empty_status();
 		if ( null !== $this->header_loader ) {
 			$this->headers             = null;
 			$this->header_failure_code = null;
@@ -2058,6 +1979,13 @@ final class NativePackageUpdater {
 		}
 		$this->clear_discovery_snapshot();
 		$this->queued_multi_run = false;
+		$this->clear_pending();
+		// WordPress caches the whole update check in this site transient and answers from it
+		// for up to twelve hours, so without this the next check would never reach the provider.
+		if ( function_exists( 'delete_site_transient' ) ) {
+			delete_site_transient( 'plugin' === $this->target_type ? 'update_plugins' : 'update_themes' );
+		}
+		return true;
 	}
 
 	/** @phpstan-impure Host callbacks can change target markers between checks. */
@@ -2594,11 +2522,11 @@ final class NativePackageUpdater {
 			}
 			return $this->live() ? $descriptor : null;
 		}
-		if ( ! $rejected && false === ( $listed['not_modified'] ?? null ) ) {
-			if ( false === ( $listed['search_exhausted'] ?? null ) ) {
-				$reason = array() === $candidates ? 'no_candidates' : 'no_newer_candidate';
-			} elseif ( true === ( $listed['search_exhausted'] ?? null ) ) {
+		if ( false === ( $listed['not_modified'] ?? null ) ) {
+			if ( true === ( $listed['search_exhausted'] ?? null ) ) {
 				$search_exhausted = true;
+			} elseif ( ! $rejected && false === ( $listed['search_exhausted'] ?? null ) ) {
+				$reason = array() === $candidates ? 'no_candidates' : 'no_newer_candidate';
 			}
 		}
 		return null;
