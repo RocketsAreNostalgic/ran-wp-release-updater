@@ -63,6 +63,32 @@ namespace {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress update-check cache seam.
 		function delete_site_transient( string $transient ): bool {
 			$GLOBALS['ran_wp_release_updater_test_deleted_transients'][] = $transient;
+			unset( $GLOBALS['ran_wp_release_updater_test_site_transients'][ $transient ] );
+			return true;
+		}
+	}
+	if ( ! function_exists( 'get_site_transient' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress update-check cache read seam.
+		function get_site_transient( string $transient ): mixed {
+			$value = $GLOBALS['ran_wp_release_updater_test_site_transients'][ $transient ] ?? false;
+			if ( is_object( $value ) ) {
+				$value = clone $value;
+			}
+			foreach ( $GLOBALS['ran_wp_release_updater_test_transient_filters'][ 'site_transient_' . $transient ] ?? array() as $callback ) {
+				$value = $callback( $value );
+			}
+			return $value;
+		}
+	}
+	if ( ! function_exists( 'set_site_transient' ) ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Exercise the native WordPress update-check cache write seam.
+		function set_site_transient( string $transient, mixed $value, int $expiration = 0 ): bool {
+			unset( $expiration );
+			$GLOBALS['ran_wp_release_updater_test_set_transients'][] = $transient;
+			foreach ( $GLOBALS['ran_wp_release_updater_test_transient_filters'][ 'pre_set_site_transient_' . $transient ] ?? array() as $callback ) {
+				$value = $callback( $value );
+			}
+			$GLOBALS['ran_wp_release_updater_test_site_transients'][ $transient ] = is_object( $value ) ? clone $value : $value;
 			return true;
 		}
 	}
@@ -641,12 +667,16 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$this->temporary_directory = dirname( __DIR__, 2 ) . '/.workspaces/p0.2/php-tmp/native-package-updater-' . bin2hex( random_bytes( 6 ) );
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_mkdir -- Create real directories for installed-package lifecycle fixtures with the specified permissions.
 			mkdir( $this->temporary_directory, 0700, true );
-			$GLOBALS['ran_wp_release_updater_test_observations']     = array();
-			$GLOBALS['ran_wp_release_updater_test_observer_throws']  = false;
-			$GLOBALS['ran_wp_release_updater_test_hooks']            = array();
-			$GLOBALS['ran_wp_release_updater_test_removed_hooks']    = array();
-			$GLOBALS['ran_wp_release_updater_test_filter_callbacks'] = array();
-			$GLOBALS['ran_wp_release_updater_test_doing_action']     = null;
+			$GLOBALS['ran_wp_release_updater_test_observations']       = array();
+			$GLOBALS['ran_wp_release_updater_test_observer_throws']    = false;
+			$GLOBALS['ran_wp_release_updater_test_hooks']              = array();
+			$GLOBALS['ran_wp_release_updater_test_removed_hooks']      = array();
+			$GLOBALS['ran_wp_release_updater_test_filter_callbacks']   = array();
+			$GLOBALS['ran_wp_release_updater_test_doing_action']       = null;
+			$GLOBALS['ran_wp_release_updater_test_deleted_transients'] = array();
+			$GLOBALS['ran_wp_release_updater_test_site_transients']    = array();
+			$GLOBALS['ran_wp_release_updater_test_set_transients']     = array();
+			$GLOBALS['ran_wp_release_updater_test_transient_filters']  = array();
 		}
 		// phpcs:ignore RANOwnedMethods.NamingConventions.ValidMethodName.NotSnakeCase -- PHPUnit requires this inherited lifecycle method name.
 		protected function tearDown(): void {
@@ -1071,7 +1101,8 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( array(), $database->read_option_names() );
 			$updater->register();
 			$updater->register();
-			self::assertCount( 18, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 19, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertContains( array( 'filter', 'ran_wp_release_updater_refresh_target_v1', array( $updater, 'filter_refresh_target' ), 10, 3 ), $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertContains( array( 'filter', 'ran_wp_release_updater_install_exact_release_v1', array( $updater, 'filter_install_exact_release' ), 10, 7 ), $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			self::assertSame( array( 0, 0, 0 ), array( $adapter->list_calls, $adapter->inspect_calls, $adapter->acquire_calls ) );
 		}
@@ -1770,7 +1801,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			$property->setValue( $broker, 'active' );
 			list( $updater, $adapter, $database ) = $this->subject( 'manual', null, 'stable', false, $state );
 			$updater->register();
-			self::assertCount( 18, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 19, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 
 			foreach ( array( 'stale_global', 'wrong_protocol' ) as $failure ) {
 				if ( 'stale_global' === $failure ) {
@@ -2104,7 +2135,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			);
 			self::assertInstanceOf( NativePackageUpdater::class, $updater );
 			$updater->register();
-			self::assertCount( 17, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+			self::assertCount( 18, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 			$offer = $updater->filter_update(
 				false,
 				array(
@@ -2129,7 +2160,7 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 				$stock = new \Theme_Upgrader();
 				$GLOBALS['ran_wp_release_updater_test_doing_action'] = $automatic_action ? 'wp_maybe_auto_update' : null;
 				self::assertSame( $stage, $updater->filter_source_selection( $stage, '/tmp', $stock, $extra ) );
-				self::assertCount( 18, $GLOBALS['ran_wp_release_updater_test_hooks'] );
+				self::assertCount( 19, $GLOBALS['ran_wp_release_updater_test_hooks'] );
 				if ( $failed_result ) {
 					$original      = new \WP_Error( 'post_copy_failed', 'Post-copy failure.' );
 					$stock->result = $original;
@@ -2141,11 +2172,11 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 					self::assertNotSame( $original, $outgoing );
 					$bridged = ! $automatic_action && ! $replace_skin;
 					self::assertSame( $bridged ? array() : $original, $stock->result );
-					self::assertSame( $bridged ? 19 : 18, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
+					self::assertSame( $bridged ? 20 : 19, count( $GLOBALS['ran_wp_release_updater_test_hooks'] ) );
 					if ( $bridged ) {
 						self::assertSame(
 							array( 'action', 'upgrader_process_complete', array( $updater, 'restore_theme_error_result' ), PHP_INT_MIN, 2 ),
-							$GLOBALS['ran_wp_release_updater_test_hooks'][18]
+							$GLOBALS['ran_wp_release_updater_test_hooks'][19]
 						);
 					}
 					$stock->skin->result = $outgoing;
@@ -2871,6 +2902,830 @@ namespace RAN\WPReleaseUpdater\V1\Tests\WordPress {
 			self::assertSame( 'runtime_busy', $report['reason'] );
 			self::assertSame( 'failed', $report['status'] );
 			self::assertSame( $calls, $adapter->list_calls );
+		}
+
+		private function wire_transient_hooks( NativePackageUpdater $updater, string $transient = 'update_plugins' ): void {
+			$GLOBALS['ran_wp_release_updater_test_transient_filters'][ 'site_transient_' . $transient ][]         = array( $updater, 'filter_cached_update' );
+			$GLOBALS['ran_wp_release_updater_test_transient_filters'][ 'pre_set_site_transient_' . $transient ][] = array( $updater, 'filter_store_update' );
+		}
+
+		/** @return array{NativePackageUpdater,ControllableReleaseAdapter,IdentityDescriptor} */
+		private function theme_refresh_subject( string $mode = 'manual', string $installed_version = '1.0.0' ): array {
+			$archive_path = $this->temporary_directory . '/theme-refresh-' . bin2hex( random_bytes( 4 ) ) . '.zip';
+			$zip          = new \ZipArchive();
+			self::assertTrue( $zip->open( $archive_path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) );
+			self::assertTrue( $zip->addFromString( 'package/style.css', "/*\nTheme Name: Theme\nVersion: 2.0.0\nUpdate URI: " . $this->uri() . "\nRequires at least: 6.5\nRequires PHP: 8.2\n*/\n" ) );
+			self::assertTrue( $zip->close() );
+			$this->paths[] = $archive_path;
+			$binding       = array_merge(
+				$this->binding( $mode ),
+				array(
+					'installed_package_identity' => 'package',
+					'target_type'                => 'theme',
+				)
+			);
+			$descriptor    = IdentityDescriptor::create(
+				array(
+					'artifact_filename'          => 'package.zip',
+					'artifact_identity'          => 'asset:2',
+					'artifact_sha256'            => hash_file( 'sha256', $archive_path ),
+					'artifact_size'              => filesize( $archive_path ),
+					'assurance_facts'            => array(
+						'exact_artifact_identity'       => true,
+						'exact_commit_identity'         => true,
+						'exact_reacquisition_supported' => true,
+						'exact_release_identity'        => true,
+						'provenance_verified'           => true,
+						'publication_immutable'         => true,
+						'repository_identity_stable'    => true,
+						'trusted_digest_source'         => true,
+					),
+					'canonical_update_uri'       => $this->uri(),
+					'channel'                    => 'stable',
+					'commit_identity'            => 'commit:2',
+					'installed_package_identity' => 'package',
+					'prerelease'                 => false,
+					'provider_code'              => 'neutral',
+					'release_identity'           => 'release:2',
+					'repository_identity'        => 'repo:1',
+					'repository_locator'         => 'owner/package',
+					'tag'                        => 'v2.0.0',
+					'target_type'                => 'theme',
+					'version'                    => '2.0.0',
+				)
+			);
+			$adapter       = new ControllableReleaseAdapter( $descriptor, $archive_path, $this->temporary_directory );
+			$config        = array_merge(
+				$this->config( $mode, $installed_version ),
+				array(
+					'installed_package_identity' => 'package',
+					'target_type'                => 'theme',
+				)
+			);
+			$policy        = array_merge(
+				$this->policy(),
+				array(
+					'header_file'                => 'style.css',
+					'installed_package_identity' => 'package',
+					'metadata_name'              => 'Theme',
+					'target_type'                => 'theme',
+				)
+			);
+			$updater       = NativePackageUpdater::from_configuration( $config, $binding, $adapter, new FakeOptionDatabase( 100 ), $policy );
+			self::assertInstanceOf( NativePackageUpdater::class, $updater );
+			return array( $updater, $adapter, $descriptor );
+		}
+
+		public function test_refresh_target_ignores_other_targets_non_live_and_busy_without_touching_transient(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual' );
+			$seed                      = (object) array(
+				'last_checked' => 1700000000,
+				'response'     => array( 'other/other.php' => (object) array( 'package' => 'other' ) ),
+			);
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = clone $seed;
+
+			self::assertNull( $updater->filter_refresh_target( null, 'theme', 'package/package.php' ) );
+			self::assertNull( $updater->filter_refresh_target( null, 'plugin', 'other/other.php' ) );
+			self::assertSame( 'kept', $updater->filter_refresh_target( 'kept', 'plugin', 'other/other.php' ) );
+			self::assertNull( $updater->filter_refresh_target( null, 'plugin', 7 ) );
+			self::assertSame( 0, $adapter->list_calls );
+
+			list( $guarded, $guarded_adapter ) = $this->subject( 'manual', operation_guard: static fn(): bool => false );
+			self::assertNull( $guarded->filter_refresh_target( null, 'plugin', 'package/package.php' ) );
+			self::assertSame( 0, $guarded_adapter->list_calls );
+
+			// Every busy predicate (exact_install, native_beginning, native_owner, pending_install) must refuse cleanly.
+			$before_status = $updater->status();
+			$busy_states   = array(
+				'exact_install'    => ( new \ReflectionClass( \RAN\WPReleaseUpdater\V1\WordPress\ExactInstallInvocation::class ) )->newInstanceWithoutConstructor(),
+				'native_beginning' => true,
+				'native_owner'     => 'owner',
+			);
+			foreach ( $busy_states as $property_name => $busy_value ) {
+				$property = new \ReflectionProperty( NativePackageUpdater::class, $property_name );
+				$property->setValue( $updater, $busy_value );
+				try {
+					$busy = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+				} finally {
+					$property->setValue( $updater, 'native_beginning' === $property_name ? false : null );
+				}
+				self::assertIsArray( $busy, $property_name );
+				self::assertSame( 'failed', $busy['status'], $property_name );
+				self::assertSame( 'runtime_busy', $busy['reason'], $property_name );
+				self::assertFalse( $busy['offered'], $property_name );
+				self::assertSame( 0, $adapter->list_calls, $property_name );
+				self::assertSame( $before_status, $updater->status(), $property_name );
+				self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_set_transients'], $property_name );
+			}
+
+			$this->prepare_install( $updater );
+			$before_status = $updater->status();
+			self::assertSame( '1.0.0', $before_status['installed_version'] );
+			self::assertSame( '2.0.0', $before_status['candidate_version'] );
+			$busy = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $busy );
+			self::assertSame( 'failed', $busy['status'] );
+			self::assertSame( 'runtime_busy', $busy['reason'] );
+			self::assertNull( $busy['relationship'] );
+			self::assertNull( $busy['installed_version'] );
+			self::assertNull( $busy['candidate_version'] );
+			self::assertNull( $busy['offered_version'] );
+			self::assertNull( $busy['candidate_validation_code'] );
+			self::assertFalse( $busy['offered'] );
+			self::assertSame( $before_status, $updater->status() );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_set_transients'] );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_deleted_transients'] );
+		}
+
+		public function test_refresh_target_upserts_only_selected_plugin_resets_snapshot_and_preserves_siblings(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual', native_discovery_reuse: true );
+			$this->wire_transient_hooks( $updater );
+			// Seed an in-request discovery snapshot; refresh_target must bypass it without clearing the transient.
+			$this->offer( $updater );
+			self::assertSame( 1, $adapter->list_calls );
+
+			$sibling_offer = (object) array(
+				'plugin'      => 'sibling/sibling.php',
+				'new_version' => '3.0.0',
+				'package'     => 'ran-wp-release-updater:metadata:v1:sibling-token',
+			);
+			$unrelated     = (object) array(
+				'plugin'      => 'other/other.php',
+				'new_version' => '4.0.0',
+				'package'     => 'https://downloads.wordpress.org/plugin/other.4.0.0.zip',
+			);
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+				'last_checked'                           => 1700000123,
+				'checked'                                => array(
+					'package/package.php' => '0.9.0',
+					'other/other.php'     => '3.9.0',
+				),
+				'response'                               => array( 'other/other.php' => $unrelated ),
+				'no_update'                              => array( 'package/package.php' => (object) array( 'plugin' => 'package/package.php' ) ),
+				'translations'                           => array( array( 'slug' => 'other' ) ),
+				'ran_wp_release_updater_metadata_offers' => array(
+					'sibling/sibling.php' => array(
+						'offer'   => $sibling_offer,
+						'checked' => '2.0.0',
+					),
+				),
+			);
+			$GLOBALS['ran_wp_release_updater_test_observations']                      = array();
+
+			$report = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertSame(
+				array(
+					'status'                    => 'succeeded',
+					'reason'                    => 'update_available',
+					'policy'                    => 'manual',
+					'relationship'              => 'newer',
+					'installed_version'         => '1.0.0',
+					'candidate_version'         => '2.0.0',
+					'offered_version'           => '2.0.0',
+					'candidate_validation_code' => null,
+					'offered'                   => true,
+				),
+				$report
+			);
+			self::assertSame( 2, $adapter->list_calls );
+			self::assertSame( 0, $adapter->acquire_calls );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_deleted_transients'] );
+			self::assertSame( array( 'update_plugins' ), $GLOBALS['ran_wp_release_updater_test_set_transients'] );
+			self::assertSame( '2.0.0', $updater->status()['offered_version'] );
+			self::assertIsInt( $updater->status()['last_check'] );
+			self::assertCount( 2, $GLOBALS['ran_wp_release_updater_test_observations'] );
+			self::assertSame( 'update_available', $GLOBALS['ran_wp_release_updater_test_observations'][1][1]['reason'] );
+
+			$raw = $GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'];
+			self::assertSame( 1700000123, $raw->last_checked );
+			self::assertSame( array( array( 'slug' => 'other' ) ), $raw->translations );
+			self::assertArrayHasKey( 'other/other.php', $raw->response );
+			self::assertArrayNotHasKey( 'package/package.php', $raw->response );
+			self::assertArrayNotHasKey( 'package/package.php', $raw->no_update );
+			self::assertArrayHasKey( 'package/package.php', $raw->ran_wp_release_updater_metadata_offers );
+			self::assertSame( '1.0.0', $raw->ran_wp_release_updater_metadata_offers['package/package.php']['checked'] );
+			self::assertArrayHasKey( 'sibling/sibling.php', $raw->ran_wp_release_updater_metadata_offers );
+
+			$visible = get_site_transient( 'update_plugins' );
+			self::assertInstanceOf( \stdClass::class, $visible );
+			self::assertArrayHasKey( 'package/package.php', $visible->response );
+			self::assertInstanceOf( \stdClass::class, $visible->response['package/package.php'] );
+			self::assertSame( '2.0.0', $visible->response['package/package.php']->new_version );
+			self::assertStringStartsWith( 'ran-wp-release-updater:metadata:v1:', $visible->response['package/package.php']->package );
+			self::assertSame( '1.0.0', $visible->checked['package/package.php'] );
+			self::assertArrayHasKey( 'other/other.php', $visible->response );
+		}
+
+		public function test_refresh_target_handles_theme_cold_cache_upsert_and_eviction(): void {
+			list( $updater, $adapter ) = $this->theme_refresh_subject();
+			$this->wire_transient_hooks( $updater, 'update_themes' );
+
+			// Cold cache: no update_themes transient yet; must not fabricate last_checked.
+			$report = $updater->filter_refresh_target( null, 'theme', 'package' );
+			self::assertIsArray( $report );
+			self::assertSame( 'update_available', $report['reason'] );
+			self::assertTrue( $report['offered'] );
+			self::assertSame( 0, $adapter->acquire_calls );
+			$raw = $GLOBALS['ran_wp_release_updater_test_site_transients']['update_themes'];
+			self::assertFalse( property_exists( $raw, 'last_checked' ) );
+			self::assertArrayHasKey( 'package', $raw->ran_wp_release_updater_metadata_offers );
+
+			$visible = get_site_transient( 'update_themes' );
+			self::assertInstanceOf( \stdClass::class, $visible );
+			self::assertIsArray( $visible->response['package'] );
+			self::assertSame( '2.0.0', $visible->response['package']['new_version'] );
+
+			// Warm cache with sibling theme + last_checked: withdrawing the release evicts only this theme and restores checked.
+			$raw->last_checked            = 1700000500;
+			$raw->checked                 = array( 'other-theme' => '1.2.0' );
+			$raw->response['other-theme'] = array(
+				'theme'       => 'other-theme',
+				'new_version' => '1.3.0',
+				'package'     => 'https://downloads.wordpress.org/theme/other-theme.1.3.0.zip',
+			);
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_themes'] = $raw;
+			$adapter->list_response = array(
+				'candidates'       => array(),
+				'not_modified'     => false,
+				'search_exhausted' => false,
+			);
+
+			$evicted = $updater->filter_refresh_target( null, 'theme', 'package' );
+			self::assertIsArray( $evicted );
+			self::assertSame( 'succeeded', $evicted['status'] );
+			self::assertSame( 'no_candidates', $evicted['reason'] );
+			self::assertFalse( $evicted['offered'] );
+
+			$after = get_site_transient( 'update_themes' );
+			self::assertInstanceOf( \stdClass::class, $after );
+			self::assertSame( 1700000500, $after->last_checked );
+			self::assertArrayNotHasKey( 'package', $after->response );
+			self::assertSame( '1.0.0', $after->checked['package'] );
+			self::assertArrayHasKey( 'other-theme', $after->response );
+		}
+
+		public function test_refresh_target_evicts_withdrawn_and_rejected_offers_while_preserving_siblings(): void {
+			foreach ( array( 'no_candidates', 'no_newer_candidate', 'candidate_rejected', 'candidate_not_eligible' ) as $case ) {
+				$this->tearDown();
+				$this->setUp();
+				list( $updater, $adapter, , $descriptor ) = $this->subject( 'manual' );
+				$this->wire_transient_hooks( $updater );
+
+				// Seed a cached offer for package/package.php plus sibling response and metadata-cache entries.
+				$sibling_meta = array(
+					'offer'   => (object) array( 'package' => 'ran-wp-release-updater:metadata:v1:sibling-token' ),
+					'checked' => '2.0.0',
+				);
+				$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+					'last_checked' => 1700000200,
+					'checked'      => array(
+						'package/package.php' => '1.0.0',
+						'other/other.php'     => '1.0.0',
+					),
+					'response'     => array( 'other/other.php' => (object) array( 'package' => 'sibling-zip' ) ),
+					'no_update'    => array(),
+					'ran_wp_release_updater_metadata_offers' => array( 'sibling/sibling.php' => $sibling_meta ),
+				);
+				$initial = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+				self::assertIsArray( $initial );
+				self::assertTrue( $initial['offered'] );
+
+				if ( 'no_candidates' === $case ) {
+					// Simulate a non-projected stale checked version and no_update entries so eviction must clean both.
+					$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins']->checked['package/package.php'] = '0.9.0';
+					unset( $GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins']->ran_wp_release_updater_metadata_offers['package/package.php'] );
+					$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins']->response['package/package.php']  = (object) array( 'package' => 'stale-non-projected' );
+					$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins']->no_update['package/package.php'] = (object) array( 'plugin' => 'package/package.php' );
+					$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins']->no_update['other/other.php']     = (object) array( 'plugin' => 'other/other.php' );
+					$adapter->list_response = array(
+						'candidates'       => array(),
+						'not_modified'     => false,
+						'search_exhausted' => false,
+					);
+				} elseif ( 'no_newer_candidate' === $case ) {
+					$adapter->list_response = array(
+						'candidates'       => array(
+							array(
+								'release_identity' => 'release:1',
+								'tag'              => 'v1.0.0',
+								'version'          => '1.0.0',
+							),
+						),
+						'not_modified'     => false,
+						'search_exhausted' => false,
+					);
+				} elseif ( 'candidate_rejected' === $case ) {
+					$adapter->inspect_outcomes['release:2'] = new ReleaseFailure( 'package_incompatible' );
+				} else {
+					$facts = $descriptor->to_array();
+					unset( $facts['fingerprint'] );
+					$facts['assurance_facts']['trusted_digest_source'] = false;
+					$adapter->inspect_descriptor                       = IdentityDescriptor::create( $facts );
+				}
+
+				$report = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+				self::assertIsArray( $report );
+				self::assertSame( $case, $report['reason'], $case );
+				self::assertFalse( $report['offered'], $case );
+				$after = get_site_transient( 'update_plugins' );
+				self::assertInstanceOf( \stdClass::class, $after );
+				self::assertArrayNotHasKey( 'package/package.php', $after->response, $case );
+				self::assertSame( '1.0.0', $after->checked['package/package.php'], $case );
+				self::assertArrayHasKey( 'other/other.php', $after->response, $case );
+				self::assertSame( 1700000200, $after->last_checked, $case );
+				$raw = $GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'];
+				self::assertSame( array( 'sibling/sibling.php' => $sibling_meta ), $raw->ran_wp_release_updater_metadata_offers, $case );
+				self::assertSame( '1.0.0', $raw->checked['package/package.php'], $case );
+				if ( 'no_candidates' === $case ) {
+					self::assertArrayNotHasKey( 'package/package.php', $raw->no_update );
+					self::assertArrayHasKey( 'other/other.php', $raw->no_update );
+				}
+			}
+
+			// Eviction itself (without filter_store_update pruning) removes this target's metadata-cache key while keeping siblings.
+			$this->tearDown();
+			$this->setUp();
+			list( $direct_updater, $direct_adapter ) = $this->subject( 'manual' );
+			$direct_sibling                          = array(
+				'offer'   => (object) array( 'package' => 'sibling-direct' ),
+				'checked' => '2.0.0',
+			);
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+				'checked'                                => array( 'package/package.php' => '1.0.0' ),
+				'response'                               => array(),
+				'ran_wp_release_updater_metadata_offers' => array(
+					'package/package.php' => array(
+						'offer'   => (object) array( 'package' => 'stale-direct' ),
+						'checked' => '1.0.0',
+					),
+					'sibling/sibling.php' => $direct_sibling,
+				),
+			);
+			$direct_adapter->list_response = array(
+				'candidates'       => array(),
+				'not_modified'     => false,
+				'search_exhausted' => false,
+			);
+			$direct_evicted                = $direct_updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $direct_evicted );
+			self::assertSame( 'no_candidates', $direct_evicted['reason'] );
+			self::assertSame(
+				array( 'sibling/sibling.php' => $direct_sibling ),
+				$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins']->ran_wp_release_updater_metadata_offers
+			);
+		}
+
+		public function test_refresh_target_reports_unexpected_failure_without_evicting_when_upsert_fails_after_rejected_candidate(): void {
+			list( $updater, $adapter ) = $this->subject( 'manual' );
+			$this->wire_transient_hooks( $updater );
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+				'last_checked' => 1700000111,
+				'response'     => 'corrupted',
+			);
+			$adapter->list_response                 = array(
+				'candidates'       => array(
+					array(
+						'release_identity' => 'release:3',
+						'tag'              => 'v3.0.0',
+						'version'          => '3.0.0',
+					),
+					array(
+						'release_identity' => 'release:2',
+						'tag'              => 'v2.0.0',
+						'version'          => '2.0.0',
+					),
+				),
+				'not_modified'     => false,
+				'search_exhausted' => false,
+			);
+			$adapter->inspect_outcomes['release:3'] = new ReleaseFailure( 'package_incompatible' );
+
+			$report = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $report );
+			self::assertSame( 'failed', $report['status'] );
+			self::assertSame( 'unexpected_failure', $report['reason'] );
+			self::assertFalse( $report['offered'] );
+			self::assertNull( $report['offered_version'] );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_set_transients'] );
+		}
+
+		public function test_refresh_target_preserves_cached_offer_on_transient_failures_and_skips(): void {
+			foreach ( array( 'release_list_failed', 'candidate_inspection_failed', 'rate_limited', 'policy_disabled', 'policy_forced_off', 'filesystem_unavailable', 'runtime_liveness_lost' ) as $case ) {
+				$this->tearDown();
+				$this->setUp();
+				$live                      = true;
+				$mode                      = 'policy_disabled' === $case ? 'disabled' : ( 'policy_forced_off' === $case ? 'forced-off' : 'manual' );
+				list( $updater, $adapter ) = $this->subject(
+					$mode,
+					operation_guard: static function () use ( &$live ): bool {
+						return $live;
+					}
+				);
+				$this->wire_transient_hooks( $updater );
+
+				// Seed an existing cached offer directly in the transient.
+				$existing = (object) array(
+					'plugin'      => 'package/package.php',
+					'new_version' => '2.0.0',
+					'package'     => 'existing-offer-token',
+				);
+				$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+					'last_checked' => 1700000300,
+					'checked'      => array( 'package/package.php' => '1.0.0' ),
+					'response'     => array( 'package/package.php' => $existing ),
+				);
+				$GLOBALS['ran_wp_release_updater_test_set_transients']                    = array();
+				$GLOBALS['ran_wp_release_updater_test_observations']                      = array();
+
+				if ( 'release_list_failed' === $case ) {
+					$adapter->list_response = array(
+						'candidates'       => array(),
+						'not_modified'     => true,
+						'search_exhausted' => false,
+					);
+				} elseif ( 'candidate_inspection_failed' === $case ) {
+					$adapter->inspect_outcomes['release:2'] = new ReleaseFailure( 'operation_failed' );
+				} elseif ( 'rate_limited' === $case ) {
+					$adapter->list_response = array(
+						'candidates' => array(),
+						'rate_limit' => array(
+							'limited'     => true,
+							'retry_after' => 60,
+						),
+					);
+				} elseif ( 'filesystem_unavailable' === $case ) {
+					$GLOBALS['ran_wp_release_updater_test_filesystem_method'] = 'ssh2';
+				} elseif ( 'runtime_liveness_lost' === $case ) {
+					$adapter->on_inspect = static function () use ( &$live ): void {
+						$live = false;
+					};
+				}
+
+				try {
+					$report = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+				} finally {
+					unset( $GLOBALS['ran_wp_release_updater_test_filesystem_method'] );
+				}
+				self::assertIsArray( $report );
+				self::assertFalse( $report['offered'], $case );
+				self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_set_transients'], $case );
+				self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_deleted_transients'], $case );
+				self::assertSame( $existing, $GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins']->response['package/package.php'], $case );
+				if ( 'rate_limited' === $case ) {
+					self::assertTrue( $GLOBALS['ran_wp_release_updater_test_observations'][1][2] ?? false );
+				}
+			}
+		}
+
+		public function test_refresh_target_rechecks_cached_offer_when_search_is_exhausted(): void {
+			$exhausted_list = array(
+				'candidates'       => array(
+					array(
+						'release_identity' => 'release:1',
+						'tag'              => 'v1.0.0',
+						'version'          => '1.0.0',
+					),
+				),
+				'not_modified'     => false,
+				'search_exhausted' => true,
+			);
+
+			// 1. Withdrawn (404 release_unavailable) on incomplete search -> evicts withdrawn offer while keeping release_list_failed.
+			list( $updater, $adapter ) = $this->subject( 'manual' );
+			$this->wire_transient_hooks( $updater );
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+				'last_checked' => 1700000400,
+				'checked'      => array(
+					'package/package.php' => '1.0.0',
+					'other/other.php'     => '1.0.0',
+				),
+				'response'     => array( 'other/other.php' => (object) array( 'package' => 'sibling' ) ),
+			);
+			$updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			$adapter->list_response                 = $exhausted_list;
+			$adapter->inspect_outcomes['release:2'] = new ReleaseFailure( 'release_unavailable' );
+			$withdrawn                              = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $withdrawn );
+			self::assertSame( 'failed', $withdrawn['status'] );
+			self::assertSame( 'release_list_failed', $withdrawn['reason'] );
+			self::assertFalse( $withdrawn['offered'] );
+			self::assertSame( 'same', $updater->status()['relationship'] );
+			$after_withdrawn = get_site_transient( 'update_plugins' );
+			self::assertInstanceOf( \stdClass::class, $after_withdrawn );
+			self::assertArrayNotHasKey( 'package/package.php', $after_withdrawn->response );
+			self::assertSame( '1.0.0', $after_withdrawn->checked['package/package.php'] );
+			self::assertArrayHasKey( 'other/other.php', $after_withdrawn->response );
+
+			// 2. Invalidated (package_incompatible) -> definitive eviction as candidate_rejected.
+			$this->tearDown();
+			$this->setUp();
+			list( $updater, $adapter ) = $this->subject( 'manual' );
+			$this->wire_transient_hooks( $updater );
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+				'last_checked' => 1700000401,
+				'checked'      => array( 'package/package.php' => '1.0.0' ),
+				'response'     => array(),
+			);
+			$updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			$adapter->list_response                 = $exhausted_list;
+			$adapter->inspect_outcomes['release:2'] = new ReleaseFailure( 'package_incompatible' );
+			$invalidated                            = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $invalidated );
+			self::assertSame( 'rejected', $invalidated['status'] );
+			self::assertSame( 'candidate_rejected', $invalidated['reason'] );
+			self::assertFalse( $invalidated['offered'] );
+			self::assertArrayNotHasKey( 'package/package.php', get_site_transient( 'update_plugins' )->response );
+
+			// 3. Transient failure during re-inspection -> preserves cached offer.
+			$this->tearDown();
+			$this->setUp();
+			list( $updater, $adapter ) = $this->subject( 'manual' );
+			$this->wire_transient_hooks( $updater );
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+				'last_checked' => 1700000402,
+				'checked'      => array( 'package/package.php' => '1.0.0' ),
+				'response'     => array(),
+			);
+			$updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			$GLOBALS['ran_wp_release_updater_test_set_transients'] = array();
+			$adapter->list_response                                = $exhausted_list;
+			$adapter->inspect_outcomes['release:2']                = new ReleaseFailure( 'rate_limited', 60 );
+			$transient_fail                                        = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $transient_fail );
+			self::assertSame( 'failed', $transient_fail['status'] );
+			self::assertSame( 'candidate_inspection_failed', $transient_fail['reason'] );
+			self::assertFalse( $transient_fail['offered'] );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_set_transients'] );
+			self::assertArrayHasKey( 'package/package.php', get_site_transient( 'update_plugins' )->response );
+
+			// 4. Cached offer still valid & newer -> refreshed as update_available.
+			unset( $adapter->inspect_outcomes['release:2'] );
+			$still_valid = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $still_valid );
+			self::assertSame( 'succeeded', $still_valid['status'] );
+			self::assertSame( 'update_available', $still_valid['reason'] );
+			self::assertTrue( $still_valid['offered'] );
+			self::assertArrayHasKey( 'package/package.php', get_site_transient( 'update_plugins' )->response );
+
+			// 5. No cached offer when search is exhausted -> retains v1 release_list_failed with no inspect() call.
+			$this->tearDown();
+			$this->setUp();
+			list( $updater, $adapter ) = $this->subject( 'manual' );
+			$this->wire_transient_hooks( $updater );
+			$adapter->list_response = $exhausted_list;
+			$no_cache               = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $no_cache );
+			self::assertSame( 'failed', $no_cache['status'] );
+			self::assertSame( 'release_list_failed', $no_cache['reason'] );
+			self::assertSame( 0, $adapter->inspect_calls );
+
+			// 6. Exhausted listing with a rejected newer candidate (3.0.0) still re-checks cached valid 2.0.0 instead of evicting it.
+			$this->tearDown();
+			$this->setUp();
+			list( $updater, $adapter ) = $this->subject( 'manual' );
+			$this->wire_transient_hooks( $updater );
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+				'last_checked' => 1700000403,
+				'checked'      => array( 'package/package.php' => '1.0.0' ),
+				'response'     => array(),
+			);
+			$seeded = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $seeded );
+			self::assertTrue( $seeded['offered'] );
+			$before_inspects                        = $adapter->inspect_calls;
+			$adapter->list_response                 = array(
+				'candidates'       => array(
+					array(
+						'release_identity' => 'release:3',
+						'tag'              => 'v3.0.0',
+						'version'          => '3.0.0',
+					),
+				),
+				'not_modified'     => false,
+				'search_exhausted' => true,
+			);
+			$adapter->inspect_outcomes['release:3'] = new ReleaseFailure( 'package_incompatible' );
+			$kept_after_rejected                    = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $kept_after_rejected );
+			self::assertSame( 'succeeded', $kept_after_rejected['status'] );
+			self::assertSame( 'update_available', $kept_after_rejected['reason'] );
+			self::assertTrue( $kept_after_rejected['offered'] );
+			self::assertSame( $before_inspects + 2, $adapter->inspect_calls );
+			$after_rejected = get_site_transient( 'update_plugins' );
+			self::assertInstanceOf( \stdClass::class, $after_rejected );
+			self::assertArrayHasKey( 'package/package.php', $after_rejected->response );
+
+			// 7. Re-inspection returns a mismatched tag/version -> admit_candidate() fails with candidate_descriptor_mismatch and preserves cache.
+			$GLOBALS['ran_wp_release_updater_test_set_transients'] = array();
+			$mismatched_facts                                      = $adapter->inspect_descriptor->to_array();
+			unset( $mismatched_facts['fingerprint'] );
+			$mismatched_facts['tag']                = 'v2.0.1';
+			$mismatched_facts['version']            = '2.0.1';
+			$adapter->list_response                 = $exhausted_list;
+			$adapter->inspect_outcomes['release:2'] = IdentityDescriptor::create( $mismatched_facts );
+			$mismatched                             = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $mismatched );
+			self::assertSame( 'failed', $mismatched['status'] );
+			self::assertSame( 'candidate_descriptor_mismatch', $mismatched['reason'] );
+			self::assertFalse( $mismatched['offered'] );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_set_transients'] );
+			$after_mismatch = get_site_transient( 'update_plugins' );
+			self::assertInstanceOf( \stdClass::class, $after_mismatch );
+			self::assertArrayHasKey( 'package/package.php', $after_mismatch->response );
+
+			// 8. Re-inspection throws a generic Throwable -> transient failure preserves cached offer.
+			$GLOBALS['ran_wp_release_updater_test_set_transients'] = array();
+			$adapter->inspect_outcomes['release:2']                = new \RuntimeException( 'Transient socket reset.' );
+			$generic_failure                                       = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $generic_failure );
+			self::assertSame( 'failed', $generic_failure['status'] );
+			self::assertSame( 'candidate_inspection_failed', $generic_failure['reason'] );
+			self::assertFalse( $generic_failure['offered'] );
+			self::assertSame( array(), $GLOBALS['ran_wp_release_updater_test_set_transients'] );
+			$after_generic = get_site_transient( 'update_plugins' );
+			self::assertInstanceOf( \stdClass::class, $after_generic );
+			self::assertArrayHasKey( 'package/package.php', $after_generic->response );
+
+			// 9. Re-inspection violates target binding -> InvalidArgumentException evicts as candidate_rejected.
+			$wrong_repo_facts = $adapter->inspect_descriptor->to_array();
+			unset( $wrong_repo_facts['fingerprint'] );
+			$wrong_repo_facts['repository_identity'] = 'repo:999';
+			$adapter->inspect_outcomes['release:2']  = IdentityDescriptor::create( $wrong_repo_facts );
+			$binding_failed                          = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $binding_failed );
+			self::assertSame( 'rejected', $binding_failed['status'] );
+			self::assertSame( 'candidate_rejected', $binding_failed['reason'] );
+			self::assertFalse( $binding_failed['offered'] );
+			$after_binding = get_site_transient( 'update_plugins' );
+			self::assertInstanceOf( \stdClass::class, $after_binding );
+			self::assertArrayNotHasKey( 'package/package.php', $after_binding->response );
+
+			// 10. Re-inspection rejected by descriptor_admission -> evicts with candidate_admission_rejected.
+			$this->tearDown();
+			$this->setUp();
+			$admitted                  = true;
+			list( $updater, $adapter ) = $this->subject(
+				'manual',
+				descriptor_admission: static function () use ( &$admitted ): bool {
+					return $admitted;
+				}
+			);
+			$this->wire_transient_hooks( $updater );
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+				'last_checked' => 1700000404,
+				'checked'      => array( 'package/package.php' => '1.0.0' ),
+				'response'     => array(),
+			);
+			$seeded_admission = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $seeded_admission );
+			self::assertTrue( $seeded_admission['offered'] );
+			$adapter->list_response = $exhausted_list;
+			$adapter->on_inspect    = static function () use ( &$admitted ): void {
+				$admitted = false;
+			};
+			$admission_denied       = $updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $admission_denied );
+			self::assertSame( 'rejected', $admission_denied['status'] );
+			self::assertSame( 'candidate_rejected', $admission_denied['reason'] );
+			self::assertSame( 'candidate_admission_rejected', $admission_denied['candidate_validation_code'] );
+			self::assertFalse( $admission_denied['offered'] );
+			$after_admission = get_site_transient( 'update_plugins' );
+			self::assertInstanceOf( \stdClass::class, $after_admission );
+			self::assertArrayNotHasKey( 'package/package.php', $after_admission->response );
+
+			// 11. Theme re-check on exhausted listing with rejected newer candidate preserves valid 2.0.0, then evicts on withdrawal.
+			$this->tearDown();
+			$this->setUp();
+			list( $theme_updater, $theme_adapter ) = $this->theme_refresh_subject();
+			$this->wire_transient_hooks( $theme_updater, 'update_themes' );
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_themes'] = (object) array(
+				'last_checked' => 1700000405,
+				'checked'      => array( 'other-theme' => '1.0.0' ),
+				'response'     => array( 'other-theme' => array( 'package' => 'sibling-theme' ) ),
+			);
+			$seeded_theme = $theme_updater->filter_refresh_target( null, 'theme', 'package' );
+			self::assertIsArray( $seeded_theme );
+			self::assertTrue( $seeded_theme['offered'] );
+			$theme_adapter->list_response                 = array(
+				'candidates'       => array(
+					array(
+						'release_identity' => 'release:3',
+						'tag'              => 'v3.0.0',
+						'version'          => '3.0.0',
+					),
+				),
+				'not_modified'     => false,
+				'search_exhausted' => true,
+			);
+			$theme_adapter->inspect_outcomes['release:3'] = new ReleaseFailure( 'package_incompatible' );
+			$theme_kept                                   = $theme_updater->filter_refresh_target( null, 'theme', 'package' );
+			self::assertIsArray( $theme_kept );
+			self::assertSame( 'succeeded', $theme_kept['status'] );
+			self::assertSame( 'update_available', $theme_kept['reason'] );
+			self::assertTrue( $theme_kept['offered'] );
+			$theme_after_keep = get_site_transient( 'update_themes' );
+			self::assertInstanceOf( \stdClass::class, $theme_after_keep );
+			self::assertArrayHasKey( 'package', $theme_after_keep->response );
+			self::assertArrayHasKey( 'other-theme', $theme_after_keep->response );
+
+			$theme_adapter->inspect_outcomes['release:2'] = new ReleaseFailure( 'release_unavailable' );
+			$theme_evicted                                = $theme_updater->filter_refresh_target( null, 'theme', 'package' );
+			self::assertIsArray( $theme_evicted );
+			self::assertSame( 'rejected', $theme_evicted['status'] );
+			self::assertSame( 'candidate_rejected', $theme_evicted['reason'] );
+			self::assertFalse( $theme_evicted['offered'] );
+			$theme_after_evict = get_site_transient( 'update_themes' );
+			self::assertInstanceOf( \stdClass::class, $theme_after_evict );
+			self::assertArrayNotHasKey( 'package', $theme_after_evict->response );
+			self::assertArrayHasKey( 'other-theme', $theme_after_evict->response );
+
+			// 12. Cached offer no longer newer than installed on exhausted search -> evicted without calling inspect(), keeping release_list_failed.
+			$this->tearDown();
+			$this->setUp();
+			list( $same_updater, $same_adapter, , $same_descriptor, $same_binding ) = $this->subject( 'manual', installed_version: '2.0.0' );
+			$this->wire_transient_hooks( $same_updater );
+			$GLOBALS['ran_wp_release_updater_test_site_transients']['update_plugins'] = (object) array(
+				'last_checked' => 1700000406,
+				'checked'      => array( 'package/package.php' => '2.0.0' ),
+				'response'     => array(
+					'package/package.php' => (object) array(
+						'plugin'      => 'package/package.php',
+						'new_version' => '2.0.0',
+						'package'     => $this->token( $same_descriptor, $same_binding ),
+					),
+				),
+			);
+			$same_adapter->list_response = $exhausted_list;
+			$stale_equal                 = $same_updater->filter_refresh_target( null, 'plugin', 'package/package.php' );
+			self::assertIsArray( $stale_equal );
+			self::assertSame( 'failed', $stale_equal['status'] );
+			self::assertSame( 'release_list_failed', $stale_equal['reason'] );
+			self::assertSame( 'candidate_not_newer', $stale_equal['candidate_validation_code'] );
+			self::assertFalse( $stale_equal['offered'] );
+			self::assertSame( 0, $same_adapter->inspect_calls );
+			$after_stale_equal = get_site_transient( 'update_plugins' );
+			self::assertInstanceOf( \stdClass::class, $after_stale_equal );
+			self::assertArrayNotHasKey( 'package/package.php', $after_stale_equal->response );
+		}
+
+		public function test_filter_store_update_prunes_stale_unprojected_metadata_offers_and_keeps_valid_non_direct(): void {
+			$admitted        = true;
+			$live            = true;
+			list( $updater ) = $this->subject(
+				'manual',
+				operation_guard: static function () use ( &$live ): bool {
+					return $live;
+				},
+				descriptor_admission: static function () use ( &$admitted ): bool {
+					return $admitted;
+				}
+			);
+			$stored          = $this->stored_advisory( $updater );
+			$sibling         = array(
+				'offer'   => (object) array( 'package' => 'sibling' ),
+				'checked' => '1.0.0',
+			);
+			$stored->ran_wp_release_updater_metadata_offers['other/other.php'] = $sibling;
+
+			// Temporary non-direct filesystem preserves the valid unprojected advisory on save.
+			$GLOBALS['ran_wp_release_updater_test_filesystem_method'] = 'ssh2';
+			try {
+				$kept = $updater->filter_store_update( clone $stored );
+			} finally {
+				unset( $GLOBALS['ran_wp_release_updater_test_filesystem_method'] );
+			}
+			self::assertArrayHasKey( 'package/package.php', $kept->ran_wp_release_updater_metadata_offers );
+			self::assertSame( $sibling, $kept->ran_wp_release_updater_metadata_offers['other/other.php'] );
+
+			// Unadmitted target drops its stale unprojected advisory while preserving sibling.
+			$admitted = false;
+			$pruned   = $updater->filter_store_update( clone $stored );
+			self::assertSame( array( 'other/other.php' => $sibling ), $pruned->ran_wp_release_updater_metadata_offers );
+
+			// Displaced runtime drops its stale unprojected advisory while preserving sibling.
+			$admitted = true;
+			$live     = false;
+			$pruned_l = $updater->filter_store_update( clone $stored );
+			self::assertSame( array( 'other/other.php' => $sibling ), $pruned_l->ran_wp_release_updater_metadata_offers );
+
+			// Disabled policy drops its stale unprojected advisory while preserving sibling.
+			list( $disabled ) = $this->subject( 'disabled' );
+			$pruned_d         = $disabled->filter_store_update( clone $stored );
+			self::assertSame( array( 'other/other.php' => $sibling ), $pruned_d->ran_wp_release_updater_metadata_offers );
+
+			// Version mismatch drops its stale unprojected advisory while preserving sibling.
+			$live    = true;
+			$changed = clone $stored;
+			$changed->ran_wp_release_updater_metadata_offers['package/package.php']['checked'] = '0.9.0';
+			$pruned_v = $updater->filter_store_update( $changed );
+			self::assertSame( array( 'other/other.php' => $sibling ), $pruned_v->ran_wp_release_updater_metadata_offers );
+
+			// Non-array response still prunes a stale unprojected advisory while preserving sibling.
+			$admitted            = false;
+			$non_array           = clone $stored;
+			$non_array->response = 'not-an-array';
+			$pruned_na           = $updater->filter_store_update( $non_array );
+			self::assertSame( array( 'other/other.php' => $sibling ), $pruned_na->ran_wp_release_updater_metadata_offers );
 		}
 		private const OFFER_FILTER = 'ran_wp_release_updater_offer_release_v1';
 		/** @return array<string,mixed> */
