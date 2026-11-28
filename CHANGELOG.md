@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-beta.26](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.25...v1.0.0-beta.26) (2026-11-28)
+
+
+### Features
+
+* **native:** add single-target check and offer update ([#239](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/issues/239)) ([add78a2](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/commit/add78a2a5cb182f3f6b03c83abe8a209cc075796))
+
 ## [1.0.0-beta.25](https://github.com/RocketsAreNostalgic/ran-wp-release-updater/compare/v1.0.0-beta.24...v1.0.0-beta.25) (2026-11-27)
 
 
